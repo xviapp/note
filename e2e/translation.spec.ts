@@ -19,10 +19,14 @@ async function select(page: Page, locator: Locator) {
   });
   await expect(toolbar(page)).toBeVisible();
 }
-async function launch(page: Page, locator: Locator) {
+async function launch(page: Page, locator: Locator, expanded = true) {
   await select(page, locator);
   await toolbar(page).getByRole('button', { name: '翻译', exact: true }).click();
-  await expect(panel(page).getByRole('status')).toContainText('已保存');
+  await expect(panel(page).locator('.markdown-body')).toBeVisible();
+  if (expanded) {
+    await panel(page).getByRole('button', { name: '展开翻译详情', exact: true }).click();
+    await expect(panel(page).getByRole('status')).toContainText('已保存');
+  }
 }
 async function setup(page: Page, baseURL: string) {
   const headers = { origin: new URL(baseURL).origin };
@@ -143,7 +147,24 @@ test('floating translations save, remember language, copy, pin, maximize, and qu
   page.on('pageerror', (e) => errors.push(e.message));
   const fixture = await setup(page, baseURL!);
   await context.grantPermissions(['clipboard-read', 'clipboard-write']);
-  await launch(page, page.locator('.read-content p').first());
+  await launch(page, page.locator('.read-content p').first(), false);
+  await expect(page).toHaveTitle('页间');
+  await expect(panel(page)).toHaveClass(/translation-compact/);
+  await expect(panel(page).getByRole('button')).toHaveCount(1);
+  await expect(panel(page).getByRole('combobox')).toHaveCount(0);
+  await expect(
+    panel(page).locator(
+      '.translation-heading, .translation-original, .translation-actions, .translation-state',
+    ),
+  ).toHaveCount(0);
+  const compact = await panel(page).boundingBox();
+  expect(compact!.height).toBeLessThan(240);
+  expect(compact!.x).toBeGreaterThanOrEqual(0);
+  expect(compact!.y).toBeGreaterThanOrEqual(0);
+  expect(compact!.x + compact!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+  expect(compact!.y + compact!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await page.screenshot({ path: info.outputPath('translation-compact.png') });
+  await panel(page).getByRole('button', { name: '展开翻译详情', exact: true }).click();
   await expect(panel(page).locator('.markdown-body')).toContainText('守恒量');
   await expect(panel(page).locator('.katex')).toHaveCount(1);
   expect(fixture.generated[0].source).toBe(selected);
@@ -175,6 +196,13 @@ test('floating translations save, remember language, copy, pin, maximize, and qu
   await expect(panel(page)).not.toHaveClass(/translation-maximized/);
   await panel(page).getByRole('combobox', { name: '翻译目标语言' }).selectOption('en');
   await expect(panel(page).locator('.markdown-body')).toHaveText('The translated passage.');
+  await panel(page).getByRole('button', { name: '收起翻译详情' }).click();
+  await expect(panel(page)).toHaveClass(/translation-compact/);
+  await expect(panel(page).locator('.markdown-body')).toHaveText('The translated passage.');
+  await expect(panel(page).getByRole('button', { name: '展开翻译详情' })).toBeFocused();
+  await page.keyboard.press('Enter');
+  await expect(panel(page).getByRole('combobox')).toHaveValue('en');
+  expect(fixture.generated).toHaveLength(2);
   await panel(page).getByRole('button', { name: '关闭翻译' }).click();
   await launch(page, page.locator('.read-content p').first());
   await expect(panel(page).getByRole('combobox')).toHaveValue('en');
@@ -396,10 +424,14 @@ test('switching language ignores a late response; stopping and outside dismissal
   await select(page, page.locator('.read-content p').first());
   await toolbar(page).getByRole('button', { name: '翻译', exact: true }).click();
   await expect.poll(() => waiting.length).toBe(1);
+  await panel(page).getByRole('button', { name: '展开翻译详情' }).click();
   await panel(page).getByRole('combobox').selectOption('en');
   await expect.poll(() => waiting.length).toBe(2);
   await complete(waiting[1], 'Current English result.');
   await expect(panel(page).locator('.markdown-body')).toHaveText('Current English result.');
+  await panel(page).getByRole('button', { name: '收起翻译详情' }).click();
+  await expect(panel(page).locator('.markdown-body')).toHaveText('Current English result.');
+  await panel(page).getByRole('button', { name: '展开翻译详情' }).click();
   await complete(waiting[0], '迟到的中文结果');
   await expect(panel(page).locator('.markdown-body')).toHaveText('Current English result.');
   await panel(page).getByRole('button', { name: '重译', exact: true }).click();
@@ -457,4 +489,62 @@ test('unchanged repeated Markdown uses offsets, but ambiguous matches after an e
   await panel(page).getByRole('button', { name: '回到原文' }).click();
   await expect(panel(page).getByRole('alert')).toContainText('无法准确定位');
   expect(await page.evaluate(() => CSS.highlights.has('translation-source'))).toBe(false);
+});
+
+test('compact translations scroll long text and expand in place without another request', async ({
+  page,
+  baseURL,
+}, info) => {
+  await setup(page, baseURL!);
+  const longTranslation = `${'这是一段较长的译文，用来确认小浮窗内可以连续阅读。\n\n'.repeat(80)}译文结尾。`;
+  let calls = 0;
+  await page.route('**/api/nodes/*/translations', async (route) => {
+    if (route.request().method() !== 'POST') return route.fallback();
+    calls++;
+    const data = route.request().postDataJSON();
+    await route.fulfill({
+      json: {
+        type: 'done',
+        cached: false,
+        translation: {
+          id: crypto.randomUUID(),
+          source: data.source,
+          content: longTranslation,
+          targetLanguage: data.targetLanguage,
+          location: data.location,
+          savedAt: Date.now(),
+        },
+      },
+    });
+  });
+  await launch(
+    page,
+    page.locator('.read-content p').filter({ hasText: 'Reading paragraph 4.' }),
+    false,
+  );
+  const result = panel(page).locator('.translation-result');
+  await expect
+    .poll(() => result.evaluate((element) => element.scrollHeight > element.clientHeight))
+    .toBe(true);
+  const bounds = await panel(page).boundingBox();
+  expect(bounds!.height).toBeLessThanOrEqual(360);
+  expect(bounds!.y).toBeGreaterThanOrEqual(0);
+  expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(page.viewportSize()!.height);
+  await result.evaluate((element) => {
+    element.scrollTop = element.scrollHeight;
+  });
+  await expect(panel(page).getByText('译文结尾。', { exact: true })).toBeInViewport();
+  await page.evaluate(() => {
+    document.documentElement.dataset.theme = 'starry';
+  });
+  await page.screenshot({ path: info.outputPath('translation-compact-long.png') });
+  await panel(page).getByRole('button', { name: '展开翻译详情' }).click();
+  await expect(panel(page).locator('.markdown-body')).toHaveText(longTranslation);
+  await panel(page).getByRole('button', { name: '最大化翻译窗口' }).click();
+  await panel(page).getByRole('button', { name: '收起翻译详情' }).click();
+  await expect(panel(page)).toHaveClass(/translation-compact/);
+  await expect(panel(page)).not.toHaveClass(/translation-maximized/);
+  expect(calls).toBe(1);
+  await page.keyboard.press('Escape');
+  await expect(panel(page)).toHaveCount(0);
 });

@@ -19,6 +19,36 @@
   border-radius: 0;
   z-index: 90;
 }
+.translation-compact .translation-result {
+  flex: 0 1 auto;
+  padding: 16px 18px 4px;
+}
+.translation-compact .markdown-body > :last-child {
+  margin-bottom: 0;
+}
+.translation-compact .loading {
+  justify-content: flex-start;
+  padding: 4px 0;
+  font-size: 13px;
+}
+.translation-compact .translation-error {
+  max-height: none;
+  flex-shrink: 1;
+  padding: 16px 18px 4px;
+}
+.translation-expand {
+  align-self: flex-end;
+  flex: 0 0 auto;
+  width: 30px;
+  height: 30px;
+  margin: 0 6px 6px;
+  background: var(--surface);
+  color: var(--muted);
+}
+.translation-expand:hover {
+  color: var(--blue);
+  background: var(--hover);
+}
 .translation-heading,
 .translation-controls,
 .translation-actions,
@@ -211,6 +241,11 @@
   z-index: 3;
 }
 @media (pointer: coarse) {
+  .translation-expand {
+    width: 44px;
+    height: 44px;
+    margin: 0 4px 2px;
+  }
   .translation-heading .icon-button,
   .translation-actions .button,
   .translation-controls button,

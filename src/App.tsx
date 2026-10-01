@@ -187,7 +187,7 @@ function AuthScreen({
                 </p>
               )}
               <button className="button primary auth-submit" disabled={busy}>
-                {busy ? '正在验证…' : setup ? '创建私人笔记库' : '打开笔记库'}
+                {busy ? '正在验证…' : setup ? '创建笔记库' : '打开笔记库'}
               </button>
             </>
           )}

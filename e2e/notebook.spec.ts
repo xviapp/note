@@ -20,7 +20,7 @@ async function login(page: Page) {
     );
     await page.getByLabel('设置密码', { exact: true }).fill(password);
     await page.getByLabel('确认密码', { exact: true }).fill(password);
-    await page.getByRole('button', { name: '创建私人笔记库' }).click();
+    await page.getByRole('button', { name: '创建笔记库' }).click();
   } else {
     await page.getByLabel('密码', { exact: true }).fill(password);
     await page.getByRole('button', { name: '打开笔记库' }).click();

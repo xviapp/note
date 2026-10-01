@@ -42,6 +42,7 @@ export function TranslationPanel(props: {
   const [error, setError] = useState(''),
     [status, setStatus] = useState('');
   const [history, setHistory] = useState(false);
+  const [expanded, setExpanded] = useState(!launch.source);
   const [records, setRecords] = useState<TranslationSummary[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
   const operation = useRef<AbortController | null>(null);
@@ -95,6 +96,7 @@ export function TranslationPanel(props: {
   const loadHistory = async (offset = 0) => {
     const controller = begin();
     setHistory(true);
+    setExpanded(true);
     setBusy('loading');
     if (!offset) {
       setRecords([]);
@@ -136,70 +138,79 @@ export function TranslationPanel(props: {
     }
   };
   useEffect(() => {
+    setExpanded(!launch.source);
     if (launch.source) void run(launch.source, preferredLanguage(), launch.location || null);
     else void loadHistory();
     return () => operation.current?.abort();
   }, [nodeId, launch]);
 
   return (
-    <TranslationWindow launch={launch} onClose={props.onClose}>
-      <div className="translation-controls">
-        {history ? (
-          <>
-            {source && (
+    <TranslationWindow
+      launch={launch}
+      onClose={props.onClose}
+      expanded={expanded || history}
+      onExpandedChange={setExpanded}
+      canCollapse={!history}
+    >
+      {(expanded || history) && (
+        <div className="translation-controls">
+          {history ? (
+            <>
+              {source && (
+                <button
+                  className="icon-button"
+                  aria-label="返回译文"
+                  onClick={() => {
+                    operation.current?.abort();
+                    setBusy(null);
+                    setError('');
+                    setHistory(false);
+                    setStatus(saved ? '已保存' : '');
+                  }}
+                >
+                  <ArrowLeft size={16} />
+                </button>
+              )}
+              <strong>翻译记录</strong>
+              <span className="toolbar-spacer" />
               <button
                 className="icon-button"
-                aria-label="返回译文"
-                onClick={() => {
-                  operation.current?.abort();
-                  setBusy(null);
-                  setError('');
-                  setHistory(false);
-                  setStatus(saved ? '已保存' : '');
-                }}
+                aria-label="刷新翻译记录"
+                disabled={!!busy}
+                onClick={() => void loadHistory()}
               >
-                <ArrowLeft size={16} />
+                <RotateCw size={16} />
               </button>
-            )}
-            <strong>翻译记录</strong>
-            <span className="toolbar-spacer" />
-            <button
-              className="icon-button"
-              aria-label="刷新翻译记录"
-              disabled={!!busy}
-              onClick={() => void loadHistory()}
-            >
-              <RotateCw size={16} />
-            </button>
-          </>
-        ) : (
-          <>
-            <label className="translation-language">
-              译为
-              <select
-                aria-label="翻译目标语言"
-                value={language}
-                onChange={(event) => {
-                  const target = event.target.value as TranslationLanguage;
-                  rememberLanguage(target);
-                  void run(source, target, location);
-                }}
-              >
-                {Object.entries(TRANSLATION_LANGUAGES).map(([value, label]) => (
-                  <option key={value} value={value}>
-                    {label}
-                  </option>
-                ))}
-              </select>
-            </label>
-            <span className="toolbar-spacer" />
-            <button className="text-button" onClick={() => void loadHistory()}>
-              <History size={15} />
-              翻译记录
-            </button>
-          </>
-        )}
-      </div>
+            </>
+          ) : (
+            <>
+              <label className="translation-language">
+                译为
+                <select
+                  aria-label="翻译目标语言"
+                  value={language}
+                  onChange={(event) => {
+                    const target = event.target.value as TranslationLanguage;
+                    rememberLanguage(target);
+                    void run(source, target, location);
+                  }}
+                >
+                  {Object.entries(TRANSLATION_LANGUAGES).map(([value, label]) => (
+                    <option key={value} value={value}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <span className="toolbar-spacer" />
+              <button className="text-button" onClick={() => void loadHistory()}>
+                <History size={15} />
+                翻译记录
+              </button>
+            </>
+          )}
+        </div>
+      )}
       {error && (
         <p className="translation-error" role="alert">
           {error}
@@ -281,85 +292,93 @@ export function TranslationPanel(props: {
                 onImage={props.onImage}
               />
             )}
-            <details className="translation-original" key={`${source}:${language}`}>
-              <summary>查看原文{location ? ` · ${sourceLabel(location)}` : ''}</summary>
-              <pre>{source}</pre>
-            </details>
-          </div>
-          <div className="translation-state" role="status">
-            <span>
-              {busy === 'translation' ? '翻译中…' : status || (content && !saved ? '未保存' : '')}
-            </span>
-            {location && (
-              <button
-                className="text-button"
-                onClick={() => {
-                  const failure = props.onLocate(location);
-                  if (failure) setError(failure);
-                  else props.onClose();
-                }}
-                title={location.kind === 'pdf' ? location.fileName : undefined}
-              >
-                <Locate size={14} />
-                回到原文
-              </button>
+            {expanded && (
+              <details className="translation-original" key={`${source}:${language}`}>
+                <summary>查看原文{location ? ` · ${sourceLabel(location)}` : ''}</summary>
+                <pre>{source}</pre>
+              </details>
             )}
           </div>
-          <footer className="translation-actions">
-            <button
-              className="button compact"
-              disabled={!content}
-              onClick={async () => {
-                try {
-                  await navigator.clipboard.writeText(content);
-                  setStatus('已复制译文');
-                } catch {
-                  setError('复制失败，请手动选择译文复制。');
-                }
-              }}
-            >
-              <Copy size={14} />
-              复制
-            </button>
-            <button
-              className="button compact"
-              disabled={!content || busy === 'translation'}
-              onClick={() => {
-                const failure = props.onQuote(
-                  `原文：\n${source}\n\n译文（${TRANSLATION_LANGUAGES[language]}）：\n${content}`,
-                );
-                if (failure) setError(failure);
-                else props.onClose();
-              }}
-            >
-              <Quote size={14} />
-              加入助手
-            </button>
-            <span className="toolbar-spacer" />
-            {busy === 'translation' ? (
-              <button
-                className="button compact"
-                onClick={() => {
-                  operation.current?.abort();
-                  setBusy(null);
-                  setStatus('');
-                  setError('已停止翻译。未完成的译文不会保存。');
-                }}
-              >
-                <Square size={13} />
-                停止
-              </button>
-            ) : (
-              <button
-                className="button compact"
-                disabled={!source || !!busy}
-                onClick={() => void run(source, language, location, true)}
-              >
-                <RotateCw size={14} />
-                {saved ? '重译' : '重试'}
-              </button>
-            )}
-          </footer>
+          {expanded && (
+            <>
+              <div className="translation-state" role="status">
+                <span>
+                  {busy === 'translation'
+                    ? '翻译中…'
+                    : status || (content && !saved ? '未保存' : '')}
+                </span>
+                {location && (
+                  <button
+                    className="text-button"
+                    onClick={() => {
+                      const failure = props.onLocate(location);
+                      if (failure) setError(failure);
+                      else props.onClose();
+                    }}
+                    title={location.kind === 'pdf' ? location.fileName : undefined}
+                  >
+                    <Locate size={14} />
+                    回到原文
+                  </button>
+                )}
+              </div>
+              <footer className="translation-actions">
+                <button
+                  className="button compact"
+                  disabled={!content}
+                  onClick={async () => {
+                    try {
+                      await navigator.clipboard.writeText(content);
+                      setStatus('已复制译文');
+                    } catch {
+                      setError('复制失败，请手动选择译文复制。');
+                    }
+                  }}
+                >
+                  <Copy size={14} />
+                  复制
+                </button>
+                <button
+                  className="button compact"
+                  disabled={!content || busy === 'translation'}
+                  onClick={() => {
+                    const failure = props.onQuote(
+                      `原文：\n${source}\n\n译文（${TRANSLATION_LANGUAGES[language]}）：\n${content}`,
+                    );
+                    if (failure) setError(failure);
+                    else props.onClose();
+                  }}
+                >
+                  <Quote size={14} />
+                  加入助手
+                </button>
+                <span className="toolbar-spacer" />
+                {busy === 'translation' ? (
+                  <button
+                    className="button compact"
+                    onClick={() => {
+                      operation.current?.abort();
+                      setBusy(null);
+                      setStatus('');
+                      setError('已停止翻译。未完成的译文不会保存。');
+                    }}
+                  >
+                    <Square size={13} />
+                    停止
+                  </button>
+                ) : (
+                  <button
+                    className="button compact"
+                    disabled={!source || !!busy}
+                    onClick={() => void run(source, language, location, true)}
+                  >
+                    <RotateCw size={14} />
+                    {saved ? '重译' : '重试'}
+                  </button>
+                )}
+              </footer>
+            </>
+          )}
         </>
       )}
       {question.dialog}
