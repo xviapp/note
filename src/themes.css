@@ -1,52 +1,58 @@
 :root {
   color-scheme: light;
-  --surface: #ffffff;
-  --surface-subtle: #f5f7fa;
-  --sidebar: #f2f5f9;
-  --hover: #eaf0f7;
-  --selected: #e1e9f4;
-  --ink: #24344b;
-  --muted: #5d6d83;
-  --line: #dfe5ed;
-  --line-strong: #afbed1;
-  --blue: #315d96;
-  --focus: #668aba;
-  --focus-ring: #315d9680;
-  --button-bg: #315d96;
-  --button-hover: #244d83;
+  --font-ui: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
+  --font-book: 'Iowan Old Style', 'Palatino Linotype', 'Songti SC', 'Noto Serif CJK SC', serif;
+  --radius-control: 10px;
+  --radius-menu: 14px;
+  --radius-panel: 20px;
+  --surface: #fcfdfb;
+  --surface-subtle: #f2f6f0;
+  --sidebar: #edf2ec;
+  --hover: #e5ede3;
+  --selected: #dce9dc;
+  --ink: #2c3d33;
+  --muted: #5e7065;
+  --line: #e0e8dd;
+  --line-strong: #a0b4a5;
+  --blue: #426b55;
+  --focus: #578568;
+  --focus-ring: #57856866;
+  --button-bg: #426b55;
+  --button-hover: #365b47;
   --button-ink: #ffffff;
-  --danger: #ad4245;
-  --danger-bg: #fff4f3;
+  --danger: #a84f4d;
+  --danger-bg: #fcf2f0;
   --danger-line: #edc5c5;
   --warning: #906028;
   --warning-bg: #fff5e9;
   --warning-line: #ead9c6;
   --favorite: #a57929;
   --success: #527e6a;
-  --pdf-stage: #e8edf4;
-  --shadow-soft: #24344b19;
-  --shadow-strong: #1c2e5140;
-  --scrim: #1e304a66;
+  --pdf-stage: #e5ebe3;
+  --shadow-soft: #293e2e0d;
+  --shadow-strong: #203e2c2e;
+  --shadow-popover: 0 18px 52px -12px var(--shadow-strong), 0 3px 12px var(--shadow-soft);
+  --scrim: #263e3252;
   --star-pattern: none;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface: #171c24;
-  --surface-subtle: #1e2632;
-  --sidebar: #121720;
-  --hover: #253141;
-  --selected: #2d3e55;
-  --ink: #dde5ef;
-  --muted: #a5b2c6;
-  --line: #303b4b;
-  --line-strong: #53647d;
-  --blue: #9cbffc;
-  --focus: #a5c6ff;
-  --focus-ring: #a5c6ff80;
-  --button-bg: #9cbffc;
-  --button-hover: #b8d2ff;
-  --button-ink: #142034;
+  --surface: #202824;
+  --surface-subtle: #28332d;
+  --sidebar: #19211d;
+  --hover: #303f35;
+  --selected: #354b3c;
+  --ink: #e1e8df;
+  --muted: #acbdb0;
+  --line: #344238;
+  --line-strong: #607465;
+  --blue: #b1d0ae;
+  --focus: #b7d7b4;
+  --focus-ring: #b7d7b480;
+  --button-bg: #b1d0ae;
+  --button-hover: #c4dfc0;
+  --button-ink: #233929;
   --danger: #f3a3a8;
   --danger-bg: #352329;
   --danger-line: #714449;
@@ -55,29 +61,29 @@
   --warning-line: #61503a;
   --favorite: #e5be78;
   --success: #9bc9b1;
-  --pdf-stage: #0f131b;
+  --pdf-stage: #151d18;
   --shadow-soft: #00000030;
   --shadow-strong: #00000066;
-  --scrim: #070b12a6;
+  --scrim: #0d1712a6;
 }
 
 :root[data-theme='starry'] {
   color-scheme: dark;
-  --surface: #131b32;
-  --surface-subtle: #1a2642;
-  --sidebar: #0d1429;
-  --hover: #263453;
-  --selected: #303e66;
-  --ink: #e1e8fc;
-  --muted: #a8b6d7;
-  --line: #2a395b;
-  --line-strong: #55668e;
-  --blue: #b8baff;
-  --focus: #c8c7ff;
-  --focus-ring: #c8c7ff80;
-  --button-bg: #b8baff;
-  --button-hover: #cdcfff;
-  --button-ink: #161d38;
+  --surface: #20263b;
+  --surface-subtle: #282f47;
+  --sidebar: #181e31;
+  --hover: #313a54;
+  --selected: #3c4462;
+  --ink: #e4e5ef;
+  --muted: #b4bdd2;
+  --line: #363f59;
+  --line-strong: #636d8c;
+  --blue: #c4c3e8;
+  --focus: #cdcaef;
+  --focus-ring: #cdcaef80;
+  --button-bg: #c4c3e8;
+  --button-hover: #d4d1ef;
+  --button-ink: #2c2d49;
   --danger: #ffb0bf;
   --danger-bg: #34233b;
   --danger-line: #75465f;
@@ -86,15 +92,15 @@
   --warning-line: #615044;
   --favorite: #edcc8f;
   --success: #9ed5c7;
-  --pdf-stage: #090f20;
+  --pdf-stage: #141a2a;
   --shadow-soft: #00000040;
   --shadow-strong: #00000080;
   --scrim: #04081ab3;
   --star-pattern:
-    radial-gradient(circle at 28px 54px, #c6d5ff5c 0.7px, transparent 1.3px),
-    radial-gradient(circle at 196px 128px, #c6d5ff70 0.9px, transparent 1.6px),
-    radial-gradient(circle at 76px 258px, #c6d5ff40 0.6px, transparent 1.2px),
-    radial-gradient(circle at 230px 306px, #c6d5ff50 0.7px, transparent 1.3px);
+    radial-gradient(circle at 28px 54px, #d1d2ed3d 0.7px, transparent 1.3px),
+    radial-gradient(circle at 196px 128px, #d1d2ed55 0.9px, transparent 1.6px),
+    radial-gradient(circle at 76px 258px, #d1d2ed2e 0.6px, transparent 1.2px),
+    radial-gradient(circle at 230px 306px, #d1d2ed38 0.7px, transparent 1.3px);
 }
 
 ::selection {

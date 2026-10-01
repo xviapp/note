@@ -20,12 +20,10 @@
   flex-direction: column;
   min-height: 0;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-panel);
   background: var(--surface);
-  box-shadow:
-    0 16px 50px var(--shadow-strong),
-    0 2px 8px var(--shadow-soft);
+  box-shadow: var(--shadow-popover);
   font-size: 13px;
 }
 .assistant-panel[hidden],
@@ -40,14 +38,14 @@
   align-items: center;
   gap: 8px;
   padding: 12px 16px;
-  border: 1px solid var(--line-strong);
+  border: 1px solid var(--line);
   border-radius: 24px;
   background: var(--surface);
   color: var(--blue);
   font-size: 13px;
   font-weight: 500;
   white-space: nowrap;
-  box-shadow: 0 4px 18px var(--shadow-strong);
+  box-shadow: 0 6px 24px -4px var(--shadow-strong);
 }
 .assistant-launcher:hover {
   background: var(--hover);
@@ -76,6 +74,7 @@
   gap: 1px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
+  background: var(--surface-subtle);
 }
 .assistant-drag-handle {
   flex: 1;
@@ -97,7 +96,7 @@
   align-items: center;
   gap: 8px;
   font-size: 14px;
-  font-weight: 600;
+  font-weight: 500;
 }
 .assistant-heading span {
   display: block;
@@ -162,12 +161,14 @@
   margin: 10px auto;
 }
 .chat-message {
-  padding: 19px 0;
-  border-bottom: 1px solid var(--line);
+  padding: 21px 0;
   overflow-wrap: anywhere;
 }
-.chat-message:last-of-type {
-  border-bottom: 0;
+.chat-user {
+  margin: 16px 0 2px;
+  padding: 14px 16px;
+  background: var(--surface-subtle);
+  border-radius: 16px 16px 5px 16px;
 }
 .chat-role {
   font-size: 11px;
@@ -225,6 +226,7 @@
   padding: 7px 10px;
   margin-bottom: 12px;
   font-size: 11px;
+  border-radius: 0 8px 8px 0;
 }
 .chat-quote summary {
   cursor: pointer;
@@ -240,7 +242,7 @@
   display: block;
   margin: 8px 0 12px;
   max-width: 100%;
-  border-radius: 4px;
+  border-radius: 10px;
   overflow: hidden;
   border: 1px solid var(--line);
 }
@@ -290,6 +292,7 @@
   padding: 10px 12px;
   line-height: 1.7;
   background: var(--surface-subtle);
+  border-radius: 14px;
 }
 .assistant-send {
   display: flex;
@@ -321,6 +324,7 @@
   border-left: 2px solid var(--blue);
   background: var(--surface-subtle);
   color: var(--muted);
+  border-radius: 0 8px 8px 0;
 }
 .context-quote > svg {
   flex-shrink: 0;
@@ -368,7 +372,7 @@
   padding: 7px 9px;
   background: var(--surface-subtle);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
 }
 .context-file > svg {
   flex-shrink: 0;
@@ -402,7 +406,7 @@
 .chat-file-card {
   background: var(--surface-subtle);
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   padding: 10px;
   margin-bottom: 10px;
   font-size: 12px;

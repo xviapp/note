@@ -4,11 +4,11 @@
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--line-strong);
-  border-radius: 12px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
   background: var(--surface);
   color: var(--ink);
-  box-shadow: 0 12px 44px var(--shadow-strong);
+  box-shadow: var(--shadow-popover);
   font-size: 14px;
   line-height: 1.55;
 }
@@ -63,6 +63,7 @@
   border-bottom: 1px solid var(--line);
   padding: 6px 10px;
   gap: 2px;
+  background: var(--surface-subtle);
 }
 .translation-drag {
   display: flex;
@@ -102,7 +103,7 @@
 }
 .translation-controls {
   min-height: 51px;
-  background: var(--surface-subtle);
+  background: var(--surface);
   border-bottom: 1px solid var(--line);
 }
 .translation-controls .text-button,

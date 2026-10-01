@@ -1,5 +1,5 @@
 :root {
-  font-family: Inter, 'PingFang SC', 'Microsoft YaHei', system-ui, sans-serif;
+  font-family: var(--font-ui);
   color: var(--ink);
   background: var(--surface);
   font-synthesis: none;
@@ -65,9 +65,9 @@ svg {
 input:not([type='checkbox']):not([type='radio']):not([type='file']),
 select,
 textarea {
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
-  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
   padding: 10px 12px;
   width: 100%;
   color: var(--ink);
@@ -75,13 +75,19 @@ textarea {
 input::placeholder {
   color: var(--muted);
 }
+input:not([type='checkbox']):not([type='radio']):not([type='file']):focus,
+select:focus,
+textarea:focus {
+  border-color: var(--focus);
+  background: var(--surface);
+}
 input[type='file'] {
   max-width: 100%;
   font-size: 13px;
 }
 input[type='file']::file-selector-button {
   border: 1px solid var(--line);
-  border-radius: 5px;
+  border-radius: var(--radius-control);
   background: var(--surface-subtle);
   padding: 8px 12px;
   margin: 8px 12px 8px 0;
@@ -130,16 +136,16 @@ progress::-moz-progress-bar {
   min-height: 37px;
   padding: 8px 14px;
   border: 1px solid var(--line);
-  border-radius: 7px;
-  background: var(--surface);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
   font-size: 13px;
   font-weight: 500;
   line-height: 1.4;
   white-space: nowrap;
 }
 .button:hover:not(:disabled) {
-  border-color: var(--line-strong);
-  background: var(--surface-subtle);
+  border-color: var(--line);
+  background: var(--hover);
 }
 .button.primary {
   background: var(--button-bg);
@@ -169,7 +175,7 @@ progress::-moz-progress-bar {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   flex-shrink: 0;
   color: var(--muted);
 }
@@ -177,6 +183,9 @@ progress::-moz-progress-bar {
   background: var(--hover);
   color: var(--blue);
   text-decoration: none;
+}
+:where(.icon-button, .button, .main-nav button, .new-note-button, .brand-mark) > .lucide {
+  stroke-width: 1.65;
 }
 .text-button {
   display: inline-flex;
@@ -243,13 +252,14 @@ progress::-moz-progress-bar {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 52px;
-  height: 52px;
+  width: 60px;
+  height: 60px;
   background: var(--surface-subtle);
   color: var(--blue);
-  border-radius: 14px;
+  border-radius: 22px 22px 22px 8px;
 }
 .empty-state h2 {
+  font-family: var(--font-book);
   font-size: 18px;
 }
 .empty-state p {
@@ -281,21 +291,22 @@ progress::-moz-progress-bar {
   display: flex;
   align-items: center;
   gap: 12px;
-  font-size: 23px;
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-family: var(--font-book);
+  font-size: 25px;
+  font-weight: 500;
+  letter-spacing: 0.08em;
   white-space: nowrap;
 }
 .brand-mark {
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 39px;
-  height: 43px;
-  border: 1px solid var(--line-strong);
-  border-radius: 7px;
+  width: 40px;
+  height: 44px;
+  border-radius: 6px 14px 14px 6px;
   color: var(--blue);
   background: var(--selected);
+  box-shadow: inset 3px 0 0 var(--line-strong);
 }
 
 .auth-screen {
@@ -313,10 +324,11 @@ progress::-moz-progress-bar {
 .auth-form-area {
   width: 100%;
   max-width: 410px;
-  padding: 34px;
+  padding: 38px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: 26px;
+  box-shadow: var(--shadow-popover);
 }
 .auth-form {
   width: 100%;
@@ -330,6 +342,7 @@ progress::-moz-progress-bar {
   margin-bottom: 10px;
 }
 .auth-form h1 {
+  font-family: var(--font-book);
   font-size: 21px;
   font-weight: 500;
 }
@@ -355,12 +368,12 @@ progress::-moz-progress-bar {
   height: 100dvh;
   display: flex;
   overflow: hidden;
+  background: var(--sidebar);
 }
 .sidebar {
   width: 264px;
   flex-shrink: 0;
   background: var(--sidebar);
-  border-right: 1px solid var(--line);
   display: flex;
   flex-direction: column;
   padding: 28px 16px 18px;
@@ -372,30 +385,30 @@ progress::-moz-progress-bar {
   justify-content: space-between;
 }
 .sidebar .brand {
-  font-size: 22px;
+  font-size: 25px;
 }
 .sidebar .brand-mark {
-  width: 35px;
-  height: 39px;
+  width: 38px;
+  height: 42px;
 }
 .new-note-button {
   display: flex;
   align-items: center;
   gap: 9px;
-  padding: 10px 13px;
+  padding: 11px 14px;
   background: var(--surface);
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: 12px;
   color: var(--blue);
   font-weight: 500;
   font-size: 13px;
   text-align: left;
   margin-bottom: 19px;
-  box-shadow: 0 2px 3px var(--shadow-soft);
+  box-shadow: 0 3px 9px var(--shadow-soft);
 }
 .new-note-button:hover {
-  background: var(--surface-subtle);
-  border-color: var(--line-strong);
+  background: var(--hover);
+  border-color: var(--line);
 }
 
 .main-nav {
@@ -408,7 +421,7 @@ progress::-moz-progress-bar {
   align-items: center;
   gap: 11px;
   padding: 9px 12px;
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   color: var(--muted);
   text-align: left;
   font-size: 13px;
@@ -421,6 +434,7 @@ progress::-moz-progress-bar {
   background: var(--selected);
   color: var(--blue);
   font-weight: 500;
+  box-shadow: inset 3px 0 0 var(--focus);
 }
 .sidebar-tree {
   margin: 24px -9px 12px;
@@ -453,10 +467,10 @@ progress::-moz-progress-bar {
 .tree-row {
   display: flex;
   align-items: center;
-  border-radius: 5px;
-  min-height: 34px;
+  border-radius: 9px;
+  min-height: 36px;
   padding-right: 3px;
-  margin: 1px 4px;
+  margin: 3px 4px;
 }
 .tree-row:hover {
   background: var(--hover);
@@ -520,7 +534,6 @@ progress::-moz-progress-bar {
   background: var(--selected) !important;
 }
 .sidebar-bottom {
-  border-top: 1px solid var(--line);
   padding-top: 12px;
 }
 .sidebar-usage {
@@ -564,12 +577,12 @@ progress::-moz-progress-bar {
   position: absolute;
   top: 100%;
   right: 0;
-  width: 172px;
-  padding: 5px;
+  width: 180px;
+  padding: 7px;
   background: var(--surface);
   border: 1px solid var(--line);
-  box-shadow: 0 6px 24px var(--shadow-soft);
-  border-radius: 7px;
+  box-shadow: var(--shadow-popover);
+  border-radius: var(--radius-menu);
   z-index: 40;
 }
 .menu-popup button {
@@ -577,8 +590,8 @@ progress::-moz-progress-bar {
   width: 100%;
   text-align: left;
   font-size: 12px;
-  padding: 8px;
-  border-radius: 4px;
+  padding: 9px 10px;
+  border-radius: 8px;
 }
 .menu-popup button:hover {
   background: var(--surface-subtle);
@@ -588,6 +601,9 @@ progress::-moz-progress-bar {
   flex: 1;
   min-width: 0;
   flex-direction: column;
+  background: var(--surface);
+  border-radius: 24px 0 0 24px;
+  overflow: hidden;
 }
 .app-header {
   height: 68px;
@@ -611,7 +627,7 @@ progress::-moz-progress-bar {
   display: grid;
   place-items: center;
   color: var(--muted);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   flex-shrink: 0;
 }
 .theme-switcher-labeled {
@@ -655,7 +671,7 @@ progress::-moz-progress-bar {
   gap: 12px;
   padding: 10px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-menu);
   cursor: pointer;
 }
 .theme-choices label.selected {
@@ -686,16 +702,16 @@ progress::-moz-progress-bar {
   height: 58px;
   display: block;
   position: relative;
-  border-radius: 4px;
+  border-radius: 8px;
   overflow: hidden;
-  border: 1px solid #8294af55;
-  background: #fff;
+  border: 1px solid #96a89855;
+  background: #fcfdfb;
 }
 .theme-swatch::before {
   content: '';
   position: absolute;
   inset: 0 72% 0 0;
-  background: #f2f5f9;
+  background: #edf2ec;
 }
 .theme-swatch span {
   position: absolute;
@@ -709,19 +725,19 @@ progress::-moz-progress-bar {
     0 20px #8294af40;
 }
 .theme-swatch[data-palette='dark'] {
-  background: #171c24;
+  background: #202824;
 }
 .theme-swatch[data-palette='dark']::before {
-  background: #121720;
+  background: #19211d;
 }
 .theme-swatch[data-palette='starry'] {
-  background: radial-gradient(circle at 89% 19%, #c6d5ff88 1px, transparent 1.5px), #131b32;
+  background: radial-gradient(circle at 89% 19%, #d1d2ed88 1px, transparent 1.5px), #20263b;
 }
 .theme-swatch[data-palette='starry']::before {
-  background: radial-gradient(circle at 38% 32%, #c6d5ff99 1px, transparent 1.5px), #0d1429;
+  background: radial-gradient(circle at 38% 32%, #d1d2ed99 1px, transparent 1.5px), #181e31;
 }
 .theme-swatch[data-palette='system'] {
-  background: linear-gradient(115deg, #fff 50%, #171c24 50%);
+  background: linear-gradient(115deg, #fcfdfb 50%, #202824 50%);
 }
 .header-title {
   font-size: 12px;
@@ -771,8 +787,9 @@ progress::-moz-progress-bar {
 }
 .collection-page > h1,
 .collection-title h1 {
-  font-size: 29px;
-  font-weight: 550;
+  font-family: var(--font-book);
+  font-size: 32px;
+  font-weight: 500;
   line-height: 1.4;
   margin-top: 12px;
 }
@@ -792,14 +809,15 @@ progress::-moz-progress-bar {
   line-height: 1.8;
 }
 .node-list {
-  border-top: 1px solid var(--line);
+  padding-top: 4px;
 }
 .node-list-row {
   display: flex;
   align-items: center;
-  border-bottom: 1px solid var(--line);
+  border-radius: 12px;
   gap: 8px;
-  padding: 4px 7px 4px 0;
+  padding: 4px 8px;
+  margin: 4px -8px;
 }
 .node-list-row:hover {
   background: var(--surface-subtle);
@@ -817,8 +835,15 @@ progress::-moz-progress-bar {
   flex: 1;
   min-width: 0;
 }
+.node-list-main > .node-icon {
+  width: 38px;
+  height: 42px;
+  padding: 10px;
+  border-radius: 5px 11px 11px 5px;
+  background: var(--surface-subtle);
+}
 .node-list-main strong {
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   display: block;
   white-space: nowrap;
@@ -827,7 +852,7 @@ progress::-moz-progress-bar {
 }
 .node-list-main small {
   display: block;
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-top: 3px;
   white-space: nowrap;
@@ -835,7 +860,7 @@ progress::-moz-progress-bar {
   overflow: hidden;
 }
 .node-list-main time {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   margin-left: auto;
   white-space: nowrap;
@@ -938,15 +963,16 @@ progress::-moz-progress-bar {
   margin-bottom: 33px;
 }
 .document-heading h1 {
-  font-size: 29px;
-  font-weight: 550;
-  letter-spacing: -0.02em;
+  font-family: var(--font-book);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: 0.015em;
   line-height: 1.5;
   overflow-wrap: anywhere;
   margin: 15px 0 13px;
 }
 .document-meta {
-  font-size: 10px;
+  font-size: 11px;
   color: var(--muted);
   display: flex;
   align-items: center;
@@ -972,7 +998,7 @@ progress::-moz-progress-bar {
 }
 .markdown-body {
   color: var(--ink);
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.95;
   overflow-wrap: anywhere;
 }
@@ -999,8 +1025,7 @@ progress::-moz-progress-bar {
 }
 .markdown-body h2 {
   font-size: 21px;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 0.45em;
+  padding-bottom: 0.15em;
 }
 .markdown-body h3 {
   font-size: 17px;
@@ -1028,8 +1053,9 @@ progress::-moz-progress-bar {
 }
 .markdown-body blockquote {
   margin: 1.6em 0;
-  padding: 10px 20px;
-  border-left: 3px solid var(--line-strong);
+  padding: 14px 20px;
+  border-left: 3px solid var(--focus);
+  border-radius: 0 12px 12px 0;
   background: var(--surface-subtle);
   color: var(--muted);
 }
@@ -1040,7 +1066,7 @@ progress::-moz-progress-bar {
   background: var(--surface-subtle);
   border: 1px solid var(--line);
   padding: 16px 19px;
-  border-radius: 6px;
+  border-radius: 12px;
   overflow: auto;
   font-size: 12px;
   line-height: 1.8;
@@ -1124,6 +1150,7 @@ progress::-moz-progress-bar {
   line-height: 1.7;
   padding: 5px 8px;
   border-left: 2px solid transparent;
+  border-radius: 0 8px 8px 0;
   margin-left: -1px;
   overflow-wrap: anywhere;
 }
@@ -1186,7 +1213,7 @@ progress::-moz-progress-bar {
   gap: 12px;
   padding: 25px;
   border: 1px solid var(--line);
-  border-radius: 8px;
+  border-radius: var(--radius-menu);
   background: var(--surface-subtle);
 }
 .external-link span {
@@ -1337,11 +1364,11 @@ progress::-moz-progress-bar {
 }
 .modal {
   border: 1px solid var(--line);
-  border-radius: 12px;
+  border-radius: var(--radius-panel);
   width: 460px;
   max-width: calc(100vw - 32px);
-  padding: 24px;
-  box-shadow: 0 24px 90px var(--shadow-strong);
+  padding: 28px;
+  box-shadow: var(--shadow-popover);
   color: var(--ink);
   background: var(--surface);
   max-height: calc(100dvh - 48px);
@@ -1350,7 +1377,7 @@ progress::-moz-progress-bar {
 }
 .modal::backdrop {
   background: var(--scrim);
-  backdrop-filter: blur(2px);
+  backdrop-filter: blur(4px);
 }
 .modal-wide {
   width: 950px;
@@ -1363,8 +1390,8 @@ progress::-moz-progress-bar {
   margin-bottom: 18px;
 }
 .modal-heading h2 {
-  font-size: 17px;
-  font-weight: 550;
+  font-size: 18px;
+  font-weight: 500;
   overflow-wrap: anywhere;
 }
 .modal-heading .icon-button {
@@ -1408,7 +1435,7 @@ progress::-moz-progress-bar {
   align-items: center;
   gap: 7px;
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: var(--radius-control);
   font-size: 12px;
   padding: 9px;
   cursor: pointer;
@@ -1431,7 +1458,7 @@ progress::-moz-progress-bar {
   max-height: 310px;
   overflow: auto;
   border: 1px solid var(--line);
-  border-radius: 7px;
+  border-radius: var(--radius-control);
   padding: 8px;
 }
 .picker-breadcrumb {
@@ -1481,7 +1508,7 @@ progress::-moz-progress-bar {
   display: grid;
   grid-template-columns: 150px minmax(0, 1fr);
   border: 1px solid var(--line);
-  border-radius: 6px;
+  border-radius: 12px;
   overflow: hidden;
   min-height: 300px;
   max-height: 60dvh;
@@ -1701,7 +1728,6 @@ progress::-moz-progress-bar {
   max-width: 850px;
 }
 .settings-section {
-  border-top: 1px solid var(--line);
   padding-top: 27px;
   margin-top: 36px;
 }
@@ -1712,6 +1738,9 @@ progress::-moz-progress-bar {
   gap: 10px;
   margin-bottom: 23px;
   font-weight: 500;
+}
+.settings-section + .settings-section {
+  border-top: 1px solid var(--line);
 }
 .settings-section h2 svg {
   color: var(--muted);
@@ -1846,6 +1875,7 @@ progress::-moz-progress-bar {
     transition: transform 0.18s ease;
     padding: 25px 15px 20px;
     box-shadow: none;
+    border-radius: 0 22px 22px 0;
   }
   .sidebar-open .sidebar {
     visibility: visible;
@@ -1889,6 +1919,7 @@ progress::-moz-progress-bar {
   }
   .main-area {
     width: 100%;
+    border-radius: 0;
   }
   .app-header {
     height: 57px;
@@ -1961,7 +1992,7 @@ progress::-moz-progress-bar {
     margin-bottom: 27px;
   }
   .document-heading h1 {
-    font-size: 25px;
+    font-size: 27px;
     margin: 12px 0;
   }
   .document-meta {
@@ -1972,7 +2003,7 @@ progress::-moz-progress-bar {
   }
 
   .markdown-body {
-    font-size: 14px;
+    font-size: 15px;
     line-height: 1.9;
   }
   .markdown-body h1 {
@@ -1996,7 +2027,7 @@ progress::-moz-progress-bar {
   }
   .collection-page > h1,
   .collection-title h1 {
-    font-size: 26px;
+    font-size: 28px;
   }
   .page-description {
     font-size: 12px;
@@ -2030,7 +2061,7 @@ progress::-moz-progress-bar {
     padding: 20px;
     max-width: calc(100vw - 24px);
     max-height: calc(100dvh - 28px);
-    border-radius: 10px;
+    border-radius: var(--radius-panel);
   }
   .modal-heading {
     margin-bottom: 17px;

@@ -181,7 +181,8 @@ test('floating translations save, remember language, copy, pin, maximize, and qu
   expect(bounds!.y + bounds!.height).toBeLessThanOrEqual(viewport.height);
   await page.screenshot({ path: info.outputPath('translation-light.png') });
   await panel(page).getByRole('button', { name: '固定翻译窗口', exact: true }).click();
-  await page.locator('.note-toolbar').click({ position: { x: 4, y: 4 } });
+  // Stay on the toolbar's empty top padding, inside the rounded reading pane.
+  await page.locator('.note-toolbar').click({ position: { x: 60, y: 4 } });
   await expect(panel(page)).toBeVisible();
   const drag = panel(page).getByRole('group', { name: '移动翻译窗口' });
   await drag.focus();

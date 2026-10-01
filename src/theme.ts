@@ -28,9 +28,9 @@ function apply(preference: ThemePreference) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute(
     'content',
     {
-      light: '#ffffff',
-      dark: '#171c24',
-      starry: '#131b32',
+      light: '#fcfdfb',
+      dark: '#202824',
+      starry: '#20263b',
     }[theme],
   );
   if (snapshot.preference === preference && snapshot.theme === theme) return;
