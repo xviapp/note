@@ -1,11 +1,7 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
-import {
-  CHAT_PDF_PAGE_LIMIT,
-  CHAT_FILE_TEXT_LIMIT,
-  parsePageRange,
-  pageLabel,
-} from '../../shared/chat-files';
+import { CHAT_PDF_PAGE_LIMIT, parsePageRange, pageLabel } from '../../shared/chat-files';
+import { AI_IMAGE_TOKENS, estimateTextTokens } from '../../shared/ai-context';
 import { fileUrl } from '../api';
 import {
   prepareBasicFile,
@@ -37,6 +33,11 @@ export function ChatFileDialog({
     [partId, setPartId] = useState('');
   const abort = useRef<AbortController | null>(null);
   const meta = useRef<ReturnType<typeof sourceDescription> | null>(null);
+  const estimatedTokens = useMemo(
+    () =>
+      prepared ? estimateTextTokens(prepared.text) + prepared.images.length * AI_IMAGE_TOKENS : 0,
+    [prepared],
+  );
   useEffect(() => {
     let task: PDFDocumentLoadingTask | undefined;
     const controller = new AbortController();
@@ -48,15 +49,13 @@ export function ChatFileDialog({
         if (source.type === 'note' && source.note.arxiv_id) {
           const choices = paperParts(source.note);
           setParts(choices);
-          if (choices[0].text.length <= CHAT_FILE_TEXT_LIMIT) {
-            setPartId('all');
-            setPrepared({
-              ...description,
-              id: crypto.randomUUID(),
-              text: choices[0].text,
-              images: [],
-            });
-          }
+          setPartId('all');
+          setPrepared({
+            ...description,
+            id: crypto.randomUUID(),
+            text: choices[0].text,
+            images: [],
+          });
         } else if (description.kind === 'pdf') {
           const { openPdf } = await import('../pdf-document');
           const input =
@@ -162,20 +161,13 @@ export function ChatFileDialog({
                 >
                   <option value="">选择全文或章节</option>
                   {parts.map((part) => (
-                    <option
-                      key={part.id}
-                      value={part.id}
-                      disabled={part.text.length > CHAT_FILE_TEXT_LIMIT}
-                    >
+                    <option key={part.id} value={part.id}>
                       {part.title} · {part.text.length.toLocaleString()} 字符
-                      {part.text.length > CHAT_FILE_TEXT_LIMIT ? '（超过上限）' : ''}
                     </option>
                   ))}
                 </select>
               </label>
-              <p className="field-hint">
-                公式以 LaTeX 附上；每次最多 60,000 字符。图片请框选截图，或引用图注提问。
-              </p>
+              <p className="field-hint">公式以 LaTeX 附上。图片请框选截图，或引用图注提问。</p>
             </div>
           )}
           {pdf && (
@@ -220,6 +212,7 @@ export function ChatFileDialog({
                 {prepared.pages ? `第 ${pageLabel(prepared.pages)} 页 · ` : ''}
                 {prepared.text.length.toLocaleString()} 字符
                 {prepared.images.length ? ` · ${prepared.images.length} 张图片` : ''}
+                {` · 约 ${estimatedTokens.toLocaleString()} tokens`}
               </p>
               {prepared.text && (
                 <details>

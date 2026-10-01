@@ -15,6 +15,12 @@ import { sseData } from '../shared/sse';
 import { readApiKey } from '../worker/deepseek';
 import { cleanup } from '../worker/recovery';
 import { discardFile } from '../worker/storage';
+import { AI_CONTEXT_WINDOW, inputTokenBudget } from '../shared/ai-context';
+import {
+  CHAT_BODY_BYTE_LIMIT,
+  CHAT_SOURCE_TEXT_BYTE_LIMIT,
+  CHAT_EVENT_CHARACTER_LIMIT,
+} from '../shared/chat-files';
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -92,7 +98,8 @@ function provider(content = '# 阅读结论\n\n解释所选文字。', complete:
 async function events(response: Response): Promise<ChatEvent[]> {
   expect(response.status).toBe(200);
   const result: ChatEvent[] = [];
-  for await (const line of sseData(response.body!)) result.push(JSON.parse(line));
+  for await (const line of sseData(response.body!, CHAT_EVENT_CHARACTER_LIMIT))
+    result.push(JSON.parse(line));
   return result;
 }
 async function chat(
@@ -161,7 +168,10 @@ describe('per-file DeepSeek assistant', () => {
       bytes = new TextEncoder().encode('资料文本');
     expect((await uploadAttachment(node, 'reading.txt', bytes, true)).status).toBe(401);
     expect((await uploadAttachment(node, 'script.html', bytes)).status).toBe(400);
-    expect((await uploadAttachment(node, 'huge.txt', new Uint8Array(1_048_577))).status).toBe(400);
+    expect(
+      (await uploadAttachment(node, 'huge.txt', new Uint8Array(CHAT_SOURCE_TEXT_BYTE_LIMIT + 1)))
+        .status,
+    ).toBe(400);
     const response = await uploadAttachment(node, 'reading.txt', bytes);
     expect(response.status).toBe(201);
     const file = (await response.json()) as FileInfo;
@@ -263,17 +273,18 @@ describe('per-file DeepSeek assistant', () => {
       },
     ];
     await chat(node, { content: '旧问题', image: png, files });
-    await chat(node, { content: '现在的问题', image: png, files });
+    const result = await chat(node, { content: '现在的问题', image: png, files });
     const sent = JSON.parse(String(fetch.mock.calls[1][1]?.body));
     const current = sent.messages.at(-1).content;
     expect(current.filter((part: { type: string }) => part.type === 'image_url')).toHaveLength(7);
     expect(current).toContainEqual({ type: 'text', text: '附件图片：scans.pdf，第 6 页' });
-    expect(JSON.stringify(sent)).toContain('较早的图片未放入本次上下文');
+    expect(JSON.stringify(sent)).not.toContain('旧问题');
+    expect(result[0]).toMatchObject({ type: 'start', context: { omittedHistory: true } });
     expect(
       sent.messages
         .flatMap((m: { content: unknown }) => (Array.isArray(m.content) ? m.content : []))
         .filter((p: { type: string }) => p.type === 'image_url'),
-    ).toHaveLength(8);
+    ).toHaveLength(7);
   });
 
   it('rejects excessive or inconsistent attachment metadata before a paid request', async () => {
@@ -295,10 +306,7 @@ describe('per-file DeepSeek assistant', () => {
     };
     for (const files of [
       [basic, basic, basic, basic],
-      [
-        { ...basic, text: 'x'.repeat(30_001) },
-        { ...basic, text: 'y'.repeat(30_000) },
-      ],
+      [{ ...basic, text: '*'.repeat(870_000) }],
       [{ ...basic, sourceId: file.id }],
       [{ ...pdf, pages: [0] }],
       [{ ...pdf, pages: [4] }],
@@ -322,6 +330,237 @@ describe('per-file DeepSeek assistant', () => {
     for (const value of ['', '0', '3-2', '1-11', '1,', '1.5'])
       expect(() => parsePageRange(value, 10)).toThrow();
     expect(() => parsePageRange('1-201', 300)).toThrow('200');
+  });
+
+  it('sends complete long PDF text and a text attachment larger than 1 MiB, retaining their snapshots', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    const text = 'Long research text. '.repeat(60_000) + 'END OF TEXT';
+    const pdfText = '[第 1 页]\n' + '论文公式 $x_i + y_i$. '.repeat(10_000) + 'PDF END';
+    const response = await uploadAttachment(node, 'long.txt', new TextEncoder().encode(text));
+    expect(response.status).toBe(201);
+    const source = (await response.json()) as FileInfo;
+    const files: ChatFileInput[] = [
+      { name: 'long.txt', kind: 'text', text, sourceId: source.id, images: [] },
+      {
+        name: 'long.pdf',
+        kind: 'pdf',
+        text: pdfText,
+        pageCount: 1,
+        pages: [1],
+        mode: 'auto',
+        images: [],
+      },
+    ];
+    const result = await chat(node, { content: '比较这两份资料', files });
+    expect(result.at(-1)).toMatchObject({ type: 'done' });
+    const sent = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(sent.messages[1].content).toContain(text);
+    expect(sent.messages[1].content).toContain(pdfText);
+    expect(result[0]).toMatchObject({
+      type: 'start',
+      context: {
+        contextWindow: AI_CONTEXT_WINDOW,
+        reservedOutputTokens: 8192,
+        omittedHistory: false,
+      },
+    });
+    const stored = (await history(node)).messages[0].files!;
+    expect(stored.map((file) => file.text)).toEqual([text, pdfText]);
+    expect(await discardFile(bindings, source.id)).toBe(false);
+    const storage = await ok<StorageInfo>('/api/storage');
+    expect(storage.orphanBytes).toBe(0);
+  });
+
+  it('reserves output tokens, rejects an oversized turn without saving or charging, and allows the same request to retry', async () => {
+    const node = await create();
+    await configure();
+    await ok('/api/ai/settings', 'PUT', { maxTokens: 32768 });
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    const data: ChatInput = {
+      content: '完整读取',
+      image: png,
+      files: [
+        {
+          name: 'formula.txt',
+          kind: 'text',
+          text: '*'.repeat(inputTokenBudget(8192) - 5000),
+          images: [],
+        },
+      ],
+    };
+    const storage = await ok<StorageInfo>('/api/storage');
+    const response = await request(`/api/nodes/${node.id}/assistant`, 'POST', data, {
+      key: 'budget-retry',
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({
+      error: expect.stringContaining('32,768'),
+      code: 'AI_CONTEXT_LIMIT',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    expect((await history(node)).messages).toHaveLength(0);
+    expect((await history(node)).busy).toBe(false);
+    expect((await ok<StorageInfo>('/api/storage')).allocatedBytes).toBe(storage.allocatedBytes);
+    await ok('/api/ai/settings', 'PUT', { maxTokens: 8192 });
+    expect((await chat(node, data, { key: 'budget-retry' })).at(-1)).toMatchObject({
+      type: 'done',
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('paginates large attachment history by bytes without losing or truncating messages', async () => {
+    const node = await create();
+    await configure();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider('已读。'));
+    const text = '字'.repeat(1_000_000);
+    for (let index = 0; index < 3; index++)
+      await chat(node, {
+        content: `阅读 ${index}`,
+        files: [{ name: 'long.txt', kind: 'text', text, images: [] }],
+      });
+    const first = await history(node);
+    expect(first.messages.length).toBeLessThan(6);
+    expect(first.nextBefore).not.toBeNull();
+    const older = await ok<ChatHistory>(
+      `/api/nodes/${node.id}/assistant?before=${first.nextBefore}`,
+    );
+    expect(older.nextBefore).toBeNull();
+    const all = [...older.messages, ...first.messages];
+    expect(all).toHaveLength(6);
+    expect(new Set(all.map((message) => message.id)).size).toBe(6);
+    expect(
+      all.filter((message) => message.role === 'user').map((message) => message.files![0].text),
+    ).toEqual([text, text, text]);
+  });
+
+  it('follows an older continuation outside the recent metadata page without unrelated turns', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => provider('原回复断点。', 'length'));
+    await chat(node, { content: '最初问题', quote: '原始资料' });
+    const reply = (await history(node)).messages[1];
+    fetch.mockImplementation(async () => provider('后续回答。'));
+    for (let index = 0; index < 12; index++) await chat(node, { content: `无关问题 ${index}` });
+    fetch.mockClear();
+    await chat(node, { content: '继续生成', continueFrom: reply.id });
+    const sent = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(sent.messages).toHaveLength(4);
+    expect(sent.messages[1].content).toContain('原始资料');
+    expect(sent.messages[2]).toEqual({ role: 'assistant', content: '原回复断点。' });
+    expect(JSON.stringify(sent.messages)).not.toContain('无关问题');
+  });
+
+  it('drops only older whole turns when text plus recent history exceeds the input budget', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    const file = (text: string): ChatFileInput => ({
+      name: 'source.txt',
+      kind: 'text',
+      text,
+      images: [],
+    });
+    const oldest = file('*'.repeat(400_000) + ' OLD END');
+    const recent = file('*'.repeat(100_000) + ' RECENT END');
+    const current = file('*'.repeat(400_000) + ' CURRENT END');
+    await chat(node, { content: '最早问题', files: [oldest] });
+    await chat(node, { content: '最近问题', files: [recent] });
+    const result = await chat(node, { content: '现在问题', files: [current] });
+    expect(result[0]).toMatchObject({ type: 'start', context: { omittedHistory: true } });
+    const sent = JSON.parse(String(fetch.mock.calls[2][1]?.body));
+    expect(sent.messages).toHaveLength(4);
+    expect(sent.messages[1]).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining(recent.text),
+    });
+    expect(sent.messages[2].role).toBe('assistant');
+    expect(sent.messages[3].content).toContain(current.text);
+    expect(JSON.stringify(sent.messages)).not.toContain('OLD END');
+    const saved = await history(node);
+    expect(saved.messages).toHaveLength(6);
+    expect(saved.messages[0].files![0].text).toBe(oldest.text);
+  });
+
+  it('refuses an over-budget continuation without discarding its original question or partial reply', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => provider('*'.repeat(10_000), 'length'));
+    await chat(node, {
+      content: '原问题',
+      files: [
+        {
+          name: 'large.txt',
+          kind: 'text',
+          text: '*'.repeat(inputTokenBudget(8192) - 2000),
+          images: [],
+        },
+      ],
+    });
+    const saved = await history(node);
+    const partial = saved.messages.at(-1)!;
+    expect(partial.status).toBe('interrupted');
+    const response = await request(`/api/nodes/${node.id}/assistant`, 'POST', {
+      content: '继续生成',
+      continueFrom: partial.id,
+    });
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ code: 'AI_CONTEXT_LIMIT' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((await history(node)).messages).toEqual(saved.messages);
+    expect((await history(node)).busy).toBe(false);
+  });
+
+  it('identifies provider tokenizer overflow without retrying or truncating the submitted file', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () =>
+      Response.json(
+        {
+          error: { code: 'context_length_exceeded', message: 'provider-private-details' },
+        },
+        { status: 400 },
+      ),
+    );
+    const files: ChatFileInput[] = [
+      { name: 'research.md', kind: 'markdown', text: '全文尾部。'.repeat(20_000), images: [] },
+    ];
+    const result = await chat(node, { content: '分析', files });
+    expect(result.at(-1)).toMatchObject({
+      type: 'error',
+      error: expect.stringContaining('实际分词后超出上下文容量'),
+    });
+    expect(JSON.stringify(result)).not.toContain('provider-private-details');
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((await history(node)).messages[0].files![0].text).toBe(files[0].text);
+  });
+
+  it('reports the separate request byte guard before reading an oversized chat body', async () => {
+    const node = await create();
+    const context = createExecutionContext();
+    contexts.push(context);
+    const response = await worker.fetch(
+      new Request(`https://notes.test/api/nodes/${node.id}/assistant`, {
+        method: 'POST',
+        headers: {
+          cookie,
+          origin: 'https://notes.test',
+          'content-type': 'application/json',
+          'content-length': String(CHAT_BODY_BYTE_LIMIT + 1),
+        },
+        body: '{}',
+      }),
+      bindings,
+      context,
+    );
+    expect(response.status).toBe(413);
+    expect(await response.json()).toMatchObject({ error: expect.stringContaining('16 MiB') });
+    expect((await history(node)).messages).toHaveLength(0);
   });
   it('keeps settings private, encrypts the key, and tests only the fixed provider', async () => {
     expect((await request('/api/ai/settings', 'GET', undefined, { anonymous: true })).status).toBe(

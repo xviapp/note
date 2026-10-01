@@ -16,14 +16,16 @@ export const json = (value: unknown, status = 200, extra: HeadersInit = {}) =>
       ...extra,
     },
   });
-export async function body<T = Record<string, unknown>>(request: Request): Promise<T> {
+export async function body<T = Record<string, unknown>>(
+  request: Request,
+  limit = 6 * 1_048_576 + 65_536,
+  tooLarge = '请求内容过大。',
+): Promise<T> {
   if (!request.headers.get('content-type')?.includes('application/json'))
     throw new AppError(415, '请使用 JSON 请求。');
   // JSON escaping can expand one byte of plain text into six bytes (e.g. \u0000).
-  // The decoded text still has the independent 1 MiB UTF-8 bound in storage.ts.
-  const limit = 6 * 1_048_576 + 65_536;
-  if (Number(request.headers.get('content-length')) > limit)
-    throw new AppError(413, '请求内容过大。');
+  // Notes retain their independent 1 MiB UTF-8 bound in storage.ts.
+  if (Number(request.headers.get('content-length')) > limit) throw new AppError(413, tooLarge);
   const reader = request.body?.getReader();
   let size = 0;
   const chunks: Uint8Array[] = [];
@@ -34,7 +36,7 @@ export async function body<T = Record<string, unknown>>(request: Request): Promi
       size += item.value.byteLength;
       if (size > limit) {
         await reader.cancel();
-        throw new AppError(413, '请求内容过大。');
+        throw new AppError(413, tooLarge);
       }
       chunks.push(item.value);
     }

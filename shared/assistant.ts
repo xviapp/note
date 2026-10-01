@@ -1,5 +1,6 @@
 import type { FileInfo } from './types';
 import type { ChatFile, ChatFileInput } from './chat-files';
+import type { ChatContextUsage } from './ai-context';
 
 export const AI_MODEL = 'deepseek-flash';
 export const AI_PROMPT_LIMIT = 8_000;
@@ -40,7 +41,7 @@ export interface ChatHistory {
   busy: boolean;
 }
 export type ChatEvent =
-  | { type: 'start'; user: ChatMessage; assistant: ChatMessage }
+  | { type: 'start'; user: ChatMessage; assistant: ChatMessage; context?: ChatContextUsage }
   | { type: 'delta'; content: string }
   | { type: 'done'; message: ChatMessage }
   | { type: 'error'; error: string; message?: ChatMessage };

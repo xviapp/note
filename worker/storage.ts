@@ -2,6 +2,7 @@ import type { BlobRow, Env } from './types';
 import { AppError, idValue } from './http';
 import type { StorageInfo } from '../shared/types';
 import { sanitizeSvg, SVG_LIMIT, SVG_MIME } from '../shared/svg';
+import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 
 export const MAX_FILE_BYTES = 50_000_000;
 export const MAX_TEXT_BYTES = 1_048_576;
@@ -62,6 +63,15 @@ async function abandon(env: Env, file: BlobRow): Promise<void> {
 export async function storeText(env: Env, content: string): Promise<BlobRow> {
   return storeBody(env, content, 'content.txt', 'text/plain; charset=utf-8', MAX_TEXT_BYTES);
 }
+export async function storeChatBody(env: Env, content: string): Promise<BlobRow> {
+  return storeBody(
+    env,
+    content,
+    'conversation.json',
+    'application/json; charset=utf-8',
+    CHAT_BODY_BYTE_LIMIT,
+  );
+}
 export async function storePaper(env: Env, content: string): Promise<BlobRow> {
   return storeBody(env, content, 'paper.html', 'text/html; charset=utf-8', 8 * 1_048_576);
 }
@@ -87,7 +97,9 @@ async function storeBody(
       413,
       name === 'paper.html'
         ? '论文 HTML 超过 8 MiB，无法导入。'
-        : '单篇正文最多 1 MiB，请拆分为多个子笔记。',
+        : name === 'conversation.json'
+          ? '本次对话数据超过 16 MiB，请减少附件或缩小 PDF 页码范围。'
+          : '单篇正文最多 1 MiB，请拆分为多个子笔记。',
     );
   const file = await reserve(env, name, mime, bytes.byteLength);
   try {

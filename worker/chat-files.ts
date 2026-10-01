@@ -1,7 +1,7 @@
 import { AI_IMAGE_LIMIT } from '../shared/assistant';
 import {
   CHAT_FILE_LIMIT,
-  CHAT_FILE_TEXT_LIMIT,
+  CHAT_SOURCE_TEXT_BYTE_LIMIT,
   CHAT_FILE_IMAGE_LIMIT,
   CHAT_PDF_PAGE_LIMIT,
   pageLabel,
@@ -25,14 +25,14 @@ function supportsSource(file: BlobRow): boolean {
     /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(file.mime) ||
     (['application/octet-stream', 'text/plain; charset=utf-8'].includes(file.mime) &&
       /\.(md|markdown|txt)$/i.test(file.name) &&
-      file.size <= 1_048_576)
+      file.size <= CHAT_SOURCE_TEXT_BYTE_LIMIT)
   );
 }
 export async function uploadChatFile(env: Env, request: Request): Promise<FileInfo> {
   const file = await uploadFile(env, request);
   if (!supportsSource(file)) {
     await discardFile(env, file.id);
-    throw new AppError(400, '支持 PDF、图片，以及不超过 1 MiB 的 Markdown / TXT 文件。');
+    throw new AppError(400, '支持 PDF、图片，以及不超过 8 MiB 的 Markdown / TXT 文件。');
   }
   return info(file);
 }
@@ -43,8 +43,7 @@ export async function validateChatFiles(
   if (value === undefined) return { files: [], blobIds: [] };
   if (!Array.isArray(value) || value.length > CHAT_FILE_LIMIT)
     throw new AppError(400, `每次最多附上 ${CHAT_FILE_LIMIT} 个文件。`);
-  let characters = 0,
-    images = 0;
+  let images = 0;
   const files: ChatFile[] = [],
     blobIds = new Set<string>();
   for (const input of value) {
@@ -54,10 +53,8 @@ export async function validateChatFiles(
     const kind = input.kind as ChatFileKind;
     if (!['markdown', 'text', 'pdf', 'image'].includes(kind))
       throw new AppError(400, '不支持这种文件类型。');
-    const text = textValue(input.text, '文件文字', CHAT_FILE_TEXT_LIMIT, true);
-    characters += text.length;
-    if (characters > CHAT_FILE_TEXT_LIMIT)
-      throw new AppError(413, '文件文字合计最多 60,000 字符，请减少文件或缩小 PDF 页码范围。');
+    if (typeof input.text !== 'string') throw new AppError(400, '文件文字格式不正确。');
+    const text = input.text;
     const file: ChatFile = { name, kind, text, images: [] };
     if (kind === 'pdf') {
       file.pageCount = integer(input.pageCount, 'PDF 总页数', 1, 1_000_000);

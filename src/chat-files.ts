@@ -2,7 +2,7 @@ import { AI_IMAGE_LIMIT } from '../shared/assistant';
 import {
   CHAT_FILE_IMAGE_LIMIT,
   CHAT_FILE_LIMIT,
-  CHAT_FILE_TEXT_LIMIT,
+  CHAT_SOURCE_TEXT_BYTE_LIMIT,
   type ChatFileInput,
   type ChatFileKind,
 } from '../shared/chat-files';
@@ -57,8 +57,8 @@ export function sourceDescription(source: AttachmentSource): {
             ? 'text'
             : null;
   if (!kind) throw new Error('支持 Markdown、TXT、PDF 和图片文件。');
-  if (['text', 'markdown'].includes(kind) && file.size > 1_048_576)
-    throw new Error('文本文件最多 1 MiB，请拆分后附上。');
+  if (['text', 'markdown'].includes(kind) && file.size > CHAT_SOURCE_TEXT_BYTE_LIMIT)
+    throw new Error('文本附件最多 8 MiB，请拆分后附上。');
   return {
     name: file.name.slice(0, 200),
     kind,
@@ -149,16 +149,12 @@ export async function prepareBasicFile(
     }
     if (result.text.includes('\0')) throw new Error('文件包含二进制内容，请选择文本文件。');
     if (!result.text.trim()) throw new Error('文件没有可读取的文字。');
-    if (result.text.length > CHAT_FILE_TEXT_LIMIT)
-      throw new Error('文件超过 60,000 字符，请拆分文件或引用部分文字。');
   }
   signal.throwIfAborted();
   return result;
 }
 export function validatePreparedFiles(files: PreparedChatFile[]): void {
   if (files.length > CHAT_FILE_LIMIT) throw new Error(`每次最多附上 ${CHAT_FILE_LIMIT} 个文件。`);
-  if (files.reduce((sum, file) => sum + file.text.length, 0) > CHAT_FILE_TEXT_LIMIT)
-    throw new Error('文件文字合计最多 60,000 字符，请减少文件或缩小 PDF 页码范围。');
   if (files.reduce((sum, file) => sum + file.images.length, 0) > CHAT_FILE_IMAGE_LIMIT)
     throw new Error(
       `文件图片合计最多 ${CHAT_FILE_IMAGE_LIMIT} 张，请减少文件或缩小 PDF 页码范围。`,

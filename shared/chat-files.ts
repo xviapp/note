@@ -1,10 +1,13 @@
 import type { FileInfo } from './types';
 
 export const CHAT_FILE_LIMIT = 3;
-export const CHAT_FILE_TEXT_LIMIT = 60_000;
+// Byte bounds protect browser/Worker memory; model context is budgeted in tokens.
+export const CHAT_SOURCE_TEXT_BYTE_LIMIT = 8 * 1_048_576;
+export const CHAT_BODY_BYTE_LIMIT = 16 * 1_048_576;
+// A start event echoes the saved attachment snapshots plus message metadata.
+export const CHAT_EVENT_CHARACTER_LIMIT = CHAT_BODY_BYTE_LIMIT + 65_536;
 export const CHAT_FILE_IMAGE_LIMIT = 6;
 export const CHAT_PDF_PAGE_LIMIT = 200;
-export const CHAT_CONTEXT_TEXT_LIMIT = 120_000;
 export const CHAT_CONTEXT_IMAGE_LIMIT = 8;
 export type ChatFileKind = 'markdown' | 'text' | 'pdf' | 'image';
 export interface ChatFileInput {

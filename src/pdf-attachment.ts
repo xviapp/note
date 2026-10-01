@@ -1,5 +1,5 @@
 import type { PDFDocumentProxy } from 'pdfjs-dist';
-import { CHAT_FILE_IMAGE_LIMIT, CHAT_FILE_TEXT_LIMIT } from '../shared/chat-files';
+import { CHAT_FILE_IMAGE_LIMIT } from '../shared/chat-files';
 import { canvasImage, type PreparedChatFile } from './chat-files';
 
 export async function preparePdf(
@@ -33,8 +33,6 @@ export async function preparePdf(
       }
       if (mode === 'auto' && text.replace(/\s/g, '').length >= 24) {
         result.text += `\n\n[第 ${number} 页]\n${text}`;
-        if (result.text.length > CHAT_FILE_TEXT_LIMIT)
-          throw new Error('所选页面文字超过 60,000 字符，请缩小页码范围。');
       } else {
         if (result.images.length >= CHAT_FILE_IMAGE_LIMIT)
           throw new Error(`所选范围需要超过 ${CHAT_FILE_IMAGE_LIMIT} 张页面图片，请缩小页码范围。`);

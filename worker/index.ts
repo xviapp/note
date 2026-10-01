@@ -19,6 +19,7 @@ import { favorite, openReading, readingState, saveReading } from './reading';
 import { aiSettings, saveAiSettings, testAiSettings } from './deepseek';
 import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
+import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import { importArxiv } from './arxiv';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
 
@@ -151,7 +152,11 @@ export default {
             execution,
             request,
             id,
-            await body(request),
+            await body(
+              request,
+              CHAT_BODY_BYTE_LIMIT,
+              '本次对话数据超过 16 MiB，请减少附件或缩小 PDF 页码范围。',
+            ),
             operationKey(request),
           );
         if (action === 'assistant' && method === 'DELETE') {

@@ -80,6 +80,7 @@ export function AssistantPanel(props: Props) {
   const [error, setError] = useState(''),
     [capturing, setCapturing] = useState(false),
     [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
+  const [contextNotice, setContextNotice] = useState('');
   const [exporting, setExporting] = useState(''),
     [copied, setCopied] = useState('');
   const [files, setFiles] = useState<PreparedChatFile[]>([]),
@@ -173,6 +174,7 @@ export function AssistantPanel(props: Props) {
       return;
     setSending(true);
     setError('');
+    setContextNotice('');
     follow.current = true;
     const controller = new AbortController();
     abort.current = controller;
@@ -201,6 +203,9 @@ export function AssistantPanel(props: Props) {
       await streamChat(node.id, data, requestKey.current.key, controller.signal, (event) => {
         if (!mounted.current) return;
         if (event.type === 'start') {
+          setContextNotice(
+            event.context?.omittedHistory ? '本次已省略较早的对话，完整历史仍保留。' : '',
+          );
           started = true;
           replyId = event.assistant.id;
           if (!continueFrom) {
@@ -331,6 +336,7 @@ export function AssistantPanel(props: Props) {
                 try {
                   await api(base, 'DELETE');
                   requestKey.current = null;
+                  setContextNotice('');
                   await load();
                   props.onChanged();
                 } catch (e) {
@@ -642,6 +648,11 @@ export function AssistantPanel(props: Props) {
           {error && (
             <p className="inline-error" role="alert">
               {error}
+            </p>
+          )}
+          {contextNotice && (
+            <p className="field-hint" role="status">
+              {contextNotice}
             </p>
           )}
           <div className="assistant-send">

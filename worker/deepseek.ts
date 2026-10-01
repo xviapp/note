@@ -103,9 +103,27 @@ async function providerFetch(
     throw new AppError(502, '暂时无法连接 DeepSeek，请稍后重试。');
   }
   if (!response.ok) {
-    await response.body?.cancel();
+    // Estimates can differ from the provider's tokenizer. Classify that error
+    // without exposing arbitrary provider response text (or retrying/truncating).
+    if (response.status === 400 || response.status === 413) {
+      const detail = (await response.json().catch(() => null)) as {
+        error?: { code?: string; message?: string };
+      } | null;
+      const error = detail?.error;
+      if (
+        error &&
+        /context[_ ](?:length|window)|maximum context|too many tokens|token limit/i.test(
+          `${error.code ?? ''} ${error.message ?? ''}`,
+        )
+      )
+        throw new AppError(
+          413,
+          'DeepSeek 实际分词后超出上下文容量，请减少附件、缩小 PDF 页码范围或降低回复长度后重试。',
+          'AI_CONTEXT_LIMIT',
+        );
+    } else await response.body?.cancel();
     const labels: Record<number, string> = {
-      400: 'DeepSeek 未能接受这些内容，请缩短问题或重新截图。',
+      400: 'DeepSeek 未能接受这些内容，请减少附件、缩短问题或重新截图。',
       401: 'DeepSeek API Key 无效，请在设置中更新。',
       402: 'DeepSeek 账户余额不足，请检查账户。',
       403: 'DeepSeek 拒绝了此密钥的请求，请检查账户权限。',

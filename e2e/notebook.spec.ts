@@ -856,6 +856,7 @@ test('configures reply length and saves or continues an interrupted reply withou
   await page.getByRole('button', { name: '保存 AI 配置', exact: true }).click();
   await expect(page.getByText('AI 配置已保存。', { exact: true })).toBeVisible();
   await page.reload();
+  await expectPreview(page);
   await nav(page, '设置');
   await expect(limit).toHaveValue('16384');
   await expect(page.getByLabel('DeepSeek API Key', { exact: true })).toHaveValue('');
@@ -1155,7 +1156,7 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
   }
 });
 
-test('long arXiv papers attach a chosen section without silently truncating the full text', async ({
+test('long arXiv papers allow the full text or a chosen section without silent truncation', async ({
   page,
 }) => {
   await login(page);
@@ -1167,7 +1168,7 @@ test('long arXiv papers attach a chosen section without silently truncating the 
     page,
     paperHtml.replace('The proof continues', 'Long text '.repeat(6100) + 'The proof continues'),
   );
-  await assistantFixture(page);
+  const chat = await assistantFixture(page);
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建节点' });
   await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
@@ -1179,13 +1180,73 @@ test('long arXiv papers attach a chosen section without silently truncating the 
   await page.getByRole('button', { name: '附上当前文件', exact: true }).click();
   const file = page.getByRole('dialog', { name: '附上文件', exact: true });
   const range = file.getByRole('combobox', { name: '论文范围', exact: true });
-  await expect(range).toHaveValue('');
-  await expect(range.locator('option[value="all"]')).toHaveJSProperty('disabled', true);
-  await range.selectOption('section-0');
+  await expect(range).toHaveValue('all');
+  await expect(range.locator('option[value="all"]')).toHaveJSProperty('disabled', false);
   await file.getByText('查看将发送的文字', { exact: true }).click();
+  const fullText = await file.locator('pre').textContent();
+  expect(fullText!.length).toBeGreaterThan(60_000);
+  await expect(file.locator('pre')).toContainText('The proof continues');
+  await expect(file.getByText(/约 [\d,]+ tokens/)).toBeVisible();
+  await range.selectOption('section-0');
   await expect(file.locator('pre')).toContainText('1 Introduction');
   await expect(file.locator('pre')).not.toContainText('The proof continues');
   await expect(file.getByRole('button', { name: '附到对话', exact: true })).toBeEnabled();
+  await range.selectOption('all');
+  await file.getByRole('button', { name: '附到对话', exact: true }).click();
+  await page.getByRole('textbox', { name: '发给助手的问题', exact: true }).fill('概括全文');
+  await page.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(page.locator('.chat-assistant')).toContainText('结构要点');
+  expect(chat.sent[0].files![0].text).toBe(fullText);
+});
+
+test('context overflow keeps the draft and attachment and allows a smaller submission', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers: { origin: 'http://127.0.0.1:8799' },
+    data: { apiKey: 'sk-e2e-placeholder-key', maxTokens: 8192 },
+  });
+  const { node } = await assistantSeed(page, {
+    kind: 'markdown',
+    title: '上下文容量',
+    content: '参考内容。',
+  });
+  await page.goto(`/n/${node.id}`);
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  const panel = page.getByRole('complementary', { name: '文件 AI 助手', exact: true });
+  const input = panel.getByRole('textbox', { name: '发给助手的问题', exact: true });
+  await input.fill('请读取完整附件。');
+  await page.getByLabel('选择聊天附件', { exact: true }).setInputFiles({
+    name: 'large.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from('*'.repeat(900_000)),
+  });
+  const file = page.getByRole('dialog', { name: '附上文件', exact: true });
+  await expect(file.getByText(/约 [\d,]+ tokens/)).toBeVisible();
+  await file.getByRole('button', { name: '附到对话', exact: true }).click();
+  await panel.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(panel.getByRole('alert')).toContainText('超过可用输入预算');
+  await expect(input).toHaveValue('请读取完整附件。');
+  await expect(panel.locator('.context-file')).toHaveCount(1);
+  await expect(panel.locator('.chat-message')).toHaveCount(0);
+  const history = await (await page.request.get(`/api/nodes/${node.id}/assistant`)).json();
+  expect(history).toMatchObject({ messages: [], busy: false });
+  await page.screenshot({ path: `test-results/assistant-context-${info.project.name}.png` });
+  await panel.getByRole('button', { name: '移除附件 large.txt', exact: true }).click();
+  // More characters, but fewer estimated tokens. This also exercises the
+  // browser's SSE parser with an echoed attachment snapshot larger than 1 MiB.
+  const fittingText = 'Long research text. '.repeat(60_000) + 'COMPLETE END';
+  await page.getByLabel('选择聊天附件', { exact: true }).setInputFiles({
+    name: 'fitting.txt', mimeType: 'text/plain', buffer: Buffer.from(fittingText),
+  });
+  await file.getByRole('button', { name: '附到对话', exact: true }).click();
+  const chat = await assistantFixture(page);
+  await panel.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(panel.locator('.chat-assistant')).toContainText('结构要点');
+  expect(chat.sent[0].files![0].text).toBe(fittingText);
+  await expect(input).toHaveValue('');
+  await expect(panel.getByRole('alert')).toHaveCount(0);
 });
 
 async function cropInBrowser(page: Page, mobile: boolean) {
