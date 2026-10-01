@@ -36,6 +36,7 @@ export function paperFragment(content: string): DocumentFragment {
       'audio',
       'video',
       'source',
+      'annotation',
       'annotation-xml',
     ],
     FORBID_ATTR: [
@@ -49,7 +50,9 @@ export function paperFragment(content: string): DocumentFragment {
       'mathbackground',
     ],
     ADD_ATTR: ['alttext'],
-    ADD_FORBID_CONTENTS: ['nav'],
+    // Removing annotation tags alone unwraps their TeX into the MathML formula.
+    // Keep the presentation tree and its alttext, but discard alternate encodings.
+    ADD_FORBID_CONTENTS: ['nav', 'annotation', 'annotation-xml'],
     ALLOW_DATA_ATTR: false,
   });
 }
