@@ -1,4 +1,11 @@
-import { useCallback, useEffect, useRef, useState, type RefObject } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useImperativeHandle,
+  useRef,
+  useState,
+  type RefObject,
+} from 'react';
 import {
   Camera,
   Check,
@@ -39,7 +46,12 @@ import { MarkdownView } from './MarkdownView';
 import { ScreenshotCrop } from './ScreenshotCrop';
 import { Spinner, useQuestion } from './Primitives';
 
+export interface AssistantHandle {
+  addQuote: (text: string) => string | undefined;
+}
+
 interface Props {
+  actionsRef: RefObject<AssistantHandle | null>;
   node: NoteDetail;
   visible: boolean;
   enabled: boolean;
@@ -74,6 +86,7 @@ export function AssistantPanel(props: Props) {
     [fileSource, setFileSource] = useState<AttachmentSource | null>(null),
     [uploading, setUploading] = useState(false);
   const fileInput = useRef<HTMLInputElement>(null);
+  const promptInput = useRef<HTMLTextAreaElement>(null);
   const abort = useRef<AbortController | null>(null),
     mounted = useRef(true),
     bottom = useRef<HTMLDivElement>(null),
@@ -81,6 +94,15 @@ export function AssistantPanel(props: Props) {
     follow = useRef(true);
   const requestKey = useRef<{ payload: string; key: string } | null>(null);
   const question = useQuestion();
+  const addQuote = (text: string) => {
+    if (sending || abort.current) return '正在回复，请结束后再加入引用。';
+    if (text.length > AI_QUOTE_LIMIT)
+      return `引用最多 ${AI_QUOTE_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`;
+    setQuote(text);
+    setError('');
+    requestAnimationFrame(() => promptInput.current?.focus({ preventScroll: true }));
+  };
+  useImperativeHandle(props.actionsRef, () => ({ addQuote }));
   const base = `/api/nodes/${node.id}/assistant`;
   const load = useCallback(
     async (before?: number, quiet = false) => {
@@ -331,6 +353,7 @@ export function AssistantPanel(props: Props) {
         )}
         <div
           className="assistant-messages"
+          data-selection-owner={node.id}
           ref={list}
           onScroll={() => {
             const el = list.current!;
@@ -577,12 +600,8 @@ export function AssistantPanel(props: Props) {
               className="text-button"
               disabled={!props.selection || sending}
               onClick={() => {
-                if (props.selection.length > AI_QUOTE_LIMIT) {
-                  setError(`引用最多 ${AI_QUOTE_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`);
-                  return;
-                }
-                setQuote(props.selection);
-                setError('');
+                const error = addQuote(props.selection);
+                if (error) setError(error);
               }}
             >
               <Quote size={15} />
@@ -599,6 +618,7 @@ export function AssistantPanel(props: Props) {
             </button>
           </div>
           <textarea
+            ref={promptInput}
             aria-label="发给助手的问题"
             rows={3}
             maxLength={AI_PROMPT_LIMIT}

@@ -30,10 +30,10 @@ import { Empty, Modal, NodeIcon, Spinner, useQuestion } from './Primitives';
 import { MarkdownView, type Heading } from './MarkdownView';
 import { Attachments, NodeList } from './Management';
 import { NodeMenu, NodePicker, type NodeAction } from './Tree';
-import { AssistantPanel } from './AssistantPanel';
+import { AssistantPanel, type AssistantHandle } from './AssistantPanel';
 import type { AssistantMode } from './AssistantWindow';
 import { PaperView } from './PaperView';
-import { paperText } from '../paper';
+import { SelectionToolbar } from './SelectionToolbar';
 
 const Editor = lazy(() => import('./Editor'));
 const PdfView = lazy(() => import('./PdfView'));
@@ -88,27 +88,7 @@ export default function NotePane(props: Props) {
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('floating');
   const [selection, setSelection] = useState('');
-  useEffect(() => {
-    const select = () => {
-      const value = window.getSelection();
-      if (
-        value &&
-        !value.isCollapsed &&
-        value.anchorNode &&
-        value.focusNode &&
-        readingRoot.current?.contains(value.anchorNode) &&
-        readingRoot.current.contains(value.focusNode)
-      ) {
-        setSelection(
-          noteRef.current?.arxiv_id && value.rangeCount
-            ? paperText(value.getRangeAt(0).cloneContents())
-            : value.toString().trim(),
-        );
-      }
-    };
-    document.addEventListener('selectionchange', select);
-    return () => document.removeEventListener('selectionchange', select);
-  }, []);
+  const assistantActions = useRef<AssistantHandle>(null);
   const dirty =
     !!note &&
     (content !== note.content ||
@@ -581,7 +561,11 @@ export default function NotePane(props: Props) {
       <div
         className={`reading-with-assistant${assistantOpen && !editing && assistantMode === 'docked' ? ' assistant-docked' : ''}`}
       >
-        <div ref={readingRoot} className={`note-workspace ${editing ? `edit-tab-${editTab}` : ''}`}>
+        <div
+          ref={readingRoot}
+          data-selection-owner={id}
+          className={`note-workspace ${editing ? `edit-tab-${editTab}` : ''}`}
+        >
           {editing && (
             <div className="source-pane">
               <Suspense fallback={<Spinner label="正在打开编辑器…" />}>
@@ -744,6 +728,7 @@ export default function NotePane(props: Props) {
         </div>
         {note.kind !== 'folder' && (
           <AssistantPanel
+            actionsRef={assistantActions}
             node={note}
             visible={assistantOpen && !editing}
             enabled={!editing}
@@ -760,6 +745,18 @@ export default function NotePane(props: Props) {
           />
         )}
       </div>
+      {!editing && note.kind !== 'folder' && (
+        <SelectionToolbar
+          owner={id}
+          onSelection={setSelection}
+          onQuote={(text) => {
+            const error = assistantActions.current?.addQuote(text);
+            if (error) return error;
+            setPdf(null);
+            setAssistantOpen(true);
+          }}
+        />
+      )}
       {tocOpen && (
         <Modal title="标题目录" onClose={() => setTocOpen(false)}>
           {toc}
@@ -773,7 +770,7 @@ export default function NotePane(props: Props) {
       {pdf && (
         <Modal title={pdf.name} onClose={() => setPdf(null)} wide className="pdf-modal">
           <Suspense fallback={<Spinner />}>
-            <PdfView key={pdf.id} fileId={pdf.id} />
+            <PdfView key={pdf.id} fileId={pdf.id} selectionOwner={id} />
           </Suspense>
         </Modal>
       )}

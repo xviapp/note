@@ -1,0 +1,67 @@
+.selection-toolbar {
+  position: fixed;
+  z-index: 80;
+  max-width: calc(100vw - 20px);
+  padding: 4px;
+  border: 1px solid var(--line-strong);
+  border-radius: 10px;
+  background: var(--surface);
+  color: var(--ink);
+  box-shadow: 0 6px 24px var(--shadow-strong);
+  font-size: 13px;
+  line-height: 1.4;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.selection-toolbar::after {
+  content: '';
+  position: absolute;
+  left: calc(var(--selection-arrow) - 5px);
+  width: 8px;
+  height: 8px;
+  background: var(--surface);
+  transform: rotate(45deg);
+}
+.selection-toolbar[data-side='above']::after {
+  bottom: -5px;
+  border-right: 1px solid var(--line-strong);
+  border-bottom: 1px solid var(--line-strong);
+}
+.selection-toolbar[data-side='below']::after {
+  top: -5px;
+  border-top: 1px solid var(--line-strong);
+  border-left: 1px solid var(--line-strong);
+}
+.selection-actions {
+  display: flex;
+  gap: 2px;
+}
+.selection-actions button {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  min-height: 38px;
+  padding: 8px 10px;
+  border-radius: 6px;
+  white-space: nowrap;
+}
+.selection-actions button:hover {
+  background: var(--hover);
+  color: var(--blue);
+}
+.selection-actions button:focus-visible {
+  outline-offset: -2px;
+}
+.selection-status {
+  margin: 2px 6px 0;
+  padding: 7px 4px 5px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (pointer: coarse) {
+  .selection-actions button {
+    min-height: 44px;
+  }
+}

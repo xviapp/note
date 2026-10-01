@@ -27,10 +27,12 @@ export default function PdfView({
   fileId,
   initialPosition = {},
   onPosition,
+  selectionOwner,
 }: {
   fileId: string;
   initialPosition?: ReadingPosition;
   onPosition?: (position: Position) => void;
+  selectionOwner?: string;
 }) {
   const [document, setDocument] = useState<{
     pdf: PDFDocumentProxy;
@@ -180,7 +182,12 @@ export default function PdfView({
   const end = layout ? pageAt(layout.boxes, scrollTop + 2 * viewport.height) : 0;
 
   return (
-    <div className="pdf-view" role="region" aria-label="PDF 阅读器">
+    <div
+      className="pdf-view"
+      role="region"
+      aria-label="PDF 阅读器"
+      data-selection-owner={selectionOwner}
+    >
       <div className="pdf-toolbar" role="toolbar" aria-label="PDF 阅读工具">
         <button
           className="icon-button"
