@@ -79,7 +79,7 @@ async function assertInViewport(page: Page) {
   expect(box!.y + box!.height).toBeLessThanOrEqual(viewport.height);
 }
 
-test('selection toolbar copies, shows a translation placeholder, and dismisses without editing', async ({
+test('selection toolbar copies, offers translation, and dismisses without editing', async ({
   page,
   baseURL,
   context,
@@ -108,8 +108,7 @@ test('selection toolbar copies, shows a translation placeholder, and dismisses w
   await expect(toolbar(page).getByRole('status')).toHaveText('已复制');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(paragraph);
   expect(await page.evaluate(() => getSelection()?.toString())).toBe(paragraph);
-  await toolbar(page).getByRole('button', { name: '翻译', exact: true }).click();
-  await expect(toolbar(page).getByRole('status')).toHaveText('翻译功能待接入');
+  await expect(toolbar(page).getByRole('button', { name: '翻译', exact: true })).toBeEnabled();
   expect(posts).toEqual([]);
   await assertInViewport(page);
   await page.screenshot({ path: info.outputPath('selection-light.png') });

@@ -108,6 +108,9 @@ export async function cleanup(env: Env): Promise<{ removed: number }> {
     ).bind(now),
     env.DB.prepare('DELETE FROM login_attempts WHERE window_start<?').bind(now - 3600_000),
     env.DB.prepare('DELETE FROM idempotency WHERE created_at<?').bind(now - 7 * 86400_000),
+    env.DB.prepare(
+      'DELETE FROM translations WHERE id IN (SELECT id FROM translations WHERE body_blob_id IS NULL AND locked_until<=? AND updated_at<? LIMIT 50)',
+    ).bind(now, now - 7 * 86400_000),
   ]);
   const batches = await env.DB.prepare('SELECT id FROM trash_batches WHERE purging=1 LIMIT 3').all<{
     id: string;

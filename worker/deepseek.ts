@@ -172,7 +172,8 @@ export async function* deepseekReply(
       yield value;
     }
   }
-  if (finish === 'length') throw new AppError(502, '已达到本次回复长度上限，可点击「继续生成」。');
+  if (finish === 'length')
+    throw new AppError(502, '已达到本次回复长度上限，可点击「继续生成」。', 'AI_LENGTH_LIMIT');
   if (!ended || finish !== 'stop' || !length)
     throw new AppError(502, '回复未完整接收，已有内容已保留。');
 }

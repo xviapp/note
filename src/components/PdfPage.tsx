@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import { TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import { Spinner } from './Primitives';
+import type { PdfSourceRect } from '../../shared/translation';
 
 export function PdfPage({
   document,
@@ -9,6 +10,7 @@ export function PdfPage({
   height,
   top,
   onMeasure,
+  highlights,
 }: {
   document: PDFDocumentProxy;
   number: number;
@@ -16,6 +18,7 @@ export function PdfPage({
   height: number;
   top: number;
   onMeasure: (number: number, aspect: number) => void;
+  highlights?: PdfSourceRect[];
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const textContainer = useRef<HTMLDivElement>(null);
@@ -108,6 +111,19 @@ export function PdfPage({
     >
       <canvas ref={canvas} aria-label={`PDF 第 ${number} 页`} />
       <div ref={textContainer} className="pdf-text-layer" />
+      {highlights?.map((rect, index) => (
+        <div
+          key={index}
+          className="pdf-source-highlight"
+          aria-hidden="true"
+          style={{
+            left: `${rect.x * 100}%`,
+            top: `${rect.y * 100}%`,
+            width: `${rect.width * 100}%`,
+            height: `${rect.height * 100}%`,
+          }}
+        />
+      ))}
       {error ? (
         <p className="pdf-page-status inline-error" role="alert">
           {error}

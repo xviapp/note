@@ -6,6 +6,7 @@ import {
   ChevronRight,
   FileText,
   History,
+  Languages,
   Link2,
   List,
   Menu,
@@ -34,6 +35,10 @@ import { AssistantPanel, type AssistantHandle } from './AssistantPanel';
 import type { AssistantMode } from './AssistantWindow';
 import { PaperView } from './PaperView';
 import { SelectionToolbar } from './SelectionToolbar';
+import { TranslationPanel } from './TranslationPanel';
+import type { TranslationLaunch } from '../translation';
+import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
+import { clearSourceHighlight, locateTextSource } from '../source-location';
 
 const Editor = lazy(() => import('./Editor'));
 const PdfView = lazy(() => import('./PdfView'));
@@ -89,6 +94,35 @@ export default function NotePane(props: Props) {
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('floating');
   const [selection, setSelection] = useState('');
   const assistantActions = useRef<AssistantHandle>(null);
+  const [translation, setTranslation] = useState<TranslationLaunch | null>(null);
+  const [pdfLocation, setPdfLocation] = useState<PdfSourceLocation | null>(null);
+  useEffect(() => {
+    clearSourceHighlight();
+    return clearSourceHighlight;
+  }, [id, note?.content, editing]);
+  const addQuote = (text: string) => {
+    if (!assistantActions.current) return '助手尚未就绪，请稍后重试。';
+    const error = assistantActions.current.addQuote(text);
+    if (error) return error;
+    setTranslation(null);
+    setPdf(null);
+    setAssistantOpen(true);
+  };
+  const locateSource = (location: SourceLocation): string | undefined => {
+    if (location.kind === 'text') {
+      const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
+      if (!root) return '原文暂时无法打开，请稍后重试。';
+      touched.current = restored.current = true;
+      return locateTextSource(root, location);
+    }
+    const file =
+      note?.file?.id === location.fileId
+        ? note.file
+        : note?.attachments.find((file) => file.id === location.fileId);
+    if (!file) return '原 PDF 已删除或从附件移除，无法定位。保存的原文与译文仍可查看。';
+    setPdfLocation({ ...location });
+    if (note?.file?.id !== file.id) setPdf(file);
+  };
   const dirty =
     !!note &&
     (content !== note.content ||
@@ -208,6 +242,7 @@ export default function NotePane(props: Props) {
       return;
     try {
       await unlockNote(id);
+      setTranslation(null);
       setEditing(true);
       setEditTab('source');
       setSaveError('');
@@ -416,6 +451,17 @@ export default function NotePane(props: Props) {
               <Bot size={18} />
             </button>
           )}
+          {note.kind !== 'folder' && !editing && (
+            <button
+              className="icon-button"
+              aria-label="翻译记录"
+              title="翻译记录"
+              aria-expanded={!!translation}
+              onClick={() => setTranslation({})}
+            >
+              <Languages size={18} />
+            </button>
+          )}
           <button
             className={`icon-button ${note.favorite ? 'is-favorite' : ''}`}
             aria-label={note.favorite ? '取消收藏' : '收藏笔记'}
@@ -588,6 +634,7 @@ export default function NotePane(props: Props) {
                   fileId={note.file.id}
                   initialPosition={reading.initial}
                   onPosition={reading.update}
+                  sourceLocation={pdfLocation}
                 />
               </Suspense>
             ) : (
@@ -645,7 +692,7 @@ export default function NotePane(props: Props) {
                     )}
                   </div>
                 </header>
-                <div className="read-content">
+                <div className="read-content" data-version-id={note.current_version_id}>
                   {note.arxiv_id ? (
                     <PaperView note={note} onHeadings={onHeadings} onImage={showImage} />
                   ) : note.kind === 'markdown' ? (
@@ -749,12 +796,20 @@ export default function NotePane(props: Props) {
         <SelectionToolbar
           owner={id}
           onSelection={setSelection}
-          onQuote={(text) => {
-            const error = assistantActions.current?.addQuote(text);
-            if (error) return error;
-            setPdf(null);
-            setAssistantOpen(true);
-          }}
+          onQuote={addQuote}
+          onTranslate={setTranslation}
+        />
+      )}
+      {!editing && translation && (
+        <TranslationPanel
+          nodeId={id}
+          launch={translation}
+          onClose={() => setTranslation(null)}
+          onChanged={props.onChanged}
+          onQuote={addQuote}
+          onLocate={locateSource}
+          onNavigate={props.onNavigate}
+          onImage={showImage}
         />
       )}
       {tocOpen && (
@@ -768,9 +823,22 @@ export default function NotePane(props: Props) {
         </Suspense>
       )}
       {pdf && (
-        <Modal title={pdf.name} onClose={() => setPdf(null)} wide className="pdf-modal">
+        <Modal
+          title={pdf.name}
+          onClose={() => {
+            setTranslation(null);
+            setPdf(null);
+          }}
+          wide
+          className="pdf-modal"
+        >
           <Suspense fallback={<Spinner />}>
-            <PdfView key={pdf.id} fileId={pdf.id} selectionOwner={id} />
+            <PdfView
+              key={pdf.id}
+              fileId={pdf.id}
+              selectionOwner={id}
+              sourceLocation={pdfLocation}
+            />
           </Suspense>
         </Modal>
       )}

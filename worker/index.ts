@@ -20,6 +20,7 @@ import { aiSettings, saveAiSettings, testAiSettings } from './deepseek';
 import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
 import { importArxiv } from './arxiv';
+import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
 
 export default {
   async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
@@ -103,6 +104,30 @@ export default {
         const id = note[1],
           action = note[2] || '';
         if (!action && method === 'GET') return json(await noteDetail(env, id));
+        if (action === 'translations' && method === 'GET')
+          return json(
+            await translationHistory(
+              env,
+              id,
+              integer(Number(url.searchParams.get('offset') || 0), '分页位置'),
+            ),
+          );
+        if (action === 'translations' && method === 'POST')
+          return await translate(
+            env,
+            execution,
+            request,
+            id,
+            await body(request),
+            operationKey(request),
+          );
+        const translation = action.match(/^translations\/([a-zA-Z0-9_-]+)$/);
+        if (translation && method === 'GET')
+          return json(await getTranslation(env, id, translation[1]));
+        if (translation && method === 'DELETE') {
+          await deleteTranslation(env, id, translation[1]);
+          return json({ ok: true });
+        }
         if (action === 'assistant/files' && method === 'POST') {
           const node = await getNode(env, id);
           if (node.kind === 'folder') throw new AppError(400, '请打开一个文件使用助手。');

@@ -2,6 +2,9 @@ import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from
 import { createPortal } from 'react-dom';
 import { Copy, Languages, Quote } from 'lucide-react';
 import { paperText } from '../paper';
+import { captureSourceLocation } from '../source-location';
+import type { TranslationLaunch } from '../translation';
+import { TRANSLATION_LIMIT } from '../../shared/translation';
 import '../selection.css';
 
 interface SelectedText {
@@ -86,20 +89,22 @@ export function SelectionToolbar({
   owner,
   onSelection,
   onQuote,
+  onTranslate,
 }: {
   owner: string;
   onSelection: (text: string) => void;
   onQuote: (text: string) => string | undefined;
+  onTranslate: (launch: TranslationLaunch) => void;
 }) {
   const [selected, setSelected] = useState<SelectedText | null>(null);
   const [status, setStatus] = useState('');
   const [position, setPosition] = useState({ left: 0, top: 0, arrow: 0, side: 'above' });
   const toolbar = useRef<HTMLDivElement>(null);
   const active = useRef(selected);
-  const callbacks = useRef({ onSelection, onQuote });
+  const callbacks = useRef({ onSelection, onQuote, onTranslate });
   const dismiss = useRef(() => {});
   active.current = selected;
-  callbacks.current = { onSelection, onQuote };
+  callbacks.current = { onSelection, onQuote, onTranslate };
 
   useEffect(() => {
     let timer = 0,
@@ -271,7 +276,29 @@ export function SelectionToolbar({
           <Quote size={16} />
           加入助手
         </button>
-        <button type="button" onClick={() => setStatus('翻译功能待接入')}>
+        <button
+          type="button"
+          onClick={() => {
+            if (selected.text.length > TRANSLATION_LIMIT) {
+              setStatus(
+                `每次最多翻译 ${TRANSLATION_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`,
+              );
+              return;
+            }
+            callbacks.current.onTranslate({
+              source: selected.text,
+              location: captureSourceLocation(selected.range),
+              host: selected.host,
+              anchor: {
+                left: selected.first.left,
+                top: selected.first.top,
+                bottom: selected.last.bottom,
+              },
+            });
+            dismiss.current();
+            window.getSelection()?.removeAllRanges();
+          }}
+        >
           <Languages size={16} />
           翻译
         </button>

@@ -6,6 +6,7 @@ import { fileUrl } from '../api';
 import type { ReadingPosition } from '../../shared/types';
 import { Spinner } from './Primitives';
 import { PdfPage } from './PdfPage';
+import type { PdfSourceLocation } from '../../shared/translation';
 
 type Position = { page: number; pageRatio: number };
 type PageBox = { top: number; height: number };
@@ -28,11 +29,13 @@ export default function PdfView({
   initialPosition = {},
   onPosition,
   selectionOwner,
+  sourceLocation,
 }: {
   fileId: string;
   initialPosition?: ReadingPosition;
   onPosition?: (position: Position) => void;
   selectionOwner?: string;
+  sourceLocation?: PdfSourceLocation | null;
 }) {
   const [document, setDocument] = useState<{
     pdf: PDFDocumentProxy;
@@ -53,6 +56,8 @@ export default function PdfView({
   const initial = useRef(initialPosition);
   const programmedScroll = useRef<number | null>(null);
   const onPositionRef = useRef(onPosition);
+  const located = useRef<PdfSourceLocation | null>(null);
+  const [locationError, setLocationError] = useState('');
   onPositionRef.current = onPosition;
 
   useEffect(() => {
@@ -136,6 +141,35 @@ export default function PdfView({
     });
   }, []);
 
+  useLayoutEffect(() => {
+    if (
+      !sourceLocation ||
+      sourceLocation.fileId !== fileId ||
+      !layout ||
+      !scroll.current ||
+      located.current === sourceLocation
+    )
+      return;
+    located.current = sourceLocation;
+    const box = layout.boxes[sourceLocation.page - 1];
+    if (!box) {
+      setLocationError('原文页码已不存在，无法定位。');
+      return;
+    }
+    setLocationError('');
+    const rects = sourceLocation.rects.filter((rect) => rect.page === sourceLocation.page);
+    const y = Math.min(...rects.map((rect) => rect.y));
+    const x = Math.min(...rects.map((rect) => rect.x));
+    position.current = { page: sourceLocation.page, pageRatio: Math.max(0, y - 48 / box.height) };
+    scroll.current.scrollTop = box.top - gap + position.current.pageRatio * box.height;
+    scroll.current.scrollLeft = Math.max(0, x * width - 24);
+    programmedScroll.current = scroll.current.scrollTop;
+    setScrollTop(scroll.current.scrollTop);
+    syncPage(sourceLocation.page);
+    onPositionRef.current?.(position.current);
+    scroll.current.focus({ preventScroll: true });
+  }, [sourceLocation, fileId, layout, gap, width]);
+
   const recordScroll = () => {
     const area = scroll.current;
     if (!layout || !area) return;
@@ -187,6 +221,7 @@ export default function PdfView({
       role="region"
       aria-label="PDF 阅读器"
       data-selection-owner={selectionOwner}
+      data-pdf-file-id={fileId}
     >
       <div className="pdf-toolbar" role="toolbar" aria-label="PDF 阅读工具">
         <button
@@ -255,6 +290,11 @@ export default function PdfView({
           <Download size={17} />
         </a>
       </div>
+      {locationError && (
+        <p className="inline-error" role="alert">
+          {locationError}
+        </p>
+      )}
       <div
         className="pdf-scroll"
         ref={scroll}
@@ -282,6 +322,11 @@ export default function PdfView({
                 height={box.height}
                 top={box.top}
                 onMeasure={measure}
+                highlights={
+                  sourceLocation?.fileId === fileId
+                    ? sourceLocation.rects.filter((rect) => rect.page === start + offset + 1)
+                    : undefined
+                }
               />
             ))}
           </div>
