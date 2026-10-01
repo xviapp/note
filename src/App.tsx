@@ -298,6 +298,31 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     window.addEventListener('keydown', escape);
     return () => window.removeEventListener('keydown', escape);
   }, [mobileOpen]);
+  useEffect(() => {
+    const openMenus = () =>
+      document.querySelectorAll<HTMLDetailsElement>('details.node-menu[open]');
+    const dismissOutside = (event: MouseEvent) => {
+      if (!(event.target instanceof Node)) return;
+      for (const menu of openMenus()) {
+        if (!menu.contains(event.target)) menu.open = false;
+      }
+    };
+    const escape = (event: KeyboardEvent) => {
+      if (event.key !== 'Escape') return;
+      const menus = openMenus();
+      if (!menus.length) return;
+      event.preventDefault();
+      event.stopPropagation();
+      for (const menu of menus) menu.open = false;
+      menus[0].querySelector('summary')?.focus();
+    };
+    document.addEventListener('click', dismissOutside, true);
+    document.addEventListener('keydown', escape, true);
+    return () => {
+      document.removeEventListener('click', dismissOutside, true);
+      document.removeEventListener('keydown', escape, true);
+    };
+  }, []);
   const action = async (kind: NodeAction, node: NoteNode) => {
     document
       .querySelectorAll<HTMLDetailsElement>('details.node-menu[open]')

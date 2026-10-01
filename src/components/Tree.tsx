@@ -16,7 +16,7 @@ export interface TreeProps {
 }
 export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreeProps['onAction'] }) {
   return (
-    <details className="node-menu">
+    <details className="node-menu" name="node-actions">
       <summary role="button" className="icon-button" aria-label={`管理 ${node.title}`}>
         <MoreHorizontal size={18} />
       </summary>
