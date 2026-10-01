@@ -5,10 +5,13 @@ export const AI_MODEL = 'deepseek-flash';
 export const AI_PROMPT_LIMIT = 8_000;
 export const AI_QUOTE_LIMIT = 20_000;
 export const AI_IMAGE_LIMIT = 1_048_576;
+export const AI_DEFAULT_MAX_TOKENS = 8192;
+export const AI_REPLY_LIMITS = [2048, 4096, 8192, 16384, 32768] as const;
 
 export interface AssistantSettings {
   configured: boolean;
   model: string;
+  maxTokens: number;
 }
 export interface ChatMessage {
   id: string;
@@ -19,6 +22,7 @@ export interface ChatMessage {
   quote?: string;
   image?: FileInfo;
   files?: ChatFile[];
+  continueFrom?: string;
   exportedNodeId?: string;
   error?: string;
   createdAt: number;
@@ -28,6 +32,7 @@ export interface ChatInput {
   quote?: string;
   image?: string;
   files?: ChatFileInput[];
+  continueFrom?: string;
 }
 export interface ChatHistory {
   messages: ChatMessage[];

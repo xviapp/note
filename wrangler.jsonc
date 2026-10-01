@@ -26,8 +26,9 @@
     "production": {
       "name": "xvi-note",
       "account_id": "96110580dfb605bb5aade1a2b533d9c1",
-      "workers_dev": true,
+      "workers_dev": false,
       "preview_urls": false,
+      "routes": [{ "pattern": "note.xvi.app", "custom_domain": true }],
       "d1_databases": [
         {
           "binding": "DB",

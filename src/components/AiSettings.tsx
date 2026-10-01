@@ -1,6 +1,10 @@
 import { useEffect, useState } from 'react';
 import { Bot } from 'lucide-react';
-import type { AssistantSettings } from '../../shared/assistant';
+import {
+  AI_DEFAULT_MAX_TOKENS,
+  AI_REPLY_LIMITS,
+  type AssistantSettings,
+} from '../../shared/assistant';
 import { api } from '../api';
 import type { Confirm } from './Management';
 
@@ -8,13 +12,17 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null);
   const [key, setKey] = useState(''),
     [busy, setBusy] = useState(false);
+  const [maxTokens, setMaxTokens] = useState<number>(AI_DEFAULT_MAX_TOKENS);
   const [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   useEffect(() => {
     let live = true;
     api<AssistantSettings>('/api/ai/settings')
       .then((value) => {
-        if (live) setSettings(value);
+        if (live) {
+          setSettings(value);
+          setMaxTokens(value.maxTokens);
+        }
       })
       .catch((e) => {
         if (live) setError(e.message);
@@ -37,13 +45,15 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
         await api('/api/ai/test', 'POST', key.trim() ? { apiKey: key.trim() } : {});
         setNotice(key.trim() ? '连接成功，保存后即可使用。' : '连接成功。');
       } else {
-        setSettings(
-          await api<AssistantSettings>(
-            '/api/ai/settings',
-            action === 'save' ? 'PUT' : 'DELETE',
-            action === 'save' ? { apiKey: key.trim() } : undefined,
-          ),
+        const saved = await api<AssistantSettings>(
+          '/api/ai/settings',
+          action === 'save' ? 'PUT' : 'DELETE',
+          action === 'save'
+            ? { ...(key.trim() ? { apiKey: key.trim() } : {}), maxTokens }
+            : undefined,
         );
+        setSettings(saved);
+        setMaxTokens(saved.maxTokens);
         setKey('');
         setNotice(action === 'save' ? 'AI 配置已保存。' : 'AI 配置已清除。');
       }
@@ -91,12 +101,32 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
             }}
           />
         </label>
+        <label>
+          单次回复上限
+          <select
+            value={maxTokens}
+            disabled={busy || !settings}
+            onChange={(e) => {
+              setMaxTokens(Number(e.target.value));
+              setNotice('');
+            }}
+          >
+            {AI_REPLY_LIMITS.map((limit) => (
+              <option key={limit} value={limit}>
+                {limit} tokens{limit === AI_DEFAULT_MAX_TOKENS ? '（默认）' : ''}
+              </option>
+            ))}
+          </select>
+        </label>
         <p className="field-hint">
           密钥加密保存在服务端。仅发送你提交的问题、附件、引用、截图和本文件的近期会话；调用按
           DeepSeek 账户计费。
         </p>
         <div className="ai-settings-actions">
-          <button className="button primary" disabled={busy || !key.trim()}>
+          <button
+            className="button primary"
+            disabled={busy || !settings || (!key.trim() && !settings.configured)}
+          >
             保存 AI 配置
           </button>
           <button

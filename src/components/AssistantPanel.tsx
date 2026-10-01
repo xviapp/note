@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState, type RefObject } from 'react'
 import {
   Camera,
   Check,
+  CirclePlay,
   Copy,
   FilePlus2,
   FileText,
@@ -19,6 +20,7 @@ import {
   type AssistantSettings,
   type ChatHistory,
   type ChatMessage,
+  type ChatInput,
 } from '../../shared/assistant';
 import type { NoteDetail, NoteNode } from '../../shared/types';
 import { CHAT_FILE_LIMIT, pageLabel } from '../../shared/chat-files';
@@ -138,8 +140,15 @@ export function AssistantPanel(props: Props) {
     if (visible && follow.current) bottom.current?.scrollIntoView({ block: 'nearest' });
   }, [messages, visible, props.mode]);
 
-  const send = async () => {
-    if (sending || remoteBusy || !prompt.trim() || !settings?.configured) return;
+  const send = async (continueFrom?: string) => {
+    if (
+      abort.current ||
+      sending ||
+      remoteBusy ||
+      (!continueFrom && !prompt.trim()) ||
+      !settings?.configured
+    )
+      return;
     setSending(true);
     setError('');
     follow.current = true;
@@ -148,19 +157,22 @@ export function AssistantPanel(props: Props) {
     let replyId = '',
       started = false;
     try {
-      validatePreparedFiles(files);
-      setUploading(files.length > 0);
-      const attached = [];
-      for (const file of files)
-        attached.push(await uploadPreparedFile(node.id, file, controller.signal));
+      let data: ChatInput = { content: '继续生成', continueFrom };
+      if (!continueFrom) {
+        validatePreparedFiles(files);
+        setUploading(files.length > 0);
+        const attached = [];
+        for (const file of files)
+          attached.push(await uploadPreparedFile(node.id, file, controller.signal));
+        data = {
+          content: prompt.trim(),
+          ...(quote ? { quote } : {}),
+          ...(image ? { image } : {}),
+          ...(attached.length ? { files: attached } : {}),
+        };
+      }
       controller.signal.throwIfAborted();
       setUploading(false);
-      const data = {
-        content: prompt.trim(),
-        ...(quote ? { quote } : {}),
-        ...(image ? { image } : {}),
-        ...(attached.length ? { files: attached } : {}),
-      };
       const payload = JSON.stringify(data);
       if (requestKey.current?.payload !== payload)
         requestKey.current = { payload, key: crypto.randomUUID() };
@@ -169,10 +181,12 @@ export function AssistantPanel(props: Props) {
         if (event.type === 'start') {
           started = true;
           replyId = event.assistant.id;
-          setPrompt('');
-          setQuote('');
-          setImage('');
-          setFiles([]);
+          if (!continueFrom) {
+            setPrompt('');
+            setQuote('');
+            setImage('');
+            setFiles([]);
+          }
           setMessages((old) => [
             ...old.filter((m) => m.id !== event.user.id && m.id !== event.assistant.id),
             event.user,
@@ -418,7 +432,7 @@ export function AssistantPanel(props: Props) {
               {message.error && <p className="chat-error">{message.error}</p>}
               {message.role === 'assistant' && !!message.content && (
                 <div className="chat-message-actions">
-                  {message.status === 'completed' && (
+                  {message.status !== 'pending' && (
                     <button
                       className="text-button"
                       disabled={!!exporting}
@@ -430,6 +444,16 @@ export function AssistantPanel(props: Props) {
                         : message.exportedNodeId
                           ? '打开子笔记'
                           : '保存为子笔记'}
+                    </button>
+                  )}
+                  {message.status === 'interrupted' && (
+                    <button
+                      className="text-button"
+                      disabled={sending || remoteBusy || !settings?.configured}
+                      onClick={() => void send(message.id)}
+                    >
+                      <CirclePlay size={14} />
+                      继续生成
                     </button>
                   )}
                   <button

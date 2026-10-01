@@ -75,8 +75,8 @@ async function create(title = '资料 A', extra = {}) {
 async function configure() {
   await ok('/api/ai/settings', 'PUT', { apiKey: key });
 }
-function provider(content = '# 阅读结论\n\n解释所选文字。', complete = true) {
-  const data = `: keepalive\r\n\r\ndata: ${JSON.stringify({ choices: [{ delta: { content } }] })}\r\n\r\n${complete ? `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` : ''}`;
+function provider(content = '# 阅读结论\n\n解释所选文字。', complete: boolean | 'length' = true) {
+  const data = `: keepalive\r\n\r\ndata: ${JSON.stringify({ choices: [{ delta: { content } }] })}\r\n\r\n${complete ? `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: complete === 'length' ? 'length' : 'stop' }] })}\n\ndata: [DONE]\n\n` : ''}`;
   const bytes = new TextEncoder().encode(data);
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -341,7 +341,11 @@ describe('per-file DeepSeek assistant', () => {
       ).status,
     ).toBe(403);
     await configure();
-    expect(await ok('/api/ai/settings')).toEqual({ configured: true, model: 'deepseek-flash' });
+    expect(await ok('/api/ai/settings')).toEqual({
+      configured: true,
+      model: 'deepseek-flash',
+      maxTokens: 8192,
+    });
     const row = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first<{
       encrypted_key: string;
     }>();
@@ -358,6 +362,140 @@ describe('per-file DeepSeek assistant', () => {
     expect(fetch.mock.calls[0][1]?.headers).toMatchObject({ authorization: `Bearer ${key}` });
     await ok('/api/ai/settings', 'DELETE');
     expect(await ok('/api/ai/settings')).toMatchObject({ configured: false });
+  });
+
+  it('defaults to 8192 tokens and changes the reply limit without replacing the saved key', async () => {
+    expect(await ok('/api/ai/settings')).toMatchObject({ configured: false, maxTokens: 8192 });
+    await configure();
+    const node = await create();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    await chat(node);
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).max_tokens).toBe(8192);
+    const encrypted = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first();
+    expect(await ok('/api/ai/settings', 'PUT', { maxTokens: 16384 })).toMatchObject({
+      maxTokens: 16384,
+    });
+    expect(await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first()).toEqual(
+      encrypted,
+    );
+    expect(await readApiKey(bindings)).toBe(key);
+    await chat(node);
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body)).max_tokens).toBe(16384);
+    for (const maxTokens of [0, -1, 8192.5, '8192', 65536])
+      expect((await request('/api/ai/settings', 'PUT', { maxTokens })).status).toBe(400);
+    await configure();
+    expect(await ok('/api/ai/settings')).toMatchObject({ maxTokens: 16384 });
+    await ok('/api/ai/settings', 'DELETE');
+    expect(await ok('/api/ai/settings')).toMatchObject({ configured: false, maxTokens: 8192 });
+  });
+
+  it('continues a length-limited reply with its original context and exports the partial reply once', async () => {
+    const node = await create(),
+      other = await create('另一个文件');
+    await configure();
+    const partial = '# 未完的分析\n\n第一部分。';
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => provider(partial, 'length'));
+    expect((await chat(node)).at(-1)).toMatchObject({
+      type: 'error',
+      message: { status: 'interrupted', content: partial },
+    });
+    const answer = (await history(node)).messages[1];
+    const child = await ok<NoteNode>(
+      `/api/nodes/${node.id}/assistant/${answer.id}/export`,
+      'POST',
+      {},
+    );
+    expect(child.parent_id).toBe(node.id);
+    expect((await ok<NoteDetail>(`/api/nodes/${child.id}`)).content).toBe(partial);
+    expect(
+      (await ok<NoteNode>(`/api/nodes/${node.id}/assistant/${answer.id}/export`, 'POST', {})).id,
+    ).toBe(child.id);
+    fetch.mockImplementation(async () => provider('第二部分，完成。'));
+    await chat(node, { content: '后来的无关问题' });
+    fetch.mockImplementationOnce(async () => provider('第二部分，还没写完。', 'length'));
+    const continuation = { content: '继续生成', continueFrom: answer.id };
+    await events(
+      await request(`/api/nodes/${node.id}/assistant`, 'POST', continuation, {
+        key: 'continue-once',
+      }),
+    );
+    const sent = JSON.parse(String(fetch.mock.calls[2][1]?.body));
+    expect(sent.messages.slice(1, -1)).toEqual([
+      { role: 'user', content: '解释这段文字\n\n<引用文字>\n被选中的文字\n</引用文字>' },
+      { role: 'assistant', content: partial },
+    ]);
+    expect(sent.messages.at(-1)).toMatchObject({
+      role: 'user',
+      content: expect.stringContaining('继续'),
+    });
+    expect(sent.max_tokens).toBe(8192);
+    expect(
+      (
+        await request(`/api/nodes/${node.id}/assistant`, 'POST', continuation, {
+          key: 'continue-once',
+        })
+      ).status,
+    ).toBe(409);
+    expect((await request(`/api/nodes/${other.id}/assistant`, 'POST', continuation)).status).toBe(
+      404,
+    );
+    expect(
+      (
+        await request(`/api/nodes/${node.id}/assistant`, 'POST', {
+          ...continuation,
+          continueFrom: (await history(node)).messages[0].id,
+        })
+      ).status,
+    ).toBe(400);
+    expect(fetch).toHaveBeenCalledTimes(3);
+    const second = (await history(node)).messages.at(-1)!;
+    await events(
+      await request(`/api/nodes/${node.id}/assistant`, 'POST', {
+        content: '继续生成',
+        continueFrom: second.id,
+      }),
+    );
+    const repeated = JSON.parse(String(fetch.mock.calls[3][1]?.body));
+    expect(JSON.stringify(repeated.messages)).not.toContain('后来的无关问题');
+    expect(JSON.stringify(repeated.messages)).toContain(partial.replaceAll('\n', '\\n'));
+    expect(JSON.stringify(repeated.messages)).toContain('第二部分，还没写完。');
+    expect(JSON.stringify(repeated.messages)).toContain('被选中的文字');
+    expect((await history(node)).messages.at(-1)).toMatchObject({
+      status: 'completed',
+      content: '第二部分，完成。',
+    });
+  });
+
+  it('retains the original file and screenshot when a long reply exceeds the usual history budget', async () => {
+    const node = await create();
+    await configure();
+    const partial = '已生成的内容。'.repeat(15_000);
+    const fileText = '资料原文。'.repeat(10_000);
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementationOnce(async () => provider(partial, 'length'));
+    await chat(node, {
+      content: '分析资料',
+      quote: '原始引用',
+      image: png,
+      files: [{ name: 'reference.txt', kind: 'text', text: fileText, images: [] }],
+    });
+    const answer = (await history(node)).messages.at(-1)!;
+    expect(answer.content).toBe(partial);
+    fetch.mockImplementationOnce(async () => provider('续写内容。'));
+    await events(
+      await request(`/api/nodes/${node.id}/assistant`, 'POST', {
+        content: '继续生成',
+        continueFrom: answer.id,
+      }),
+    );
+    const sent = JSON.parse(String(fetch.mock.calls[1][1]?.body));
+    expect(sent.messages[1].content[0].text).toContain(fileText);
+    expect(sent.messages[1].content[0].text).toContain('原始引用');
+    expect(sent.messages[1].content[1].image_url.url).toBe(png);
+    expect(sent.messages[2]).toEqual({ role: 'assistant', content: partial });
   });
 
   it('streams UTF-8, isolates file context and history, and exports once under the source file', async () => {
@@ -535,9 +673,12 @@ describe('per-file DeepSeek assistant', () => {
       message: { status: 'interrupted', content: '部分回复' },
     });
     const answer = (await history(node)).messages[1];
-    expect(
-      (await request(`/api/nodes/${node.id}/assistant/${answer.id}/export`, 'POST', {})).status,
-    ).toBe(400);
+    const saved = await ok<NoteNode>(
+      `/api/nodes/${node.id}/assistant/${answer.id}/export`,
+      'POST',
+      {},
+    );
+    expect((await ok<NoteDetail>(`/api/nodes/${saved.id}`)).content).toBe('部分回复');
     expect(
       (
         await request(
@@ -569,16 +710,26 @@ describe('per-file DeepSeek assistant', () => {
     const ready = new Promise<void>((resolve) => {
       started = resolve;
     });
-    vi.spyOn(globalThis, 'fetch').mockImplementation(
-      (_url, init) =>
-        new Promise((_resolve, reject) => {
-          started();
-          init?.signal?.addEventListener(
-            'abort',
-            () => reject(new DOMException('Aborted', 'AbortError')),
-            { once: true },
-          );
-        }),
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async (_url, init) =>
+        new Response(
+          new ReadableStream<Uint8Array>({
+            start(controller) {
+              controller.enqueue(
+                new TextEncoder().encode(
+                  `data: ${JSON.stringify({ choices: [{ delta: { content: '停止前已生成的内容。' } }] })}\n\n`,
+                ),
+              );
+              started();
+              init?.signal?.addEventListener(
+                'abort',
+                () => controller.error(new DOMException('Aborted', 'AbortError')),
+                { once: true },
+              );
+            },
+          }),
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
     );
     const controller = new AbortController();
     const response = await request(
@@ -590,6 +741,24 @@ describe('per-file DeepSeek assistant', () => {
     const consuming = events(response);
     await ready;
     expect((await history(node)).busy).toBe(true);
+    const pending = (await history(node)).messages.at(-1)!;
+    expect(
+      (await request(`/api/nodes/${node.id}/assistant/${pending.id}/export`, 'POST', {})).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(`/api/nodes/${node.id}/assistant`, 'POST', {
+          content: '继续生成',
+          continueFrom: pending.id,
+        })
+      ).status,
+    ).toBe(400);
+    const lock = await bindings.DB.prepare(
+      'SELECT locked_until FROM assistant_threads WHERE node_id=?',
+    )
+      .bind(node.id)
+      .first<{ locked_until: number }>();
+    expect(lock!.locked_until - Date.now()).toBeGreaterThan(300_000);
     expect(
       (await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '并行请求' })).status,
     ).toBe(409);
@@ -597,8 +766,25 @@ describe('per-file DeepSeek assistant', () => {
     controller.abort();
     expect((await consuming).at(-1)).toMatchObject({
       type: 'error',
-      message: { status: 'interrupted' },
+      message: { status: 'interrupted', content: '停止前已生成的内容。' },
     });
     expect((await history(node)).busy).toBe(false);
+    const saved = await ok<NoteNode>(
+      `/api/nodes/${node.id}/assistant/${pending.id}/export`,
+      'POST',
+      {},
+    );
+    expect((await ok<NoteDetail>(`/api/nodes/${saved.id}`)).content).toBe('停止前已生成的内容。');
+    fetch.mockImplementationOnce(async () => provider('停止后的续写。'));
+    await events(
+      await request(`/api/nodes/${node.id}/assistant`, 'POST', {
+        content: '继续生成',
+        continueFrom: pending.id,
+      }),
+    );
+    expect(JSON.parse(String(fetch.mock.calls[1][1]?.body)).messages).toContainEqual({
+      role: 'assistant',
+      content: '停止前已生成的内容。',
+    });
   });
 });

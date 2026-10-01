@@ -11,7 +11,7 @@ import type { BlobRow, Env } from './types';
 import { AppError, asError, idValue, textValue } from './http';
 import { createNode, getNode } from './library';
 import { discardFile, getBlob, storeText, uploadFile } from './storage';
-import { deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
+import { aiSettings, deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
 import { CHAT_CONTEXT_IMAGE_LIMIT, CHAT_CONTEXT_TEXT_LIMIT } from '../shared/chat-files';
 import { fileContext, validateChatFiles } from './chat-files';
 
@@ -40,7 +40,7 @@ async function assistantNode(env: Env, id: string): Promise<NoteNode> {
   return node;
 }
 async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
-  let body: Pick<ChatMessage, 'content' | 'quote' | 'files'> = { content: '' };
+  let body: Pick<ChatMessage, 'content' | 'quote' | 'files' | 'continueFrom'> = { content: '' };
   if (row.body_key) {
     const object = await env.FILES.get(row.body_key);
     if (!object) throw new AppError(503, '会话内容暂时无法读取，请稍后重试。');
@@ -67,12 +67,15 @@ async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
     ...(row.error ? { error: row.error } : {}),
   };
 }
-async function message(env: Env, nodeId: string, id: string): Promise<ChatMessage> {
+async function messageRow(env: Env, nodeId: string, id: string): Promise<MessageRow> {
   const row = await env.DB.prepare(`${MESSAGE_QUERY} WHERE m.node_id=? AND m.id=?`)
     .bind(nodeId, id)
     .first<MessageRow>();
   if (!row) throw new AppError(404, '这条消息不存在。');
-  return present(env, row);
+  return row;
+}
+async function message(env: Env, nodeId: string, id: string): Promise<ChatMessage> {
+  return present(env, await messageRow(env, nodeId, id));
 }
 async function expireRequests(env: Env, id: string): Promise<void> {
   await env.DB.prepare(
@@ -126,23 +129,37 @@ async function screenshot(env: Env, data: unknown): Promise<BlobRow | null> {
   }
   return file;
 }
-async function context(env: Env, node: NoteNode): Promise<ProviderMessage[]> {
-  const rows = await env.DB.prepare(
-    `${MESSAGE_QUERY} WHERE m.node_id=? AND m.status='completed' ORDER BY m.sequence DESC LIMIT 20`,
-  )
-    .bind(node.id)
-    .all<MessageRow>();
+async function context(env: Env, node: NoteNode, userId: string): Promise<ProviderMessage[]> {
+  const recent = async (before: number) =>
+    (
+      await env.DB.prepare(
+        `${MESSAGE_QUERY} WHERE m.node_id=?
+      AND (m.status='completed' OR (m.role='assistant' AND m.status='interrupted' AND m.body_blob_id IS NOT NULL))
+      AND m.sequence<=? ORDER BY m.sequence DESC LIMIT 20`,
+      )
+        .bind(node.id, before)
+        .all<MessageRow>()
+    ).results;
+  let rows = await recent(Number.MAX_SAFE_INTEGER);
   const messages: ProviderMessage[] = [];
+  let requiredRequest = '';
   let characters = 0,
     images = 0;
   // Newest first while budgeting, then restore chronological order.
-  for (const row of rows.results) {
+  for (let index = 0; index < rows.length && messages.length < 20; index++) {
+    const row = rows[index];
     const value = await present(env, row);
     let text = value.quote
       ? `${value.content}\n\n<引用文字>\n${value.quote}\n</引用文字>`
       : value.content;
+    if (value.continueFrom)
+      text =
+        '请从上一条助手回复的断点继续完成回答，不重复已有内容，保持原有的语言和 Markdown 格式。';
     for (const file of value.files ?? []) text += fileContext(file);
-    if (characters + text.length > CHAT_CONTEXT_TEXT_LIMIT) break;
+    // Always carry the selected reply and its original question/attachments.
+    // They may together exceed the normal recent-history text budget.
+    const required = row.id === userId || row.request_id === requiredRequest;
+    if (!required && characters + text.length > CHAT_CONTEXT_TEXT_LIMIT) break;
     characters += text.length;
     const parts: Exclude<ProviderMessage['content'], string> = [{ type: 'text', text }];
     const attachments = [
@@ -171,6 +188,14 @@ async function context(env: Env, node: NoteNode): Promise<ProviderMessage[]> {
       images++;
     }
     messages.push({ role: value.role, content: parts.length === 1 ? text : parts });
+    if (value.continueFrom) {
+      const target = await messageRow(env, node.id, value.continueFrom);
+      // Follow the chosen reply, even when it is older than this history page.
+      // Repeated continuations keep this branch instead of reintroducing later questions.
+      if (target.sequence >= row.sequence) throw new AppError(400, '续写上下文无效，请重新提问。');
+      requiredRequest = target.request_id;
+      rows = [...rows.slice(0, index + 1), ...(await recent(target.sequence))];
+    }
   }
   return [
     {
@@ -192,6 +217,23 @@ export async function sendChat(
   const prompt = textValue(data.content, '问题', AI_PROMPT_LIMIT).trim();
   const quote = data.quote == null ? '' : textValue(data.quote, '引用文字', AI_QUOTE_LIMIT, true);
   const apiKey = await readApiKey(env);
+  const { maxTokens } = await aiSettings(env);
+  const timeout = Math.max(300_000, Math.ceil(maxTokens / 8192) * 300_000);
+  const continuation =
+    data.continueFrom === undefined
+      ? undefined
+      : await messageRow(env, id, idValue(data.continueFrom));
+  if (continuation) {
+    const previous = await present(env, continuation);
+    if (
+      previous.role !== 'assistant' ||
+      previous.status !== 'interrupted' ||
+      !previous.content.trim()
+    )
+      throw new AppError(400, '只能继续生成已有内容的中断回复。');
+    if (data.quote || data.image || (Array.isArray(data.files) && data.files.length))
+      throw new AppError(400, '继续生成会沿用原问题的引用和附件。');
+  }
   const attachments = await validateChatFiles(env, data.files);
   const duplicate = await env.DB.prepare(
     'SELECT id FROM assistant_messages WHERE node_id=? AND request_id=?',
@@ -203,7 +245,7 @@ export async function sendChat(
   const lock = await env.DB.prepare(
     'UPDATE assistant_threads SET active_request=?,locked_until=? WHERE node_id=? AND locked_until<=? RETURNING node_id',
   )
-    .bind(key, Date.now() + 180_000, id, Date.now())
+    .bind(key, Date.now() + timeout + 60_000, id, Date.now())
     .first();
   if (!lock) throw new AppError(409, '这个文件正在生成回复，请稍后再试。', 'AI_BUSY');
   const unlock = () =>
@@ -222,6 +264,7 @@ export async function sendChat(
       env,
       JSON.stringify({
         content: prompt,
+        ...(continuation ? { continueFrom: continuation.id } : {}),
         ...(quote ? { quote } : {}),
         ...(attachments.files.length ? { files: attachments.files } : {}),
       }),
@@ -252,7 +295,7 @@ export async function sendChat(
   const onAbort = () => abort.abort();
   request.signal.addEventListener('abort', onAbort, { once: true });
   if (request.signal.aborted) abort.abort();
-  const timer = setTimeout(() => abort.abort('timeout'), 120_000);
+  const timer = setTimeout(() => abort.abort('timeout'), timeout);
   let disconnected = false;
   const stream = new ReadableStream<Uint8Array>({
     start(controller) {
@@ -277,8 +320,8 @@ export async function sendChat(
             user: await message(env, id, userId),
             assistant: await message(env, id, replyId),
           });
-          const messages = await context(env, node);
-          for await (const delta of deepseekReply(apiKey, messages, abort.signal)) {
+          const messages = await context(env, node, userId);
+          for await (const delta of deepseekReply(apiKey, messages, abort.signal, maxTokens)) {
             content += delta;
             emit({ type: 'delta', content: delta });
           }
@@ -350,8 +393,8 @@ export async function clearChat(env: Env, id: string): Promise<void> {
 export async function exportReply(env: Env, id: string, messageId: string): Promise<NoteNode> {
   await assistantNode(env, id);
   const value = await message(env, id, idValue(messageId));
-  if (value.role !== 'assistant' || value.status !== 'completed' || !value.content.trim())
-    throw new AppError(400, '只能将完整的助手回复保存为笔记。');
+  if (value.role !== 'assistant' || value.status === 'pending' || !value.content.trim())
+    throw new AppError(400, '回复结束或停止后，有内容才能保存为笔记。');
   if (value.exportedNodeId) return getNode(env, value.exportedNodeId);
   const heading = value.content.match(/^#{1,6}\s+(.+)$/m)?.[1];
   const title = (heading?.replace(/[*_`]/g, '') || '助手笔记').slice(0, 200).trim();

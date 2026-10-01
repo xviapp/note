@@ -1,6 +1,11 @@
-import { AI_MODEL, type AssistantSettings } from '../shared/assistant';
+import {
+  AI_MODEL,
+  AI_DEFAULT_MAX_TOKENS,
+  AI_REPLY_LIMITS,
+  type AssistantSettings,
+} from '../shared/assistant';
 import { sseData } from '../shared/sse';
-import { AppError, textValue } from './http';
+import { AppError, integer, textValue } from './http';
 import type { Env } from './types';
 
 const BASE_URL = 'https://api.deepseek.com';
@@ -26,13 +31,28 @@ function validateKey(value: unknown): string {
   return key;
 }
 export async function aiSettings(env: Env): Promise<AssistantSettings> {
-  const row = await env.DB.prepare('SELECT id FROM ai_settings WHERE id=1').first();
-  return { configured: !!row, model: AI_MODEL };
+  const row = await env.DB.prepare('SELECT max_tokens FROM ai_settings WHERE id=1').first<{
+    max_tokens: number;
+  }>();
+  return {
+    configured: !!row,
+    model: AI_MODEL,
+    maxTokens: row?.max_tokens ?? AI_DEFAULT_MAX_TOKENS,
+  };
 }
 export async function saveAiSettings(
   env: Env,
   data: Record<string, unknown>,
 ): Promise<AssistantSettings> {
+  const current = await aiSettings(env);
+  const maxTokens =
+    data.maxTokens === undefined ? current.maxTokens : integer(data.maxTokens, '回复长度');
+  if (!AI_REPLY_LIMITS.some((limit) => limit === maxTokens))
+    throw new AppError(400, '请选择支持的回复长度。');
+  if (data.apiKey === undefined && current.configured) {
+    await env.DB.prepare('UPDATE ai_settings SET max_tokens=? WHERE id=1').bind(maxTokens).run();
+    return aiSettings(env);
+  }
   const key = validateKey(data.apiKey);
   const iv = crypto.getRandomValues(new Uint8Array(12));
   const encrypted = await crypto.subtle.encrypt(
@@ -41,9 +61,9 @@ export async function saveAiSettings(
     new TextEncoder().encode(key),
   );
   await env.DB.prepare(
-    'INSERT INTO ai_settings(id,encrypted_key) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET encrypted_key=excluded.encrypted_key',
+    'INSERT INTO ai_settings(id,encrypted_key,max_tokens) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET encrypted_key=excluded.encrypted_key,max_tokens=excluded.max_tokens',
   )
-    .bind(`${toBase64(iv)}.${toBase64(new Uint8Array(encrypted))}`)
+    .bind(`${toBase64(iv)}.${toBase64(new Uint8Array(encrypted))}`, maxTokens)
     .run();
   return aiSettings(env);
 }
@@ -120,12 +140,13 @@ export async function* deepseekReply(
   key: string,
   messages: ProviderMessage[],
   signal: AbortSignal,
+  maxTokens: number,
 ): AsyncGenerator<string> {
   const response = await providerFetch('/chat/completions', key, signal, {
     model: AI_MODEL,
     messages,
     stream: true,
-    max_tokens: 4096,
+    max_tokens: maxTokens,
     thinking: { type: 'disabled' },
   });
   if (!response.body) throw new AppError(502, 'DeepSeek 没有返回回复。');
@@ -147,11 +168,11 @@ export async function* deepseekReply(
     const value = choice?.delta?.content;
     if (typeof value === 'string' && value) {
       length += value.length;
-      if (length > 80_000) throw new AppError(502, '回复过长，已停止生成。');
+      if (length > 262_144) throw new AppError(502, '回复内容过大，已停止生成，可保存已有内容。');
       yield value;
     }
   }
-  if (finish === 'length') throw new AppError(502, '回复达到单次长度上限，可以继续提问。');
+  if (finish === 'length') throw new AppError(502, '已达到本次回复长度上限，可点击「继续生成」。');
   if (!ended || finish !== 'stop' || !length)
-    throw new AppError(502, '回复未完整接收，可以重新提问。');
+    throw new AppError(502, '回复未完整接收，已有内容已保留。');
 }

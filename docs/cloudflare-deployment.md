@@ -6,23 +6,30 @@
 
 | 项目          | 值                                                              |
 | ------------- | --------------------------------------------------------------- |
-| 地址          | https://xvi-note.so-s-account.workers.dev                       |
+| 地址          | https://note.xvi.app                                           |
 | Wrangler 环境 | `production`                                                    |
 | Worker        | `xvi-note`                                                      |
-| 发布版本      | `b8275710-707d-40f8-ad75-50229effa7bc`                          |
+| 首次发布版本  | `b8275710-707d-40f8-ad75-50229effa7bc`                          |
 | D1            | `xvi-note` / `6ee905d7-80bf-46fa-a35c-80d839581ff7`             |
 | R2            | `xvi-note-files`，公开访问关闭                                  |
-| 迁移          | `0001_initial.sql`、`0002_assistant.sql`、`0003_chat_files.sql` |
+| 迁移          | `0001_initial.sql`、`0002_assistant.sql`、`0003_chat_files.sql`、`0004_ai_reply_limit.sql` |
 | 清理任务      | 每 30 分钟                                                      |
 
 生产 D1 与 R2 是新建的独立资源，本地 `.wrangler/state` 和密码未改动。首次密码由使用者通过专属链接设置，部署验证没有初始化生产账号。专属链接和初始密钥保存在 Git 忽略的 `.wrangler/deploy/`，目录权限 0700，敏感文件权限 0600；不写入本记录。后续部署使用 `npm run deploy`，保留线上密钥；远端密码重置命令固定选择 `production`。
 
-## 部署时修正
+## AI 回复更新
+
+- 部署配置同步已有自定义域名 `note.xvi.app`，保持 `workers.dev` 和预览地址关闭。
+- 新迁移为已有 AI 配置补上默认 8192 tokens，保留加密 Key；设置中可单独调整回复上限。默认等待 5 分钟，更长的上限相应延长等待时间与会话锁。
+- 中断回复可保存为 Markdown 子笔记，也可继续生成；续写携带所选回复及原问题、引用和附件，支持连续续写，并保留输入框草稿及待发送附件。
+- 构建、38 项服务端测试通过；电脑、手机共 30 项浏览器用例验证通过（修正新增用例的下拉框定位后单独重跑该用例）。DeepSeek 使用模拟响应，未触发真实付费调用。
+
+## 首次部署时修正
 
 1. **D1 迁移解析。** 云端对触发器中未加括号的 `CASE … END` 返回 `incomplete input`。最小 SQL 在云端复现，加括号后成功。已对三个迁移的 CASE 表达式加括号，约束语义不变；随后生产库和独立测试库均完整迁移成功。对应 [Cloudflare 问题记录](https://github.com/cloudflare/workers-sdk/issues/4727)。
 2. **密码计算运行时差异。** 原生 PBKDF2 600,000 次在本地通过，云端返回 `NotSupportedError`，明确限制最多 100,000 次。该限制也存在于 [workerd 的限制器实现](https://github.com/cloudflare/workerd/blob/main/src/workerd/io/limit-enforcer.h)。已保留 600,000 次，将计算移到浏览器，服务端使用 APP_SECRET 做带域标识的 HMAC-SHA256 校验。新记录不保存可直接登录的派生值；旧本地记录经原密码验证后自动升级。新增测试模拟服务端禁止 PBKDF2，覆盖初始化、登录、改密、参数降级拒绝、数据库校验值重放拒绝和旧格式升级。
 
-## 验证结果
+## 首次部署验证结果
 
 - 构建和 TypeScript 检查通过。原有 33 项集成测试与新增的 2 项密码回归测试通过；电脑、手机共 28 项浏览器测试通过。
 - 独立云端 Worker、D1、R2 执行完整 HTTP 冒烟：短密码与无效设置令牌拒绝、初始化、正确与错误密码、10 次正确登录、会话撤销、编辑确认、笔记创建 / 读取 / 保存、1,048,013 字节正文、文件上传、10 次 PDF Range 请求、回收站永久删除及清理。清理后所有容量计数为 0。

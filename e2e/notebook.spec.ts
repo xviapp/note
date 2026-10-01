@@ -729,7 +729,7 @@ test('settings change password and revoke every open device', async ({ page, con
 
 // UI fixtures simulate conversation transport; Worker tests exercise the actual
 // encrypted settings, provider stream, persistence and export endpoints in D1/R2.
-async function assistantFixture(page: Page) {
+async function assistantFixture(page: Page, options: { interruptFirst?: boolean } = {}) {
   const threads = new Map<string, ChatHistory>();
   const sent: ChatInput[] = [];
   let sequence = 0;
@@ -816,7 +816,10 @@ async function assistantFixture(page: Page) {
       id: crypto.randomUUID(),
       sequence: ++sequence,
       role: 'assistant',
-      status: 'completed',
+      status: options.interruptFirst && sent.length === 1 ? 'interrupted' : 'completed',
+      ...(options.interruptFirst && sent.length === 1
+        ? { error: '已达到本次回复长度上限，可点击「继续生成」。' }
+        : {}),
       content:
         '# 结构要点\n\n这段资料介绍了桥梁的受力路径。\n\n- 桥面承受荷载，再传给主梁。\n- 支座将力传递到桥墩与基础。\n\n可以结合截图，逐项标注结构的位置。\n\n![示意图](https://assistant-tracker.invalid/pixel.png)',
       createdAt: Date.now(),
@@ -825,7 +828,9 @@ async function assistantFixture(page: Page) {
     const events = [
       { type: 'start', user, assistant: { ...assistant, content: '', status: 'pending' } },
       { type: 'delta', content: assistant.content },
-      { type: 'done', message: assistant },
+      assistant.error
+        ? { type: 'error', error: assistant.error, message: assistant }
+        : { type: 'done', message: assistant },
     ];
     await route.fulfill({
       contentType: 'text/event-stream',
@@ -834,6 +839,72 @@ async function assistantFixture(page: Page) {
   });
   return { threads, sent };
 }
+test('configures reply length and saves or continues an interrupted reply without sending the draft', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.delete('/api/ai/settings', { headers: { origin: 'http://127.0.0.1:8799' } });
+  await nav(page, '设置');
+  const limit = page.getByRole('combobox', { name: '单次回复上限', exact: true });
+  await expect(limit).toHaveValue('8192');
+  await page.getByLabel('DeepSeek API Key', { exact: true }).fill('sk-e2e-placeholder-key');
+  await page.getByRole('button', { name: '保存 AI 配置', exact: true }).click();
+  await expect(page.getByText('AI 配置已保存。', { exact: true })).toBeVisible();
+  await limit.selectOption('16384');
+  await page.getByRole('button', { name: '保存 AI 配置', exact: true }).click();
+  await expect(page.getByText('AI 配置已保存。', { exact: true })).toBeVisible();
+  await page.reload();
+  await nav(page, '设置');
+  await expect(limit).toHaveValue('16384');
+  await expect(page.getByLabel('DeepSeek API Key', { exact: true })).toHaveValue('');
+  await expect(page.getByRole('button', { name: '测试连接', exact: true })).toBeEnabled();
+  await limit.selectOption('8192');
+  await page.getByRole('button', { name: '保存 AI 配置', exact: true }).click();
+  await expect(page.getByText('AI 配置已保存。', { exact: true })).toBeVisible();
+
+  const { node } = await assistantSeed(page, {
+    kind: 'markdown',
+    title: '继续阅读',
+    content: '# 正文\n\n待发送的附件。',
+  });
+  const fixture = await assistantFixture(page, { interruptFirst: true });
+  await page.goto(`/n/${node.id}`);
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  const panel = page.getByRole('complementary', { name: '文件 AI 助手', exact: true });
+  const prompt = panel.getByRole('textbox', { name: '发给助手的问题' });
+  await prompt.fill('详细解释。');
+  await panel.getByRole('button', { name: '发送', exact: true }).click();
+  const reply = panel.locator('.chat-assistant').first();
+  await expect(reply.getByRole('button', { name: '继续生成', exact: true })).toBeEnabled();
+  await reply.getByRole('button', { name: '保存为子笔记', exact: true }).click();
+  await expect(reply.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
+  const partial = fixture.threads.get(node.id)!.messages[1];
+  const saved = await (await page.request.get(`/api/nodes/${partial.exportedNodeId}`)).json();
+  expect(saved).toMatchObject({ parent_id: node.id, kind: 'markdown', content: partial.content });
+  await prompt.fill('下一条问题草稿');
+  await panel.getByRole('button', { name: '附上当前文件', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: '附上文件', exact: true })
+    .getByRole('button', { name: '附到对话', exact: true })
+    .click();
+  await reply.getByRole('button', { name: '继续生成', exact: true }).click();
+  await expect(panel.locator('.chat-assistant')).toHaveCount(2);
+  await expect(
+    panel
+      .locator('.chat-assistant')
+      .last()
+      .getByRole('button', { name: '保存为子笔记', exact: true }),
+  ).toBeVisible();
+  expect(fixture.sent[1]).toEqual({ content: '继续生成', continueFrom: partial.id });
+  await expect(prompt).toHaveValue('下一条问题草稿');
+  await expect(panel.locator('.context-file')).toHaveCount(1);
+  await page.screenshot({ path: `test-results/assistant-continue-${info.project.name}.png` });
+  await page.reload();
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  await expect(panel.locator('.chat-assistant')).toHaveCount(2);
+  await expect(panel.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
+});
+
 async function assistantSeed(page: Page, data: Record<string, unknown>) {
   const headers = { origin: 'http://127.0.0.1:8799' };
   const node = await (
