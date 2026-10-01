@@ -5,12 +5,12 @@ import type { Env } from '../worker/types';
 import type { FileInfo, NoteNode, NoteDetail, StorageInfo, VersionInfo } from '../shared/types';
 import { cleanup } from '../worker/recovery';
 import { discardFile, storeText, uploadFile } from '../worker/storage';
+import { editToken, requireSession } from '../worker/auth';
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
 };
-let cookie = '',
-  library = '';
+let cookie = '';
 const notes = new Map<string, string>();
 beforeAll(async () => {
   await applyD1Migrations(bindings.DB, bindings.TEST_MIGRATIONS);
@@ -28,7 +28,6 @@ async function request(
       origin: options.origin || 'https://notes.test',
       'content-type': 'application/json',
       ...(!options.anonymous ? { cookie } : {}),
-      ...(!options.locked && library ? { 'x-library-edit': library } : {}),
       ...(!options.locked && id && notes.has(id) ? { 'x-note-edit': notes.get(id)! } : {}),
       ...(options.key ? { 'x-idempotency-key': options.key } : {}),
     },
@@ -61,7 +60,6 @@ beforeEach(async () => {
   if (objects.objects.length)
     await bindings.FILES.delete(objects.objects.map((object) => object.key));
   notes.clear();
-  library = '';
   cookie = '';
   const setup = await request('/api/auth/setup', 'POST', {
     token: bindings.SETUP_TOKEN,
@@ -69,7 +67,6 @@ beforeEach(async () => {
   });
   expect(setup.status, await setup.clone().text()).toBe(200);
   cookie = setup.headers.get('set-cookie')!.split(';')[0];
-  library = (await ok<{ token: string }>('/api/edit/unlock', 'POST', {})).token;
 });
 async function create(kind = 'markdown', title = '阅读笔记', extra: Record<string, unknown> = {}) {
   const node = await ok<NoteNode>('/api/nodes', 'POST', {
@@ -104,7 +101,7 @@ async function file(name = 'picture.png'): Promise<FileInfo> {
     `https://notes.test/api/files?name=${name}&size=${png.length}`,
     {
       method: 'POST',
-      headers: { origin: 'https://notes.test', cookie, 'x-library-edit': library },
+      headers: { origin: 'https://notes.test', cookie },
       body: png,
     },
   );
@@ -113,7 +110,7 @@ async function file(name = 'picture.png'): Promise<FileInfo> {
 }
 
 describe('private library behavior', () => {
-  it('protects every private surface and enforces two distinct edit confirmations', async () => {
+  it('protects private surfaces and requires confirmation only for file content changes', async () => {
     const node = await create(),
       asset = await file();
     for (const path of [
@@ -127,9 +124,10 @@ describe('private library behavior', () => {
       expect((await request(path, 'GET', undefined, { anonymous: true })).status).toBe(401);
     }
     expect(
-      (await request('/api/nodes', 'POST', { kind: 'folder', title: 'blocked' }, { locked: true }))
+      (await request('/api/nodes', 'POST', { kind: 'folder', title: '直接新建' }, { locked: true }))
         .status,
-    ).toBe(403);
+    ).toBe(201);
+    expect((await request('/api/edit/unlock', 'POST', {})).status).toBe(400);
     notes.delete(node.id);
     expect(
       (
@@ -137,6 +135,14 @@ describe('private library behavior', () => {
           revision: 1,
           content: 'blocked',
           attachments: [],
+        })
+      ).status,
+    ).toBe(403);
+    const { versions } = await ok<{ versions: VersionInfo[] }>(`/api/nodes/${node.id}/versions`);
+    expect(
+      (
+        await request(`/api/nodes/${node.id}/versions/${versions[0].id}/restore`, 'POST', {
+          revision: node.revision,
         })
       ).status,
     ).toBe(403);
@@ -164,6 +170,65 @@ describe('private library behavior', () => {
       ).status,
     ).toBe(400);
   });
+  it('allows settings and library management without unlocking file content', async () => {
+    const node = await create();
+    notes.clear();
+    const asset = await file();
+    await ok(`/api/files/${asset.id}`, 'DELETE');
+    expect(
+      await ok<StorageInfo>('/api/settings', 'PATCH', { quotaBytes: 1_000_000 }),
+    ).toMatchObject({ quotaBytes: 1_000_000 });
+    const renamed = await ok<NoteNode>(`/api/nodes/${node.id}`, 'PATCH', {
+      title: '直接改名',
+      revision: node.revision,
+    });
+    const batch = await trash(renamed);
+    await ok(`/api/trash/${batch.id}/restore`, 'POST', {});
+    expect((await ok<NoteDetail>(`/api/nodes/${node.id}`)).title).toBe('直接改名');
+    const deleted = await trash(renamed);
+    await ok(`/api/trash/${deleted.id}`, 'DELETE');
+    await ok('/api/cleanup', 'POST', {});
+    for (const options of [{ anonymous: true }, { origin: 'https://elsewhere.test' }]) {
+      expect(
+        (await request('/api/settings', 'PATCH', { quotaBytes: 2_000_000 }, options)).status,
+      ).toBe(options.anonymous ? 401 : 403);
+    }
+  });
+  it('binds file editing to the selected file, session and token lifetime', async () => {
+    const first = await create(),
+      second = await create();
+    const token = notes.get(first.id)!;
+    notes.set(first.id, notes.get(second.id)!);
+    const payload = { revision: first.revision, content: '修改正文', attachments: [] };
+    const locked = async () => {
+      const response = await request(`/api/nodes/${first.id}/content`, 'PUT', payload);
+      expect(response.status).toBe(403);
+      expect(await response.json()).toMatchObject({ code: 'EDIT_LOCKED' });
+    };
+    await locked();
+    const session = await requireSession(
+      new Request('https://notes.test', { headers: { cookie } }),
+      bindings,
+    );
+    notes.set(
+      first.id,
+      await editToken(bindings, { ...session, expires_at: Date.now() - 1 }, first.id),
+    );
+    await locked();
+    notes.set(first.id, token);
+    const login = await request('/api/auth/login', 'POST', {
+      password: 'correct-horse-long-passphrase',
+    });
+    cookie = login.headers.get('set-cookie')!.split(';')[0];
+    await locked();
+    notes.set(
+      first.id,
+      (await ok<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: first.id })).token,
+    );
+    await ok(`/api/nodes/${first.id}/content`, 'PUT', payload);
+    expect((await ok<NoteDetail>(`/api/nodes/${first.id}`)).content).toBe('修改正文');
+    expect((await ok<NoteDetail>(`/api/nodes/${second.id}`)).content).toBe('# 开始\n正文');
+  });
   it('supports notes with children, rejects cycles and preserves stable links when moving', async () => {
     const parent = await create(),
       child = await create('text', '子笔记', { parentId: parent.id }),
@@ -188,11 +253,11 @@ describe('private library behavior', () => {
       (
         await request('/api/nodes', 'POST', {
           kind: 'text',
-          title: '不能挂在链接下',
+          title: '链接的子笔记',
           parentId: link.id,
         })
       ).status,
-    ).toBe(400);
+    ).toBe(201);
     expect(
       (await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${destination.id}`)).nodes.map(
         (n) => n.id,
@@ -267,7 +332,7 @@ describe('private library behavior', () => {
       [1, 2].map((i) =>
         SELF.fetch(`https://notes.test/api/files?name=${i}.png&size=${png.length}`, {
           method: 'POST',
-          headers: { origin: 'https://notes.test', cookie, 'x-library-edit': library },
+          headers: { origin: 'https://notes.test', cookie },
           body: png,
         }),
       ),
@@ -391,7 +456,7 @@ describe('private library behavior', () => {
       `https://notes.test/api/files?name=unsafe.svg&size=${data.length}`,
       {
         method: 'POST',
-        headers: { cookie, origin: 'https://notes.test', 'x-library-edit': library },
+        headers: { cookie, origin: 'https://notes.test' },
         body: data,
       },
     );

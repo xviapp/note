@@ -2,6 +2,7 @@ import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
 import { EditorView, keymap } from '@codemirror/view';
 import { useMemo } from 'react';
+import { useTheme } from '../theme';
 
 export default function Editor({
   value,
@@ -14,6 +15,7 @@ export default function Editor({
   onSave: () => void;
   kind: 'markdown' | 'text';
 }) {
+  const { theme } = useTheme();
   const extensions = useMemo(
     () => [
       EditorView.lineWrapping,
@@ -40,7 +42,7 @@ export default function Editor({
       extensions={extensions}
       height="100%"
       minHeight="350px"
-      theme="light"
+      theme={theme === 'light' ? 'light' : 'dark'}
       autoFocus
       basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true }}
     />

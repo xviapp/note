@@ -1,0 +1,604 @@
+/// <reference types="@cloudflare/vitest-pool-workers/types" />
+import {
+  env,
+  applyD1Migrations,
+  createExecutionContext,
+  waitOnExecutionContext,
+} from 'cloudflare:test';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import worker from '../worker/index';
+import type { Env } from '../worker/types';
+import type { ChatEvent, ChatHistory, ChatInput } from '../shared/assistant';
+import { parsePageRange, pageLabel, type ChatFileInput } from '../shared/chat-files';
+import type { FileInfo, NoteDetail, NoteNode, StorageInfo } from '../shared/types';
+import { sseData } from '../shared/sse';
+import { readApiKey } from '../worker/deepseek';
+import { cleanup } from '../worker/recovery';
+import { discardFile } from '../worker/storage';
+
+const bindings = env as unknown as Env & {
+  TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
+};
+const key = 'sk-test-only-fake-deepseek-key';
+const png =
+  'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jG1cAAAAASUVORK5CYII=';
+let cookie = '';
+let contexts: ExecutionContext[] = [];
+beforeAll(() => applyD1Migrations(bindings.DB, bindings.TEST_MIGRATIONS));
+async function request(
+  path: string,
+  method = 'GET',
+  data?: unknown,
+  options: {
+    anonymous?: boolean;
+    key?: string;
+    origin?: string;
+    signal?: AbortSignal;
+  } = {},
+) {
+  const context = createExecutionContext();
+  contexts.push(context);
+  return worker.fetch(
+    new Request(`https://notes.test${path}`, {
+      method,
+      signal: options.signal,
+      headers: {
+        origin: options.origin || 'https://notes.test',
+        'content-type': 'application/json',
+        ...(!options.anonymous ? { cookie } : {}),
+        ...(options.key ? { 'x-idempotency-key': options.key } : {}),
+      },
+      body: data === undefined ? undefined : JSON.stringify(data),
+    }),
+    bindings,
+    context,
+  );
+}
+async function ok<T = Record<string, unknown>>(
+  path: string,
+  method = 'GET',
+  data?: unknown,
+  options = {},
+): Promise<T> {
+  const response = await request(path, method, data, options);
+  expect(response.ok, await response.clone().text()).toBe(true);
+  return response.json() as Promise<T>;
+}
+async function create(title = '资料 A', extra = {}) {
+  return ok<NoteNode>('/api/nodes', 'POST', {
+    kind: 'markdown',
+    title,
+    content: '未经引用的私密全文，不得上传。',
+    ...extra,
+  });
+}
+async function configure() {
+  await ok('/api/ai/settings', 'PUT', { apiKey: key });
+}
+function provider(content = '# 阅读结论\n\n解释所选文字。', complete = true) {
+  const data = `: keepalive\r\n\r\ndata: ${JSON.stringify({ choices: [{ delta: { content } }] })}\r\n\r\n${complete ? `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n` : ''}`;
+  const bytes = new TextEncoder().encode(data);
+  return new Response(
+    new ReadableStream<Uint8Array>({
+      start(controller) {
+        // Deliberately split both SSE lines and Chinese UTF-8 characters.
+        for (let i = 0; i < bytes.length; i += 7) controller.enqueue(bytes.slice(i, i + 7));
+        controller.close();
+      },
+    }),
+    { headers: { 'content-type': 'text/event-stream' } },
+  );
+}
+async function events(response: Response): Promise<ChatEvent[]> {
+  expect(response.status).toBe(200);
+  const result: ChatEvent[] = [];
+  for await (const line of sseData(response.body!)) result.push(JSON.parse(line));
+  return result;
+}
+async function chat(
+  node: NoteNode,
+  data: ChatInput = { content: '解释这段文字', quote: '被选中的文字' },
+  options = {},
+) {
+  return events(await request(`/api/nodes/${node.id}/assistant`, 'POST', data, options));
+}
+async function history(node: NoteNode) {
+  return ok<ChatHistory>(`/api/nodes/${node.id}/assistant`);
+}
+async function uploadAttachment(
+  node: NoteNode,
+  name: string,
+  bytes: Uint8Array<ArrayBuffer>,
+  anonymous = false,
+) {
+  const context = createExecutionContext();
+  contexts.push(context);
+  return worker.fetch(
+    new Request(
+      `https://notes.test/api/nodes/${node.id}/assistant/files?name=${encodeURIComponent(name)}&size=${bytes.length}`,
+      {
+        method: 'POST',
+        headers: { origin: 'https://notes.test', ...(!anonymous ? { cookie } : {}) },
+        body: bytes,
+      },
+    ),
+    bindings,
+    context,
+  );
+}
+beforeEach(async () => {
+  contexts = [];
+  cookie = '';
+  await bindings.DB.batch([
+    bindings.DB.prepare('DELETE FROM nodes'),
+    bindings.DB.prepare('DELETE FROM trash_batches'),
+    bindings.DB.prepare('DELETE FROM blobs'),
+    bindings.DB.prepare('DELETE FROM idempotency'),
+    bindings.DB.prepare('DELETE FROM sessions'),
+    bindings.DB.prepare('DELETE FROM login_attempts'),
+    bindings.DB.prepare('DELETE FROM ai_settings'),
+    bindings.DB.prepare(
+      'UPDATE site SET password_hash=NULL,password_salt=NULL,auth_epoch=0,quota_bytes=8000000000,allocated_bytes=0 WHERE id=1',
+    ),
+  ]);
+  const objects = await bindings.FILES.list();
+  if (objects.objects.length)
+    await bindings.FILES.delete(objects.objects.map((object) => object.key));
+  const setup = await request('/api/auth/setup', 'POST', {
+    token: bindings.SETUP_TOKEN,
+    password: 'Note2026',
+  });
+  cookie = setup.headers.get('set-cookie')!.split(';')[0];
+});
+afterEach(async () => {
+  await Promise.all(contexts.map(waitOnExecutionContext));
+  vi.restoreAllMocks();
+});
+
+describe('per-file DeepSeek assistant', () => {
+  it('accepts private file uploads while read-only and refuses unsupported files', async () => {
+    const node = await create(),
+      bytes = new TextEncoder().encode('资料文本');
+    expect((await uploadAttachment(node, 'reading.txt', bytes, true)).status).toBe(401);
+    expect((await uploadAttachment(node, 'script.html', bytes)).status).toBe(400);
+    expect((await uploadAttachment(node, 'huge.txt', new Uint8Array(1_048_577))).status).toBe(400);
+    const response = await uploadAttachment(node, 'reading.txt', bytes);
+    expect(response.status).toBe(201);
+    const file = (await response.json()) as FileInfo;
+    expect(await (await request(`/api/files/${file.id}`)).text()).toBe('资料文本');
+    expect(
+      (await request(`/api/files/${file.id}`, 'GET', undefined, { anonymous: true })).status,
+    ).toBe(401);
+    expect((await history(node)).messages).toHaveLength(0);
+  });
+
+  it('sends selected PDF pages and text snapshots, retaining file references through trash and cleanup', async () => {
+    const node = await create();
+    await configure();
+    const pdf = (await (
+      await uploadAttachment(
+        node,
+        'manual.pdf',
+        new TextEncoder().encode('%PDF-1.4\noriginal-binary-not-for-provider'),
+      )
+    ).json()) as FileInfo;
+    const image = (await (
+      await uploadAttachment(
+        node,
+        'page.png',
+        Uint8Array.from(atob(png.split(',')[1]), (c) => c.charCodeAt(0)),
+      )
+    ).json()) as FileInfo;
+    const owner = await create('原 PDF', { kind: 'pdf', fileId: pdf.id });
+    const files: ChatFileInput[] = [
+      {
+        name: 'manual.pdf',
+        kind: 'pdf',
+        sourceId: pdf.id,
+        pages: [2, 3],
+        pageCount: 10,
+        mode: 'auto',
+        text: '[第 2 页]\n桥梁结构文字',
+        images: [{ blobId: image.id, page: 3 }],
+      },
+      { name: '当前笔记', kind: 'markdown', text: '# 当时附上的完整笔记', images: [] },
+    ];
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    await chat(node, { content: '比较两个文件', files });
+    const sent = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(JSON.stringify(sent)).toContain('本次仅提供第 2–3 页');
+    expect(JSON.stringify(sent)).toContain('当时附上的完整笔记');
+    expect(JSON.stringify(sent)).not.toContain('original-binary-not-for-provider');
+    expect(sent.messages[1].content).toContainEqual({
+      type: 'text',
+      text: '附件图片：manual.pdf，第 3 页',
+    });
+    expect(sent.messages[1].content.at(-1).image_url.url).toBe(png);
+    const original = await history(node);
+    expect(original.messages[0].files?.[0]).toMatchObject({
+      source: pdf,
+      pages: [2, 3],
+      images: [{ file: image, page: 3 }],
+    });
+    expect(await discardFile(bindings, image.id)).toBe(false);
+    await cleanup(bindings);
+    expect((await request(`/api/files/${image.id}`)).status).toBe(200);
+    const storage = await ok<StorageInfo>('/api/storage');
+    expect(storage.orphanBytes).toBe(0);
+    expect(storage.currentBytes).toBe(storage.allocatedBytes);
+    const trash = await ok<{ id: string }>(`/api/nodes/${node.id}`, 'DELETE', { count: 1 });
+    await cleanup(bindings);
+    expect((await request(`/api/files/${image.id}`)).status).toBe(200);
+    expect((await ok<StorageInfo>('/api/storage')).trashBytes).toBeGreaterThan(image.size);
+    await ok(`/api/trash/${trash.id}/restore`, 'POST', {});
+    expect((await history(node)).messages).toEqual(original.messages);
+    await ok(`/api/nodes/${node.id}/assistant`, 'DELETE');
+    await cleanup(bindings);
+    expect((await request(`/api/files/${image.id}`)).status).toBe(404);
+    expect((await request(`/api/files/${pdf.id}`)).status).toBe(200);
+    expect((await ok<NoteDetail>(`/api/nodes/${owner.id}`)).file?.id).toBe(pdf.id);
+  });
+
+  it('includes every current PDF image along with the screenshot within the history budget', async () => {
+    const node = await create();
+    await configure();
+    const image = (await (
+      await uploadAttachment(
+        node,
+        'page.png',
+        Uint8Array.from(atob(png.split(',')[1]), (c) => c.charCodeAt(0)),
+      )
+    ).json()) as FileInfo;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    const pages = [1, 2, 3, 4, 5, 6];
+    const files: ChatFileInput[] = [
+      {
+        name: 'scans.pdf',
+        kind: 'pdf',
+        pageCount: 12,
+        pages,
+        mode: 'images',
+        text: '',
+        images: pages.map((page) => ({ blobId: image.id, page })),
+      },
+    ];
+    await chat(node, { content: '旧问题', image: png, files });
+    await chat(node, { content: '现在的问题', image: png, files });
+    const sent = JSON.parse(String(fetch.mock.calls[1][1]?.body));
+    const current = sent.messages.at(-1).content;
+    expect(current.filter((part: { type: string }) => part.type === 'image_url')).toHaveLength(7);
+    expect(current).toContainEqual({ type: 'text', text: '附件图片：scans.pdf，第 6 页' });
+    expect(JSON.stringify(sent)).toContain('较早的图片未放入本次上下文');
+    expect(
+      sent.messages
+        .flatMap((m: { content: unknown }) => (Array.isArray(m.content) ? m.content : []))
+        .filter((p: { type: string }) => p.type === 'image_url'),
+    ).toHaveLength(8);
+  });
+
+  it('rejects excessive or inconsistent attachment metadata before a paid request', async () => {
+    const node = await create();
+    await configure();
+    const file = (await (
+      await uploadAttachment(node, 'wrong.md', new TextEncoder().encode('%PDF-1.4\nfixture'))
+    ).json()) as FileInfo;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    const basic = { name: 'note.md', kind: 'markdown', text: '内容', images: [] };
+    const pdf = {
+      name: 'book.pdf',
+      kind: 'pdf',
+      text: '[第 1 页] 文本',
+      pages: [1],
+      pageCount: 3,
+      mode: 'auto',
+      images: [],
+    };
+    for (const files of [
+      [basic, basic, basic, basic],
+      [
+        { ...basic, text: 'x'.repeat(30_001) },
+        { ...basic, text: 'y'.repeat(30_000) },
+      ],
+      [{ ...basic, sourceId: file.id }],
+      [{ ...pdf, pages: [0] }],
+      [{ ...pdf, pages: [4] }],
+      [{ ...pdf, pages: [1, 1] }],
+      [{ ...pdf, mode: 'images' }],
+      [{ ...pdf, images: [{ blobId: file.id, page: 2 }] }],
+      [{ ...pdf, images: Array.from({ length: 7 }, (_, i) => ({ blobId: file.id, page: i + 1 })) }],
+    ])
+      expect(
+        (await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '问', files }, {}))
+          .status,
+      ).toBeGreaterThanOrEqual(400);
+    expect(fetch).not.toHaveBeenCalled();
+    expect((await history(node)).messages).toHaveLength(0);
+    expect((await history(node)).busy).toBe(false);
+  });
+
+  it('parses bounded page ranges without silently truncating or repeating pages', () => {
+    expect(parsePageRange('1-3，5,2,8-9', 10)).toEqual([1, 2, 3, 5, 8, 9]);
+    expect(pageLabel([1, 2, 3, 5, 8, 9])).toBe('1–3、5、8–9');
+    for (const value of ['', '0', '3-2', '1-11', '1,', '1.5'])
+      expect(() => parsePageRange(value, 10)).toThrow();
+    expect(() => parsePageRange('1-201', 300)).toThrow('200');
+  });
+  it('keeps settings private, encrypts the key, and tests only the fixed provider', async () => {
+    expect((await request('/api/ai/settings', 'GET', undefined, { anonymous: true })).status).toBe(
+      401,
+    );
+    expect(
+      (await request('/api/ai/settings', 'PUT', { apiKey: key }, { anonymous: true })).status,
+    ).toBe(401);
+    expect(
+      (
+        await request(
+          '/api/ai/settings',
+          'PUT',
+          { apiKey: key },
+          { origin: 'https://elsewhere.test' },
+        )
+      ).status,
+    ).toBe(403);
+    await configure();
+    expect(await ok('/api/ai/settings')).toEqual({ configured: true, model: 'deepseek-flash' });
+    const row = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first<{
+      encrypted_key: string;
+    }>();
+    expect(row!.encrypted_key).not.toContain(key);
+    expect(await readApiKey(bindings)).toBe(key);
+    await expect(readApiKey({ ...bindings, APP_SECRET: 'changed-secret' })).rejects.toThrow(
+      '重新保存',
+    );
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(new Response(JSON.stringify({ data: [{ id: 'deepseek-flash' }] })));
+    await ok('/api/ai/test', 'POST', {});
+    expect(fetch.mock.calls[0][0]).toBe('https://api.deepseek.com/models');
+    expect(fetch.mock.calls[0][1]?.headers).toMatchObject({ authorization: `Bearer ${key}` });
+    await ok('/api/ai/settings', 'DELETE');
+    expect(await ok('/api/ai/settings')).toMatchObject({ configured: false });
+  });
+
+  it('streams UTF-8, isolates file context and history, and exports once under the source file', async () => {
+    const first = await create(),
+      second = await create('资料 B');
+    expect(
+      (await request(`/api/nodes/${first.id}/assistant`, 'POST', { content: '问' })).status,
+    ).toBe(400);
+    await configure();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    const stream = await chat(first);
+    expect(stream.map((e) => e.type)).toEqual(['start', 'delta', 'done']);
+    expect(stream[1]).toMatchObject({ type: 'delta', content: '# 阅读结论\n\n解释所选文字。' });
+    const payload = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(payload).toMatchObject({
+      model: 'deepseek-flash',
+      thinking: { type: 'disabled' },
+      stream: true,
+    });
+    expect(JSON.stringify(payload)).toContain('被选中的文字');
+    expect(JSON.stringify(payload)).not.toContain('未经引用的私密全文');
+    expect((await history(first)).messages).toHaveLength(2);
+    expect((await history(second)).messages).toHaveLength(0);
+    await chat(first, { content: '再简短一些', quote: '' });
+    expect(JSON.stringify(JSON.parse(String(fetch.mock.calls[1][1]?.body)).messages)).toContain(
+      '阅读结论',
+    );
+    await chat(second, { content: '新话题', quote: '' });
+    expect(JSON.stringify(JSON.parse(String(fetch.mock.calls[2][1]?.body)).messages)).not.toContain(
+      '被选中的文字',
+    );
+    const answer = (await history(first)).messages[1];
+    expect(
+      (
+        await request(
+          `/api/nodes/${first.id}/assistant/${answer.id}/export`,
+          'POST',
+          {},
+          { anonymous: true },
+        )
+      ).status,
+    ).toBe(401);
+    const saved = await ok<NoteNode>(
+      `/api/nodes/${first.id}/assistant/${answer.id}/export`,
+      'POST',
+      {},
+    );
+    expect(saved).toMatchObject({ parent_id: first.id, kind: 'markdown', title: '阅读结论' });
+    expect((await ok<NoteDetail>(`/api/nodes/${saved.id}`)).content).toBe(answer.content);
+    await bindings.DB.prepare('DELETE FROM idempotency').run();
+    expect(
+      (await ok<NoteNode>(`/api/nodes/${first.id}/assistant/${answer.id}/export`, 'POST', {})).id,
+    ).toBe(saved.id);
+    expect(
+      (await request(`/api/nodes/${second.id}/assistant/${answer.id}/export`, 'POST', {})).status,
+    ).toBe(404);
+    expect((await ok<NoteDetail>(`/api/nodes/${first.id}`)).revision).toBe(first.revision);
+  });
+
+  it('retains private screenshots through cleanup and trash restore, then reclaims cleared chat', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    await events(
+      await request(
+        `/api/nodes/${node.id}/assistant`,
+        'POST',
+        { content: '解释截图', image: png },
+        {},
+      ),
+    );
+    const sent = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(sent.messages[1].content[1].image_url.url).toBe(png);
+    const original = await history(node),
+      screenshot = original.messages[0].image!;
+    expect(
+      (await request(`/api/files/${screenshot.id}`, 'GET', undefined, { anonymous: true })).status,
+    ).toBe(401);
+    expect(await discardFile(bindings, screenshot.id)).toBe(false);
+    await cleanup(bindings);
+    expect((await request(`/api/files/${screenshot.id}`)).status).toBe(200);
+    const storage = await ok<StorageInfo>('/api/storage');
+    expect(storage.currentBytes).toBe(storage.allocatedBytes);
+    expect(storage.orphanBytes).toBe(0);
+    const trash = await ok<{ id: string }>(`/api/nodes/${node.id}`, 'DELETE', { count: 1 });
+    expect((await request(`/api/nodes/${node.id}/assistant`)).status).toBe(410);
+    expect((await ok<StorageInfo>('/api/storage')).trashBytes).toBe(storage.currentBytes);
+    await ok(`/api/trash/${trash.id}/restore`, 'POST', {});
+    expect((await history(node)).messages).toEqual(original.messages);
+    const saved = await ok<NoteNode>(
+      `/api/nodes/${node.id}/assistant/${original.messages[1].id}/export`,
+      'POST',
+      {},
+    );
+    await ok(`/api/nodes/${node.id}/assistant`, 'DELETE');
+    await cleanup(bindings);
+    expect((await history(node)).messages).toHaveLength(0);
+    expect((await request(`/api/files/${screenshot.id}`)).status).toBe(404);
+    expect((await ok<NoteDetail>(`/api/nodes/${saved.id}`)).content).toContain('阅读结论');
+  });
+
+  it('allows PDF and image files to own assistant notes and preserves cycle protection', async () => {
+    await configure();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    for (const kind of ['pdf', 'image']) {
+      const bytes =
+        kind === 'pdf'
+          ? new TextEncoder().encode('%PDF-1.4\nfixture')
+          : Uint8Array.from(atob(png.split(',')[1]), (c) => c.charCodeAt(0));
+      const context = createExecutionContext();
+      contexts.push(context);
+      const response = await worker.fetch(
+        new Request(`https://notes.test/api/files?name=fixture.${kind}&size=${bytes.byteLength}`, {
+          method: 'POST',
+          headers: { origin: 'https://notes.test', cookie },
+          body: bytes,
+        }),
+        bindings,
+        context,
+      );
+      const file = (await response.json()) as FileInfo;
+      const node = await create(kind, { kind, fileId: file.id });
+      await chat(node);
+      const answer = (await history(node)).messages[1];
+      const child = await ok<NoteNode>(
+        `/api/nodes/${node.id}/assistant/${answer.id}/export`,
+        'POST',
+        {},
+      );
+      expect(child.parent_id).toBe(node.id);
+      expect(
+        (
+          await request(`/api/nodes/${node.id}`, 'PATCH', {
+            revision: node.revision,
+            parentId: child.id,
+          })
+        ).status,
+      ).toBe(400);
+    }
+  });
+
+  it('rejects invalid and oversized content before calling the provider, respects quota, and unlocks failures', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    for (const data of [
+      { content: '问'.repeat(8001) },
+      { content: '问', quote: '字'.repeat(20001) },
+      { content: '问', image: 'data:image/png;base64,bm90LWFuLWltYWdl' },
+      { content: '问', image: `data:image/png;base64,${'a'.repeat(1_400_000)}` },
+    ]) {
+      expect(
+        (await request(`/api/nodes/${node.id}/assistant`, 'POST', data)).status,
+      ).toBeGreaterThanOrEqual(400);
+    }
+    expect(fetch).not.toHaveBeenCalled();
+    expect((await history(node)).messages).toHaveLength(0);
+    await bindings.DB.prepare('UPDATE site SET quota_bytes=allocated_bytes WHERE id=1').run();
+    expect(
+      (await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '问' })).status,
+    ).toBe(413);
+    expect((await history(node)).busy).toBe(false);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('marks truncated and failed replies, avoids duplicate requests, and permits a later question', async () => {
+    const node = await create();
+    await configure();
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => provider('部分回复', false));
+    const result = await chat(node, undefined, { key: 'request-once' });
+    expect(result.at(-1)).toMatchObject({
+      type: 'error',
+      message: { status: 'interrupted', content: '部分回复' },
+    });
+    const answer = (await history(node)).messages[1];
+    expect(
+      (await request(`/api/nodes/${node.id}/assistant/${answer.id}/export`, 'POST', {})).status,
+    ).toBe(400);
+    expect(
+      (
+        await request(
+          `/api/nodes/${node.id}/assistant`,
+          'POST',
+          { content: '重复' },
+          { key: 'request-once' },
+        )
+      ).status,
+    ).toBe(409);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    fetch.mockImplementationOnce(
+      async () => new Response('secret error response is not reflected', { status: 402 }),
+    );
+    expect((await chat(node)).at(-1)).toMatchObject({
+      type: 'error',
+      error: expect.stringContaining('余额不足'),
+      message: { status: 'failed' },
+    });
+    expect((await history(node)).busy).toBe(false);
+    fetch.mockImplementationOnce(async () => provider('后来完整的回复'));
+    expect((await chat(node)).at(-1)).toMatchObject({ type: 'done' });
+  });
+
+  it('serializes a file across devices and stops an active provider request', async () => {
+    const node = await create();
+    await configure();
+    let started!: () => void;
+    const ready = new Promise<void>((resolve) => {
+      started = resolve;
+    });
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      (_url, init) =>
+        new Promise((_resolve, reject) => {
+          started();
+          init?.signal?.addEventListener(
+            'abort',
+            () => reject(new DOMException('Aborted', 'AbortError')),
+            { once: true },
+          );
+        }),
+    );
+    const controller = new AbortController();
+    const response = await request(
+      `/api/nodes/${node.id}/assistant`,
+      'POST',
+      { content: '等待回复' },
+      { signal: controller.signal },
+    );
+    const consuming = events(response);
+    await ready;
+    expect((await history(node)).busy).toBe(true);
+    expect(
+      (await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '并行请求' })).status,
+    ).toBe(409);
+    expect((await request(`/api/nodes/${node.id}/assistant`, 'DELETE')).status).toBe(409);
+    controller.abort();
+    expect((await consuming).at(-1)).toMatchObject({
+      type: 'error',
+      message: { status: 'interrupted' },
+    });
+    expect((await history(node)).busy).toBe(false);
+  });
+});

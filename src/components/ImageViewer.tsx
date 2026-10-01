@@ -45,7 +45,10 @@ export default function ImageViewer({
         </button>
         <a
           className="icon-button"
-          href={`${src}${src.includes('?') ? '&' : '?'}download=1`}
+          href={
+            /^(data:|blob:)/.test(src) ? src : `${src}${src.includes('?') ? '&' : '?'}download=1`
+          }
+          download={/^(data:|blob:)/.test(src) ? 'screenshot.jpg' : undefined}
           target="_blank"
           rel="noreferrer"
           aria-label="下载图片"

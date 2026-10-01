@@ -1,33 +1,31 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   BookOpen,
-  ChevronLeft,
   Clock3,
   FolderOpen,
-  LockKeyhole,
   Menu,
   Plus,
   Settings2,
-  ShieldCheck,
   Star,
   Trash2,
-  UnlockKeyhole,
   X,
 } from 'lucide-react';
-import { api, formatBytes, lockEdits, unlockLibrary } from './api';
+import { api, formatBytes, lockEdits } from './api';
 import {
   PARENT_KINDS,
+  type AuthStatus,
   type FileInfo,
   type NoteDetail,
   type NoteNode,
   type StorageInfo,
 } from '../shared/types';
-import { Empty, Spinner, useQuestion } from './components/Primitives';
+import { Spinner, useQuestion } from './components/Primitives';
 import { Tree, type NodeAction } from './components/Tree';
 import { MoveDialog, NodeForm, NodeList, Settings, TrashView } from './components/Management';
 import NotePane from './components/NotePane';
+import { ThemeSwitcher } from './components/ThemePicker';
+import { MIN_PASSWORD_LENGTH, preparePassword } from '../shared/password';
 
-type AuthStatus = { initialized: boolean; authenticated: boolean; name: string };
 type View = 'tree' | 'favorites' | 'recent' | 'trash' | 'settings';
 const routeId = () => window.location.pathname.match(/^\/n\/([a-zA-Z0-9_-]+)$/)?.[1] || null;
 
@@ -98,10 +96,7 @@ function Brand({ name = '页间' }: { name?: string }) {
       <span className="brand-mark">
         <BookOpen size={22} strokeWidth={1.6} />
       </span>
-      <span>
-        {name}
-        <small>PRIVATE NOTEBOOK</small>
-      </span>
+      <span>{name}</span>
     </div>
   );
 }
@@ -129,8 +124,9 @@ function AuthScreen({
     }
     setBusy(true);
     try {
+      const current = await api<AuthStatus>('/api/auth/status');
       await api(`/api/auth/${setup ? 'setup' : 'login'}`, 'POST', {
-        password,
+        password: await preparePassword(password, setup ? undefined : current.password),
         ...(setup ? { token } : {}),
       });
       setPassword('');
@@ -144,40 +140,13 @@ function AuthScreen({
   };
   return (
     <main className="auth-screen">
-      <div className="auth-intro">
-        <Brand name={status.name} />
-        <div className="auth-copy">
-          <span className="page-eyebrow">留一处，给自己的思考</span>
-          <h1>
-            翻开一页，
-            <br />
-            接着上次读。
-          </h1>
-          <p>
-            笔记、图片与资料，有序放在一起。
-            <br />
-            无论在电脑，还是在手边的手机。
-          </p>
-        </div>
-        <div className="auth-footer">
-          <LockKeyhole size={14} />
-          一个人的书架，安心阅读
-        </div>
-        <div className="book-lines" aria-hidden="true">
-          <span />
-          <span />
-          <span />
-          <span />
-          <span />
-        </div>
+      <div className="auth-theme">
+        <ThemeSwitcher />
       </div>
       <div className="auth-form-area">
         <form onSubmit={submit} className="auth-form">
-          <span className="auth-icon">
-            <ShieldCheck size={27} strokeWidth={1.5} />
-          </span>
-          <h2>{setup ? '设置你的密码' : '欢迎回来'}</h2>
-          <p>{setup ? '只需一个密码，就能开始使用。' : '输入密码，打开你的私人笔记库。'}</p>
+          <Brand name={status.name} />
+          <h1>{setup ? '设置密码' : '登录'}</h1>
           {setup && !token ? (
             <p className="inline-error">请使用部署时生成的专属设置链接，完成第一次密码设置。</p>
           ) : (
@@ -189,11 +158,11 @@ function AuthScreen({
                   type="password"
                   autoComplete={setup ? 'new-password' : 'current-password'}
                   required
-                  minLength={setup ? 12 : undefined}
+                  minLength={setup ? MIN_PASSWORD_LENGTH : undefined}
                   maxLength={256}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
-                  placeholder={setup ? '至少 12 个字符' : '输入你的密码'}
+                  placeholder={setup ? `至少 ${MIN_PASSWORD_LENGTH} 个字符` : undefined}
                   disabled={busy}
                 />
               </label>
@@ -203,12 +172,11 @@ function AuthScreen({
                   <input
                     type="password"
                     autoComplete="new-password"
-                    minLength={12}
+                    minLength={MIN_PASSWORD_LENGTH}
                     maxLength={256}
                     required
                     value={repeat}
                     onChange={(e) => setRepeat(e.target.value)}
-                    placeholder="再输入一次"
                     disabled={busy}
                   />
                 </label>
@@ -220,7 +188,6 @@ function AuthScreen({
               )}
               <button className="button primary auth-submit" disabled={busy}>
                 {busy ? '正在验证…' : setup ? '创建私人笔记库' : '打开笔记库'}
-                <ChevronLeft size={17} style={{ transform: 'rotate(180deg)' }} />
               </button>
             </>
           )}
@@ -235,13 +202,9 @@ function AuthScreen({
           )}
           {forgot && (
             <p className="field-hint">
-              请在部署端运行密码重置命令，生成新的专属设置链接。笔记和文件会完整保留。
+              在部署端重置密码，使用新的设置链接登录。笔记和文件会保留。
             </p>
           )}
-          <div className="auth-note">
-            <LockKeyhole size={12} />
-            登录后默认进入只读预览
-          </div>
         </form>
       </div>
     </main>
@@ -252,8 +215,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
   const [view, setView] = useState<View>('tree'),
     [selected, setSelected] = useState<string | null>(routeId);
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
-    [mobileOpen, setMobileOpen] = useState(false),
-    [editable, setEditable] = useState(false);
+    [mobileOpen, setMobileOpen] = useState(false);
   const [revision, setRevision] = useState(0),
     [detailRevision, setDetailRevision] = useState(0),
     [storage, setStorage] = useState<StorageInfo | null>(null),
@@ -272,11 +234,6 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
   );
   const changed = useCallback(() => setRevision((r) => r + 1), []);
   useEffect(() => {
-    const expired = () => setEditable(false);
-    window.addEventListener('note:edit-expired', expired);
-    return () => window.removeEventListener('note:edit-expired', expired);
-  }, []);
-  useEffect(() => {
     let live = true;
     api<StorageInfo>('/api/storage')
       .then((data) => {
@@ -287,25 +244,6 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
       live = false;
     };
   }, [revision, report]);
-  const ensureEdit = async () => {
-    if (editable) return true;
-    if (
-      !(await question.confirm(
-        '进入全库编辑模式？',
-        '可以新建、移动、删除节点及上传文件。每篇笔记的正文仍需单独确认编辑。刷新后自动回到只读。',
-        '确认进入',
-      ))
-    )
-      return false;
-    try {
-      await unlockLibrary();
-      setEditable(true);
-      return true;
-    } catch (e) {
-      report(e);
-      return false;
-    }
-  };
   const setRoute = (id: string | null, replace = false) => {
     const path = id ? `/n/${id}` : '/';
     history[replace ? 'replaceState' : 'pushState'](null, '', path);
@@ -361,10 +299,12 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     return () => window.removeEventListener('keydown', escape);
   }, [mobileOpen]);
   const action = async (kind: NodeAction, node: NoteNode) => {
-    document.querySelectorAll<HTMLDetailsElement>('details.node-menu[open]').forEach((element) => {
-      element.open = false;
-    });
-    if (!(await leaveGuard.current()) || !(await ensureEdit())) return;
+    document
+      .querySelectorAll<HTMLDetailsElement>('details.node-menu[open]')
+      .forEach((element) => {
+        element.open = false;
+      });
+    if (!(await leaveGuard.current())) return;
     if (kind === 'new') {
       setForm({ parent: node.id });
       return;
@@ -396,7 +336,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     }
   };
   const drop = async (id: string, parent: string | null) => {
-    if (!id || id === parent || !editable || !(await leaveGuard.current())) return;
+    if (!id || id === parent || !(await leaveGuard.current())) return;
     try {
       const node = await api<NoteNode>(`/api/nodes/${id}`);
       await api(`/api/nodes/${id}`, 'PATCH', { parentId: parent, revision: node.revision });
@@ -407,7 +347,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     }
   };
   const newNode = async () => {
-    if (!(await leaveGuard.current()) || !(await ensureEdit())) return;
+    if (!(await leaveGuard.current())) return;
     setForm({ parent: loaded && PARENT_KINDS.includes(loaded.kind) ? loaded.id : null });
   };
   const logout = async (all = false) => {
@@ -432,7 +372,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
         aria-label="关闭笔记目录"
         onClick={() => setMobileOpen(false)}
       />
-      <aside className="sidebar" aria-label="主导航">
+      <aside id="notebook-sidebar" className="sidebar" aria-label="主导航">
         <div className="sidebar-brand">
           <Brand name={name} />
           <button
@@ -445,7 +385,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
         </div>
         <button className="new-note-button" onClick={newNode}>
           <Plus size={18} />
-          新建笔记<span>＋</span>
+          新建笔记
         </button>
         <nav className="main-nav">
           {navItems.map((item) => (
@@ -463,7 +403,6 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
           <Tree
             refresh={revision}
             selected={selected}
-            editable={editable}
             onOpen={openNode}
             onAction={action}
             onDrop={drop}
@@ -487,6 +426,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
               设置
             </button>
           </nav>
+          <ThemeSwitcher showLabel />
           {storage && (
             <button
               className={`sidebar-usage ${storage.allocatedBytes >= storage.quotaBytes * 0.8 ? 'warning' : ''}`}
@@ -504,43 +444,32 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
         </div>
       </aside>
       <main className="main-area">
-        <header className="app-header">
-          <div className="header-location">
-            <button
-              className="icon-button mobile-menu"
-              aria-label="打开笔记目录"
-              aria-expanded={mobileOpen}
-              onClick={() => setMobileOpen(true)}
-            >
-              <Menu size={21} />
-            </button>
-            <span className="header-title">
-              {view === 'tree'
-                ? '我的笔记库'
-                : view === 'favorites'
-                  ? '收藏'
-                  : view === 'recent'
-                    ? '最近访问'
-                    : view === 'trash'
-                      ? '回收站'
-                      : '设置'}
-            </span>
-          </div>
-          <button
-            className={`mode-button ${editable ? 'unlocked' : ''}`}
-            onClick={async () => {
-              if (editable) {
-                if (!(await leaveGuard.current())) return;
-                lockEdits();
-                setEditable(false);
-              } else await ensureEdit();
-            }}
-          >
-            {editable ? <UnlockKeyhole size={15} /> : <LockKeyhole size={15} />}
-            <span>{editable ? '结束全库编辑' : '只读模式'}</span>
-            {!editable && <span className="mode-action">进入编辑</span>}
-          </button>
-        </header>
+        {!(view === 'tree' && selected) && (
+          <header className="app-header">
+            <div className="header-location">
+              <button
+                className="icon-button mobile-menu"
+                aria-label="打开笔记目录"
+                aria-controls="notebook-sidebar"
+                aria-expanded={mobileOpen}
+                onClick={() => setMobileOpen(true)}
+              >
+                <Menu size={21} />
+              </button>
+              <span className="header-title">
+                {view === 'tree'
+                  ? '我的笔记库'
+                  : view === 'favorites'
+                    ? '收藏'
+                    : view === 'recent'
+                      ? '最近访问'
+                      : view === 'trash'
+                        ? '回收站'
+                        : '设置'}
+              </span>
+            </div>
+          </header>
+        )}
         {notice && (
           <div className="notice" role="alert">
             <span>{notice}</span>
@@ -566,26 +495,25 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
                 id={selected}
                 refresh={detailRevision}
                 treeRefresh={revision}
-                editable={editable}
-                ensureEdit={ensureEdit}
+                sidebarOpen={mobileOpen}
+                onOpenSidebar={() => setMobileOpen(true)}
                 onNavigate={navigate}
                 onOpen={openNode}
                 onAction={action}
                 onChanged={changed}
                 onLoaded={setLoaded}
                 onFileNode={async (file, parent) => {
-                  if ((await leaveGuard.current()) && (await ensureEdit()))
-                    setForm({ file, parent });
+                  if (await leaveGuard.current()) setForm({ file, parent });
                 }}
                 setLeaveGuard={(guard) => {
                   leaveGuard.current = guard;
                 }}
                 onError={report}
                 onTrash={() => switchView('trash')}
+                onSettings={() => switchView('settings')}
               />
             ) : (
               <section className="collection-page library-home">
-                <div className="page-eyebrow">你的私人书架</div>
                 <div className="collection-title">
                   <h1>全部笔记</h1>
                   <button className="button" onClick={newNode}>
@@ -593,49 +521,24 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
                     新建
                   </button>
                 </div>
-                <p className="page-description">安静阅读，按自己的方式整理。</p>
                 <NodeList
                   parent={null}
                   refresh={revision}
-                  editable={editable}
                   onOpen={openNode}
                   onAction={action}
                 />
-                <div className="reading-tip">
-                  <BookOpen size={21} />
-                  <div>
-                    <strong>打开即阅读</strong>
-                    <p>从左侧选择一篇笔记。需要修改时，再确认进入编辑。</p>
-                  </div>
-                </div>
               </section>
             )
           ) : view === 'favorites' || view === 'recent' ? (
             <section className="collection-page">
-              <div className="page-eyebrow">随时接着读</div>
               <h1>{view === 'favorites' ? '收藏' : '最近访问'}</h1>
-              <p className="page-description">
-                {view === 'favorites' ? '常读的内容，触手可及。' : '最近打开的 20 个节点。'}
-              </p>
-              <NodeList
-                view={view}
-                refresh={revision}
-                editable={editable}
-                onOpen={openNode}
-                onAction={action}
-              />
+              <NodeList view={view} refresh={revision} onOpen={openNode} onAction={action} />
             </section>
           ) : view === 'trash' ? (
-            <TrashView
-              ensureEdit={ensureEdit}
-              confirm={question.confirm}
-              onChanged={changed}
-              onError={report}
-            />
+            <TrashView confirm={question.confirm} onChanged={changed} onError={report} />
           ) : (
             <Settings
               storage={storage}
-              ensureEdit={ensureEdit}
               confirm={question.confirm}
               onChanged={changed}
               onLogout={logout}

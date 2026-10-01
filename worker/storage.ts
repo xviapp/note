@@ -7,7 +7,9 @@ export const MAX_TEXT_BYTES = 1_048_576;
 const DAY = 86400_000;
 export const UNREFERENCED = `NOT EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=blobs.id)`;
+ AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=blobs.id)
+ AND NOT EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=blobs.id OR m.image_blob_id=blobs.id)
+ AND NOT EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=blobs.id)`;
 
 export async function getBlob(env: Env, id: string): Promise<BlobRow> {
   const file = await env.DB.prepare("SELECT * FROM blobs WHERE id=? AND state='ready'")
@@ -222,16 +224,18 @@ export async function discardFile(env: Env, id: string): Promise<boolean> {
 }
 export async function storageInfo(env: Env): Promise<StorageInfo> {
   const siteQuery = env.DB.prepare('SELECT quota_bytes,allocated_bytes FROM site WHERE id=1');
+  const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m JOIN nodes n ON n.id=m.node_id WHERE n.trash_id IS NULL AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id JOIN nodes n ON n.id=m.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id))`;
+  const aiReferenced = `(EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=b.id OR m.image_blob_id=b.id) OR EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=b.id))`;
   const sumsQuery = env.DB.prepare(
     `SELECT
     COALESCE(SUM(CASE WHEN state='pending' THEN size ELSE 0 END),0) reserved,
     COALESCE(SUM(CASE WHEN state!='pending' AND (
       EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND n.file_blob_id=b.id) OR
       EXISTS(SELECT 1 FROM nodes n JOIN versions v ON v.id=n.current_version_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR
-      EXISTS(SELECT 1 FROM nodes n JOIN version_assets a ON a.version_id=n.current_version_id WHERE n.trash_id IS NULL AND a.blob_id=b.id)
+      EXISTS(SELECT 1 FROM nodes n JOIN version_assets a ON a.version_id=n.current_version_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR ${aiLive}
     ) THEN size ELSE 0 END),0) current,
-    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a JOIN versions v ON v.id=a.version_id JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND n.file_blob_id=b.id)) THEN size ELSE 0 END),0) live,
-    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=b.id)) THEN size ELSE 0 END),0) referenced
+    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a JOIN versions v ON v.id=a.version_id JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND n.file_blob_id=b.id) OR ${aiLive}) THEN size ELSE 0 END),0) live,
+    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=b.id) OR ${aiReferenced}) THEN size ELSE 0 END),0) referenced
     FROM blobs b`,
   );
   // Read both views in one D1 transaction so an upload or a cleanup between

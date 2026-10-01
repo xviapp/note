@@ -16,14 +16,16 @@
     "test": "vitest run",
     "test:e2e": "playwright test",
     "db:local": "wrangler d1 migrations apply DB --local",
+    "db:remote": "wrangler d1 migrations apply DB --remote --env production",
     "setup:local": "node scripts/setup.mjs",
     "reset-password": "node scripts/reset-password.mjs",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "npm run build && npm run db:remote && wrangler deploy --env production"
   },
   "dependencies": {
     "@codemirror/lang-markdown": "6.5.2",
     "@codemirror/view": "6.43.13",
     "@uiw/react-codemirror": "4.25.12",
+    "html2canvas": "1.4.1",
     "lucide-react": "1.49.0",
     "pdfjs-dist": "6.3.289",
     "react": "19.3.0",

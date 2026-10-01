@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowUpRight,
-  BookOpen,
+  Palette,
   Download,
   FolderOpen,
   HardDrive,
@@ -15,6 +15,7 @@ import {
 import { api, fileUrl, formatBytes, formatDate, upload } from '../api';
 import {
   KIND_LABELS,
+  type AuthStatus,
   type FileInfo,
   type NodeKind,
   type NoteNode,
@@ -23,6 +24,9 @@ import {
 } from '../../shared/types';
 import { Empty, Modal, NodeIcon, Spinner } from './Primitives';
 import { NodeMenu, NodePicker, type NodeAction } from './Tree';
+import { ThemeChoices } from './ThemePicker';
+import { MIN_PASSWORD_LENGTH, preparePassword } from '../../shared/password';
+import { AiSettings } from './AiSettings';
 
 export type Confirm = (
   title: string,
@@ -30,7 +34,6 @@ export type Confirm = (
   ok?: string,
   danger?: boolean,
 ) => Promise<boolean>;
-export type EnsureEdit = () => Promise<boolean>;
 
 export function NodeForm({
   node,
@@ -123,7 +126,6 @@ export function NodeForm({
             maxLength={200}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
-            placeholder="给它一个容易找到的名字"
             disabled={busy}
           />
         </label>
@@ -161,7 +163,6 @@ export function NodeForm({
             <span className="field-hint">单个文件不超过 50 MB</span>
           </label>
         )}
-        {existingFile && <p className="muted small">引用原附件，不会重复上传文件。</p>}
         {error && (
           <p className="inline-error" role="alert">
             {error}
@@ -200,7 +201,6 @@ export function MoveDialog({
         if (!busy) onClose();
       }}
     >
-      <p className="dialog-copy">选择目标目录。笔记本身也可以包含子节点。</p>
       <NodePicker
         value={parent}
         parentsOnly
@@ -249,14 +249,12 @@ export function NodeList({
   view,
   parent,
   refresh,
-  editable,
   onOpen,
   onAction,
 }: {
   view?: 'favorites' | 'recent';
   parent?: string | null;
   refresh: number;
-  editable: boolean;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
@@ -287,11 +285,9 @@ export function NodeList({
     return view ? (
       <Empty
         icon={view === 'favorites' ? <Star /> : <History />}
-        title={view === 'favorites' ? '把常读的留在这里' : '还没有阅读记录'}
+        title={view === 'favorites' ? '暂无收藏' : '暂无阅读记录'}
       >
-        {view === 'favorites'
-          ? '点按笔记标题旁的星标，即可快速找到它。'
-          : '打开过的 20 个最近节点会出现在这里。'}
+        {view === 'favorites' ? '点击笔记旁的星标添加收藏。' : undefined}
       </Empty>
     ) : (
       <p className="children-empty">此目录还没有内容</p>
@@ -312,7 +308,7 @@ export function NodeList({
               <time>{formatDate(node.updated_at)}</time>
             )}
           </button>
-          {editable && <NodeMenu node={node} onAction={onAction} />}
+          <NodeMenu node={node} onAction={onAction} />
         </div>
       ))}
       {next !== null && (
@@ -338,12 +334,10 @@ export function NodeList({
 }
 
 export function TrashView({
-  ensureEdit,
   confirm,
   onChanged,
   onError,
 }: {
-  ensureEdit: EnsureEdit;
   confirm: Confirm;
   onChanged: () => void;
   onError: (e: unknown) => void;
@@ -363,7 +357,6 @@ export function TrashView({
     };
   }, [revision]);
   async function act(batch: TrashBatch, restore: boolean) {
-    if (!(await ensureEdit())) return;
     if (
       !restore &&
       !(await confirm(
@@ -393,7 +386,6 @@ export function TrashView({
   }
   return (
     <section className="collection-page">
-      <div className="page-eyebrow">整理与恢复</div>
       <h1>回收站</h1>
       <p className="page-description">
         保留 7 天，恢复时一并还原子节点。删除后仍占用空间，清理完成后释放。
@@ -401,9 +393,7 @@ export function TrashView({
       {!items ? (
         <Spinner />
       ) : !items.length ? (
-        <Empty icon={<Trash2 />} title="回收站是空的">
-          删除的笔记会在这里暂留一段时间。
-        </Empty>
+        <Empty icon={<Trash2 />} title="回收站为空" />
       ) : (
         <div className="trash-list">
           {items.map((batch) => {
@@ -447,14 +437,12 @@ export function TrashView({
 
 export function Settings({
   storage,
-  ensureEdit,
   confirm,
   onChanged,
   onLogout,
   onError,
 }: {
   storage: StorageInfo | null;
-  ensureEdit: EnsureEdit;
   confirm: Confirm;
   onChanged: () => void;
   onLogout: (all?: boolean) => Promise<void>;
@@ -469,8 +457,15 @@ export function Settings({
     [error, setError] = useState('');
   return (
     <section className="collection-page settings-page">
-      <div className="page-eyebrow">你的私人书架</div>
       <h1>设置</h1>
+      <section className="settings-section">
+        <h2>
+          <Palette size={19} />
+          外观
+        </h2>
+        <ThemeChoices />
+      </section>
+      <AiSettings confirm={confirm} />
       <section className="settings-section">
         <h2>
           <HardDrive size={19} />
@@ -505,10 +500,11 @@ export function Settings({
           className="quota-form"
           onSubmit={async (e) => {
             e.preventDefault();
-            if (!(await ensureEdit())) return;
             setBusy(true);
             try {
-              await api('/api/settings', 'PATCH', { quotaBytes: Math.round(Number(quota) * 1e9) });
+              await api('/api/settings', 'PATCH', {
+                quotaBytes: Math.round(Number(quota) * 1e9),
+              });
               onChanged();
             } catch (e) {
               onError(e);
@@ -543,7 +539,6 @@ export function Settings({
           className="text-button"
           disabled={busy}
           onClick={async () => {
-            if (!(await ensureEdit())) return;
             setBusy(true);
             try {
               await api('/api/cleanup', 'POST', {});
@@ -599,18 +594,6 @@ export function Settings({
           退出当前设备
         </button>
       </section>
-      <section className="settings-section">
-        <h2>
-          <BookOpen size={19} />
-          阅读与保留
-        </h2>
-        <p className="muted">
-          每次打开默认只读。每篇笔记保留最近 5 个历史版本，回收站保留 7 天，最近访问显示 20 项。
-        </p>
-        <p className="muted">
-          忘记密码时，通过部署端生成新的密码设置链接。原来的笔记和文件会保留。
-        </p>
-      </section>
       {passwordOpen && (
         <Modal
           title="修改密码"
@@ -629,9 +612,14 @@ export function Settings({
               }
               setBusy(true);
               try {
+                const status = await api<AuthStatus>('/api/auth/status');
+                const [currentPassword, replacement] = await Promise.all([
+                  preparePassword(oldPassword, status.password),
+                  preparePassword(newPassword),
+                ]);
                 await api('/api/auth/password', 'POST', {
-                  currentPassword: oldPassword,
-                  newPassword,
+                  currentPassword,
+                  newPassword: replacement,
                 });
                 window.dispatchEvent(new Event('note:unauthenticated'));
               } catch (e) {
@@ -658,14 +646,14 @@ export function Settings({
                 aria-describedby="new-password-hint"
                 type="password"
                 required
-                minLength={12}
+                minLength={MIN_PASSWORD_LENGTH}
                 maxLength={256}
                 autoComplete="new-password"
                 value={newPassword}
                 onChange={(e) => setNewPassword(e.target.value)}
               />
               <span id="new-password-hint" className="field-hint">
-                至少 12 个字符，可以使用容易记住的长句。
+                至少 {MIN_PASSWORD_LENGTH} 个字符
               </span>
             </label>
             <label>
@@ -673,7 +661,7 @@ export function Settings({
               <input
                 type="password"
                 required
-                minLength={12}
+                minLength={MIN_PASSWORD_LENGTH}
                 autoComplete="new-password"
                 value={repeat}
                 onChange={(e) => setRepeat(e.target.value)}
@@ -749,7 +737,11 @@ export function Attachments({
               <FolderOpen size={16} />
             </button>
           )}
-          <a className="icon-button" aria-label={`下载 ${file.name}`} href={fileUrl(file.id, true)}>
+          <a
+            className="icon-button"
+            aria-label={`下载 ${file.name}`}
+            href={fileUrl(file.id, true)}
+          >
             <Download size={16} />
           </a>
           {editing && (

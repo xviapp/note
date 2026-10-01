@@ -1,6 +1,15 @@
+import type { PasswordParameters } from './password';
+
+export interface AuthStatus {
+  initialized: boolean;
+  authenticated: boolean;
+  name: string;
+  password?: PasswordParameters;
+}
+
 export type NodeKind = 'folder' | 'markdown' | 'text' | 'pdf' | 'image' | 'link';
 export const TEXT_KINDS: NodeKind[] = ['markdown', 'text'];
-export const PARENT_KINDS: NodeKind[] = ['folder', 'markdown', 'text'];
+export const PARENT_KINDS: NodeKind[] = ['folder', 'markdown', 'text', 'pdf', 'image', 'link'];
 export interface NoteNode {
   id: string;
   parent_id: string | null;

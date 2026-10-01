@@ -9,7 +9,6 @@ type Listing = { nodes: NoteNode[]; nextOffset: number | null };
 export interface TreeProps {
   refresh: number;
   selected: string | null;
-  editable: boolean;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
   onDrop: (id: string, parent: string | null) => void;
@@ -90,14 +89,7 @@ function Branch({
   };
   if (error) return <p className="inline-error small">{error}</p>;
   if (!listing) return <Spinner label="加载目录…" />;
-  if (!listing.nodes.length)
-    return depth === 0 ? (
-      <p className="tree-empty">
-        这里还没有笔记。
-        <br />
-        从第一篇开始吧。
-      </p>
-    ) : null;
+  if (!listing.nodes.length) return depth === 0 ? <p className="tree-empty">暂无笔记</p> : null;
   return (
     <ul
       className="tree-branch"
@@ -117,17 +109,13 @@ function Branch({
             <div
               className={`tree-row ${props.selected === node.id ? 'selected' : ''}`}
               style={{ paddingLeft: 8 + Math.min(depth, 10) * 15 }}
-              draggable={props.editable}
+              draggable
               onDragStart={(e) => {
                 e.dataTransfer.setData('text/x-note-id', node.id);
                 e.dataTransfer.effectAllowed = 'move';
               }}
               onDragOver={(e) => {
-                if (
-                  props.editable &&
-                  hasChildren &&
-                  e.dataTransfer.types.includes('text/x-note-id')
-                ) {
+                if (hasChildren && e.dataTransfer.types.includes('text/x-note-id')) {
                   e.preventDefault();
                   e.currentTarget.classList.add('drop-target');
                 }
@@ -137,8 +125,7 @@ function Branch({
                 e.preventDefault();
                 e.stopPropagation();
                 e.currentTarget.classList.remove('drop-target');
-                if (props.editable && hasChildren)
-                  props.onDrop(e.dataTransfer.getData('text/x-note-id'), node.id);
+                if (hasChildren) props.onDrop(e.dataTransfer.getData('text/x-note-id'), node.id);
               }}
             >
               <button
@@ -153,7 +140,7 @@ function Branch({
                 <NodeIcon kind={node.kind} />
                 <span>{node.title}</span>
               </button>
-              {props.editable && <NodeMenu node={node} onAction={props.onAction} />}
+              <NodeMenu node={node} onAction={props.onAction} />
             </div>
             {hasChildren && open && depth < 100 && (
               <Branch {...props} parent={node.id} depth={depth + 1} />
@@ -177,10 +164,11 @@ export function Tree(props: TreeProps) {
       <div
         className="section-label"
         onDragOver={(e) => {
-          if (props.editable) e.preventDefault();
+          if (e.dataTransfer.types.includes('text/x-note-id')) e.preventDefault();
         }}
         onDrop={(e) => {
-          if (props.editable) props.onDrop(e.dataTransfer.getData('text/x-note-id'), null);
+          e.preventDefault();
+          props.onDrop(e.dataTransfer.getData('text/x-note-id'), null);
         }}
       >
         <span>我的笔记</span>

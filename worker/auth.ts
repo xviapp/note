@@ -1,11 +1,19 @@
 import type { Env, Session, Site } from './types';
 import { AppError, body, json, textValue } from './http';
+import {
+  MIN_PASSWORD_LENGTH,
+  PASSWORD_ITERATIONS,
+  derivePasswordHash,
+  type PasswordProof,
+} from '../shared/password';
 
 const encoder = new TextEncoder();
-export const PASSWORD_ITERATIONS = 600_000;
+export { PASSWORD_ITERATIONS } from '../shared/password';
+const PASSWORD_PREFIX = 'hmac-v1:';
 const SESSION_MS = 30 * 86400_000;
 export const COOKIE = 'note_session';
-export const randomToken = (length = 32) => base64(crypto.getRandomValues(new Uint8Array(length)));
+export const randomToken = (length = 32) =>
+  base64(crypto.getRandomValues(new Uint8Array(length)));
 export function base64(bytes: Uint8Array): string {
   return btoa(String.fromCharCode(...bytes))
     .replace(/\+/g, '-')
@@ -13,7 +21,9 @@ export function base64(bytes: Uint8Array): string {
     .replace(/=+$/g, '');
 }
 export function fromBase64(value: string): Uint8Array<ArrayBuffer> {
-  return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), (c) => c.charCodeAt(0));
+  return Uint8Array.from(atob(value.replace(/-/g, '+').replace(/_/g, '/')), (c) =>
+    c.charCodeAt(0),
+  );
 }
 export async function digest(value: string): Promise<string> {
   return base64(new Uint8Array(await crypto.subtle.digest('SHA-256', encoder.encode(value))));
@@ -23,18 +33,7 @@ export async function passwordHash(
   salt: string,
   iterations = PASSWORD_ITERATIONS,
 ): Promise<string> {
-  const key = await crypto.subtle.importKey('raw', encoder.encode(password), 'PBKDF2', false, [
-    'deriveBits',
-  ]);
-  return base64(
-    new Uint8Array(
-      await crypto.subtle.deriveBits(
-        { name: 'PBKDF2', hash: 'SHA-256', salt: fromBase64(salt), iterations },
-        key,
-        256,
-      ),
-    ),
-  );
+  return derivePasswordHash(password, salt, iterations);
 }
 async function sameSecret(a: string, b: string): Promise<boolean> {
   const [left, right] = await Promise.all([digest(a), digest(b)]);
@@ -42,11 +41,83 @@ async function sameSecret(a: string, b: string): Promise<boolean> {
   for (let i = 0; i < left.length; i++) diff |= left.charCodeAt(i) ^ right.charCodeAt(i);
   return diff === 0;
 }
-function validatePassword(password: unknown): string {
-  const value = textValue(password, '密码', 256);
-  if ([...value].length < 12)
-    throw new AppError(400, '请设置至少 12 个字符的密码，可以使用容易记住的长句。');
-  return value;
+async function passwordProof(input: unknown, site?: Site): Promise<PasswordProof> {
+  let proof: PasswordProof;
+  if (typeof input === 'string') {
+    // Backwards compatibility for existing local accounts and older API clients.
+    // Cloudflare's hosted runtime requires the browser-prepared proof instead.
+    const password = textValue(input, '密码', 256);
+    if (!site && [...password].length < MIN_PASSWORD_LENGTH)
+      throw new AppError(400, `密码至少需要 ${MIN_PASSWORD_LENGTH} 个字符。`);
+    const salt = site?.password_salt ?? randomToken(16);
+    const iterations = site?.password_iterations ?? PASSWORD_ITERATIONS;
+    let derived: string;
+    try {
+      derived = await passwordHash(password, salt, iterations);
+    } catch (error) {
+      if (error instanceof Error && error.name === 'NotSupportedError')
+        throw new AppError(
+          400,
+          '请刷新页面后重试；旧版客户端不支持云端密码校验。',
+          'PASSWORD_CLIENT_OUTDATED',
+        );
+      throw error;
+    }
+    proof = { derived, salt, iterations, length: [...password].length };
+  } else {
+    if (!input || typeof input !== 'object' || Array.isArray(input))
+      throw new AppError(400, '密码校验数据无效。');
+    proof = input as PasswordProof;
+    if (
+      typeof proof.derived !== 'string' ||
+      !/^[A-Za-z0-9_-]{43}$/.test(proof.derived) ||
+      typeof proof.salt !== 'string' ||
+      !/^[A-Za-z0-9_-]{22}$/.test(proof.salt) ||
+      base64(fromBase64(proof.derived)) !== proof.derived ||
+      base64(fromBase64(proof.salt)) !== proof.salt ||
+      !Number.isSafeInteger(proof.iterations) ||
+      proof.iterations < 1 ||
+      proof.iterations > PASSWORD_ITERATIONS ||
+      !Number.isSafeInteger(proof.length) ||
+      proof.length < 1 ||
+      proof.length > 256
+    )
+      throw new AppError(400, '密码校验数据无效。');
+  }
+  if (!site && proof.length < MIN_PASSWORD_LENGTH)
+    throw new AppError(400, `密码至少需要 ${MIN_PASSWORD_LENGTH} 个字符。`);
+  if (!site && proof.iterations !== PASSWORD_ITERATIONS)
+    throw new AppError(400, '密码计算强度不正确，请刷新页面后重试。');
+  if (
+    site &&
+    (proof.salt !== site.password_salt || proof.iterations !== site.password_iterations)
+  )
+    throw new AppError(401, '密码不正确，请重新输入。', 'INVALID_PASSWORD');
+  return proof;
+}
+async function sealPassword(env: Env, proof: PasswordProof): Promise<string> {
+  const value = JSON.stringify(['password-v1', proof.salt, proof.iterations, proof.derived]);
+  return (
+    PASSWORD_PREFIX +
+    base64(
+      new Uint8Array(
+        await crypto.subtle.sign('HMAC', await signingKey(env), encoder.encode(value)),
+      ),
+    )
+  );
+}
+async function verifyPassword(
+  env: Env,
+  site: Site,
+  input: unknown,
+): Promise<PasswordProof | null> {
+  if (!site.password_hash || !site.password_salt) return null;
+  const sealed = site.password_hash.startsWith(PASSWORD_PREFIX);
+  // A legacy PBKDF2 database value must never be accepted as a login proof.
+  if (!sealed && typeof input !== 'string') return null;
+  const proof = await passwordProof(input, site);
+  const hash = sealed ? await sealPassword(env, proof) : proof.derived;
+  return (await sameSecret(hash, site.password_hash)) ? proof : null;
 }
 export async function getSite(env: Env): Promise<Site> {
   const site = await env.DB.prepare('SELECT * FROM site WHERE id=1').first<Site>();
@@ -125,12 +196,21 @@ export async function publicAuth(
       initialized: Boolean(site.password_hash),
       authenticated: Boolean(await findSession(request, env)),
       name: env.APP_NAME || '页间',
+      ...(site.password_salt
+        ? {
+            password: {
+              salt: site.password_salt,
+              iterations: site.password_iterations,
+              clientHash: Boolean(site.password_hash?.startsWith(PASSWORD_PREFIX)),
+            },
+          }
+        : {}),
     });
   }
   if (path === '/api/auth/setup' && request.method === 'POST') {
     configured(env);
     await throttle(request, env);
-    const data = await body<{ token: string; password: string }>(request);
+    const data = await body<{ token: string; password: unknown }>(request);
     if (
       typeof data.token !== 'string' ||
       data.token.length > 256 ||
@@ -139,13 +219,12 @@ export async function publicAuth(
       throw new AppError(403, '初始化链接无效，请使用部署时生成的专属链接。');
     const site = await getSite(env);
     if (site.password_hash) throw new AppError(409, '站点已初始化，请直接登录。');
-    const password = validatePassword(data.password),
-      salt = randomToken(16),
-      hash = await passwordHash(password, salt);
+    const proof = await passwordProof(data.password),
+      hash = await sealPassword(env, proof);
     const row = await env.DB.prepare(
       'UPDATE site SET password_hash=?,password_salt=?,password_iterations=?,initialized_at=? WHERE id=1 AND password_hash IS NULL RETURNING auth_epoch',
     )
-      .bind(hash, salt, PASSWORD_ITERATIONS, Date.now())
+      .bind(hash, proof.salt, proof.iterations, Date.now())
       .first<{ auth_epoch: number }>();
     if (!row) throw new AppError(409, '初始化已完成，请登录。');
     return issueSession(request, env, row.auth_epoch);
@@ -153,14 +232,20 @@ export async function publicAuth(
   if (path === '/api/auth/login' && request.method === 'POST') {
     configured(env);
     const key = await throttle(request, env);
-    const { password } = await body<{ password: string }>(request);
-    textValue(password, '密码', 256);
+    const { password } = await body<{ password: unknown }>(request);
     const site = await getSite(env);
     if (!site.password_hash || !site.password_salt)
       throw new AppError(409, '请先通过专属链接设置密码。');
-    const hash = await passwordHash(password, site.password_salt, site.password_iterations);
-    if (!(await sameSecret(hash, site.password_hash)))
-      throw new AppError(401, '密码不正确，请重新输入。', 'INVALID_PASSWORD');
+    const proof = await verifyPassword(env, site, password);
+    if (!proof) throw new AppError(401, '密码不正确，请重新输入。', 'INVALID_PASSWORD');
+    if (!site.password_hash.startsWith(PASSWORD_PREFIX)) {
+      const upgraded = await env.DB.prepare(
+        'UPDATE site SET password_hash=? WHERE id=1 AND password_hash=? AND auth_epoch=? RETURNING id',
+      )
+        .bind(await sealPassword(env, proof), site.password_hash, site.auth_epoch)
+        .first();
+      if (!upgraded) throw new AppError(409, '密码已更新，请重新登录。');
+    }
     await env.DB.prepare('DELETE FROM login_attempts WHERE key=?').bind(key).run();
     return issueSession(request, env, site.auth_epoch);
   }
@@ -174,7 +259,9 @@ export async function accountAuth(
 ): Promise<Response | null> {
   if (request.method !== 'POST') return null;
   if (path === '/api/auth/logout') {
-    await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?').bind(session.token_hash).run();
+    await env.DB.prepare('DELETE FROM sessions WHERE token_hash=?')
+      .bind(session.token_hash)
+      .run();
     return json({ ok: true }, 200, { 'set-cookie': cookie(request, '', 0) });
   }
   if (path === '/api/auth/logout-all') {
@@ -186,25 +273,16 @@ export async function accountAuth(
   }
   if (path === '/api/auth/password') {
     await throttle(request, env);
-    const data = await body<{ currentPassword: string; newPassword: string }>(request);
-    textValue(data.currentPassword, '当前密码', 256);
-    const password = validatePassword(data.newPassword);
+    const data = await body<{ currentPassword: unknown; newPassword: unknown }>(request);
+    const proof = await passwordProof(data.newPassword);
     const site = await getSite(env);
-    if (
-      !site.password_salt ||
-      !site.password_hash ||
-      !(await sameSecret(
-        await passwordHash(data.currentPassword, site.password_salt, site.password_iterations),
-        site.password_hash,
-      ))
-    )
+    if (!(await verifyPassword(env, site, data.currentPassword)))
       throw new AppError(401, '当前密码不正确。', 'INVALID_PASSWORD');
-    const salt = randomToken(16),
-      hash = await passwordHash(password, salt);
+    const hash = await sealPassword(env, proof);
     const changed = await env.DB.prepare(
       'UPDATE site SET password_hash=?,password_salt=?,password_iterations=?,auth_epoch=auth_epoch+1 WHERE id=1 AND auth_epoch=? RETURNING id',
     )
-      .bind(hash, salt, PASSWORD_ITERATIONS, session.epoch)
+      .bind(hash, proof.salt, proof.iterations, session.epoch)
       .first();
     if (!changed) throw new AppError(409, '密码已在其他设备更新，请重新登录。');
     await env.DB.prepare('DELETE FROM sessions WHERE epoch<=?').bind(session.epoch).run();
@@ -221,18 +299,20 @@ async function signingKey(env: Env): Promise<CryptoKey> {
     ['sign', 'verify'],
   );
 }
-export async function editToken(env: Env, session: Session, scope: string): Promise<string> {
+export async function editToken(env: Env, session: Session, nodeId: string): Promise<string> {
   const data = base64(
     encoder.encode(
       JSON.stringify({
         session: session.token_hash,
-        scope,
+        scope: `note:${nodeId}`,
         expires: Math.min(session.expires_at, Date.now() + 8 * 3600_000),
       }),
     ),
   );
   const signature = base64(
-    new Uint8Array(await crypto.subtle.sign('HMAC', await signingKey(env), encoder.encode(data))),
+    new Uint8Array(
+      await crypto.subtle.sign('HMAC', await signingKey(env), encoder.encode(data)),
+    ),
   );
   return `${data}.${signature}`;
 }
@@ -240,9 +320,9 @@ export async function requireEdit(
   request: Request,
   env: Env,
   session: Session,
-  scope = 'library',
+  nodeId: string,
 ): Promise<void> {
-  const token = request.headers.get(scope === 'library' ? 'x-library-edit' : 'x-note-edit');
+  const token = request.headers.get('x-note-edit');
   if (!token || token.length > 2048)
     throw new AppError(403, '请先确认进入编辑模式。', 'EDIT_LOCKED');
   try {
@@ -260,7 +340,7 @@ export async function requireEdit(
     const value = JSON.parse(new TextDecoder().decode(fromBase64(data)));
     if (
       value.session !== session.token_hash ||
-      value.scope !== scope ||
+      value.scope !== `note:${nodeId}` ||
       value.expires <= Date.now()
     )
       throw new Error();

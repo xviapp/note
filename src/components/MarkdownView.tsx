@@ -12,11 +12,13 @@ export const MarkdownView = memo(function MarkdownView({
   onNavigate,
   onImage,
   onHeadings,
+  safeImages = false,
 }: {
   content: string;
   onNavigate: (id: string) => void;
   onImage: (src: string, alt: string) => void;
   onHeadings?: (headings: Heading[]) => void;
+  safeImages?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   useEffect(() => {
@@ -37,7 +39,7 @@ export const MarkdownView = memo(function MarkdownView({
       node?: { position?: { start: { offset?: number } } };
       children?: ReactNode;
     }) => {
-      const id = `heading-${node?.position?.start.offset ?? 0}`,
+      const id = safeImages ? undefined : `heading-${node?.position?.start.offset ?? 0}`,
         props = { id, children };
       switch (level) {
         case 1:
@@ -87,21 +89,27 @@ export const MarkdownView = memo(function MarkdownView({
           },
           img: ({ src, alt }) =>
             typeof src === 'string' ? (
-              <img
-                src={src}
-                alt={alt ?? ''}
-                loading="lazy"
-                decoding="async"
-                tabIndex={0}
-                role="button"
-                onClick={() => onImage(src, alt ?? '图片')}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter' || event.key === ' ') {
-                    event.preventDefault();
-                    onImage(src, alt ?? '图片');
-                  }
-                }}
-              />
+              safeImages ? (
+                <a href={src} target="_blank" rel="noopener noreferrer">
+                  {alt || '查看图片链接'}
+                </a>
+              ) : (
+                <img
+                  src={src}
+                  alt={alt ?? ''}
+                  loading="lazy"
+                  decoding="async"
+                  tabIndex={0}
+                  role="button"
+                  onClick={() => onImage(src, alt ?? '图片')}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter' || event.key === ' ') {
+                      event.preventDefault();
+                      onImage(src, alt ?? '图片');
+                    }
+                  }}
+                />
+              )
             ) : null,
           input: (props) => <input {...props} disabled />,
         }}

@@ -21,7 +21,8 @@ if (remote && (!args.includes('--url') || !urlArg?.startsWith('https://')))
   throw new Error('远端重置需要 --url https://你的站点。');
 let localPort = 5173;
 try {
-  localPort = JSON.parse(await readFile('.wrangler/local-ports.json', 'utf8')).uiPort || localPort;
+  localPort =
+    JSON.parse(await readFile('.wrangler/local-ports.json', 'utf8')).uiPort || localPort;
 } catch {
   /* No previous local launch. */
 }
@@ -31,7 +32,11 @@ const token = randomBytes(32).toString('base64url'),
 const wrangler = (parameters, input) => {
   const result = spawnSync(
     process.execPath,
-    ['node_modules/wrangler/bin/wrangler.js', ...parameters],
+    [
+      'node_modules/wrangler/bin/wrangler.js',
+      ...parameters,
+      ...(remote ? ['--env', 'production'] : []),
+    ],
     { input, stdio: input ? ['pipe', 'inherit', 'inherit'] : 'inherit' },
   );
   if (result.status !== 0)

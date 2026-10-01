@@ -1,3 +1,4 @@
+-- Parenthesize CASE expressions in triggers for the D1 remote SQL parser.
 PRAGMA foreign_keys = ON;
 
 CREATE TABLE site (
@@ -38,8 +39,8 @@ CREATE TABLE blobs (
 );
 CREATE INDEX blobs_cleanup ON blobs(state,draft_until);
 CREATE TRIGGER blob_quota BEFORE INSERT ON blobs BEGIN
-  SELECT CASE WHEN (SELECT allocated_bytes + NEW.size > quota_bytes FROM site WHERE id = 1)
-    THEN RAISE(ABORT, 'QUOTA_EXCEEDED') END;
+  SELECT (CASE WHEN (SELECT allocated_bytes + NEW.size > quota_bytes FROM site WHERE id = 1)
+    THEN RAISE(ABORT, 'QUOTA_EXCEEDED') END);
 END;
 CREATE TRIGGER blob_allocated AFTER INSERT ON blobs BEGIN
   UPDATE site SET allocated_bytes = allocated_bytes + NEW.size WHERE id = 1;
@@ -78,24 +79,24 @@ CREATE INDEX nodes_trash ON nodes(trash_id);
 CREATE INDEX nodes_file ON nodes(file_blob_id);
 
 CREATE TRIGGER node_parent_insert BEFORE INSERT ON nodes WHEN NEW.parent_id IS NOT NULL BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.parent_id AND trash_id IS NULL AND kind IN ('folder','markdown','text'))
-    THEN RAISE(ABORT,'INVALID_PARENT') END;
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.parent_id AND trash_id IS NULL AND kind IN ('folder','markdown','text'))
+    THEN RAISE(ABORT,'INVALID_PARENT') END);
 END;
 CREATE TRIGGER node_parent_update BEFORE UPDATE OF parent_id ON nodes WHEN NEW.parent_id IS NOT NULL BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.parent_id AND trash_id IS NULL AND kind IN ('folder','markdown','text'))
-    THEN RAISE(ABORT,'INVALID_PARENT') END;
-  SELECT CASE WHEN NEW.parent_id IN (
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.parent_id AND trash_id IS NULL AND kind IN ('folder','markdown','text'))
+    THEN RAISE(ABORT,'INVALID_PARENT') END);
+  SELECT (CASE WHEN NEW.parent_id IN (
     WITH RECURSIVE subtree(id) AS (SELECT OLD.id UNION ALL SELECT n.id FROM nodes n JOIN subtree s ON n.parent_id=s.id)
     SELECT id FROM subtree
-  ) THEN RAISE(ABORT,'TREE_CYCLE') END;
+  ) THEN RAISE(ABORT,'TREE_CYCLE') END);
 END;
 CREATE TRIGGER node_file_insert BEFORE INSERT ON nodes WHEN NEW.file_blob_id IS NOT NULL BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.file_blob_id AND state='ready')
-    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END;
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.file_blob_id AND state='ready')
+    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END);
 END;
 CREATE TRIGGER node_file_update BEFORE UPDATE OF file_blob_id ON nodes WHEN NEW.file_blob_id IS NOT NULL BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.file_blob_id AND state='ready')
-    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END;
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.file_blob_id AND state='ready')
+    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END);
 END;
 CREATE TRIGGER node_file_retained AFTER INSERT ON nodes WHEN NEW.file_blob_id IS NOT NULL BEGIN
   UPDATE blobs SET draft_until=NULL WHERE id=NEW.file_blob_id;
@@ -119,31 +120,31 @@ CREATE TABLE version_assets (
 CREATE INDEX version_assets_blob ON version_assets(blob_id);
 
 CREATE TRIGGER version_guard BEFORE INSERT ON versions BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.node_id AND trash_id IS NULL AND revision=NEW.sequence-1 AND kind IN ('markdown','text'))
-    THEN RAISE(ABORT,'VERSION_CONFLICT') END;
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.body_blob_id AND state='ready')
-    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END;
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.node_id AND trash_id IS NULL AND revision=NEW.sequence-1 AND kind IN ('markdown','text'))
+    THEN RAISE(ABORT,'VERSION_CONFLICT') END);
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.body_blob_id AND state='ready')
+    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END);
 END;
 CREATE TRIGGER version_retained AFTER INSERT ON versions BEGIN
   UPDATE blobs SET draft_until=NULL WHERE id=NEW.body_blob_id;
 END;
 CREATE TRIGGER attachment_guard BEFORE INSERT ON version_assets BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.blob_id AND state='ready')
-    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END;
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM blobs WHERE id=NEW.blob_id AND state='ready')
+    THEN RAISE(ABORT,'FILE_UNAVAILABLE') END);
 END;
 CREATE TRIGGER attachment_retained AFTER INSERT ON version_assets BEGIN
   UPDATE blobs SET draft_until=NULL WHERE id=NEW.blob_id;
 END;
 
 CREATE TRIGGER trash_guard BEFORE INSERT ON trash_batches BEGIN
-  SELECT CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.root_id AND trash_id IS NULL)
-    THEN RAISE(ABORT,'NODE_UNAVAILABLE') END;
-  SELECT CASE WHEN NEW.expected_count != (
+  SELECT (CASE WHEN NOT EXISTS(SELECT 1 FROM nodes WHERE id=NEW.root_id AND trash_id IS NULL)
+    THEN RAISE(ABORT,'NODE_UNAVAILABLE') END);
+  SELECT (CASE WHEN NEW.expected_count != (
     WITH RECURSIVE subtree(id) AS (
       SELECT id FROM nodes WHERE id=NEW.root_id AND trash_id IS NULL
       UNION ALL SELECT n.id FROM nodes n JOIN subtree s ON n.parent_id=s.id WHERE n.trash_id IS NULL
     ) SELECT COUNT(*) FROM subtree
-  ) THEN RAISE(ABORT,'TREE_CHANGED') END;
+  ) THEN RAISE(ABORT,'TREE_CHANGED') END);
 END;
 
 CREATE TABLE favorites (

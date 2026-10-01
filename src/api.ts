@@ -8,10 +8,8 @@ export class ApiError extends Error {
     super(message);
   }
 }
-let libraryToken = '';
 const noteTokens = new Map<string, string>();
 export function lockEdits() {
-  libraryToken = '';
   noteTokens.clear();
 }
 export function lockNote(id: string) {
@@ -25,7 +23,6 @@ export async function api<T = Record<string, unknown>>(
 ): Promise<T> {
   const headers: Record<string, string> = {};
   if (data !== undefined) headers['content-type'] = 'application/json';
-  if (libraryToken) headers['x-library-edit'] = libraryToken;
   const node = path.match(/^\/api\/nodes\/([^/]+)/)?.[1];
   if (node && noteTokens.has(node)) headers['x-note-edit'] = noteTokens.get(node)!;
   if (method !== 'GET') headers['x-idempotency-key'] = key ?? crypto.randomUUID();
@@ -37,7 +34,7 @@ export async function api<T = Record<string, unknown>>(
   });
   return parse<T>(response);
 }
-async function parse<T>(response: Response): Promise<T> {
+export async function parse<T>(response: Response): Promise<T> {
   const value = (await response
     .json()
     .catch(() => ({ error: '服务器暂时无法响应，请稍后重试。' }))) as {
@@ -51,15 +48,10 @@ async function parse<T>(response: Response): Promise<T> {
     }
     if (response.status === 403 && value.code === 'EDIT_LOCKED') {
       lockEdits();
-      window.dispatchEvent(new Event('note:edit-expired'));
     }
     throw new ApiError(value.error || '操作未完成。', response.status, value.code);
   }
   return value as T;
-}
-export async function unlockLibrary() {
-  const result = await api<{ token: string }>('/api/edit/unlock', 'POST', {});
-  libraryToken = result.token;
 }
 export async function unlockNote(id: string) {
   const result = await api<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: id });
@@ -70,7 +62,6 @@ export async function upload(file: File): Promise<FileInfo> {
     `/api/files?name=${encodeURIComponent(file.name)}&size=${file.size}`,
     {
       method: 'POST',
-      headers: { 'x-library-edit': libraryToken },
       credentials: 'same-origin',
       body: file,
     },

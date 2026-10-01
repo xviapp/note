@@ -1,0 +1,157 @@
+import { AI_MODEL, type AssistantSettings } from '../shared/assistant';
+import { sseData } from '../shared/sse';
+import { AppError, textValue } from './http';
+import type { Env } from './types';
+
+const BASE_URL = 'https://api.deepseek.com';
+export function toBase64(bytes: Uint8Array): string {
+  let value = '';
+  for (let i = 0; i < bytes.length; i += 8192)
+    value += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  return btoa(value);
+}
+function fromBase64(value: string): Uint8Array<ArrayBuffer> {
+  return Uint8Array.from(atob(value), (char) => char.charCodeAt(0));
+}
+async function encryptionKey(env: Env): Promise<CryptoKey> {
+  const hash = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(`note:ai-key:v1:${env.APP_SECRET}`),
+  );
+  return crypto.subtle.importKey('raw', hash, 'AES-GCM', false, ['encrypt', 'decrypt']);
+}
+function validateKey(value: unknown): string {
+  const key = textValue(value, 'API Key', 512).trim();
+  if (!/^[\x21-\x7e]+$/.test(key)) throw new AppError(400, 'API Key 不能包含空白或中文字符。');
+  return key;
+}
+export async function aiSettings(env: Env): Promise<AssistantSettings> {
+  const row = await env.DB.prepare('SELECT id FROM ai_settings WHERE id=1').first();
+  return { configured: !!row, model: AI_MODEL };
+}
+export async function saveAiSettings(
+  env: Env,
+  data: Record<string, unknown>,
+): Promise<AssistantSettings> {
+  const key = validateKey(data.apiKey);
+  const iv = crypto.getRandomValues(new Uint8Array(12));
+  const encrypted = await crypto.subtle.encrypt(
+    { name: 'AES-GCM', iv },
+    await encryptionKey(env),
+    new TextEncoder().encode(key),
+  );
+  await env.DB.prepare(
+    'INSERT INTO ai_settings(id,encrypted_key) VALUES(1,?) ON CONFLICT(id) DO UPDATE SET encrypted_key=excluded.encrypted_key',
+  )
+    .bind(`${toBase64(iv)}.${toBase64(new Uint8Array(encrypted))}`)
+    .run();
+  return aiSettings(env);
+}
+export async function readApiKey(env: Env): Promise<string> {
+  const row = await env.DB.prepare('SELECT encrypted_key FROM ai_settings WHERE id=1').first<{
+    encrypted_key: string;
+  }>();
+  if (!row) throw new AppError(400, '请先在设置中配置 DeepSeek API Key。', 'AI_NOT_CONFIGURED');
+  try {
+    const [iv, ciphertext] = row.encrypted_key.split('.');
+    const plain = await crypto.subtle.decrypt(
+      { name: 'AES-GCM', iv: fromBase64(iv) },
+      await encryptionKey(env),
+      fromBase64(ciphertext),
+    );
+    return new TextDecoder().decode(plain);
+  } catch {
+    throw new AppError(400, 'AI 密钥无法读取，请在设置中重新保存 API Key。', 'AI_KEY_UNREADABLE');
+  }
+}
+async function providerFetch(
+  path: string,
+  key: string,
+  signal: AbortSignal,
+  data?: unknown,
+): Promise<Response> {
+  let response: Response;
+  try {
+    response = await fetch(`${BASE_URL}${path}`, {
+      method: data ? 'POST' : 'GET',
+      headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
+      body: data ? JSON.stringify(data) : undefined,
+      signal,
+    });
+  } catch (error) {
+    if (signal.aborted) throw error;
+    throw new AppError(502, '暂时无法连接 DeepSeek，请稍后重试。');
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    const labels: Record<number, string> = {
+      400: 'DeepSeek 未能接受这些内容，请缩短问题或重新截图。',
+      401: 'DeepSeek API Key 无效，请在设置中更新。',
+      402: 'DeepSeek 账户余额不足，请检查账户。',
+      403: 'DeepSeek 拒绝了此密钥的请求，请检查账户权限。',
+      429: 'DeepSeek 请求过于频繁，请稍后重试。',
+    };
+    throw new AppError(
+      502,
+      labels[response.status] || 'DeepSeek 暂时无法响应，请稍后重试。',
+      'AI_PROVIDER_ERROR',
+    );
+  }
+  return response;
+}
+export async function testAiSettings(
+  env: Env,
+  data: Record<string, unknown>,
+): Promise<{ ok: true }> {
+  const key = data.apiKey ? validateKey(data.apiKey) : await readApiKey(env);
+  const response = await providerFetch('/models', key, AbortSignal.timeout(15_000));
+  const result = (await response.json()) as { data?: { id: string }[] };
+  if (!result.data?.some((model) => model.id === AI_MODEL))
+    throw new AppError(400, `当前账户无法使用 ${AI_MODEL}，请检查 DeepSeek 模型权限。`);
+  return { ok: true };
+}
+export interface ProviderMessage {
+  role: 'system' | 'user' | 'assistant';
+  content:
+    | string
+    | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
+}
+export async function* deepseekReply(
+  key: string,
+  messages: ProviderMessage[],
+  signal: AbortSignal,
+): AsyncGenerator<string> {
+  const response = await providerFetch('/chat/completions', key, signal, {
+    model: AI_MODEL,
+    messages,
+    stream: true,
+    max_tokens: 4096,
+    thinking: { type: 'disabled' },
+  });
+  if (!response.body) throw new AppError(502, 'DeepSeek 没有返回回复。');
+  let ended = false,
+    finish = '',
+    length = 0;
+  for await (const data of sseData(response.body)) {
+    if (data === '[DONE]') {
+      ended = true;
+      break;
+    }
+    const chunk = JSON.parse(data) as {
+      error?: unknown;
+      choices?: { delta?: { content?: string }; finish_reason?: string }[];
+    };
+    if (chunk.error) throw new AppError(502, 'DeepSeek 生成失败，请稍后重试。');
+    const choice = chunk.choices?.[0];
+    if (choice?.finish_reason) finish = choice.finish_reason;
+    const value = choice?.delta?.content;
+    if (typeof value === 'string' && value) {
+      length += value.length;
+      if (length > 80_000) throw new AppError(502, '回复过长，已停止生成。');
+      yield value;
+    }
+  }
+  if (finish === 'length') throw new AppError(502, '回复达到单次长度上限，可以继续提问。');
+  if (!ended || finish !== 'stop' || !length)
+    throw new AppError(502, '回复未完整接收，可以重新提问。');
+}

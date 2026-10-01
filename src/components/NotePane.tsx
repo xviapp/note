@@ -1,13 +1,14 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   ArrowUpRight,
+  Bot,
   Check,
   ChevronRight,
   FileText,
   History,
   Link2,
   List,
-  LockKeyhole,
+  Menu,
   Paperclip,
   Pencil,
   Plus,
@@ -22,14 +23,15 @@ import {
   type FileInfo,
   type NoteDetail,
   type NoteNode,
-  type ReadingPosition,
   type VersionInfo,
 } from '../../shared/types';
 import { useReading } from '../useReading';
 import { Empty, Modal, NodeIcon, Spinner, useQuestion } from './Primitives';
 import { MarkdownView, type Heading } from './MarkdownView';
-import { Attachments, NodeList, type EnsureEdit } from './Management';
+import { Attachments, NodeList } from './Management';
 import { NodeMenu, NodePicker, type NodeAction } from './Tree';
+import { AssistantPanel } from './AssistantPanel';
+import type { AssistantMode } from './AssistantWindow';
 
 const Editor = lazy(() => import('./Editor'));
 const PdfView = lazy(() => import('./PdfView'));
@@ -39,8 +41,8 @@ interface Props {
   id: string;
   refresh: number;
   treeRefresh: number;
-  editable: boolean;
-  ensureEdit: EnsureEdit;
+  sidebarOpen: boolean;
+  onOpenSidebar: () => void;
   onNavigate: (id: string) => void;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
@@ -50,6 +52,7 @@ interface Props {
   setLeaveGuard: (guard: () => Promise<boolean>) => void;
   onError: (error: unknown) => void;
   onTrash: () => void;
+  onSettings: () => void;
 }
 
 export default function NotePane(props: Props) {
@@ -77,9 +80,29 @@ export default function NotePane(props: Props) {
     draftUploads = useRef(new Set<string>());
   const reading = useReading(id),
     restored = useRef(false),
-    touched = useRef(false),
-    pdfPage = useRef(1);
+    touched = useRef(false);
   const saveRequest = useRef<{ payload: string; key: string } | null>(null);
+  const readingRoot = useRef<HTMLDivElement>(null);
+  const [assistantOpen, setAssistantOpen] = useState(false);
+  const [assistantMode, setAssistantMode] = useState<AssistantMode>('floating');
+  const [selection, setSelection] = useState('');
+  useEffect(() => {
+    const select = () => {
+      const value = window.getSelection();
+      if (
+        value &&
+        !value.isCollapsed &&
+        value.anchorNode &&
+        value.focusNode &&
+        readingRoot.current?.contains(value.anchorNode) &&
+        readingRoot.current.contains(value.focusNode)
+      ) {
+        setSelection(value.toString().trim());
+      }
+    };
+    document.addEventListener('selectionchange', select);
+    return () => document.removeEventListener('selectionchange', select);
+  }, []);
   const dirty =
     !!note &&
     (content !== note.content ||
@@ -189,7 +212,6 @@ export default function NotePane(props: Props) {
     return () => props.setLeaveGuard(async () => true);
   });
   const startEdit = async () => {
-    if (!(await props.ensureEdit())) return;
     if (
       !(await question.confirm(
         '编辑这篇笔记？',
@@ -230,11 +252,7 @@ export default function NotePane(props: Props) {
           24 +
           (position.headingRatio || 0) * sectionHeight;
       } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
-    } else
-      area.scrollTop =
-        (area.scrollHeight - area.clientHeight) *
-        (note.kind === 'pdf' ? position.pageRatio || 0 : position.ratio || 0);
-    pdfPage.current = position.page || 1;
+    } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
     restored.current = true;
   }, [note?.id, reading.initial, editing]);
   useEffect(() => {
@@ -270,16 +288,12 @@ export default function NotePane(props: Props) {
       );
     }
     setActiveHeading(heading);
-    if (!touched.current || !['markdown', 'text', 'pdf'].includes(note.kind)) return;
+    if (!touched.current || !TEXT_KINDS.includes(note.kind)) return;
     const ratio = Math.max(
       0,
       Math.min(1, area.scrollTop / Math.max(1, area.scrollHeight - area.clientHeight)),
     );
-    reading.update(
-      note.kind === 'pdf'
-        ? { page: pdfPage.current, pageRatio: ratio }
-        : { ratio, ...(heading ? { heading, headingRatio } : {}) },
-    );
+    reading.update({ ratio, ...(heading ? { heading, headingRatio } : {}) });
   };
   const jump = (heading: Heading) => {
     touched.current = true;
@@ -335,49 +349,83 @@ export default function NotePane(props: Props) {
       setUploading(false);
     }
   };
-  if (loadError)
-    return (
-      <Empty
-        icon={<FileText />}
-        title={
-          loadError instanceof ApiError && loadError.code === 'NODE_TRASHED'
-            ? '这篇笔记在回收站中'
-            : '暂时无法打开笔记'
-        }
-        action={
-          loadError instanceof ApiError && loadError.code === 'NODE_TRASHED' ? (
-            <button className="button" onClick={props.onTrash}>
-              前往回收站
-            </button>
-          ) : (
-            <button className="button" onClick={() => window.location.reload()}>
-              重新加载
-            </button>
-          )
-        }
+  const navigation = (
+    <div className="note-location">
+      <button
+        className="icon-button mobile-menu"
+        aria-label="打开笔记目录"
+        aria-controls="notebook-sidebar"
+        aria-expanded={props.sidebarOpen}
+        onClick={props.onOpenSidebar}
       >
-        {loadError.message}
-      </Empty>
+        <Menu size={21} />
+      </button>
+      <div className="breadcrumbs">
+        <button onClick={() => props.onNavigate('')}>全部笔记</button>
+        {note?.breadcrumbs.map((part, index) => (
+          <span key={part.id}>
+            <ChevronRight size={13} />
+            <button
+              title={part.title}
+              disabled={index === note.breadcrumbs.length - 1}
+              onClick={() => props.onNavigate(part.id)}
+            >
+              {part.title}
+            </button>
+          </span>
+        ))}
+      </div>
+    </div>
+  );
+  if (loadError || !note)
+    return (
+      <div className="note-pane">
+        <div className="note-toolbar">{navigation}</div>
+        {loadError ? (
+          <Empty
+            icon={<FileText />}
+            title={
+              loadError instanceof ApiError && loadError.code === 'NODE_TRASHED'
+                ? '这篇笔记在回收站中'
+                : '暂时无法打开笔记'
+            }
+            action={
+              loadError instanceof ApiError && loadError.code === 'NODE_TRASHED' ? (
+                <button className="button" onClick={props.onTrash}>
+                  前往回收站
+                </button>
+              ) : (
+                <button className="button" onClick={() => window.location.reload()}>
+                  重新加载
+                </button>
+              )
+            }
+          >
+            {loadError.message}
+          </Empty>
+        ) : (
+          <Spinner />
+        )}
+      </div>
     );
-  if (!note) return <Spinner />;
   return (
     <div className={`note-pane ${editing ? 'is-editing' : ''}`}>
       <div className="note-toolbar">
-        <div className="breadcrumbs">
-          <button onClick={() => props.onNavigate('')}>全部笔记</button>
-          {note.breadcrumbs.map((part, index) => (
-            <span key={part.id}>
-              <ChevronRight size={13} />
-              <button
-                disabled={index === note.breadcrumbs.length - 1}
-                onClick={() => props.onNavigate(part.id)}
-              >
-                {part.title}
-              </button>
-            </span>
-          ))}
-        </div>
+        {navigation}
         <div className="note-actions">
+          {note.kind !== 'folder' && !editing && (
+            <button
+              className={`icon-button ${assistantOpen ? 'is-active' : ''}`}
+              aria-label="AI 助手"
+              aria-expanded={assistantOpen}
+              title="AI 助手"
+              onClick={() => {
+                setAssistantOpen((value) => !value);
+              }}
+            >
+              <Bot size={18} />
+            </button>
+          )}
           <button
             className={`icon-button ${note.favorite ? 'is-favorite' : ''}`}
             aria-label={note.favorite ? '取消收藏' : '收藏笔记'}
@@ -416,12 +464,17 @@ export default function NotePane(props: Props) {
             </button>
           )}
           {!editing && TEXT_KINDS.includes(note.kind) && (
-            <button className="button compact" onClick={startEdit}>
+            <button
+              className="button compact edit-note-button"
+              aria-label="编辑正文"
+              title="编辑正文"
+              onClick={startEdit}
+            >
               <Pencil size={15} />
               <span>编辑正文</span>
             </button>
           )}
-          {!editing && props.editable && <NodeMenu node={note} onAction={props.onAction} />}
+          {!editing && <NodeMenu node={note} onAction={props.onAction} />}
         </div>
       </div>
       {editing && (
@@ -504,10 +557,8 @@ export default function NotePane(props: Props) {
             className="text-button"
             onClick={async () => {
               try {
-                if (await props.ensureEdit()) {
-                  await unlockNote(id);
-                  setSaveError('编辑确认已更新，请再次保存。');
-                }
+                await unlockNote(id);
+                setSaveError('编辑确认已更新，请再次保存。');
               } catch (e) {
                 props.onError(e);
               }
@@ -517,161 +568,172 @@ export default function NotePane(props: Props) {
           </button>
         </div>
       )}
-      <div className={`note-workspace ${editing ? `edit-tab-${editTab}` : ''}`}>
-        {editing && (
-          <div className="source-pane">
-            <Suspense fallback={<Spinner label="正在打开编辑器…" />}>
-              <Editor
-                value={content}
-                onChange={setContent}
-                onSave={() => {
-                  void save();
-                }}
-                kind={note.kind as 'markdown' | 'text'}
-              />
-            </Suspense>
-          </div>
-        )}
-        <div
-          ref={scroll}
-          className="note-scroll"
-          tabIndex={0}
-          aria-label="笔记阅读区"
-          onScroll={recordScroll}
-          onWheel={() => {
-            touched.current = true;
-          }}
-          onTouchStart={() => {
-            touched.current = true;
-          }}
-          onPointerDown={() => {
-            touched.current = true;
-          }}
-          onKeyDown={(e) => {
-            if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(e.key))
-              touched.current = true;
-          }}
-          onLoadCapture={() => {
-            if (!touched.current) restorePosition();
-          }}
-        >
-          <article className={`note-article ${note.kind === 'pdf' ? 'pdf-article' : ''}`}>
-            <header className="document-heading">
-              <div className="page-eyebrow">
-                <NodeIcon kind={note.kind} size={14} />
-                {KIND_LABELS[note.kind]}
-                <span className="reading-badge">
-                  <LockKeyhole size={11} />
-                  {editing ? '编辑预览' : '只读预览'}
-                </span>
-              </div>
-              <h1>{note.title}</h1>
-              <div className="document-meta">
-                更新于 {formatDate(note.updated_at)}
-                {PARENT_KINDS.includes(note.kind) && !!note.child_count && (
-                  <span>{note.child_count} 个子节点</span>
-                )}
-              </div>
-            </header>
-            <div className="read-content">
-              {note.kind === 'markdown' ? (
-                content ? (
-                  <MarkdownView
-                    content={editing ? content : note.content}
-                    onNavigate={props.onNavigate}
-                    onImage={showImage}
-                    onHeadings={onHeadings}
-                  />
-                ) : (
-                  <p className="empty-body">这篇笔记还是空白的。点击「编辑正文」，写下第一行。</p>
-                )
-              ) : note.kind === 'text' ? (
-                <pre className="plain-text">
-                  {(editing ? content : note.content) || '这篇笔记还是空白的。'}
-                </pre>
-              ) : note.kind === 'image' && note.file ? (
-                <button
-                  className="image-node"
-                  aria-label="放大查看图片"
-                  onClick={() => showImage(fileUrl(note.file!.id), note.title)}
-                >
-                  <img src={fileUrl(note.file.id)} alt={note.title} />
-                  <span>点击放大 · 支持双指缩放</span>
-                </button>
-              ) : note.kind === 'pdf' && note.file ? (
-                reading.initial ? (
-                  <Suspense fallback={<Spinner />}>
-                    <PdfView
-                      fileId={note.file.id}
-                      initialPage={reading.initial.page || 1}
-                      onPage={(page) => {
-                        pdfPage.current = page;
-                        touched.current = true;
-                        if (scroll.current) scroll.current.scrollTop = 0;
-                        reading.update({ page, pageRatio: 0 });
-                      }}
-                    />
-                  </Suspense>
-                ) : (
-                  <Spinner />
-                )
-              ) : note.kind === 'link' ? (
-                <a
-                  className="external-link"
-                  href={note.url || '#'}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                >
-                  <ArrowUpRight size={22} />
-                  <strong>打开网页</strong>
-                  <span>{note.url}</span>
-                </a>
-              ) : null}
-            </div>
-            {TEXT_KINDS.includes(note.kind) && (
-              <Attachments
-                files={editing ? assets : note.attachments}
-                editing={editing}
-                onRemove={(fileId) => {
-                  setAssets((previous) => previous.filter((file) => file.id !== fileId));
-                  if (note.kind === 'markdown')
-                    setContent((previous) =>
-                      previous.replace(
-                        new RegExp(`!\\[[^\\]]*\\]\\(/api/files/${fileId}\\)`, 'g'),
-                        '',
-                      ),
-                    );
-                }}
-                onPreview={previewFile}
-                onCreate={
-                  !editing && props.editable ? (file) => props.onFileNode(file, id) : undefined
-                }
-              />
-            )}
-            {PARENT_KINDS.includes(note.kind) && !editing && (
-              <section className="children-section">
-                <div className="children-heading">
-                  <h2>子节点{note.child_count ? <span>{note.child_count}</span> : null}</h2>
-                  {props.editable && (
-                    <button className="text-button" onClick={() => props.onAction('new', note)}>
-                      <Plus size={14} />
-                      新建
-                    </button>
-                  )}
-                </div>
-                <NodeList
-                  parent={id}
-                  refresh={props.treeRefresh}
-                  editable={props.editable}
-                  onOpen={props.onOpen}
-                  onAction={props.onAction}
+      <div
+        className={`reading-with-assistant${assistantOpen && !editing && assistantMode === 'docked' ? ' assistant-docked' : ''}`}
+      >
+        <div ref={readingRoot} className={`note-workspace ${editing ? `edit-tab-${editTab}` : ''}`}>
+          {editing && (
+            <div className="source-pane">
+              <Suspense fallback={<Spinner label="正在打开编辑器…" />}>
+                <Editor
+                  value={content}
+                  onChange={setContent}
+                  onSave={() => {
+                    void save();
+                  }}
+                  kind={note.kind as 'markdown' | 'text'}
                 />
-              </section>
-            )}
-          </article>
+              </Suspense>
+            </div>
+          )}
+          {note.kind === 'pdf' && note.file ? (
+            reading.initial ? (
+              <Suspense fallback={<Spinner label="正在打开 PDF…" />}>
+                <PdfView
+                  key={note.file.id}
+                  fileId={note.file.id}
+                  initialPosition={reading.initial}
+                  onPosition={reading.update}
+                />
+              </Suspense>
+            ) : (
+              <Spinner />
+            )
+          ) : (
+            <div
+              ref={scroll}
+              className="note-scroll"
+              tabIndex={0}
+              aria-label="笔记阅读区"
+              onScroll={recordScroll}
+              onWheel={() => {
+                touched.current = true;
+              }}
+              onTouchStart={() => {
+                touched.current = true;
+              }}
+              onPointerDown={() => {
+                touched.current = true;
+              }}
+              onKeyDown={(e) => {
+                if (
+                  ['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(e.key)
+                )
+                  touched.current = true;
+              }}
+              onLoadCapture={() => {
+                if (!touched.current) restorePosition();
+              }}
+            >
+              <article className="note-article">
+                <header className="document-heading">
+                  <div className="page-eyebrow">
+                    <NodeIcon kind={note.kind} size={14} />
+                    {KIND_LABELS[note.kind]}
+                  </div>
+                  <h1>{note.title}</h1>
+                  <div className="document-meta">
+                    更新于 {formatDate(note.updated_at)}
+                    {PARENT_KINDS.includes(note.kind) && !!note.child_count && (
+                      <span>{note.child_count} 个子节点</span>
+                    )}
+                  </div>
+                </header>
+                <div className="read-content">
+                  {note.kind === 'markdown' ? (
+                    content ? (
+                      <MarkdownView
+                        content={editing ? content : note.content}
+                        onNavigate={props.onNavigate}
+                        onImage={showImage}
+                        onHeadings={onHeadings}
+                      />
+                    ) : (
+                      <p className="empty-body">暂无内容。点击「编辑正文」开始编辑。</p>
+                    )
+                  ) : note.kind === 'text' ? (
+                    <pre className="plain-text">
+                      {(editing ? content : note.content) || '暂无内容'}
+                    </pre>
+                  ) : note.kind === 'image' && note.file ? (
+                    <button
+                      className="image-node"
+                      aria-label="放大查看图片"
+                      onClick={() => showImage(fileUrl(note.file!.id), note.title)}
+                    >
+                      <img src={fileUrl(note.file.id)} alt={note.title} />
+                    </button>
+                  ) : note.kind === 'link' ? (
+                    <a
+                      className="external-link"
+                      href={note.url || '#'}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                    >
+                      <ArrowUpRight size={22} />
+                      <strong>打开网页</strong>
+                      <span>{note.url}</span>
+                    </a>
+                  ) : null}
+                </div>
+                {TEXT_KINDS.includes(note.kind) && (
+                  <Attachments
+                    files={editing ? assets : note.attachments}
+                    editing={editing}
+                    onRemove={(fileId) => {
+                      setAssets((previous) => previous.filter((file) => file.id !== fileId));
+                      if (note.kind === 'markdown')
+                        setContent((previous) =>
+                          previous.replace(
+                            new RegExp(`!\\[[^\\]]*\\]\\(/api/files/${fileId}\\)`, 'g'),
+                            '',
+                          ),
+                        );
+                    }}
+                    onPreview={previewFile}
+                    onCreate={!editing ? (file) => props.onFileNode(file, id) : undefined}
+                  />
+                )}
+                {PARENT_KINDS.includes(note.kind) && !editing && (
+                  <section className="children-section">
+                    <div className="children-heading">
+                      <h2>子节点{note.child_count ? <span>{note.child_count}</span> : null}</h2>
+                      <button className="text-button" onClick={() => props.onAction('new', note)}>
+                        <Plus size={14} />
+                        新建
+                      </button>
+                    </div>
+                    <NodeList
+                      parent={id}
+                      refresh={props.treeRefresh}
+                      onOpen={props.onOpen}
+                      onAction={props.onAction}
+                    />
+                  </section>
+                )}
+              </article>
+            </div>
+          )}
+          {!editing && note.kind === 'markdown' && headings.length > 0 && (
+            <aside className="desktop-toc">{toc}</aside>
+          )}
         </div>
-        {!editing && note.kind === 'markdown' && headings.length > 0 && (
-          <aside className="desktop-toc">{toc}</aside>
+        {note.kind !== 'folder' && (
+          <AssistantPanel
+            node={note}
+            visible={assistantOpen && !editing}
+            enabled={!editing}
+            mode={assistantMode}
+            onModeChange={setAssistantMode}
+            selection={selection}
+            readingRoot={readingRoot}
+            onClose={() => setAssistantOpen(false)}
+            onOpen={() => setAssistantOpen(true)}
+            onChanged={props.onChanged}
+            onSettings={props.onSettings}
+            onNavigate={props.onNavigate}
+            onImage={showImage}
+          />
         )}
       </div>
       {tocOpen && (
@@ -685,9 +747,9 @@ export default function NotePane(props: Props) {
         </Suspense>
       )}
       {pdf && (
-        <Modal title={pdf.name} onClose={() => setPdf(null)} wide>
+        <Modal title={pdf.name} onClose={() => setPdf(null)} wide className="pdf-modal">
           <Suspense fallback={<Spinner />}>
-            <PdfView fileId={pdf.id} />
+            <PdfView key={pdf.id} fileId={pdf.id} />
           </Suspense>
         </Modal>
       )}
@@ -699,7 +761,7 @@ export default function NotePane(props: Props) {
           onNavigate={props.onNavigate}
           onPreviewFile={previewFile}
           onRestore={async (version) => {
-            if (!(await leave()) || !(await props.ensureEdit())) return;
+            if (!(await leave())) return;
             if (
               !(await question.confirm(
                 '恢复这个版本？',
