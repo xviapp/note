@@ -25,6 +25,8 @@
     "@codemirror/lang-markdown": "6.5.2",
     "@codemirror/view": "6.43.13",
     "@uiw/react-codemirror": "4.25.12",
+    "css-tree": "3.2.1",
+    "dompurify": "3.4.16",
     "html2canvas": "1.4.1",
     "katex": "0.16.47",
     "lucide-react": "1.49.0",
@@ -35,12 +37,14 @@
     "rehype-katex": "7.0.1",
     "rehype-sanitize": "6.0.0",
     "remark-gfm": "4.0.1",
-    "remark-math": "6.0.0"
+    "remark-math": "6.0.0",
+    "saxes": "6.0.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "5.20261001.1",
     "@playwright/test": "1.63.0",
+    "@types/css-tree": "3.2.0",
     "@types/node": "26.6.3",
     "@types/react": "19.3.0",
     "@types/react-dom": "19.3.0",

@@ -1,5 +1,32 @@
 import { AI_IMAGE_LIMIT } from '../shared/assistant';
 
+async function mathImage(element: Element, scale: number): Promise<string> {
+  const box = element.getBoundingClientRect(),
+    style = getComputedStyle(element);
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  svg.setAttribute('width', String(Math.ceil(box.width * scale)));
+  svg.setAttribute('height', String(Math.ceil(box.height * scale)));
+  svg.setAttribute('viewBox', `0 0 ${box.width} ${box.height}`);
+  const foreign = document.createElementNS(svg.namespaceURI, 'foreignObject');
+  foreign.setAttribute('width', '100%');
+  foreign.setAttribute('height', '100%');
+  const host = document.createElementNS('http://www.w3.org/1999/xhtml', 'div');
+  host.style.cssText = `margin:0;display:flex;align-items:center;width:${box.width}px;height:${box.height}px;color:${style.color};font-size:${style.fontSize};font-family:${style.fontFamily};line-height:normal;`;
+  const math = element.cloneNode(true) as Element;
+  math.setAttribute('style', 'margin:0;max-width:none;overflow:visible;');
+  host.appendChild(math);
+  foreign.appendChild(host);
+  svg.appendChild(foreign);
+  const image = new Image();
+  image.src = `data:image/svg+xml;charset=utf-8,${encodeURIComponent(new XMLSerializer().serializeToString(svg))}`;
+  await image.decode();
+  const canvas = document.createElement('canvas');
+  canvas.width = Math.ceil(box.width * scale);
+  canvas.height = Math.ceil(box.height * scale);
+  canvas.getContext('2d')!.drawImage(image, 0, 0);
+  return canvas.toDataURL('image/png');
+}
+
 export async function captureReading(root: HTMLElement): Promise<HTMLCanvasElement> {
   const rect = root.getBoundingClientRect();
   const visible = (element: Element) => {
@@ -51,6 +78,22 @@ export async function captureReading(root: HTMLElement): Promise<HTMLCanvasEleme
   }
   const { default: html2canvas } = await import('html2canvas');
   await document.fonts.ready;
+  // Rasterize only visible MathML with the browser before html2canvas paints
+  // the surrounding document. Foreign-object rendering of the entire scroll
+  // container loses clipping/scroll offsets in Chromium.
+  const formulas = await Promise.all(
+    Array.from(root.querySelectorAll('math')).map(async (math, index) => {
+      const box = math.getBoundingClientRect();
+      if (!visible(math) || !box.width || !box.height) return null;
+      return {
+        index,
+        src: await mathImage(math, scale),
+        width: box.width,
+        height: box.height,
+        block: math.getAttribute('display') === 'block',
+      };
+    }),
+  );
   return html2canvas(root, {
     width: Math.ceil(rect.width),
     height: Math.ceil(rect.height),
@@ -60,6 +103,16 @@ export async function captureReading(root: HTMLElement): Promise<HTMLCanvasEleme
     logging: false,
     useCORS: false,
     allowTaint: false,
+    onclone: (_document, clonedRoot) => {
+      const math = clonedRoot.querySelectorAll('math');
+      for (const formula of formulas) {
+        if (!formula) continue;
+        const image = _document.createElement('img');
+        image.src = formula.src;
+        image.style.cssText = `width:${formula.width}px;height:${formula.height}px;max-width:none;display:${formula.block ? 'block' : 'inline-block'};vertical-align:middle;background:transparent;`;
+        math[formula.index]?.replaceWith(image);
+      }
+    },
     ignoreElements: (element) => element.classList.contains('pdf-text-layer'),
   });
 }

@@ -32,6 +32,8 @@ import { Attachments, NodeList } from './Management';
 import { NodeMenu, NodePicker, type NodeAction } from './Tree';
 import { AssistantPanel } from './AssistantPanel';
 import type { AssistantMode } from './AssistantWindow';
+import { PaperView } from './PaperView';
+import { paperText } from '../paper';
 
 const Editor = lazy(() => import('./Editor'));
 const PdfView = lazy(() => import('./PdfView'));
@@ -97,7 +99,11 @@ export default function NotePane(props: Props) {
         readingRoot.current?.contains(value.anchorNode) &&
         readingRoot.current.contains(value.focusNode)
       ) {
-        setSelection(value.toString().trim());
+        setSelection(
+          noteRef.current?.arxiv_id && value.rangeCount
+            ? paperText(value.getRangeAt(0).cloneContents())
+            : value.toString().trim(),
+        );
       }
     };
     document.addEventListener('selectionchange', select);
@@ -235,9 +241,11 @@ export default function NotePane(props: Props) {
     if (!note || !reading.initial || editing || touched.current || !scroll.current) return;
     const area = scroll.current,
       position = reading.initial;
-    if (position.heading && note.kind === 'markdown') {
+    if (position.heading && (note.kind === 'markdown' || note.arxiv_id)) {
       const anchors = Array.from(
-        area.querySelectorAll<HTMLElement>('.read-content [id^="heading-"]'),
+        area.querySelectorAll<HTMLElement>(
+          '.read-content [id^="heading-"], .read-content [data-paper-heading]',
+        ),
       );
       const index = anchors.findIndex((element) => element.id === position.heading),
         anchor = anchors[index];
@@ -273,7 +281,9 @@ export default function NotePane(props: Props) {
       headingRatio = 0;
     const top = area.getBoundingClientRect().top;
     const anchors = Array.from(
-      area.querySelectorAll<HTMLElement>('.read-content [id^="heading-"]'),
+      area.querySelectorAll<HTMLElement>(
+        '.read-content [id^="heading-"], .read-content [data-paper-heading]',
+      ),
     );
     for (const [index, element] of anchors.entries()) {
       const anchorTop = element.getBoundingClientRect().top;
@@ -288,7 +298,7 @@ export default function NotePane(props: Props) {
       );
     }
     setActiveHeading(heading);
-    if (!touched.current || !TEXT_KINDS.includes(note.kind)) return;
+    if (!touched.current || (!TEXT_KINDS.includes(note.kind) && !note.arxiv_id)) return;
     const ratio = Math.max(
       0,
       Math.min(1, area.scrollTop / Math.max(1, area.scrollHeight - area.clientHeight)),
@@ -304,7 +314,7 @@ export default function NotePane(props: Props) {
     // competes with the requested reading position on mobile browsers.
     requestAnimationFrame(() =>
       scroll.current
-        ?.querySelector<HTMLElement>(`#${heading.id}`)
+        ?.querySelector<HTMLElement>(`#${CSS.escape(heading.id)}`)
         ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
     );
   };
@@ -454,7 +464,7 @@ export default function NotePane(props: Props) {
               <History size={18} />
             </button>
           )}
-          {!editing && note.kind === 'markdown' && headings.length > 0 && (
+          {!editing && (note.kind === 'markdown' || note.arxiv_id) && headings.length > 0 && (
             <button
               className="icon-button mobile-toc-button"
               aria-label="标题目录"
@@ -629,18 +639,32 @@ export default function NotePane(props: Props) {
                 <header className="document-heading">
                   <div className="page-eyebrow">
                     <NodeIcon kind={note.kind} size={14} />
-                    {KIND_LABELS[note.kind]}
+                    {note.arxiv_id ? 'arXiv 论文' : KIND_LABELS[note.kind]}
                   </div>
                   <h1>{note.title}</h1>
                   <div className="document-meta">
-                    更新于 {formatDate(note.updated_at)}
+                    {note.arxiv_id ? (
+                      <a
+                        className="paper-source"
+                        href={note.url!}
+                        target="_blank"
+                        rel="noopener noreferrer"
+                      >
+                        arXiv:{note.arxiv_id}
+                        <ArrowUpRight size={13} />
+                      </a>
+                    ) : (
+                      <>更新于 {formatDate(note.updated_at)}</>
+                    )}
                     {PARENT_KINDS.includes(note.kind) && !!note.child_count && (
                       <span>{note.child_count} 个子节点</span>
                     )}
                   </div>
                 </header>
                 <div className="read-content">
-                  {note.kind === 'markdown' ? (
+                  {note.arxiv_id ? (
+                    <PaperView note={note} onHeadings={onHeadings} onImage={showImage} />
+                  ) : note.kind === 'markdown' ? (
                     content ? (
                       <MarkdownView
                         content={editing ? content : note.content}
@@ -714,7 +738,7 @@ export default function NotePane(props: Props) {
               </article>
             </div>
           )}
-          {!editing && note.kind === 'markdown' && headings.length > 0 && (
+          {!editing && (note.kind === 'markdown' || note.arxiv_id) && headings.length > 0 && (
             <aside className="desktop-toc">{toc}</aside>
           )}
         </div>

@@ -19,6 +19,7 @@ import { favorite, openReading, readingState, saveReading } from './reading';
 import { aiSettings, saveAiSettings, testAiSettings } from './deepseek';
 import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
+import { importArxiv } from './arxiv';
 
 export default {
   async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
@@ -69,6 +70,11 @@ export default {
       if (path === '/api/nodes' && method === 'POST') {
         return json(await createNode(env, await body(request), operationKey(request)), 201);
       }
+      if (path === '/api/import/arxiv' && method === 'POST')
+        return json(
+          await importArxiv(env, await body(request), operationKey(request), request.signal),
+          201,
+        );
       if (path === '/api/files' && method === 'POST') {
         const f = await uploadFile(env, request);
         return json({ id: f.id, name: f.name, mime: f.mime, size: f.size }, 201);

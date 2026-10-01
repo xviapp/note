@@ -451,9 +451,9 @@ describe('private library behavior', () => {
       headers: { range: 'bytes=3-8' },
     });
     expect(anonymous.status).toBe(401);
-    const data = '<svg onload="alert(1)"></svg>';
+    const data = '<html><body onload="alert(1)">Untrusted HTML</body></html>';
     const response = await SELF.fetch(
-      `https://notes.test/api/files?name=unsafe.svg&size=${data.length}`,
+      `https://notes.test/api/files?name=unsafe.html&size=${data.length}`,
       {
         method: 'POST',
         headers: { cookie, origin: 'https://notes.test' },

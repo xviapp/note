@@ -565,7 +565,7 @@ export function AssistantPanel(props: Props) {
               type="file"
               hidden
               aria-label="选择聊天附件"
-              accept=".md,.markdown,.txt,.pdf,.png,.jpg,.jpeg,.gif,.webp,.avif"
+              accept=".md,.markdown,.txt,.pdf,.png,.jpg,.jpeg,.gif,.webp,.avif,.svg"
               onChange={(event) => {
                 const file = event.target.files?.[0];
                 if (file) setFileSource({ type: 'local', file });

@@ -17,6 +17,7 @@ export interface NoteNode {
   title: string;
   position: number;
   url: string | null;
+  arxiv_id?: string | null;
   file_blob_id: string | null;
   current_version_id: string | null;
   revision: number;

@@ -22,7 +22,7 @@ const info = (file: BlobRow): FileInfo => ({
 function supportsSource(file: BlobRow): boolean {
   return (
     file.mime === 'application/pdf' ||
-    /^image\/(png|jpeg|gif|webp|avif)$/.test(file.mime) ||
+    /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(file.mime) ||
     (['application/octet-stream', 'text/plain; charset=utf-8'].includes(file.mime) &&
       /\.(md|markdown|txt)$/i.test(file.name) &&
       file.size <= 1_048_576)

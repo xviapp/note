@@ -8,6 +8,7 @@ import {
 } from '../shared/chat-files';
 import type { FileInfo, NoteDetail } from '../shared/types';
 import { fileUrl, parse } from './api';
+import { paperParts } from './paper';
 
 export type AttachmentSource =
   | { type: 'note'; note: NoteDetail }
@@ -47,8 +48,8 @@ export function sourceDescription(source: AttachmentSource): {
   const kind =
     mime === 'application/pdf' || /\.pdf$/i.test(file.name)
       ? 'pdf'
-      : /^image\/(png|jpeg|gif|webp|avif)$/.test(mime) ||
-          /\.(png|jpe?g|gif|webp|avif)$/i.test(file.name)
+      : /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(mime) ||
+          /\.(png|jpe?g|gif|webp|avif|svg)$/i.test(file.name)
         ? 'image'
         : /\.(md|markdown)$/i.test(file.name)
           ? 'markdown'
@@ -91,7 +92,24 @@ export async function prepareBasicFile(
   const result: PreparedChatFile = { ...meta, id: crypto.randomUUID(), text: '', images: [] };
   if (meta.kind === 'pdf') throw new Error('请先选择 PDF 页码。');
   if (meta.kind === 'image') {
-    const bitmap = await createImageBitmap(await sourceBlob(source, signal));
+    const blob = await sourceBlob(source, signal);
+    let bitmap: ImageBitmap | HTMLImageElement;
+    let svgUrl: string | undefined;
+    if (blob.type.split(';')[0] === 'image/svg+xml' || /\.svg$/i.test(meta.name)) {
+      const { sanitizeSvg, SVG_LIMIT, SVG_MIME } = await import('../shared/svg');
+      if (blob.size > SVG_LIMIT) throw new Error('SVG 图片最多 10 MiB。');
+      const clean = sanitizeSvg(new Uint8Array(await blob.arrayBuffer()));
+      svgUrl = URL.createObjectURL(new Blob([clean], { type: SVG_MIME }));
+      const image = new Image();
+      image.src = svgUrl;
+      try {
+        await image.decode();
+      } catch {
+        URL.revokeObjectURL(svgUrl);
+        throw new Error('SVG 图片无法绘制，请检查文件内容。');
+      }
+      bitmap = image;
+    } else bitmap = await createImageBitmap(blob);
     try {
       signal.throwIfAborted();
       const ratio = Math.min(1, 1800 / Math.max(bitmap.width, bitmap.height));
@@ -105,12 +123,14 @@ export async function prepareBasicFile(
       result.images.push({ data: canvasImage(canvas) });
       canvas.width = canvas.height = 0;
     } finally {
-      bitmap.close();
+      if (bitmap instanceof ImageBitmap) bitmap.close();
+      if (svgUrl) URL.revokeObjectURL(svgUrl);
     }
   } else {
     if (source.type === 'note')
-      result.text =
-        source.note.kind === 'link'
+      result.text = source.note.arxiv_id
+        ? paperParts(source.note)[0].text
+        : source.note.kind === 'link'
           ? `${source.note.title}\n${source.note.url ?? ''}`
           : source.note.content;
     else {

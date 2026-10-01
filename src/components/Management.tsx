@@ -48,7 +48,7 @@ export function NodeForm({
   onClose: () => void;
   onSaved: (node: NoteNode) => void;
 }) {
-  const [kind, setKind] = useState<NodeKind>(
+  const [kind, setKind] = useState<NodeKind | 'arxiv'>(
     node?.kind ||
       (existingFile ? (existingFile.mime === 'application/pdf' ? 'pdf' : 'image') : 'markdown'),
   );
@@ -77,11 +77,11 @@ export function NodeForm({
       const result = node
         ? await api<NoteNode>(`/api/nodes/${node.id}`, 'PATCH', {
             title,
-            ...(kind === 'link' ? { url } : {}),
+            ...(kind === 'link' && !node.arxiv_id ? { url } : {}),
             revision: node.revision,
           })
         : await api<NoteNode>(
-            '/api/nodes',
+            kind === 'arxiv' ? '/api/import/arxiv' : '/api/nodes',
             'POST',
             { kind, title, parentId: parent, url, fileId: uploaded.current?.id, content: '' },
             key.current,
@@ -102,7 +102,7 @@ export function NodeForm({
         {!node && !existingFile && (
           <fieldset className="kind-choices">
             <legend>内容类型</legend>
-            {Object.entries(KIND_LABELS).map(([value, label]) => (
+            {Object.entries({ ...KIND_LABELS, arxiv: 'arXiv 论文' }).map(([value, label]) => (
               <label key={value} className={kind === value ? 'selected' : ''}>
                 <input
                   type="radio"
@@ -110,9 +110,9 @@ export function NodeForm({
                   value={value}
                   checked={kind === value}
                   disabled={busy || !!uploaded.current}
-                  onChange={() => setKind(value as NodeKind)}
+                  onChange={() => setKind(value as NodeKind | 'arxiv')}
                 />
-                <NodeIcon kind={value as NodeKind} />
+                <NodeIcon kind={value === 'arxiv' ? 'link' : (value as NodeKind)} />
                 {label}
               </label>
             ))}
@@ -122,22 +122,25 @@ export function NodeForm({
           标题
           <input
             autoFocus
-            required
+            required={kind !== 'arxiv'}
+            placeholder={kind === 'arxiv' ? '留空使用论文标题' : undefined}
             maxLength={200}
             value={title}
             onChange={(e) => setTitle(e.target.value)}
             disabled={busy}
           />
         </label>
-        {kind === 'link' && (
+        {(kind === 'link' || kind === 'arxiv') && !node?.arxiv_id && (
           <label>
-            网页地址
+            {kind === 'arxiv' ? 'arXiv 论文地址' : '网页地址'}
             <input
               type="url"
               required
               value={url}
               onChange={(e) => setUrl(e.target.value)}
-              placeholder="https://example.com"
+              placeholder={
+                kind === 'arxiv' ? 'https://arxiv.org/html/2503.01800v1' : 'https://example.com'
+              }
               disabled={busy}
             />
           </label>
@@ -151,7 +154,7 @@ export function NodeForm({
               accept={
                 kind === 'pdf'
                   ? 'application/pdf'
-                  : 'image/png,image/jpeg,image/gif,image/webp,image/avif'
+                  : 'image/png,image/jpeg,image/gif,image/webp,image/avif,image/svg+xml'
               }
               disabled={busy || !!uploaded.current}
               onChange={(e) => {
@@ -173,7 +176,15 @@ export function NodeForm({
             取消
           </button>
           <button className="button primary" disabled={busy}>
-            {busy ? '正在保存…' : node ? '保存信息' : '创建'}
+            {busy
+              ? kind === 'arxiv'
+                ? '正在导入论文和图片…'
+                : '正在保存…'
+              : node
+                ? '保存信息'
+                : kind === 'arxiv'
+                  ? '导入论文'
+                  : '创建'}
           </button>
         </div>
       </form>
@@ -737,11 +748,7 @@ export function Attachments({
               <FolderOpen size={16} />
             </button>
           )}
-          <a
-            className="icon-button"
-            aria-label={`下载 ${file.name}`}
-            href={fileUrl(file.id, true)}
-          >
+          <a className="icon-button" aria-label={`下载 ${file.name}`} href={fileUrl(file.id, true)}>
             <Download size={16} />
           </a>
           {editing && (

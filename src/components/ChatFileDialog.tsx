@@ -1,6 +1,11 @@
 import { useEffect, useRef, useState } from 'react';
 import type { PDFDocumentLoadingTask, PDFDocumentProxy } from 'pdfjs-dist';
-import { CHAT_PDF_PAGE_LIMIT, parsePageRange, pageLabel } from '../../shared/chat-files';
+import {
+  CHAT_PDF_PAGE_LIMIT,
+  CHAT_FILE_TEXT_LIMIT,
+  parsePageRange,
+  pageLabel,
+} from '../../shared/chat-files';
 import { fileUrl } from '../api';
 import {
   prepareBasicFile,
@@ -9,6 +14,7 @@ import {
   type PreparedChatFile,
 } from '../chat-files';
 import { Modal, Spinner } from './Primitives';
+import { paperParts, type PaperPart } from '../paper';
 
 export function ChatFileDialog({
   source,
@@ -27,6 +33,8 @@ export function ChatFileDialog({
   const [range, setRange] = useState(''),
     [mode, setMode] = useState<'auto' | 'images'>('auto');
   const [progress, setProgress] = useState('');
+  const [parts, setParts] = useState<PaperPart[]>([]),
+    [partId, setPartId] = useState('');
   const abort = useRef<AbortController | null>(null);
   const meta = useRef<ReturnType<typeof sourceDescription> | null>(null);
   useEffect(() => {
@@ -37,7 +45,19 @@ export function ChatFileDialog({
       try {
         const description = sourceDescription(source);
         meta.current = description;
-        if (description.kind === 'pdf') {
+        if (source.type === 'note' && source.note.arxiv_id) {
+          const choices = paperParts(source.note);
+          setParts(choices);
+          if (choices[0].text.length <= CHAT_FILE_TEXT_LIMIT) {
+            setPartId('all');
+            setPrepared({
+              ...description,
+              id: crypto.randomUUID(),
+              text: choices[0].text,
+              images: [],
+            });
+          }
+        } else if (description.kind === 'pdf') {
           const { openPdf } = await import('../pdf-document');
           const input =
             source.type === 'local'
@@ -115,6 +135,49 @@ export function ChatFileDialog({
       ) : (
         <>
           <p className="chat-file-name">{meta.current?.name}</p>
+          {parts.length > 0 && (
+            <div className="form-stack">
+              <label>
+                论文范围
+                <select
+                  value={partId}
+                  onChange={(event) => {
+                    setPartId(event.target.value);
+                    const part = parts.find((value) => value.id === event.target.value);
+                    setPrepared(
+                      part
+                        ? {
+                            ...meta.current!,
+                            name: `${meta.current!.name}${part.id === 'all' ? '' : ` · ${part.title}`}`.slice(
+                              0,
+                              200,
+                            ),
+                            id: crypto.randomUUID(),
+                            text: part.text,
+                            images: [],
+                          }
+                        : null,
+                    );
+                  }}
+                >
+                  <option value="">选择全文或章节</option>
+                  {parts.map((part) => (
+                    <option
+                      key={part.id}
+                      value={part.id}
+                      disabled={part.text.length > CHAT_FILE_TEXT_LIMIT}
+                    >
+                      {part.title} · {part.text.length.toLocaleString()} 字符
+                      {part.text.length > CHAT_FILE_TEXT_LIMIT ? '（超过上限）' : ''}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <p className="field-hint">
+                公式以 LaTeX 附上；每次最多 60,000 字符。图片请框选截图，或引用图注提问。
+              </p>
+            </div>
+          )}
           {pdf && (
             <div className="form-stack">
               <label>

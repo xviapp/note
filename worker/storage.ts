@@ -1,6 +1,7 @@
 import type { BlobRow, Env } from './types';
 import { AppError, idValue } from './http';
 import type { StorageInfo } from '../shared/types';
+import { sanitizeSvg, SVG_LIMIT, SVG_MIME } from '../shared/svg';
 
 export const MAX_FILE_BYTES = 50_000_000;
 export const MAX_TEXT_BYTES = 1_048_576;
@@ -58,10 +59,36 @@ async function abandon(env: Env, file: BlobRow): Promise<void> {
   }
 }
 export async function storeText(env: Env, content: string): Promise<BlobRow> {
+  return storeBody(env, content, 'content.txt', 'text/plain; charset=utf-8', MAX_TEXT_BYTES);
+}
+export async function storePaper(env: Env, content: string): Promise<BlobRow> {
+  return storeBody(env, content, 'paper.html', 'text/html; charset=utf-8', 8 * 1_048_576);
+}
+export async function storeSvg(env: Env, bytes: Uint8Array, name: string): Promise<BlobRow> {
+  let content: string;
+  try {
+    content = sanitizeSvg(bytes);
+  } catch (error) {
+    throw new AppError(400, (error as Error).message);
+  }
+  return storeBody(env, content, name, SVG_MIME, SVG_LIMIT);
+}
+async function storeBody(
+  env: Env,
+  content: string,
+  name: string,
+  mime: string,
+  limit: number,
+): Promise<BlobRow> {
   const bytes = new TextEncoder().encode(content);
-  if (bytes.byteLength > MAX_TEXT_BYTES)
-    throw new AppError(413, '单篇正文最多 1 MiB，请拆分为多个子笔记。');
-  const file = await reserve(env, 'content.txt', 'text/plain; charset=utf-8', bytes.byteLength);
+  if (bytes.byteLength > limit)
+    throw new AppError(
+      413,
+      name === 'paper.html'
+        ? '论文 HTML 超过 8 MiB，无法导入。'
+        : '单篇正文最多 1 MiB，请拆分为多个子笔记。',
+    );
+  const file = await reserve(env, name, mime, bytes.byteLength);
   try {
     await env.FILES.put(file.object_key, bytes, { httpMetadata: { contentType: file.mime } });
     return await finish(env, file);
@@ -113,6 +140,35 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
     signature.set(chunk.subarray(0, take), offset);
     offset += take;
     if (offset === signature.length) break;
+  }
+  if (
+    /\.svg$/i.test(name) ||
+    request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === SVG_MIME ||
+    /^\s*<svg[\s>]/i.test(new TextDecoder().decode(signature))
+  ) {
+    let received = prefixSize;
+    try {
+      if (size > SVG_LIMIT) throw new AppError(413, 'SVG 图片最多 10 MiB。');
+      if (received > size) throw new AppError(400, 'SVG 上传大小与声明不符。');
+      while (true) {
+        const part = await reader.read();
+        if (part.done) break;
+        received += part.value.byteLength;
+        if (received > size) throw new AppError(400, 'SVG 上传大小与声明不符。');
+        prefix.push(part.value);
+      }
+      if (received !== size) throw new AppError(400, 'SVG 上传未完成，请重试。');
+    } finally {
+      await reader.cancel().catch(() => {});
+      reader.releaseLock();
+    }
+    const bytes = new Uint8Array(received);
+    let position = 0;
+    for (const chunk of prefix) {
+      bytes.set(chunk, position);
+      position += chunk.byteLength;
+    }
+    return storeSvg(env, bytes, name);
   }
   const mime = detectMime(signature);
   let file: BlobRow;
@@ -188,7 +244,7 @@ export async function serveFile(env: Env, request: Request, id: string): Promise
       : await env.FILES.get(file.object_key, partial ? { range: partial } : undefined);
   if (!object) throw new AppError(404, '文件不存在。');
   const inline =
-    file.mime === 'application/pdf' || /^image\/(png|jpeg|gif|webp|avif)$/.test(file.mime);
+    file.mime === 'application/pdf' || /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(file.mime);
   const download = new URL(request.url).searchParams.has('download');
   const headers = new Headers({
     'content-type': file.mime,
@@ -197,7 +253,10 @@ export async function serveFile(env: Env, request: Request, id: string): Promise
     'content-disposition': `${inline && !download ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.name)}`,
     'accept-ranges': 'bytes',
     etag: object.httpEtag,
-    'content-security-policy': "default-src 'none'; sandbox",
+    'content-security-policy':
+      file.mime === SVG_MIME
+        ? "default-src 'none'; style-src 'unsafe-inline'; img-src data:; sandbox"
+        : "default-src 'none'; sandbox",
   });
   if (partial) {
     headers.set(

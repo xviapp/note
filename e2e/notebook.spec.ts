@@ -1,6 +1,8 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page, type Locator } from '@playwright/test';
 import { preparePassword } from '../shared/password';
 import type { ChatHistory, ChatMessage, ChatInput } from '../shared/assistant';
+import { paperHtml, paperPng } from '../tests/fixtures/arxiv';
+import { hostileSvg } from '../tests/fixtures/svg';
 
 const password = 'Note2026';
 const token = 'e2e-test-only-setup-token-never-deploy-0001';
@@ -915,6 +917,277 @@ async function assistantSeed(page: Page, data: Record<string, unknown>) {
   ).json();
   return { node };
 }
+
+async function paperImportFixture(page: Page, source = paperHtml, svg?: string) {
+  const headers = { origin: 'http://127.0.0.1:8799' };
+  const bytes = svg ? Buffer.from(svg) : Buffer.from(paperPng, 'base64');
+  const image = await (
+    await page.request.post(`/api/files?name=figure.${svg ? 'svg' : 'png'}&size=${bytes.length}`, {
+      headers,
+      data: bytes,
+    })
+  ).json();
+  let paper: any;
+  await page.route('**/api/import/arxiv', async (route) => {
+    const input = route.request().postDataJSON();
+    const response = await page.request.post('/api/nodes', {
+      headers,
+      data: {
+        kind: 'link',
+        title: input.title || 'A paper & its equations',
+        url: 'https://arxiv.org/html/2503.01800v1',
+        parentId: input.parentId,
+      },
+    });
+    const node = await response.json();
+    const detail = await (await page.request.get(`/api/nodes/${node.id}`)).json();
+    // The Worker suite tests extraction/download/retention. Here the transport
+    // fixture exercises the importer UI and treats saved HTML as untrusted.
+    const body = source.match(/<article[\s\S]*<\/article>/)![0];
+    paper = {
+      ...detail,
+      arxiv_id: '2503.01800v1',
+      content: body.replaceAll('2503.01800v1/figure.png', `/api/files/${image.id}`),
+      attachments: [image],
+    };
+    await page.route(`**/api/nodes/${node.id}`, (request) =>
+      request.request().method() === 'GET' ? request.fulfill({ json: paper }) : request.fallback(),
+    );
+    await route.fulfill({ status: 201, json: paper });
+  });
+  return {
+    get paper() {
+      return paper;
+    },
+  };
+}
+
+async function bluePixels(image: Locator): Promise<number> {
+  return image.evaluate(async (element) => {
+    const image = element as HTMLImageElement;
+    await image.decode();
+    const canvas = document.createElement('canvas');
+    canvas.width = image.naturalWidth;
+    canvas.height = image.naturalHeight;
+    const context = canvas.getContext('2d')!;
+    context.drawImage(image, 0, 0);
+    const pixels = context.getImageData(0, 0, canvas.width, canvas.height).data;
+    let blue = 0;
+    for (let i = 0; i < pixels.length; i += 4)
+      if (pixels[i] < 90 && pixels[i + 2] > 220 && pixels[i + 3] > 200) blue++;
+    return blue;
+  });
+}
+
+test('SVG paper diagrams remain vector images and appear in screenshots and AI attachments', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers: { origin: 'http://127.0.0.1:8799' },
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
+  const fixture = await paperImportFixture(page, paperHtml, hostileSvg);
+  const chat = await assistantFixture(page);
+  const external: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('svg-tracker.invalid')) external.push(request.url());
+  });
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  const form = page.getByRole('dialog', { name: '新建节点' });
+  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await form
+    .getByLabel('arXiv 论文地址', { exact: true })
+    .fill('https://arxiv.org/html/2503.01800v1');
+  await form.getByRole('button', { name: '导入论文', exact: true }).click();
+  const diagram = page.locator('.paper-body img');
+  await expect(diagram).toHaveCount(1);
+  expect(fixture.paper.attachments[0].mime).toBe('image/svg+xml');
+  await expect.poll(() => bluePixels(diagram)).toBeGreaterThan(1000);
+  await diagram.click();
+  const zoom = page.getByRole('dialog', { name: 'Paper diagram', exact: true });
+  await expect(zoom).toBeVisible();
+  await zoom.getByRole('button', { name: '放大图片', exact: true }).click();
+  await expect(zoom.locator('.image-stage img')).toHaveCSS('transform', /matrix\(1.25/);
+  expect(await bluePixels(zoom.locator('img'))).toBeGreaterThan(1000);
+  await page.screenshot({ path: `test-results/svg-zoom-${info.project.name}.png` });
+  await zoom.getByRole('button', { name: '关闭', exact: true }).click();
+  await diagram.evaluate((image) => image.scrollIntoView({ block: 'center', behavior: 'instant' }));
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  await page.getByRole('button', { name: '框选截图', exact: true }).click();
+  const crop = page.getByRole('dialog', { name: '框选截图', exact: true });
+  await expect(crop).toBeVisible();
+  expect(await bluePixels(crop.getByAltText('当前阅读区截图'))).toBeGreaterThan(1000);
+  await page.screenshot({ path: `test-results/svg-capture-${info.project.name}.png` });
+  await crop.getByRole('button', { name: '选择整个阅读区', exact: true }).click();
+  await crop.getByRole('button', { name: '采用截图', exact: true }).click();
+  expect(await bluePixels(page.getByAltText('待发送截图'))).toBeGreaterThan(1000);
+  await page
+    .getByLabel('选择聊天附件', { exact: true })
+    .setInputFiles({
+      name: 'plot.svg',
+      mimeType: 'image/svg+xml',
+      buffer: Buffer.from(hostileSvg),
+    });
+  const file = page.getByRole('dialog', { name: '附上文件', exact: true });
+  await expect(file.getByAltText('文件图片预览')).toBeVisible();
+  expect(await bluePixels(file.getByAltText('文件图片预览'))).toBeGreaterThan(1000);
+  await file.getByRole('button', { name: '附到对话', exact: true }).click();
+  await page.getByRole('textbox', { name: '发给助手的问题' }).fill('解释 SVG 图中的曲线。');
+  await page.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(page.locator('.chat-assistant')).toContainText('结构要点');
+  expect(chat.sent[0].image).toMatch(/^data:image\/jpeg;base64,/);
+  const attached = chat.sent[0].files![0];
+  expect(attached.kind).toBe('image');
+  expect(
+    (await page.request.get(`/api/files/${attached.sourceId}`)).headers()['content-type'],
+  ).toBe('image/svg+xml');
+  expect(
+    (await page.request.get(`/api/files/${attached.images[0].blobId}`)).headers()['content-type'],
+  ).toBe('image/jpeg');
+  expect(external).toEqual([]);
+  expect(await page.evaluate(() => (window as any).svgInjected)).toBeUndefined();
+});
+
+test('imports an arXiv paper for reading, MathML, citations, saved position and its file assistant', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers: { origin: 'http://127.0.0.1:8799' },
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
+  const attacks = `<p class="app-header" style="position:fixed;inset:0" onclick="window.paperInjected=true">Untrusted styled text.</p><img src="https://paper-tracker.invalid/pixel.png" onerror="window.paperInjected=true"><a href="javascript:window.paperInjected=true">Bad link</a><math><annotation-xml encoding="text/html"><img src="x" onerror="window.paperInjected=true"></annotation-xml></math>`;
+  const fixture = await paperImportFixture(
+    page,
+    paperHtml.replace('</article>', attacks + '</article>'),
+  );
+  const chat = await assistantFixture(page);
+  const remoteImages: string[] = [];
+  page.on('request', (request) => {
+    if (request.url().includes('paper-tracker.invalid')) remoteImages.push(request.url());
+  });
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  const form = page.getByRole('dialog', { name: '新建节点' });
+  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await form
+    .getByLabel('arXiv 论文地址', { exact: true })
+    .fill('https://arxiv.org/html/2503.01800v1');
+  await form.getByRole('button', { name: '导入论文', exact: true }).click();
+  await expect(
+    page.getByRole('heading', { name: 'A paper & its equations', exact: true }),
+  ).toHaveCount(1);
+  const paper = page.locator('.paper-body');
+  await expect(paper.locator('math').first()).toBeVisible();
+  await expect(paper).toContainText('Test Author');
+  await expect(
+    paper.locator('script,style,iframe,nav,form,[onclick],.app-header,annotation-xml'),
+  ).toHaveCount(0);
+  expect(remoteImages).toHaveLength(0);
+  expect(await page.evaluate(() => (window as any).paperInjected)).toBeUndefined();
+  await expect(page.getByRole('button', { name: '编辑正文', exact: true })).toHaveCount(0);
+  await expect(page.locator('.app-header')).toHaveCount(0);
+  await expect(page.locator('iframe,embed,object')).toHaveCount(0);
+  const href = page.url();
+  await paper.getByRole('link', { name: 'Equation 1', exact: true }).click();
+  await expect
+    .poll(() => page.locator('.note-scroll').evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(500);
+  expect(page.url()).toBe(href);
+  // Reading updates flush on page hide, navigation, or the 30-second timer.
+  await page.evaluate(() => window.dispatchEvent(new Event('pagehide')));
+  await expect
+    .poll(
+      async () =>
+        (await (await page.request.get(`/api/nodes/${fixture.paper.id}/reading`)).json()).position
+          .ratio || 0,
+    )
+    .toBeGreaterThan(0);
+  const position = await page.locator('.note-scroll').evaluate((el) => el.scrollTop);
+  await page.reload();
+  await expect(paper.locator('math').first()).toBeAttached();
+  await expect
+    .poll(() => page.locator('.note-scroll').evaluate((el) => el.scrollTop))
+    .toBeGreaterThan(position * 0.8);
+  if (info.project.name === 'mobile')
+    await page.getByRole('button', { name: '标题目录', exact: true }).click();
+  const toc =
+    info.project.name === 'mobile'
+      ? page.getByRole('dialog', { name: '标题目录', exact: true })
+      : page.locator('.desktop-toc');
+  await toc.getByRole('button', { name: '1 Introduction', exact: true }).click();
+  await paper.getByRole('button', { name: '放大图片：Paper diagram', exact: true }).click();
+  await expect(page.getByRole('dialog', { name: 'Paper diagram', exact: true })).toBeVisible();
+  await page
+    .getByRole('dialog', { name: 'Paper diagram', exact: true })
+    .getByRole('button', { name: '关闭', exact: true })
+    .click();
+  await paper
+    .locator('math')
+    .first()
+    .evaluate((math) => {
+      const range = document.createRange();
+      range.selectNode(math);
+      const selection = getSelection()!;
+      selection.removeAllRanges();
+      selection.addRange(range);
+    });
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  await page.getByRole('button', { name: '引用选中文字', exact: true }).click();
+  await expect(page.locator('.context-quote')).toContainText('$E=mc^2$');
+  await cropInBrowser(page, info.project.name === 'mobile');
+  await page.getByRole('button', { name: '附上当前文件', exact: true }).click();
+  const file = page.getByRole('dialog', { name: '附上文件', exact: true });
+  await file.getByText('查看将发送的文字', { exact: true }).click();
+  await expect(file.locator('pre')).toContainText('\\int_0^1 x^2 dx=\\frac{1}{3}');
+  await file.getByRole('button', { name: '附到对话', exact: true }).click();
+  await page.getByRole('textbox', { name: '发给助手的问题' }).fill('解释这篇论文的公式。');
+  await page.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(page.locator('.chat-assistant')).toContainText('结构要点');
+  expect(chat.sent[0].quote).toContain('$E=mc^2$');
+  expect(chat.sent[0].files![0].text).toContain('arXiv:2503.01800v1');
+  await page.getByRole('button', { name: '保存为子笔记', exact: true }).click();
+  await expect(page.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '关闭助手', exact: true }).click();
+  for (const theme of ['light', 'dark', 'starry']) {
+    await selectTheme(page, theme);
+    await page.screenshot({ path: `test-results/arxiv-${theme}-${info.project.name}.png` });
+  }
+});
+
+test('long arXiv papers attach a chosen section without silently truncating the full text', async ({
+  page,
+}) => {
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers: { origin: 'http://127.0.0.1:8799' },
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
+  await paperImportFixture(
+    page,
+    paperHtml.replace('The proof continues', 'Long text '.repeat(6100) + 'The proof continues'),
+  );
+  await assistantFixture(page);
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  const form = page.getByRole('dialog', { name: '新建节点' });
+  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await form
+    .getByLabel('arXiv 论文地址', { exact: true })
+    .fill('https://arxiv.org/abs/2503.01800v1');
+  await form.getByRole('button', { name: '导入论文', exact: true }).click();
+  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  await page.getByRole('button', { name: '附上当前文件', exact: true }).click();
+  const file = page.getByRole('dialog', { name: '附上文件', exact: true });
+  const range = file.getByRole('combobox', { name: '论文范围', exact: true });
+  await expect(range).toHaveValue('');
+  await expect(range.locator('option[value="all"]')).toHaveJSProperty('disabled', true);
+  await range.selectOption('section-0');
+  await file.getByText('查看将发送的文字', { exact: true }).click();
+  await expect(file.locator('pre')).toContainText('1 Introduction');
+  await expect(file.locator('pre')).not.toContainText('The proof continues');
+  await expect(file.getByRole('button', { name: '附到对话', exact: true })).toBeEnabled();
+});
+
 async function cropInBrowser(page: Page, mobile: boolean) {
   await page.getByRole('button', { name: '框选截图', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '框选截图', exact: true });

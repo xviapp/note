@@ -2,7 +2,7 @@ import type { Env } from './types';
 import type { FileInfo, NoteDetail, NoteNode, NodeKind, VersionInfo } from '../shared/types';
 import { PARENT_KINDS, TEXT_KINDS } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
-import { discardFile, getBlob, readText, storeText } from './storage';
+import { discardFile, getBlob, readText, storePaper, storeText } from './storage';
 
 const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite`;
@@ -83,7 +83,11 @@ export function operationKey(request: Request): string {
   const key = request.headers.get('x-idempotency-key');
   return key ? idValue(key) : crypto.randomUUID();
 }
-async function priorOperation(env: Env, key: string, operation: string): Promise<NoteNode | null> {
+export async function priorOperation(
+  env: Env,
+  key: string,
+  operation: string,
+): Promise<NoteNode | null> {
   const row = await env.DB.prepare('SELECT node_id,operation FROM idempotency WHERE key=?')
     .bind(key)
     .first<{ node_id: string; operation: string }>();
@@ -116,8 +120,10 @@ export async function createNode(
   env: Env,
   data: Record<string, unknown>,
   key: string,
+  paper?: { arxivId: string; html: string; assets: string[] },
 ): Promise<NoteNode> {
-  const previous = await priorOperation(env, key, 'create');
+  const operation = paper ? 'import-arxiv' : 'create';
+  const previous = await priorOperation(env, key, operation);
   if (previous) return previous;
   const title = textValue(data.title, '标题').trim(),
     kind = data.kind as NodeKind;
@@ -138,19 +144,39 @@ export async function createNode(
   }
   const isText = TEXT_KINDS.includes(kind),
     content = isText ? textValue(data.content ?? '', '正文', 1_048_576, true) : '';
-  const assets = isText ? attachmentIds(content, data.attachments ?? []) : [];
-  const blob = isText ? await storeText(env, content) : null,
+  const assets = paper
+    ? paper.assets
+    : isText
+      ? attachmentIds(content, data.attachments ?? [])
+      : [];
+  const blob = paper
+      ? await storePaper(env, paper.html)
+      : isText
+        ? await storeText(env, content)
+        : null,
     id = crypto.randomUUID(),
     now = Date.now(),
     version = crypto.randomUUID();
   const statements = [
     env.DB.prepare(
       'INSERT INTO idempotency(key,operation,node_id,result_revision,created_at) VALUES(?,?,?,?,?)',
-    ).bind(key, 'create', id, 1, now),
+    ).bind(key, operation, id, 1, now),
     env.DB.prepare(
-      `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at)
-      VALUES(?,?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?),?,?,?,?,?)`,
-    ).bind(id, parent, kind, title, parent, url, fileId, isText ? 0 : 1, now, now),
+      `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at,arxiv_id)
+      VALUES(?,?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?),?,?,?,?,?,?)`,
+    ).bind(
+      id,
+      parent,
+      kind,
+      title,
+      parent,
+      url,
+      fileId,
+      blob ? 0 : 1,
+      now,
+      now,
+      paper?.arxivId ?? null,
+    ),
   ];
   if (blob)
     statements.push(
@@ -169,7 +195,7 @@ export async function createNode(
     await env.DB.batch(statements);
   } catch (error) {
     if (blob) await discardFile(env, blob.id).catch(() => {});
-    const prior = await priorOperation(env, key, 'create');
+    const prior = await priorOperation(env, key, operation);
     if (prior) return prior;
     throw error;
   }
@@ -242,6 +268,8 @@ export async function updateNode(
         ? null
         : idValue(data.parentId);
   const url = data.url === undefined ? node.url : node.kind === 'link' ? validUrl(data.url) : null;
+  if (node.arxiv_id && url !== node.url)
+    throw new AppError(400, '已保存论文的原文地址不能修改，请重新导入其他论文。');
   const position = data.position === undefined ? Date.now() : data.position;
   if (typeof position !== 'number' || !Number.isFinite(position))
     throw new AppError(400, '节点顺序不正确。');
