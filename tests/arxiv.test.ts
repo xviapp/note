@@ -133,6 +133,16 @@ describe('arXiv paper import', () => {
     });
     expect(String(fetch.mock.calls[0][0])).toBe('https://arxiv.org/html/2503.01800');
     const detail = await ok<NoteDetail>(`/api/nodes/${imported.id}`);
+    expect(detail.arxiv_id).toBe(imported.arxiv_id);
+    expect((await ok(`/api/nodes?parent=${parent.id}`)).nodes).toEqual([
+      expect.objectContaining({ id: imported.id, arxiv_id: imported.arxiv_id }),
+    ]);
+    await ok(`/api/nodes/${imported.id}/favorite`, 'PUT', { enabled: true });
+    await ok(`/api/nodes/${imported.id}/open`, 'POST', {});
+    for (const view of ['favorites', 'recent'])
+      expect((await ok(`/api/nodes?view=${view}`)).nodes).toEqual([
+        expect.objectContaining({ id: imported.id, arxiv_id: imported.arxiv_id }),
+      ]);
     expect(detail.content).toContain('alttext="E=mc^2"');
     expect(detail.content).toContain('href="#S2.E1"');
     expect(detail.content).toContain('CC BY 4.0');

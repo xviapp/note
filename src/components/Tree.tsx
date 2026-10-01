@@ -25,7 +25,7 @@ export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreePro
           <button onClick={() => onAction('new', node)}>新建子节点</button>
         )}
         <button onClick={() => onAction('rename', node)}>
-          重命名{node.kind === 'link' ? ' / 修改链接' : ''}
+          重命名{node.kind === 'link' && !node.arxiv_id ? ' / 修改链接' : ''}
         </button>
         <button onClick={() => onAction('move', node)}>移动到…</button>
         <button className="danger-text" onClick={() => onAction('delete', node)}>
@@ -137,7 +137,7 @@ function Branch({
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
               <button className="tree-label" onClick={() => props.onOpen(node)} title={node.title}>
-                <NodeIcon kind={node.kind} />
+                <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} />
                 <span>{node.title}</span>
               </button>
               <NodeMenu node={node} onAction={props.onAction} />
@@ -239,7 +239,7 @@ export function NodePicker({
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
             <button onClick={() => onSelect(node.id, node.title)}>
-              <NodeIcon kind={node.kind} />
+              <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} />
               <span>{node.title}</span>
             </button>
             {PARENT_KINDS.includes(node.kind) && (

@@ -260,7 +260,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     if (await leaveGuard.current()) setRoute(id || null);
   };
   const openNode = (node: NoteNode) => {
-    if (node.kind === 'link' && node.url) {
+    if (node.kind === 'link' && !node.arxiv_id && node.url) {
       window.open(node.url, '_blank', 'noopener,noreferrer');
       void api(`/api/nodes/${node.id}/open`, 'POST', {}).then(changed).catch(report);
       setMobileOpen(false);

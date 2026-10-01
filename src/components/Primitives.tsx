@@ -2,7 +2,7 @@ import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
 import { X, FileText, Folder, File, Image, Link, LoaderCircle, BookOpen } from 'lucide-react';
 import type { NodeKind } from '../../shared/types';
 
-export function NodeIcon({ kind, size = 17 }: { kind: NodeKind; size?: number }) {
+export function NodeIcon({ kind, size = 17 }: { kind: NodeKind | 'arxiv'; size?: number }) {
   const Icon = {
     folder: Folder,
     markdown: FileText,
@@ -10,6 +10,7 @@ export function NodeIcon({ kind, size = 17 }: { kind: NodeKind; size?: number })
     pdf: BookOpen,
     image: Image,
     link: Link,
+    arxiv: BookOpen,
   }[kind];
   return (
     <Icon size={size} strokeWidth={1.7} className={`node-icon kind-${kind}`} aria-hidden="true" />

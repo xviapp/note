@@ -669,7 +669,7 @@ export default function NotePane(props: Props) {
               <article className="note-article">
                 <header className="document-heading">
                   <div className="page-eyebrow">
-                    <NodeIcon kind={note.kind} size={14} />
+                    <NodeIcon kind={note.arxiv_id ? 'arxiv' : note.kind} size={14} />
                     {note.arxiv_id ? 'arXiv 论文' : KIND_LABELS[note.kind]}
                   </div>
                   <h1>{note.title}</h1>

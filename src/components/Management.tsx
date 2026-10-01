@@ -112,7 +112,7 @@ export function NodeForm({
                   disabled={busy || !!uploaded.current}
                   onChange={() => setKind(value as NodeKind | 'arxiv')}
                 />
-                <NodeIcon kind={value === 'arxiv' ? 'link' : (value as NodeKind)} />
+                <NodeIcon kind={value as NodeKind | 'arxiv'} />
                 {label}
               </label>
             ))}
@@ -308,12 +308,18 @@ export function NodeList({
       {items.map((node) => (
         <div className="node-list-row" key={node.id}>
           <button className="node-list-main" onClick={() => onOpen(node)}>
-            <NodeIcon kind={node.kind} size={20} />
+            <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} size={20} />
             <span>
               <strong>{node.title}</strong>
-              <small>{node.kind === 'link' ? node.url : KIND_LABELS[node.kind]}</small>
+              <small>
+                {node.arxiv_id
+                  ? `arXiv 论文 · ${node.arxiv_id}`
+                  : node.kind === 'link'
+                    ? node.url
+                    : KIND_LABELS[node.kind]}
+              </small>
             </span>
-            {node.kind === 'link' ? (
+            {node.kind === 'link' && !node.arxiv_id ? (
               <ArrowUpRight size={16} />
             ) : (
               <time>{formatDate(node.updated_at)}</time>
