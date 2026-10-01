@@ -1,0 +1,897 @@
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  ArrowUpRight,
+  Check,
+  ChevronRight,
+  FileText,
+  History,
+  Link2,
+  List,
+  LockKeyhole,
+  Paperclip,
+  Pencil,
+  Plus,
+  Star,
+  X,
+} from 'lucide-react';
+import { api, ApiError, fileUrl, formatDate, lockNote, unlockNote, upload } from '../api';
+import {
+  KIND_LABELS,
+  PARENT_KINDS,
+  TEXT_KINDS,
+  type FileInfo,
+  type NoteDetail,
+  type NoteNode,
+  type ReadingPosition,
+  type VersionInfo,
+} from '../../shared/types';
+import { useReading } from '../useReading';
+import { Empty, Modal, NodeIcon, Spinner, useQuestion } from './Primitives';
+import { MarkdownView, type Heading } from './MarkdownView';
+import { Attachments, NodeList, type EnsureEdit } from './Management';
+import { NodeMenu, NodePicker, type NodeAction } from './Tree';
+
+const Editor = lazy(() => import('./Editor'));
+const PdfView = lazy(() => import('./PdfView'));
+const ImageViewer = lazy(() => import('./ImageViewer'));
+
+interface Props {
+  id: string;
+  refresh: number;
+  treeRefresh: number;
+  editable: boolean;
+  ensureEdit: EnsureEdit;
+  onNavigate: (id: string) => void;
+  onOpen: (node: NoteNode) => void;
+  onAction: (action: NodeAction, node: NoteNode) => void;
+  onChanged: () => void;
+  onLoaded: (node: NoteDetail) => void;
+  onFileNode: (file: FileInfo, parent: string) => void;
+  setLeaveGuard: (guard: () => Promise<boolean>) => void;
+  onError: (error: unknown) => void;
+  onTrash: () => void;
+}
+
+export default function NotePane(props: Props) {
+  const { id } = props;
+  const [note, setNote] = useState<NoteDetail | null>(null),
+    noteRef = useRef<NoteDetail | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | Error | null>(null);
+  const [editing, setEditing] = useState(false),
+    [content, setContent] = useState(''),
+    [assets, setAssets] = useState<FileInfo[]>([]);
+  const [busy, setBusy] = useState(false),
+    [uploading, setUploading] = useState(false),
+    [saveError, setSaveError] = useState('');
+  const [editTab, setEditTab] = useState<'source' | 'preview'>('source');
+  const [headings, setHeadings] = useState<Heading[]>([]),
+    [activeHeading, setActiveHeading] = useState(''),
+    [tocOpen, setTocOpen] = useState(false);
+  const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
+    [pdf, setPdf] = useState<FileInfo | null>(null);
+  const [historyOpen, setHistoryOpen] = useState(false),
+    [linkOpen, setLinkOpen] = useState(false),
+    [linkTarget, setLinkTarget] = useState<{ id: string; title: string } | null>(null);
+  const question = useQuestion(),
+    scroll = useRef<HTMLDivElement>(null),
+    draftUploads = useRef(new Set<string>());
+  const reading = useReading(id),
+    restored = useRef(false),
+    touched = useRef(false),
+    pdfPage = useRef(1);
+  const saveRequest = useRef<{ payload: string; key: string } | null>(null);
+  const dirty =
+    !!note &&
+    (content !== note.content ||
+      assets
+        .map((f) => f.id)
+        .sort()
+        .join() !==
+        note.attachments
+          .map((f) => f.id)
+          .sort()
+          .join());
+  const applyDetail = (detail: NoteDetail) => {
+    noteRef.current = detail;
+    setNote(detail);
+    setContent(detail.content);
+    setAssets(detail.attachments);
+    props.onLoaded(detail);
+  };
+  useEffect(() => {
+    let live = true;
+    setLoadError(null);
+    api<NoteDetail>(`/api/nodes/${id}`)
+      .then((detail) => {
+        if (live) applyDetail(detail);
+      })
+      .catch((e) => {
+        if (live) setLoadError(e);
+      });
+    return () => {
+      live = false;
+    };
+  }, [id, props.refresh]);
+  useEffect(() => {
+    if (!editing || !dirty) return;
+    const warn = (event: BeforeUnloadEvent) => {
+      event.preventDefault();
+      event.returnValue = '';
+    };
+    window.addEventListener('beforeunload', warn);
+    return () => window.removeEventListener('beforeunload', warn);
+  }, [editing, dirty]);
+
+  const abandonUploads = () => {
+    for (const fileId of draftUploads.current)
+      void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
+    draftUploads.current.clear();
+  };
+  const exitEdit = () => {
+    setEditing(false);
+    lockNote(id);
+    setSaveError('');
+  };
+  const save = async (): Promise<boolean> => {
+    if (!noteRef.current || busy || uploading) return false;
+    setBusy(true);
+    setSaveError('');
+    const payload = {
+      content,
+      attachments: assets.map((file) => file.id),
+      revision: noteRef.current.revision,
+    };
+    const fingerprint = JSON.stringify(payload);
+    if (saveRequest.current?.payload !== fingerprint)
+      saveRequest.current = { payload: fingerprint, key: crypto.randomUUID() };
+    try {
+      await api<NoteNode>(`/api/nodes/${id}/content`, 'PUT', payload, saveRequest.current.key);
+      // Commit the local baseline before any navigation guard can run again.
+      const detail = await api<NoteDetail>(`/api/nodes/${id}`);
+      noteRef.current = detail;
+      setNote(detail);
+      setContent(detail.content);
+      setAssets(detail.attachments);
+      for (const fileId of draftUploads.current)
+        if (!detail.attachments.some((file) => file.id === fileId))
+          void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
+      draftUploads.current.clear();
+      exitEdit();
+      props.onChanged();
+      return true;
+    } catch (error) {
+      setSaveError((error as Error).message);
+      return false;
+    } finally {
+      setBusy(false);
+    }
+  };
+  const leave = async (): Promise<boolean> => {
+    if (busy || uploading) return false;
+    if (!editing) return true;
+    if (dirty) {
+      const answer = await question.ask('还有未保存的修改', '离开之前，如何处理这篇笔记的修改？', [
+        { value: 'cancel', label: '继续编辑' },
+        { value: 'discard', label: '放弃修改', danger: true },
+        { value: 'save', label: '保存并离开' },
+      ]);
+      if (answer === 'save') return save();
+      if (answer !== 'discard') return false;
+    }
+    abandonUploads();
+    setContent(noteRef.current?.content || '');
+    setAssets(noteRef.current?.attachments || []);
+    exitEdit();
+    return true;
+  };
+  useEffect(() => {
+    props.setLeaveGuard(leave);
+    return () => props.setLeaveGuard(async () => true);
+  });
+  const startEdit = async () => {
+    if (!(await props.ensureEdit())) return;
+    if (
+      !(await question.confirm(
+        '编辑这篇笔记？',
+        '确认后可以修改正文和附件。手动保存后回到只读预览。',
+        '开始编辑',
+      ))
+    )
+      return;
+    try {
+      await unlockNote(id);
+      setEditing(true);
+      setEditTab('source');
+      setSaveError('');
+    } catch (e) {
+      props.onError(e);
+    }
+  };
+  const onHeadings = useCallback((value: Heading[]) => setHeadings(value), []);
+  const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
+  const restorePosition = useCallback(() => {
+    if (!note || !reading.initial || editing || touched.current || !scroll.current) return;
+    const area = scroll.current,
+      position = reading.initial;
+    if (position.heading && note.kind === 'markdown') {
+      const anchors = Array.from(
+        area.querySelectorAll<HTMLElement>('.read-content [id^="heading-"]'),
+      );
+      const index = anchors.findIndex((element) => element.id === position.heading),
+        anchor = anchors[index];
+      if (anchor) {
+        const nextTop =
+          anchors[index + 1]?.getBoundingClientRect().top ??
+          area.querySelector('.read-content')!.getBoundingClientRect().bottom;
+        const sectionHeight = Math.max(1, nextTop - anchor.getBoundingClientRect().top);
+        area.scrollTop +=
+          anchor.getBoundingClientRect().top -
+          area.getBoundingClientRect().top -
+          24 +
+          (position.headingRatio || 0) * sectionHeight;
+      } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
+    } else
+      area.scrollTop =
+        (area.scrollHeight - area.clientHeight) *
+        (note.kind === 'pdf' ? position.pageRatio || 0 : position.ratio || 0);
+    pdfPage.current = position.page || 1;
+    restored.current = true;
+  }, [note?.id, reading.initial, editing]);
+  useEffect(() => {
+    const timer = window.setTimeout(restorePosition, 120);
+    return () => clearTimeout(timer);
+  }, [restorePosition, headings]);
+  useEffect(() => {
+    const article = scroll.current?.querySelector('article');
+    if (!article) return;
+    const observer = new ResizeObserver(() => restorePosition());
+    observer.observe(article);
+    return () => observer.disconnect();
+  }, [note?.id, restorePosition]);
+  const recordScroll = () => {
+    const area = scroll.current;
+    if (!note || !area || editing || (!restored.current && !touched.current)) return;
+    let heading = '',
+      headingRatio = 0;
+    const top = area.getBoundingClientRect().top;
+    const anchors = Array.from(
+      area.querySelectorAll<HTMLElement>('.read-content [id^="heading-"]'),
+    );
+    for (const [index, element] of anchors.entries()) {
+      const anchorTop = element.getBoundingClientRect().top;
+      if (anchorTop > top + 25) break;
+      heading = element.id;
+      const nextTop =
+        anchors[index + 1]?.getBoundingClientRect().top ??
+        area.querySelector('.read-content')!.getBoundingClientRect().bottom;
+      headingRatio = Math.max(
+        0,
+        Math.min(1, (top + 24 - anchorTop) / Math.max(1, nextTop - anchorTop)),
+      );
+    }
+    setActiveHeading(heading);
+    if (!touched.current || !['markdown', 'text', 'pdf'].includes(note.kind)) return;
+    const ratio = Math.max(
+      0,
+      Math.min(1, area.scrollTop / Math.max(1, area.scrollHeight - area.clientHeight)),
+    );
+    reading.update(
+      note.kind === 'pdf'
+        ? { page: pdfPage.current, pageRatio: ratio }
+        : { ratio, ...(heading ? { heading, headingRatio } : {}) },
+    );
+  };
+  const jump = (heading: Heading) => {
+    touched.current = true;
+    restored.current = true;
+    setActiveHeading(heading.id);
+    setTocOpen(false);
+    // Close the modal before scrolling: native dialog focus restoration otherwise
+    // competes with the requested reading position on mobile browsers.
+    requestAnimationFrame(() =>
+      scroll.current
+        ?.querySelector<HTMLElement>(`#${heading.id}`)
+        ?.scrollIntoView({ behavior: 'smooth', block: 'start' }),
+    );
+  };
+  const toc = (
+    <nav className="toc" aria-label="标题目录">
+      <div className="section-label">本篇目录</div>
+      {headings.map((heading) => (
+        <button
+          key={heading.id}
+          className={activeHeading === heading.id ? 'active' : ''}
+          style={{ paddingLeft: 12 + (heading.level - 1) * 10 }}
+          onClick={() => jump(heading)}
+        >
+          {heading.title || '无标题'}
+        </button>
+      ))}
+    </nav>
+  );
+  const previewFile = (file: FileInfo) => {
+    if (file.mime.startsWith('image/')) showImage(fileUrl(file.id), file.name);
+    else if (file.mime === 'application/pdf') setPdf(file);
+    else window.open(fileUrl(file.id, true), '_blank', 'noopener,noreferrer');
+  };
+  const addFiles = async (files: FileList | null) => {
+    if (!files?.length) return;
+    setUploading(true);
+    setSaveError('');
+    try {
+      for (const selected of Array.from(files)) {
+        const file = await upload(selected);
+        draftUploads.current.add(file.id);
+        setAssets((previous) => [...previous, file]);
+        if (note?.kind === 'markdown' && file.mime.startsWith('image/'))
+          setContent(
+            (previous) =>
+              `${previous}\n\n![${file.name.replace(/[\[\]\\]/g, '')}](${fileUrl(file.id)})\n`,
+          );
+      }
+    } catch (e) {
+      setSaveError((e as Error).message);
+    } finally {
+      setUploading(false);
+    }
+  };
+  if (loadError)
+    return (
+      <Empty
+        icon={<FileText />}
+        title={
+          loadError instanceof ApiError && loadError.code === 'NODE_TRASHED'
+            ? '这篇笔记在回收站中'
+            : '暂时无法打开笔记'
+        }
+        action={
+          loadError instanceof ApiError && loadError.code === 'NODE_TRASHED' ? (
+            <button className="button" onClick={props.onTrash}>
+              前往回收站
+            </button>
+          ) : (
+            <button className="button" onClick={() => window.location.reload()}>
+              重新加载
+            </button>
+          )
+        }
+      >
+        {loadError.message}
+      </Empty>
+    );
+  if (!note) return <Spinner />;
+  return (
+    <div className={`note-pane ${editing ? 'is-editing' : ''}`}>
+      <div className="note-toolbar">
+        <div className="breadcrumbs">
+          <button onClick={() => props.onNavigate('')}>全部笔记</button>
+          {note.breadcrumbs.map((part, index) => (
+            <span key={part.id}>
+              <ChevronRight size={13} />
+              <button
+                disabled={index === note.breadcrumbs.length - 1}
+                onClick={() => props.onNavigate(part.id)}
+              >
+                {part.title}
+              </button>
+            </span>
+          ))}
+        </div>
+        <div className="note-actions">
+          <button
+            className={`icon-button ${note.favorite ? 'is-favorite' : ''}`}
+            aria-label={note.favorite ? '取消收藏' : '收藏笔记'}
+            title={note.favorite ? '取消收藏' : '收藏'}
+            onClick={async () => {
+              try {
+                await api(`/api/nodes/${id}/favorite`, 'PUT', { enabled: !note.favorite });
+                const next = { ...note, favorite: note.favorite ? 0 : 1 };
+                noteRef.current = next;
+                setNote(next);
+                props.onChanged();
+              } catch (e) {
+                props.onError(e);
+              }
+            }}
+          >
+            <Star size={18} fill={note.favorite ? 'currentColor' : 'none'} />
+          </button>
+          {TEXT_KINDS.includes(note.kind) && (
+            <button
+              className="icon-button"
+              aria-label="版本历史"
+              title="版本历史"
+              onClick={() => setHistoryOpen(true)}
+            >
+              <History size={18} />
+            </button>
+          )}
+          {!editing && note.kind === 'markdown' && headings.length > 0 && (
+            <button
+              className="icon-button mobile-toc-button"
+              aria-label="标题目录"
+              onClick={() => setTocOpen(true)}
+            >
+              <List size={18} />
+            </button>
+          )}
+          {!editing && TEXT_KINDS.includes(note.kind) && (
+            <button className="button compact" onClick={startEdit}>
+              <Pencil size={15} />
+              <span>编辑正文</span>
+            </button>
+          )}
+          {!editing && props.editable && <NodeMenu node={note} onAction={props.onAction} />}
+        </div>
+      </div>
+      {editing && (
+        <div className="edit-toolbar">
+          <span className="editing-label">
+            <Pencil size={14} />
+            正在编辑{dirty ? ' · 未保存' : ''}
+          </span>
+          <div className="edit-tabs">
+            <button
+              className={editTab === 'source' ? 'active' : ''}
+              onClick={() => setEditTab('source')}
+            >
+              源码
+            </button>
+            <button
+              className={editTab === 'preview' ? 'active' : ''}
+              onClick={() => setEditTab('preview')}
+            >
+              预览
+            </button>
+          </div>
+          <label className="button compact file-input-button">
+            <Paperclip size={15} />
+            <span>{uploading ? '上传中…' : '附件 / 图片'}</span>
+            <input
+              aria-label="上传附件"
+              type="file"
+              multiple
+              disabled={busy || uploading}
+              onChange={(e) => {
+                void addFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {note.kind === 'markdown' && (
+            <button
+              className="icon-button"
+              aria-label="插入笔记链接"
+              disabled={busy || uploading}
+              onClick={() => setLinkOpen(true)}
+            >
+              <Link2 size={17} />
+            </button>
+          )}
+          <span className="toolbar-spacer" />
+          <button className="button compact" disabled={busy || uploading} onClick={leave}>
+            取消
+          </button>
+          <button
+            className="button primary compact"
+            disabled={busy || uploading}
+            onClick={() => save()}
+          >
+            <Check size={15} />
+            {busy ? '保存中…' : '保存'}
+          </button>
+        </div>
+      )}
+      {saveError && (
+        <div className="save-error" role="alert">
+          <span>{saveError}</span>
+          <button
+            className="text-button"
+            onClick={() => {
+              const href = URL.createObjectURL(
+                new Blob([content], { type: 'text/plain;charset=utf-8' }),
+              );
+              const a = document.createElement('a');
+              a.href = href;
+              a.download = `${note.title}.${note.kind === 'markdown' ? 'md' : 'txt'}`;
+              a.click();
+              setTimeout(() => URL.revokeObjectURL(href), 1000);
+            }}
+          >
+            下载当前草稿
+          </button>
+          <button
+            className="text-button"
+            onClick={async () => {
+              try {
+                if (await props.ensureEdit()) {
+                  await unlockNote(id);
+                  setSaveError('编辑确认已更新，请再次保存。');
+                }
+              } catch (e) {
+                props.onError(e);
+              }
+            }}
+          >
+            重新确认编辑
+          </button>
+        </div>
+      )}
+      <div className={`note-workspace ${editing ? `edit-tab-${editTab}` : ''}`}>
+        {editing && (
+          <div className="source-pane">
+            <Suspense fallback={<Spinner label="正在打开编辑器…" />}>
+              <Editor
+                value={content}
+                onChange={setContent}
+                onSave={() => {
+                  void save();
+                }}
+                kind={note.kind as 'markdown' | 'text'}
+              />
+            </Suspense>
+          </div>
+        )}
+        <div
+          ref={scroll}
+          className="note-scroll"
+          tabIndex={0}
+          aria-label="笔记阅读区"
+          onScroll={recordScroll}
+          onWheel={() => {
+            touched.current = true;
+          }}
+          onTouchStart={() => {
+            touched.current = true;
+          }}
+          onPointerDown={() => {
+            touched.current = true;
+          }}
+          onKeyDown={(e) => {
+            if (['ArrowDown', 'ArrowUp', 'PageDown', 'PageUp', 'Home', 'End', ' '].includes(e.key))
+              touched.current = true;
+          }}
+          onLoadCapture={() => {
+            if (!touched.current) restorePosition();
+          }}
+        >
+          <article className={`note-article ${note.kind === 'pdf' ? 'pdf-article' : ''}`}>
+            <header className="document-heading">
+              <div className="page-eyebrow">
+                <NodeIcon kind={note.kind} size={14} />
+                {KIND_LABELS[note.kind]}
+                <span className="reading-badge">
+                  <LockKeyhole size={11} />
+                  {editing ? '编辑预览' : '只读预览'}
+                </span>
+              </div>
+              <h1>{note.title}</h1>
+              <div className="document-meta">
+                更新于 {formatDate(note.updated_at)}
+                {PARENT_KINDS.includes(note.kind) && !!note.child_count && (
+                  <span>{note.child_count} 个子节点</span>
+                )}
+              </div>
+            </header>
+            <div className="read-content">
+              {note.kind === 'markdown' ? (
+                content ? (
+                  <MarkdownView
+                    content={editing ? content : note.content}
+                    onNavigate={props.onNavigate}
+                    onImage={showImage}
+                    onHeadings={onHeadings}
+                  />
+                ) : (
+                  <p className="empty-body">这篇笔记还是空白的。点击「编辑正文」，写下第一行。</p>
+                )
+              ) : note.kind === 'text' ? (
+                <pre className="plain-text">
+                  {(editing ? content : note.content) || '这篇笔记还是空白的。'}
+                </pre>
+              ) : note.kind === 'image' && note.file ? (
+                <button
+                  className="image-node"
+                  aria-label="放大查看图片"
+                  onClick={() => showImage(fileUrl(note.file!.id), note.title)}
+                >
+                  <img src={fileUrl(note.file.id)} alt={note.title} />
+                  <span>点击放大 · 支持双指缩放</span>
+                </button>
+              ) : note.kind === 'pdf' && note.file ? (
+                reading.initial ? (
+                  <Suspense fallback={<Spinner />}>
+                    <PdfView
+                      fileId={note.file.id}
+                      initialPage={reading.initial.page || 1}
+                      onPage={(page) => {
+                        pdfPage.current = page;
+                        touched.current = true;
+                        if (scroll.current) scroll.current.scrollTop = 0;
+                        reading.update({ page, pageRatio: 0 });
+                      }}
+                    />
+                  </Suspense>
+                ) : (
+                  <Spinner />
+                )
+              ) : note.kind === 'link' ? (
+                <a
+                  className="external-link"
+                  href={note.url || '#'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                >
+                  <ArrowUpRight size={22} />
+                  <strong>打开网页</strong>
+                  <span>{note.url}</span>
+                </a>
+              ) : null}
+            </div>
+            {TEXT_KINDS.includes(note.kind) && (
+              <Attachments
+                files={editing ? assets : note.attachments}
+                editing={editing}
+                onRemove={(fileId) => {
+                  setAssets((previous) => previous.filter((file) => file.id !== fileId));
+                  if (note.kind === 'markdown')
+                    setContent((previous) =>
+                      previous.replace(
+                        new RegExp(`!\\[[^\\]]*\\]\\(/api/files/${fileId}\\)`, 'g'),
+                        '',
+                      ),
+                    );
+                }}
+                onPreview={previewFile}
+                onCreate={
+                  !editing && props.editable ? (file) => props.onFileNode(file, id) : undefined
+                }
+              />
+            )}
+            {PARENT_KINDS.includes(note.kind) && !editing && (
+              <section className="children-section">
+                <div className="children-heading">
+                  <h2>子节点{note.child_count ? <span>{note.child_count}</span> : null}</h2>
+                  {props.editable && (
+                    <button className="text-button" onClick={() => props.onAction('new', note)}>
+                      <Plus size={14} />
+                      新建
+                    </button>
+                  )}
+                </div>
+                <NodeList
+                  parent={id}
+                  refresh={props.treeRefresh}
+                  editable={props.editable}
+                  onOpen={props.onOpen}
+                  onAction={props.onAction}
+                />
+              </section>
+            )}
+          </article>
+        </div>
+        {!editing && note.kind === 'markdown' && headings.length > 0 && (
+          <aside className="desktop-toc">{toc}</aside>
+        )}
+      </div>
+      {tocOpen && (
+        <Modal title="标题目录" onClose={() => setTocOpen(false)}>
+          {toc}
+        </Modal>
+      )}
+      {image && (
+        <Suspense fallback={<Spinner />}>
+          <ImageViewer {...image} onClose={() => setImage(null)} />
+        </Suspense>
+      )}
+      {pdf && (
+        <Modal title={pdf.name} onClose={() => setPdf(null)} wide>
+          <Suspense fallback={<Spinner />}>
+            <PdfView fileId={pdf.id} />
+          </Suspense>
+        </Modal>
+      )}
+      {historyOpen && (
+        <HistoryDialog
+          note={note}
+          onClose={() => setHistoryOpen(false)}
+          onImage={showImage}
+          onNavigate={props.onNavigate}
+          onPreviewFile={previewFile}
+          onRestore={async (version) => {
+            if (!(await leave()) || !(await props.ensureEdit())) return;
+            if (
+              !(await question.confirm(
+                '恢复这个版本？',
+                '恢复后会生成新的当前版本，现有正文进入历史；标题与节点位置保持原样。',
+                '确认并恢复',
+              ))
+            )
+              return;
+            await unlockNote(id);
+            await api(`/api/nodes/${id}/versions/${version}/restore`, 'POST', {
+              revision: noteRef.current!.revision,
+            });
+            lockNote(id);
+            applyDetail(await api<NoteDetail>(`/api/nodes/${id}`));
+            props.onChanged();
+            setHistoryOpen(false);
+          }}
+        />
+      )}
+      {linkOpen && (
+        <Modal title="插入笔记链接" onClose={() => setLinkOpen(false)}>
+          <NodePicker
+            value={linkTarget?.id || null}
+            onSelect={(target, title) => {
+              if (target) setLinkTarget({ id: target, title });
+            }}
+          />
+          <div className="dialog-actions">
+            <button className="button" onClick={() => setLinkOpen(false)}>
+              取消
+            </button>
+            <button
+              className="button primary"
+              disabled={!linkTarget}
+              onClick={() => {
+                if (linkTarget)
+                  setContent(
+                    (previous) =>
+                      `${previous}\n[${linkTarget.title.replace(/[\[\]\\]/g, '')}](/n/${linkTarget.id})\n`,
+                  );
+                setLinkOpen(false);
+              }}
+            >
+              插入链接
+            </button>
+          </div>
+        </Modal>
+      )}
+      {question.dialog}
+    </div>
+  );
+}
+
+function HistoryDialog({
+  note,
+  onClose,
+  onRestore,
+  onImage,
+  onNavigate,
+  onPreviewFile,
+}: {
+  note: NoteDetail;
+  onClose: () => void;
+  onRestore: (id: string) => Promise<void>;
+  onImage: (src: string, alt: string) => void;
+  onNavigate: (id: string) => void;
+  onPreviewFile: (file: FileInfo) => void;
+}) {
+  const [versions, setVersions] = useState<VersionInfo[]>([]),
+    [selected, setSelected] = useState('');
+  const [preview, setPreview] = useState<{ content: string; attachments: FileInfo[] } | null>(null),
+    [error, setError] = useState(''),
+    [busy, setBusy] = useState(false),
+    [headings, setHeadings] = useState<Heading[]>([]);
+  const previewRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    let live = true;
+    api<{ versions: VersionInfo[] }>(`/api/nodes/${note.id}/versions`)
+      .then((data) => {
+        if (live) {
+          setVersions(data.versions);
+          setSelected(data.versions[0]?.id || '');
+        }
+      })
+      .catch((e) => setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [note.id]);
+  useEffect(() => {
+    if (!selected) return;
+    let live = true;
+    setPreview(null);
+    api<{ content: string; attachments: FileInfo[] }>(`/api/nodes/${note.id}/versions/${selected}`)
+      .then((data) => {
+        if (live) setPreview(data);
+      })
+      .catch((e) => setError(e.message));
+    return () => {
+      live = false;
+    };
+  }, [selected, note.id]);
+  const onHeadings = useCallback((value: Heading[]) => setHeadings(value), []);
+  return (
+    <Modal
+      title="版本历史"
+      onClose={() => {
+        if (!busy) onClose();
+      }}
+      wide
+    >
+      <p className="dialog-copy">保留当前版本与最近 5 个历史版本。</p>
+      <div className="history-layout">
+        <div className="version-list">
+          {versions.map((version) => (
+            <button
+              key={version.id}
+              className={selected === version.id ? 'selected' : ''}
+              onClick={() => setSelected(version.id)}
+            >
+              <strong>{version.current ? '当前版本' : `版本 ${version.sequence}`}</strong>
+              <time>{formatDate(version.created_at)}</time>
+            </button>
+          ))}
+        </div>
+        <div className="version-preview" ref={previewRef}>
+          {preview ? (
+            <>
+              {note.kind === 'markdown' ? (
+                <>
+                  <div className="history-toc">
+                    {headings.map((h) => (
+                      <button
+                        className="text-button"
+                        key={h.id}
+                        onClick={() =>
+                          previewRef.current
+                            ?.querySelector(`#${h.id}`)
+                            ?.scrollIntoView({ block: 'start' })
+                        }
+                      >
+                        {h.title}
+                      </button>
+                    ))}
+                  </div>
+                  <MarkdownView
+                    content={preview.content}
+                    onImage={onImage}
+                    onNavigate={(target) => {
+                      onClose();
+                      onNavigate(target);
+                    }}
+                    onHeadings={onHeadings}
+                  />
+                </>
+              ) : (
+                <pre className="plain-text">{preview.content}</pre>
+              )}
+              <Attachments files={preview.attachments} onPreview={onPreviewFile} />
+            </>
+          ) : (
+            <Spinner />
+          )}
+        </div>
+      </div>
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
+      )}
+      <div className="dialog-actions">
+        <button className="button" onClick={onClose} disabled={busy}>
+          关闭
+        </button>
+        <button
+          className="button primary"
+          disabled={busy || !selected || !!versions.find((v) => v.id === selected)?.current}
+          onClick={async () => {
+            setBusy(true);
+            setError('');
+            try {
+              await onRestore(selected);
+            } catch (e) {
+              setError((e as Error).message);
+            } finally {
+              setBusy(false);
+            }
+          }}
+        >
+          {busy ? '正在恢复…' : '恢复此版本'}
+        </button>
+      </div>
+    </Modal>
+  );
+}
