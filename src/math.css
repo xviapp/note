@@ -1,0 +1,20 @@
+.markdown-body .katex {
+  overflow-wrap: normal;
+}
+.markdown-body .katex-display {
+  max-width: 100%;
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 0.35em 0;
+}
+.markdown-body .katex-display > .katex {
+  width: max-content;
+  min-width: 100%;
+}
+.markdown-body .katex-display > .katex:has(.tag) {
+  padding-inline: 3em;
+}
+.markdown-body .katex-error {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}

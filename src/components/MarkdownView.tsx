@@ -1,7 +1,22 @@
 import { memo, useEffect, useRef, type ReactNode } from 'react';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import rehypeSanitize from 'rehype-sanitize';
+import remarkMath from 'remark-math';
+import rehypeKatex from 'rehype-katex';
+import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
+import { mathOptions, rehypeMathCompatibility } from '../math';
+import 'katex/dist/katex.min.css';
+import '../math.css';
+
+// Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
+// https://github.com/rehypejs/rehype-sanitize#example-math
+const markdownSchema = {
+  ...defaultSchema,
+  attributes: {
+    ...defaultSchema.attributes,
+    code: [['className', /^language-./, 'math-inline', 'math-display']],
+  },
+};
 export interface Heading {
   id: string;
   title: string;
@@ -59,8 +74,12 @@ export const MarkdownView = memo(function MarkdownView({
   return (
     <div ref={ref} className="markdown-body">
       <ReactMarkdown
-        remarkPlugins={[remarkGfm]}
-        rehypePlugins={[rehypeSanitize]}
+        remarkPlugins={[remarkGfm, remarkMath]}
+        rehypePlugins={[
+          [rehypeSanitize, markdownSchema],
+          rehypeMathCompatibility,
+          [rehypeKatex, mathOptions],
+        ]}
         skipHtml
         components={{
           h1: heading(1),

@@ -26,13 +26,16 @@
     "@codemirror/view": "6.43.13",
     "@uiw/react-codemirror": "4.25.12",
     "html2canvas": "1.4.1",
+    "katex": "0.16.47",
     "lucide-react": "1.49.0",
     "pdfjs-dist": "6.3.289",
     "react": "19.3.0",
     "react-dom": "19.3.0",
     "react-markdown": "10.1.0",
+    "rehype-katex": "7.0.1",
     "rehype-sanitize": "6.0.0",
-    "remark-gfm": "4.0.1"
+    "remark-gfm": "4.0.1",
+    "remark-math": "6.0.0"
   },
   "devDependencies": {
     "@cloudflare/vitest-pool-workers": "0.22.0",
