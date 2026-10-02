@@ -14,7 +14,9 @@ async function login(page: Page) {
   expect(response.ok()).toBeTruthy();
 }
 
-test('returning to a long list restores loaded pages and its scroll position', async ({ page }) => {
+test('returning to a long list reuses loaded pages and restores its scroll position', async ({
+  page,
+}) => {
   await login(page);
   const note = await (
     await page.request.post('/api/nodes', {
@@ -27,10 +29,12 @@ test('returning to a long list restores loaded pages and its scroll position', a
     id: `first-${index}`,
     title: `笔记 ${index + 1}`,
   }));
-  let secondLoads = 0;
+  let firstLoads = 0,
+    secondLoads = 0;
   await page.route('**/api/nodes?view=favorites*', async (route) => {
     const second = new URL(route.request().url()).searchParams.has('offset');
     if (second) secondLoads++;
+    else firstLoads++;
     await route.fulfill({
       json: { nodes: second ? [note] : firstPage, nextOffset: second ? null : 30 },
     });
@@ -50,7 +54,54 @@ test('returning to a long list restores loaded pages and its scroll position', a
   await expect
     .poll(() => page.locator('.main-content').evaluate((element) => element.scrollTop))
     .toBeCloseTo(before, 0);
-  expect(secondLoads).toBe(2);
+  // Returning shows the loaded listing without fetching it again.
+  expect(firstLoads).toBe(1);
+  expect(secondLoads).toBe(1);
+});
+
+test('folder icons are downloaded once and reused after returning or reloading', async ({
+  page,
+}, info) => {
+  await login(page);
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNkaPhfDwAEhQGAhKmMIQAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  const icon = await (
+    await page.request.post(`/api/files?name=icon.png&size=${png.length}`, {
+      headers,
+      data: png,
+    })
+  ).json();
+  const parent = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: { kind: 'folder', title: `图标缓存 ${info.project.name}` },
+    })
+  ).json();
+  const title = `带图标 ${info.project.name}`;
+  await page.request.post('/api/nodes', {
+    headers,
+    data: { kind: 'folder', title, parentId: parent.id, icon: { fileId: icon.id } },
+  });
+  let downloads = 0;
+  page.on('request', (request) => {
+    if (new URL(request.url()).pathname === `/api/files/${icon.id}`) downloads++;
+  });
+  const image = page
+    .locator('.node-list-main')
+    .filter({ hasText: title })
+    .locator('.custom-folder-icon img');
+  const loaded = () => image.evaluate((img: HTMLImageElement) => img.complete && img.naturalWidth);
+  await page.goto(`/n/${parent.id}`);
+  await expect.poll(loaded).toBe(1);
+  await page.locator('.node-list-main').filter({ hasText: title }).click();
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '返回', exact: true }).click();
+  await expect.poll(loaded).toBe(1);
+  await page.reload();
+  await expect.poll(loaded).toBe(1);
+  expect(downloads).toBe(1);
 });
 
 test('settings and offline list deep links can be reloaded without a network', async ({

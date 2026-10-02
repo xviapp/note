@@ -12,6 +12,7 @@ async function fixture(run) {
   const source = new Map([
     ['index.html', Buffer.from('<title>页间</title>')],
     ['theme-init.js', Buffer.from('initial theme')],
+    ['_headers', Buffer.from('/assets/*\n  Cache-Control: immutable\n')],
     ['assets/serif.woff2', Buffer.alloc(1_100_000, 0xff)],
     ['assets/sans.woff2', Buffer.alloc(1_100_000, 0x80)],
     ['assets/serif.woff', Buffer.from('unused fallback')],
@@ -43,6 +44,7 @@ test('public resource packs preserve binary bytes and original cache URLs', () =
     assert.equal(packs.length, 2);
     assert(files.includes('/'));
     assert(!files.includes('/index.html'));
+    assert(!files.includes('/_headers'));
     assert(!files.includes('/assets/serif.woff'));
     const restored = new Map();
     for (const pack of packs)

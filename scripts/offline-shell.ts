@@ -30,6 +30,7 @@ export function offlineShell(): Plugin {
         .filter(
           (name) =>
             name !== '/sw.js' &&
+            name !== '/_headers' &&
             name !== '/android-webview.html' &&
             !name.startsWith('/offline-resources-') &&
             !name.endsWith('.map'),

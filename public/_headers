@@ -1,0 +1,11 @@
+# Cloudflare static asset headers. API responses keep their own no-store headers.
+/assets/*
+  Cache-Control: public, max-age=31536000, immutable
+/qingli/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/brand/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/pdf/*
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800
+/favicon.ico
+  Cache-Control: public, max-age=86400, stale-while-revalidate=604800

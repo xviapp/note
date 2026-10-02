@@ -39,7 +39,7 @@ import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
 import { Brand } from './components/Brand';
-import { ListingPagesContext } from './use-node-listing';
+import { ListingCacheContext, type ListingCache } from './use-node-listing';
 import {
   settingsTitles,
   useNotebookNavigation,
@@ -274,7 +274,7 @@ function Notebook({
   const leaveGuard = useRef<() => Promise<boolean>>(async () => true),
     question = useQuestion();
   const navigation = useNotebookNavigation(leaveGuard);
-  const listingPages = useRef(new Map<string, number>());
+  const listings = useRef<ListingCache>(new Map());
   const { view, id: selected, section: settingsSection } = navigation.route;
   const subpage = !!selected || !!settingsSection || ['recent', 'offline', 'trash'].includes(view);
   useEffect(() => {
@@ -353,7 +353,7 @@ function Notebook({
     void navigate(node.id);
   };
   const switchView = async (next: View) => {
-    if (await navigation.go(next === 'tree' ? '/' : `/${next}`)) changed();
+    await navigation.go(next === 'tree' ? '/' : `/${next}`);
     setMobileOpen(false);
   };
   const openSettings = (section: SettingsSection) => {
@@ -649,7 +649,7 @@ function Notebook({
                 : '下拉刷新'}
           </div>
         )}
-        <ListingPagesContext.Provider value={listingPages.current}>
+        <ListingCacheContext.Provider value={listings.current}>
           <div
             ref={navigation.scroll}
             key={navigation.key}
@@ -718,7 +718,6 @@ function Notebook({
                       onAction={action}
                       onDrop={drop}
                       expansionState={treeExpansion.current}
-                      rememberPages
                       showRefresh={false}
                     />
                   ) : (
@@ -752,7 +751,7 @@ function Notebook({
               />
             )}
           </div>
-        </ListingPagesContext.Provider>
+        </ListingCacheContext.Provider>
         {!subpage && (
           <nav className="phone-bottom-nav" aria-label="底部导航">
             {[

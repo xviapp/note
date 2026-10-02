@@ -10,7 +10,6 @@ import { useOffline } from '../connectivity';
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
 export interface TreeProps {
   expansionState?: Set<string>;
-  rememberPages?: boolean;
   showRefresh?: boolean;
   refresh: number;
   onRefresh: () => Promise<void>;
@@ -55,7 +54,6 @@ function Branch({
   const { listing, error, loading, more } = useNodeListing(
     `parent=${parent || ''}`,
     props.refresh,
-    props.rememberPages,
   );
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     if (props.expansionState) return new Set(props.expansionState);

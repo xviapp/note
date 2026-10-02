@@ -21,7 +21,7 @@ export function NodeIcon({
         aria-hidden="true"
       >
         {node.icon_emoji || (
-          <CachedImage src={fileUrl(node.icon_blob_id!)} alt="" draggable={false} />
+          <CachedImage icon src={fileUrl(node.icon_blob_id!)} alt="" draggable={false} />
         )}
       </span>
     );

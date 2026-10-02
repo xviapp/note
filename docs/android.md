@@ -35,7 +35,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.4.6-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 15，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.4.7-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 16，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -52,7 +52,7 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 ```bash
 pnpm android:apk
 pnpm run deploy
-pnpm android:publish --apk artifacts/yejian-0.4.6-android-debug.apk --notes docs/releases/0.4.6.txt --remote
+pnpm android:publish --apk artifacts/yejian-0.4.7-android-debug.apk --notes docs/releases/0.4.7.txt --remote
 ```
 
 安装包保存在 R2 的 `releases/android/` 中，通过登录接口访问，GitHub 仓库保持私有。发行文件不计入应用的笔记库容量统计，但使用同一 Cloudflare 账号的 R2 存储额度。历史安装包采用构建号与摘要寻址，不被新发布覆盖。
@@ -65,7 +65,7 @@ PDF 缩放时先变换现有画布，手指离开后再渲染清晰页面，并�
 
 ## 目录刷新
 
-Android 使用首页树形目录和底部「笔记／收藏／设置」导航，不再显示侧边栏或菜单按钮，横屏同样适用。首页保留最近访问、离线阅读、回收站和新建；笔记、收藏页在顶部下拉刷新，取消目录刷新按钮；目录支持多层展开、分页和文件管理。返回首页恢复展开状态、已加载页数和滚动位置，重新获取目录；前台恢复和联网刷新沿用既有机制。浏览器版保留侧边栏。
+Android 使用首页树形目录和底部「笔记／收藏／设置」导航，不再显示侧边栏或菜单按钮，横屏同样适用。首页保留最近访问、离线阅读、回收站和新建；笔记、收藏页在顶部下拉刷新，取消目录刷新按钮；目录支持多层展开、分页和文件管理。返回首页恢复展开状态、已加载页数和滚动位置。0.4.7 起切换页面直接复用本次登录已加载的目录，不再重新请求；库内容变化、下拉刷新、前台恢复和联网刷新时才更新，「最近访问」进入时后台更新。浏览器版保留侧边栏。
 
 0.4.1 修复两个刷新缺口：手机侧栏一直挂载，重新打开时原先不会重新请求；原生 `appStateChange` 转发的 `focus` 原先只检查会话，没有通知目录更新。现在重开侧栏会刷新目录，回到前台或网络恢复则在会话检查成功后刷新；短时间内的焦点与可见性事件合并，不做定时轮询。本机创建、重命名、移动、删除、分享导入与备份恢复继续立即通知目录。
 
@@ -86,6 +86,12 @@ Android 使用首页树形目录和底部「笔记／收藏／设置」导航，
 清单分块和批量插入按 UTF-8 字节数打包，每个绑定值不超过 1.5 MB；恢复事务最多 40 条语句，为认证和任务检查留出空间，适配 [D1 免费方案的单次 50 查询及单值 2 MB 限制](https://developers.cloudflare.com/d1/platform/limits/)。超过单次恢复边界时返回错误，当前资料保持完整。
 
 ## 验证
+
+0.4.7 验证记录（2026-10-02）：
+
+- Worker 85 项、离线构建 4 项检查通过；类型检查与 Web 构建通过。
+- 电脑／手机界面检查 130 项通过：新增返回列表不重复请求、文件夹图标仅下载一次并在返回和重载后复用。手机「移动」对话框一项因 e2e 数据累积使目标超出首页而失败，修改前同样失败；arXiv 离线阅读一项偶发失败，单独重跑 3 次通过。
+- 本机离线数据库升级到版本 2，新增 `icons` 存储，旧离线副本保留。
 
 0.4.6 验证记录（2026-10-02）：
 

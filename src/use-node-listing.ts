@@ -3,31 +3,44 @@ import { api } from './api';
 import type { NoteNode } from '../shared/types';
 
 export type NodeListing = { nodes: NoteNode[]; nextOffset: number | null };
-// Page counts are scoped to the signed-in Notebook, never persisted with private data.
-export const ListingPagesContext = createContext<Map<string, number> | null>(null);
+type CachedListing = { listing: NodeListing; pages: number; refresh: number };
+export type ListingCache = Map<string, CachedListing>;
+// Listings are scoped to the signed-in Notebook, never persisted with private data.
+// Returning to a page shows the loaded listing; library changes, foregrounding and
+// reconnecting advance `refresh`, which revalidates it in place.
+export const ListingCacheContext = createContext<ListingCache | null>(null);
+// Opening any note reorders recent visits without a library change.
+const alwaysRevalidate = (query: string) => query === 'view=recent';
 
 // Refresh the pages the reader has already opened, without blanking the list.
 // A generation also prevents a late "load more" response from undoing a refresh.
-export function useNodeListing(query: string, refresh: number, rememberPages = false) {
-  const pageCounts = useContext(ListingPagesContext);
-  const rememberedPages = rememberPages ? pageCounts?.get(query) || 1 : 1;
+export function useNodeListing(query: string, refresh: number) {
+  const cache = useContext(ListingCacheContext);
+  const cached = cache?.get(query);
   const current = useRef<{ query: string; listing: NodeListing | null; pages: number }>({
     query,
-    listing: null,
-    pages: rememberedPages,
+    listing: cached?.listing ?? null,
+    pages: cached?.pages ?? 1,
   });
   const generation = useRef(0);
   const pending = useRef(false);
   const [state, setState] = useState({
     query,
-    listing: null as NodeListing | null,
-    loading: true,
+    listing: cached?.listing ?? null,
+    loading: !cached,
     error: '',
   });
   useEffect(() => {
     const run = ++generation.current;
+    const saved = cache?.get(query);
     if (current.current.query !== query)
-      current.current = { query, listing: null, pages: rememberedPages };
+      current.current = { query, listing: saved?.listing ?? null, pages: saved?.pages ?? 1 };
+    if (saved && saved.refresh === refresh && !alwaysRevalidate(query)) {
+      setState({ query, listing: saved.listing, loading: false, error: '' });
+      return () => {
+        generation.current++;
+      };
+    }
     const pages = current.current.pages;
     pending.current = true;
     setState({ query, listing: current.current.listing, loading: true, error: '' });
@@ -47,7 +60,7 @@ export function useNodeListing(query: string, refresh: number, rememberPages = f
         } while (nextOffset !== null && loaded < pages);
         const listing = { nodes: [...nodes.values()], nextOffset };
         current.current = { query, listing, pages: loaded };
-        if (rememberPages) pageCounts?.set(query, loaded);
+        cache?.set(query, { listing, pages: loaded, refresh });
         setState({ query, listing, loading: false, error: '' });
       } catch (error) {
         if (run === generation.current)
@@ -64,7 +77,7 @@ export function useNodeListing(query: string, refresh: number, rememberPages = f
     return () => {
       generation.current++;
     };
-  }, [query, refresh, pageCounts, rememberPages]);
+  }, [query, refresh, cache]);
 
   const more = async () => {
     const previous = current.current;
@@ -82,7 +95,8 @@ export function useNodeListing(query: string, refresh: number, rememberPages = f
       );
       const listing = { nodes: [...nodes.values()], nextOffset: result.nextOffset };
       current.current = { query, listing, pages: previous.pages + 1 };
-      if (rememberPages) pageCounts?.set(query, current.current.pages);
+      const saved = cache?.get(query);
+      if (saved) cache?.set(query, { ...saved, listing, pages: current.current.pages });
       setState({ query, listing, loading: false, error: '' });
     } catch (error) {
       if (run === generation.current)

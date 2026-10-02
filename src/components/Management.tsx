@@ -341,7 +341,7 @@ export function NodeList({
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
   const query = view ? `view=${view}` : `parent=${parent || ''}`;
-  const { listing, error, loading, more } = useNodeListing(query, refresh, true);
+  const { listing, error, loading, more } = useNodeListing(query, refresh);
   if (!listing)
     return error ? (
       <p className="inline-error" role="status">

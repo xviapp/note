@@ -1,4 +1,5 @@
 import type { AuthStatus, FileInfo, NoteDetail, NoteNode } from '../shared/types';
+import { FOLDER_ICON_MAX_BYTES } from '../shared/folder-icons';
 
 // Private content lives in IndexedDB, never the public service-worker cache.
 // A document and all its files are committed as one snapshot. An interrupted
@@ -18,6 +19,12 @@ interface CachedNote {
   accessedAt: number;
   savedAt: number;
   error?: string;
+}
+// Folder icon blobs are immutable, so a saved copy never needs revalidation.
+interface CachedIcon {
+  id: string;
+  blob: Blob;
+  savedAt: number;
 }
 interface CachedResponse {
   path: string;
@@ -44,7 +51,8 @@ export interface CacheSnapshot {
 const DEFAULT_LIMIT = 200_000_000;
 const epochKey = 'note:cache-epoch';
 const limitKey = 'note:cache-limit';
-const storeNames = ['notes', 'responses'] as const;
+const storeNames = ['notes', 'responses', 'icons'] as const;
+const ICON_LIMIT = 200;
 let database: Promise<IDBDatabase> | undefined;
 const listeners = new Set<() => void>();
 let snapshot: CacheSnapshot = {
@@ -59,6 +67,7 @@ let privateGeneration = 0;
 let downloadController = new AbortController();
 let queue: Promise<unknown> = Promise.resolve();
 let refreshSequence = 0;
+const iconUrls = new Map<string, string>();
 
 export function cacheEpoch() {
   try {
@@ -71,6 +80,8 @@ function invalidateJobs(privateData = false) {
   generation++;
   if (privateData) {
     privateGeneration++;
+    for (const url of iconUrls.values()) URL.revokeObjectURL(url);
+    iconUrls.clear();
     downloadController.abort();
     downloadController = new AbortController();
   }
@@ -109,13 +120,16 @@ function readLimit() {
 }
 function openDatabase() {
   return (database ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('yejian-offline', 1);
-    request.onupgradeneeded = () => {
+    const request = indexedDB.open('yejian-offline', 2);
+    request.onupgradeneeded = (event) => {
       const db = request.result;
-      db.createObjectStore('notes', { keyPath: 'id' }).createIndex('fileIds', 'fileIds', {
-        multiEntry: true,
-      });
-      db.createObjectStore('responses', { keyPath: 'path' });
+      if (event.oldVersion < 1) {
+        db.createObjectStore('notes', { keyPath: 'id' }).createIndex('fileIds', 'fileIds', {
+          multiEntry: true,
+        });
+        db.createObjectStore('responses', { keyPath: 'path' });
+      }
+      if (event.oldVersion < 2) db.createObjectStore('icons', { keyPath: 'id' });
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => {
@@ -235,7 +249,9 @@ export async function cachedFile(id: string): Promise<Blob | null> {
     const note = await request<CachedNote | undefined>(
       tx.objectStore('notes').index('fileIds').get(id),
     );
-    return note?.files.find((file) => file.id === id)?.blob ?? null;
+    const blob = note?.files.find((file) => file.id === id)?.blob;
+    if (blob) return blob;
+    return (await request<CachedIcon | undefined>(tx.objectStore('icons').get(id)))?.blob ?? null;
   }).catch(() => null);
 }
 const fileRequests = new Map<string, Promise<Blob>>();
@@ -280,6 +296,46 @@ export function fileBlob(id: string): Promise<Blob> {
   fileRequests.set(key, result);
   void result.finally(() => fileRequests.delete(key)).catch(() => {});
   return result;
+}
+// Synchronous lookup lets a remounted list render known icons without a flash.
+export const loadedIcon = (id: string) => iconUrls.get(id);
+const iconRequests = new Map<string, Promise<string>>();
+export function iconImage(id: string): Promise<string> {
+  const known = iconUrls.get(id);
+  if (known) return Promise.resolve(known);
+  const epoch = privateGeneration,
+    cache = cacheEpoch();
+  const key = `${epoch}:${id}`;
+  const pending = iconRequests.get(key);
+  if (pending) return pending;
+  const result = (async () => {
+    const saved = await transaction('readonly', (tx) =>
+      request<CachedIcon | undefined>(tx.objectStore('icons').get(id)),
+    ).catch(() => undefined);
+    const blob = saved?.blob ?? (await fileBlob(id));
+    if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
+    if (!saved) void rememberIcon(id, blob, cache).catch(() => {});
+    const url = iconUrls.get(id) ?? URL.createObjectURL(blob);
+    iconUrls.set(id, url);
+    return url;
+  })();
+  iconRequests.set(key, result);
+  void result.finally(() => iconRequests.delete(key)).catch(() => {});
+  return result;
+}
+async function rememberIcon(id: string, blob: Blob, epoch: string) {
+  if (blob.size > FOLDER_ICON_MAX_BYTES) return;
+  await transaction('readwrite', async (tx) => {
+    if (epoch !== cacheEpoch()) return;
+    if (!(await request(tx.objectStore('responses').get('/api/auth/status')))) return;
+    const store = tx.objectStore('icons');
+    const icons = await request<CachedIcon[]>(store.getAll());
+    for (const old of icons
+      .sort((a, b) => a.savedAt - b.savedAt)
+      .slice(0, Math.max(0, icons.length + 1 - ICON_LIMIT)))
+      store.delete(old.id);
+    store.put({ id, blob, savedAt: Date.now() } satisfies CachedIcon);
+  });
 }
 export async function cachedNote(id: string): Promise<NoteDetail | undefined> {
   return transaction('readwrite', async (tx) => {
@@ -517,6 +573,7 @@ export async function clearRecentCache() {
     const store = tx.objectStore('notes');
     const notes = await request<CachedNote[]>(store.getAll());
     for (const note of notes) if (!note.pinned) store.delete(note.id);
+    tx.objectStore('icons').clear();
   });
   await changed();
 }
