@@ -37,6 +37,7 @@ import {
   type VersionInfo,
 } from '../../shared/types';
 import { useReading } from '../useReading';
+import { openLink } from '../open-link';
 import { Empty, Modal, NodeIcon, Spinner, useQuestion } from './Primitives';
 import { MarkdownView, type Heading } from './MarkdownView';
 import { Attachments, NodeList } from './Management';
@@ -398,7 +399,7 @@ export default function NotePane(props: Props) {
   const previewFile = (file: FileInfo) => {
     if (file.mime.startsWith('image/')) showImage(fileUrl(file.id), file.name);
     else if (file.mime === 'application/pdf') setPdf(file);
-    else window.open(fileUrl(file.id, true), '_blank', 'noopener,noreferrer');
+    else openLink(fileUrl(file.id, true));
   };
   const addFiles = async (files: FileList | null) => {
     if (!files?.length) return;
@@ -630,12 +631,16 @@ export default function NotePane(props: Props) {
             className="text-button"
             onClick={() => {
               const href = URL.createObjectURL(
-                new Blob([content], { type: 'text/plain;charset=utf-8' }),
+                new Blob([content], {
+                  type: `${note.kind === 'markdown' ? 'text/markdown' : 'text/plain'};charset=utf-8`,
+                }),
               );
               const a = document.createElement('a');
               a.href = href;
               a.download = `${note.title}.${note.kind === 'markdown' ? 'md' : 'txt'}`;
+              document.body.appendChild(a);
               a.click();
+              a.remove();
               setTimeout(() => URL.revokeObjectURL(href), 1000);
             }}
           >

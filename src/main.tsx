@@ -3,4 +3,8 @@ import App from './App';
 import './styles.css';
 import './assistant.css';
 import './themes.css';
-createRoot(document.getElementById('root')!).render(<App />);
+async function start() {
+  if (import.meta.env.MODE === 'android') (await import('./mobile')).installMobile();
+  createRoot(document.getElementById('root')!).render(<App />);
+}
+void start();

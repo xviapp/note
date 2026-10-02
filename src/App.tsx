@@ -25,6 +25,8 @@ import { MoveDialog, NodeForm, NodeList, Settings, TrashView } from './component
 import NotePane from './components/NotePane';
 import { ThemeSwitcher } from './components/ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../shared/password';
+import { openLink } from './open-link';
+import { dismissReadingOverlay } from './mobile-back';
 
 type View = 'tree' | 'favorites' | 'recent' | 'trash' | 'settings';
 const routeId = () => window.location.pathname.match(/^\/n\/([a-zA-Z0-9_-]+)$/)?.[1] || null;
@@ -261,7 +263,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
   };
   const openNode = (node: NoteNode) => {
     if (node.kind === 'link' && !node.arxiv_id && node.url) {
-      window.open(node.url, '_blank', 'noopener,noreferrer');
+      openLink(node.url);
       void api(`/api/nodes/${node.id}/open`, 'POST', {}).then(changed).catch(report);
       setMobileOpen(false);
       return;
@@ -290,6 +292,23 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     window.addEventListener('popstate', pop);
     return () => window.removeEventListener('popstate', pop);
   }, [selected]);
+  useEffect(() => {
+    const back = (event: Event) => {
+      if (dismissReadingOverlay()) event.preventDefault();
+      else if (mobileOpen) {
+        event.preventDefault();
+        setMobileOpen(false);
+      } else if ((event as CustomEvent<{ canGoBack: boolean }>).detail?.canGoBack) {
+        event.preventDefault();
+        history.back();
+      } else if (selected || view !== 'tree') {
+        event.preventDefault();
+        void navigate('');
+      }
+    };
+    window.addEventListener('note:native-back', back);
+    return () => window.removeEventListener('note:native-back', back);
+  }, [selected, view, mobileOpen]);
   useEffect(() => {
     if (!mobileOpen) return;
     const escape = (e: KeyboardEvent) => {

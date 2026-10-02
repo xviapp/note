@@ -1,6 +1,6 @@
 # 页间
 
-适配电脑和手机的单人笔记 Web 应用。首次通过专属链接设置一个密码，以后只用密码登录。打开笔记直接阅读，编辑器在确认后才加载。
+适配电脑和手机的单人笔记应用，提供 Web 和 Android 客户端。首次通过专属链接设置一个密码，以后只用密码登录。打开笔记直接阅读，编辑器在确认后才加载。
 
 ## 已实现
 
@@ -58,6 +58,23 @@ SVG 文件和论文内嵌 SVG 均作为独立矢量图片保存，保留路径�
 会话正文、附件原件及处理后的图片存在私有 R2，计入全库空间；文字按发送时的内容保存快照。随源文件进入回收站时保留，清空会话或永久删除源文件后由清理流程回收；其他笔记仍在使用的共享原文件不受影响，已生成的 Markdown 是独立子笔记。取消或失败留下的未引用上传由既有草稿清理机制回收。API Key 由 `APP_SECRET` 派生 AES-GCM 密钥加密后存入 D1，浏览器仅收到配置状态；轮换 `APP_SECRET` 后需要重新保存 AI Key，修改登录密码无需重新配置。
 
 `npm run deploy` 会先构建、应用生产数据库迁移，再部署新版；也可单独运行 `npm run db:remote`。本地启动脚本自动应用迁移。自动测试使用模拟 DeepSeek 响应；真实 API 联调需配置自己的有效 Key。
+
+## Android 客户端
+
+首版使用 Capacitor，Android 工程位于同一仓库的 `android/`，共用 React 界面与 Cloudflare 服务。安装后连接 `https://note.xvi.app`，用现有密码登录；笔记、阅读位置、翻译记录和青藜会话沿用同一份云端数据。这版需要联网，不包含离线笔记库。
+
+需要 Android 8.0+，以及 Android System WebView 125+。旧网页组件会显示更新提示。支持系统文件选择与保存、外部链接交给浏览器、系统返回键收起窗口或目录、未保存修改的离开确认，以及应用切到后台时补写阅读进度。
+
+本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 36 和 Build Tools 36，设置 `JAVA_HOME` 与 `ANDROID_SDK_ROOT` 后运行：
+
+```bash
+npm ci
+npm run android:apk
+```
+
+安装包输出为 `artifacts/yejian-0.1.0-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.1.0-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
+
+只更新客户端资源可执行 `npm run build:android`，打开原生工程用 `npm run android:open`。Web 构建仍输出到 `dist/`，Android 单独输出到 `dist-android/`。修改客户端后需要重新构建并安装 APK；部署网站不会替换已安装包内的界面。实现与验证方式见 [Android 客户端](docs/android.md)。
 
 ## 本地运行
 

@@ -19,9 +19,15 @@
     "db:remote": "wrangler d1 migrations apply DB --remote --env production",
     "setup:local": "node scripts/setup.mjs",
     "reset-password": "node scripts/reset-password.mjs",
-    "deploy": "npm run build && npm run db:remote && wrangler deploy --env production"
+    "deploy": "npm run build && npm run db:remote && wrangler deploy --env production",
+    "build:android": "node scripts/assets.mjs && tsc --noEmit && vite build --mode android && cap sync android",
+    "android:apk": "npm run build:android && node scripts/android.mjs assembleDebug",
+    "android:open": "cap open android"
   },
   "dependencies": {
+    "@capacitor/android": "8.5.2",
+    "@capacitor/app": "8.1.1",
+    "@capacitor/core": "8.5.2",
     "@codemirror/lang-markdown": "6.5.2",
     "@codemirror/view": "6.43.13",
     "@uiw/react-codemirror": "4.25.12",
@@ -41,6 +47,7 @@
     "saxes": "6.0.0"
   },
   "devDependencies": {
+    "@capacitor/cli": "8.5.2",
     "@cloudflare/vitest-pool-workers": "0.22.0",
     "@cloudflare/workers-types": "5.20261001.1",
     "@playwright/test": "1.63.0",
