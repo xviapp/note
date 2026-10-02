@@ -70,7 +70,7 @@ run('potrace', [bitmap, '--svg', '--opttolerance', '0.2', '--output', traced]);
 const paths = [...(await readFile(traced, 'utf8')).matchAll(/<path d="([^"]+)"/g)].map((match) =>
   match[1].replace(/\s+/g, ' '),
 );
-if (paths.length !== 3) throw new Error('Expected the three supplied book-and-flame shapes');
+if (paths.length !== 3) throw new Error('Expected the three supplied leaf-and-book shapes');
 const vector = `<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"

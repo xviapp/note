@@ -1,6 +1,6 @@
 # 应用图标
 
-原稿保存在 `assets/brand/day-original.png` 和 `assets/brand/night-original.png`，分别为白天的浅底青色图案、夜间的青底白色图案。保留原图纹理与比例，站内图标只缩放并加圆角。
+页间使用用户提供的叶片与书页图案。`assets/brand/day-original.png` 保留浅底青色原稿；`assets/brand/night-original.png` 为内置 imagegen 生成的青底米白配色，完整提示见[资源记录](../assets/brand/README.md)。站内图标只缩放并加圆角。
 
 ## 使用位置
 
@@ -34,6 +34,8 @@ npm run icons
 图标与安装清单包含在离线界面缓存中，PNG / ICO 与字体等静态资源一起打包，减少首次准备离线资源的请求数。
 
 ## 验证
+
+0.4.3：电脑与手机视口共核对 28 处品牌显示，覆盖首次设置／登录、侧栏、加载页、旧 WebView 提示页及白天、夜间、星空、跟随系统主题；favicon、Apple 图标和安装清单随主题正确切换，无页面异常。新 Android 轮廓最远点距中心约 28.53 dp，位于 33 dp 安全半径内；检查了圆形、圆角方形及单色矢量预览。2 项已有主题回归、3 项离线打包检查、Web / Android 构建和 Android Lint 通过；14 个图标及清单文件在源码、网页产物、Android 资源与 APK 中一致。安装包为 0.4.3 / versionCode 12，沿用已有签名；青藜资源未改动。
 
 0.4.2：在电脑与手机视口逐一检查六处青藜图标，核对白天、夜间、星空及跟随系统切换，未出现页面异常。10 项已有主题、助手窗口、选文和翻译交互回归通过，3 项离线资源打包检查及 Web / Android 构建通过。网页资源、Android 资源和 APK 内的图标内容一致；安装包为 0.4.2 / versionCode 11，沿用已有签名。
 
