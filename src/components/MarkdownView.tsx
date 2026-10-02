@@ -7,6 +7,7 @@ import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
 import { mathOptions, rehypeMathCompatibility } from '../math';
 import 'katex/dist/katex.min.css';
 import '../math.css';
+import { CachedImage } from './CachedImage';
 
 // Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
 // https://github.com/rehypejs/rehype-sanitize#example-math
@@ -113,7 +114,7 @@ export const MarkdownView = memo(function MarkdownView({
                   {alt || '查看图片链接'}
                 </a>
               ) : (
-                <img
+                <CachedImage
                   src={src}
                   alt={alt ?? ''}
                   loading="lazy"

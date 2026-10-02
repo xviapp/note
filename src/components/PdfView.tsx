@@ -3,11 +3,12 @@ import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { openPdf } from '../pdf-document';
 import { ChevronLeft, ChevronRight, Minus, Plus, Download, List, X } from 'lucide-react';
 import { fileUrl } from '../api';
-import type { ReadingPosition } from '../../shared/types';
+import type { NoteDetail, ReadingPosition } from '../../shared/types';
 import { Spinner } from './Primitives';
 import { PdfPage } from './PdfPage';
 import type { PdfSourceLocation } from '../../shared/translation';
 import { PdfOutline } from './PdfOutline';
+import { cacheEpoch, cachedFile, rememberNote, shareFileDownload } from '../offline-cache';
 
 type Position = { page: number; pageRatio: number };
 type PageBox = { top: number; height: number };
@@ -31,12 +32,14 @@ export default function PdfView({
   onPosition,
   selectionOwner,
   sourceLocation,
+  cacheNote,
 }: {
   fileId: string;
   initialPosition?: ReadingPosition;
   onPosition?: (position: Position) => void;
   selectionOwner?: string;
   sourceLocation?: PdfSourceLocation | null;
+  cacheNote?: NoteDetail;
 }) {
   const [document, setDocument] = useState<{
     pdf: PDFDocumentProxy;
@@ -77,9 +80,26 @@ export default function PdfView({
       page: initial.current.page || 1,
       pageRatio: initial.current.pageRatio || 0,
     };
-    const task = openPdf(fileUrl(fileId));
-    void task.promise
+    let task: ReturnType<typeof openPdf> | undefined;
+    const epoch = cacheEpoch();
+    void cachedFile(fileId)
+      .then(async (blob) => {
+        const source = blob ? new Uint8Array(await blob.arrayBuffer()) : fileUrl(fileId);
+        if (!live) return;
+        task = openPdf(source);
+        if (!blob && cacheNote) {
+          const download = task.promise
+            .then((pdf) => pdf.getData())
+            .then((data) => new Blob([new Uint8Array(data)], { type: 'application/pdf' }));
+          shareFileDownload(fileId, download);
+          void download
+            .then((blob) => rememberNote(cacheNote, false, epoch, { id: fileId, blob }))
+            .catch(() => {});
+        }
+        return task.promise;
+      })
       .then(async (pdf) => {
+        if (!pdf || !live) return;
         const first = (await pdf.getPage(1)).getViewport({ scale: 1 });
         if (live) {
           position.current.page = Math.min(pdf.numPages, Math.max(1, position.current.page));
@@ -96,7 +116,7 @@ export default function PdfView({
       });
     return () => {
       live = false;
-      void task.destroy().catch(() => {});
+      void task?.destroy().catch(() => {});
     };
   }, [fileId]);
 

@@ -50,6 +50,10 @@ import { TranslationPanel } from './TranslationPanel';
 import type { TranslationLaunch } from '../translation';
 import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
 import { clearSourceHighlight, locateTextSource } from '../source-location';
+import { ReadingSettingsButton } from './ReadingSettings';
+import { useReadingPreferences } from '../reading-preferences';
+import { useOffline } from '../connectivity';
+import { CachedImage } from './CachedImage';
 
 const Editor = lazy(() => import('./Editor'));
 const PdfView = lazy(() => import('./PdfView'));
@@ -96,6 +100,8 @@ interface Props {
 
 export default function NotePane(props: Props) {
   const { id } = props;
+  const offline = useOffline();
+  const readingPreferences = useReadingPreferences();
   const [note, setNote] = useState<NoteDetail | null>(null),
     noteRef = useRef<NoteDetail | null>(null);
   const [loadError, setLoadError] = useState<ApiError | Error | null>(null);
@@ -190,6 +196,7 @@ export default function NotePane(props: Props) {
     props.onLoaded(detail);
   };
   useEffect(() => {
+    if (editing) return;
     let live = true;
     setLoadError(null);
     api<NoteDetail>(`/api/nodes/${id}`)
@@ -202,7 +209,7 @@ export default function NotePane(props: Props) {
     return () => {
       live = false;
     };
-  }, [id, props.refresh]);
+  }, [id, props.refresh, editing]);
   useEffect(() => {
     if (!editing || !dirty) return;
     const warn = (event: BeforeUnloadEvent) => {
@@ -318,10 +325,21 @@ export default function NotePane(props: Props) {
   }, [note?.id, restorePosition]);
   useLayoutEffect(() => {
     // Toggling the sidebar reflows the article; keep the same point in the chapter.
-    if (tocPosition.current && scroll.current)
-      restoreTextPosition(scroll.current, tocPosition.current);
+    const position = tocPosition.current;
     tocPosition.current = null;
-  }, [desktopTocOpen]);
+    if (!position || !scroll.current) return;
+    const area = scroll.current;
+    restoreTextPosition(area, position);
+    const top = area.scrollTop;
+    let active = true;
+    // A newly selected font may finish loading after the initial reflow.
+    void document.fonts.ready.then(() => {
+      if (active && Math.abs(area.scrollTop - top) < 2) restoreTextPosition(area, position);
+    });
+    return () => {
+      active = false;
+    };
+  }, [desktopTocOpen, readingPreferences]);
   const recordScroll = () => {
     const area = scroll.current;
     if (!note || !area || editing || (!restored.current && !touched.current)) return;
@@ -355,6 +373,15 @@ export default function NotePane(props: Props) {
     reading.update(position);
     return position;
   };
+  useEffect(() => {
+    const remember = () => {
+      if (editing || !scroll.current) return;
+      touched.current = restored.current = true;
+      tocPosition.current = recordScroll() ?? reading.initial;
+    };
+    window.addEventListener('note:before-reading-change', remember);
+    return () => window.removeEventListener('note:before-reading-change', remember);
+  });
   const toggleToc = () => {
     if (compactToc) setTocOpen((open) => !open);
     else {
@@ -486,10 +513,19 @@ export default function NotePane(props: Props) {
       <div className="note-toolbar">
         {navigation}
         <div className="note-actions">
+          {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
+            <ReadingSettingsButton
+              beforeChange={() => {
+                touched.current = restored.current = true;
+                tocPosition.current = recordScroll() ?? reading.initial;
+              }}
+            />
+          )}
           {note.kind !== 'folder' && !editing && (
             <button
               className={`icon-button ${assistantOpen ? 'is-active' : ''}`}
               aria-label="青藜"
+              disabled={offline}
               aria-expanded={assistantOpen}
               title="青藜"
               onClick={() => {
@@ -503,6 +539,7 @@ export default function NotePane(props: Props) {
             <button
               className="icon-button"
               aria-label="翻译记录"
+              disabled={offline}
               title="翻译记录"
               aria-expanded={!!translation}
               onClick={() => setTranslation({})}
@@ -513,6 +550,7 @@ export default function NotePane(props: Props) {
           <button
             className={`icon-button ${note.favorite ? 'is-favorite' : ''}`}
             aria-label={note.favorite ? '取消收藏' : '收藏笔记'}
+            disabled={offline}
             title={note.favorite ? '取消收藏' : '收藏'}
             onClick={async () => {
               try {
@@ -532,6 +570,7 @@ export default function NotePane(props: Props) {
             <button
               className="icon-button"
               aria-label="版本历史"
+              disabled={offline}
               title="版本历史"
               onClick={() => setHistoryOpen(true)}
             >
@@ -556,6 +595,7 @@ export default function NotePane(props: Props) {
             <button
               className="button compact edit-note-button"
               aria-label="编辑正文"
+              disabled={offline}
               title="编辑正文"
               onClick={startEdit}
             >
@@ -689,6 +729,7 @@ export default function NotePane(props: Props) {
                 <PdfView
                   key={note.file.id}
                   fileId={note.file.id}
+                  cacheNote={note}
                   initialPosition={reading.initial}
                   onPosition={reading.update}
                   sourceLocation={pdfLocation}
@@ -764,16 +805,20 @@ export default function NotePane(props: Props) {
                       <p className="empty-body">暂无内容。点击「编辑正文」开始编辑。</p>
                     )
                   ) : note.kind === 'text' ? (
-                    <pre className="plain-text">
-                      {(editing ? content : note.content) || '暂无内容'}
-                    </pre>
+                    <div className="plain-text">
+                      {((editing ? content : note.content) || '暂无内容')
+                        .split(/\r?\n\r?\n/)
+                        .map((paragraph, index) => (
+                          <p key={index}>{paragraph || '\u00a0'}</p>
+                        ))}
+                    </div>
                   ) : note.kind === 'image' && note.file ? (
                     <button
                       className="image-node"
                       aria-label="放大查看图片"
                       onClick={() => showImage(fileUrl(note.file!.id), note.title)}
                     >
-                      <img src={fileUrl(note.file.id)} alt={note.title} />
+                      <CachedImage src={fileUrl(note.file.id)} alt={note.title} />
                     </button>
                   ) : note.kind === 'link' ? (
                     <a

@@ -1,6 +1,6 @@
 {
   "name": "xvi-note",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "private": true,
   "type": "module",
   "engines": {
@@ -30,6 +30,8 @@
     "@capacitor/core": "8.5.2",
     "@codemirror/lang-markdown": "6.5.2",
     "@codemirror/view": "6.43.13",
+    "@fontsource/noto-sans-sc": "5.3.0",
+    "@fontsource/noto-serif-sc": "5.3.0",
     "@uiw/react-codemirror": "4.25.12",
     "css-tree": "3.2.1",
     "dompurify": "3.4.16",

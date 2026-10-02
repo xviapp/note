@@ -69,6 +69,7 @@ test('reopens a saved arXiv paper internally from the tree, lists, favorites and
   await page.goto(`/n/${paper.id}`);
   await expect(page.locator('.paper-body')).toContainText('Reading a mathematical paper.');
   await page.goto(`/n/${other.id}`);
+  await expect(page.locator('.read-content')).toContainText('普通笔记正文。');
   await page.evaluate(() => {
     (window as any).openedUrls = [];
     window.open = (url) => {

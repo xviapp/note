@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import { Minus, Plus, RotateCcw, Download } from 'lucide-react';
 import { Modal } from './Primitives';
+import { CachedImage } from './CachedImage';
 export default function ImageViewer({
   src,
   alt,
@@ -94,7 +95,7 @@ export default function ImageViewer({
           last.current = null;
         }}
       >
-        <img
+        <CachedImage
           src={src}
           alt={alt}
           draggable={false}

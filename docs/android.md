@@ -1,6 +1,6 @@
 # Android 客户端
 
-首版为联网使用的 Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React、编辑确认、PDF 连续阅读、翻译和青藜都共用现有实现。iOS 工程暂未添加。
+Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React、编辑确认、PDF 连续阅读、翻译和青藜都共用现有实现。0.2.0 加入字体与排版设置、本机文件缓存和离线阅读，详见[阅读设置与本机缓存](offline-reading.md)。编辑和青藜仍需联网。iOS 工程暂未添加。
 
 ## 服务与会话
 
@@ -27,20 +27,22 @@
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.1.0-android-debug.apk` 是测试包，使用开发机调试签名。后续测试包应沿用相同签名才可直接覆盖安装；正式分发前使用单独保管的发布密钥，并递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.2.0-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 2，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 ## 验证
 
 `e2e/notebook.spec.ts` 的 Android 返回测试覆盖弹窗关闭、最大化还原、侧栏收起、页面返回和未保存草稿保护；同一套测试同时运行在电脑和手机视口。已有预览、附件 PDF、图片和青藜窗口测试用于验证共用界面的回归。
 
-原生调试可在隔离模拟器中安装 APK，再使用 Playwright 的 `_android.devices()` 和 `device.webView({ pkg: 'app.xvi.note' }).page()` 连接 WebView。测试写入需将 `/api/` 请求全部转发到独立本地 Worker，使用测试密码与模拟 AI，避免触碰正式笔记或产生模型调用费用。原生文件下载不经过 Playwright 网络拦截，应另用本地生成的草稿或截图验证文档选择器和写入。
+原生调试可在隔离模拟器中安装 APK，再使用 Playwright 的 `_android.devices()` 按模拟器序列号选取设备，通过 `device.webView({ pkg: 'app.xvi.note' }).page()` 连接 WebView。测试写入需将 `/api/` 请求全部转发到独立本地 Worker，使用测试密码与模拟 AI，避免触碰正式笔记或产生模型调用费用。原生文件下载不经过 Playwright 网络拦截，应另用本地生成的草稿或截图验证文档选择器和写入。
 
-2026-10-02 验证记录：
+2026-10-02，0.1.0 验证记录：
 
 - APK 在 Android 14 / WebView 128 模拟器安装、运行成功；旧 WebView 113 显示更新提示。
 - 原生环境通过密码初始化与登录、HttpOnly 会话刷新保留、Markdown 编辑与公式预览、PDF 上传与连续阅读、PDF 目录与系统返回操作。
 - 通过三种主题及系统栏颜色、软键盘下青藜最大化布局、返回键的草稿保护、系统文档保存与 Markdown 文件名／内容核对。
 - 原生地址策略 4 项测试、Worker 69 项测试、电脑／手机共 8 项相关界面测试通过；Android Lint 无错误。测试没有调用真实 DeepSeek。
 - 线上只读取公开登录状态及校验部署资源；测试笔记全部写入隔离的本地 Worker。大型文件原生下载及实体手机尚未验收。
+
+0.2.0 在独立 Android 14 / WebView 128 模拟器验证：包内宋体、字号和间距、本机离线保存、断网重开 Markdown 与完整 PDF 第 10 页、离线列表、恢复联网、退出清理，以及系统返回关闭阅读设置和 PDF。未出现 JavaScript 异常；原生 4 项单元测试及 Android Lint 通过。电脑／手机端本次 34 项针对性检查通过，详见[离线阅读验证](offline-reading.md#验证)。
 
 本机模拟器 37.1.11 的 SwiftShader 后端启动时发生 SIGSEGV；在独立测试 AVD 中使用 `-gpu host -feature -Vulkan -no-snapshot` 可正常运行，无需修改应用渲染代码。

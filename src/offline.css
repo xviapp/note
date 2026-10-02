@@ -1,0 +1,70 @@
+.offline-banner {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 7px 20px;
+  font-size: 12px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
+.offline-banner button {
+  margin-left: auto;
+  font-size: 12px;
+}
+.offline-menu-error {
+  max-width: 230px;
+  padding: 4px 10px;
+  margin: 0;
+  color: var(--danger);
+  font-size: 12px;
+}
+.cache-settings select {
+  min-width: 108px;
+}
+.cache-pinned {
+  margin-top: 24px;
+}
+.cache-pinned h3 {
+  color: var(--muted);
+  font-size: 13px;
+  font-weight: 500;
+}
+.cache-pinned h3 span {
+  margin-left: 8px;
+}
+.cache-pinned-row {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--line);
+}
+.cache-pinned-row > span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.cache-pinned-row small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 4px;
+}
+.offline-file-title {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.offline-file-title small {
+  display: block;
+  color: var(--muted);
+  font-size: 11px;
+  margin-top: 5px;
+}
+.offline-file-size {
+  color: var(--muted);
+  font-size: 12px;
+  white-space: nowrap;
+  padding-right: 12px;
+}

@@ -3,6 +3,7 @@ import { ChevronDown, ChevronRight, MoreHorizontal, Plus } from 'lucide-react';
 import { api } from '../api';
 import { PARENT_KINDS, type NoteNode } from '../../shared/types';
 import { NodeIcon, Spinner } from './Primitives';
+import { OfflineSaveButton } from './OfflineCache';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new';
 type Listing = { nodes: NoteNode[]; nextOffset: number | null };
@@ -21,6 +22,7 @@ export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreePro
         <MoreHorizontal size={18} />
       </summary>
       <div className="menu-popup">
+        <OfflineSaveButton node={node} />
         {PARENT_KINDS.includes(node.kind) && (
           <button onClick={() => onAction('new', node)}>新建子节点</button>
         )}

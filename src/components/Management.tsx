@@ -10,6 +10,7 @@ import {
   RotateCcw,
   ShieldCheck,
   Star,
+  Type,
   Trash2,
 } from 'lucide-react';
 import { api, fileUrl, formatBytes, formatDate, upload } from '../api';
@@ -27,6 +28,8 @@ import { NodeMenu, NodePicker, type NodeAction } from './Tree';
 import { ThemeChoices } from './ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../../shared/password';
 import { AiSettings } from './AiSettings';
+import { ReadingControls } from './ReadingSettings';
+import { CacheSettings } from './OfflineCache';
 
 export type Confirm = (
   title: string,
@@ -482,6 +485,14 @@ export function Settings({
         </h2>
         <ThemeChoices />
       </section>
+      <section className="settings-section">
+        <h2>
+          <Type size={19} />
+          阅读
+        </h2>
+        <ReadingControls />
+      </section>
+      <CacheSettings />
       <AiSettings confirm={confirm} />
       <section className="settings-section">
         <h2>

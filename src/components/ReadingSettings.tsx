@@ -1,0 +1,129 @@
+import { useState } from 'react';
+import { RotateCcw } from 'lucide-react';
+import { Modal } from './Primitives';
+import {
+  readingDefaults,
+  readingPresets,
+  setReadingPreferences,
+  useReadingPreferences,
+} from '../reading-preferences';
+import '../reading-settings.css';
+
+export function ReadingControls() {
+  const value = useReadingPreferences();
+  return (
+    <div className="reading-controls">
+      <fieldset className="reading-fonts">
+        <legend>字体</legend>
+        {(
+          [
+            ['system', '系统'],
+            ['serif', '宋体'],
+            ['sans', '黑体'],
+          ] as const
+        ).map(([font, name]) => (
+          <label key={font} className={`reading-font-${font}`}>
+            <input
+              type="radio"
+              name="reading-font"
+              value={font}
+              checked={value.font === font}
+              onChange={() => setReadingPreferences({ font })}
+            />
+            <span>{name}</span>
+          </label>
+        ))}
+      </fieldset>
+      <label className="reading-slider">
+        <span>
+          字号 <output>{value.size}</output>
+        </span>
+        <input
+          aria-label="正文字号"
+          type="range"
+          min="14"
+          max="28"
+          step="1"
+          value={value.size}
+          onChange={(e) => setReadingPreferences({ size: Number(e.target.value) })}
+        />
+      </label>
+      <div className="reading-presets" role="group" aria-label="排版预设">
+        {Object.entries(readingPresets).map(([name, preset]) => (
+          <button
+            key={name}
+            className="button compact"
+            aria-pressed={Object.entries(preset).every(
+              ([key, setting]) => value[key as keyof typeof value] === setting,
+            )}
+            onClick={() => setReadingPreferences(preset)}
+          >
+            {name}
+          </button>
+        ))}
+      </div>
+      <details className="reading-adjustments">
+        <summary>微调间距</summary>
+        {(
+          [
+            ['letterSpacing', '字间距', 0, 0.16, 0.01, 'em'],
+            ['lineHeight', '行距', 1.4, 2.6, 0.1, '倍'],
+            ['paragraphSpacing', '段落间距', 0.5, 2, 0.1, 'em'],
+            ['width', '正文宽度', 520, 1040, 20, 'px'],
+          ] as const
+        ).map(([key, label, min, max, step, unit]) => (
+          <label className="reading-slider" key={key}>
+            <span>
+              {label}
+              <output>
+                {value[key]} {unit}
+              </output>
+            </span>
+            <input
+              aria-label={label}
+              type="range"
+              min={min}
+              max={max}
+              step={step}
+              value={value[key]}
+              onChange={(e) => setReadingPreferences({ [key]: Number(e.target.value) })}
+            />
+          </label>
+        ))}
+      </details>
+      <button
+        className="text-button reading-reset"
+        onClick={() => setReadingPreferences(readingDefaults)}
+      >
+        <RotateCcw size={14} />
+        恢复默认
+      </button>
+    </div>
+  );
+}
+
+export function ReadingSettingsButton({ beforeChange }: { beforeChange: () => void }) {
+  const [open, setOpen] = useState(false);
+  return (
+    <>
+      <button
+        className="icon-button reading-settings-toggle"
+        aria-label="阅读设置"
+        title="阅读设置"
+        aria-haspopup="dialog"
+        aria-expanded={open}
+        onClick={() => {
+          beforeChange();
+          setOpen(true);
+        }}
+      >
+        <span aria-hidden="true">Aa</span>
+      </button>
+      {open && (
+        <Modal title="阅读设置" className="reading-settings-dialog" onClose={() => setOpen(false)}>
+          <ReadingControls />
+        </Modal>
+      )}
+    </>
+  );
+}

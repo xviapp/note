@@ -3,11 +3,13 @@ import {
   BookOpen,
   Clock3,
   FolderOpen,
+  HardDriveDownload,
   Menu,
   Plus,
   Settings2,
   Star,
   Trash2,
+  WifiOff,
   X,
 } from 'lucide-react';
 import { api, formatBytes, lockEdits } from './api';
@@ -27,8 +29,11 @@ import { ThemeSwitcher } from './components/ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../shared/password';
 import { openLink } from './open-link';
 import { dismissReadingOverlay } from './mobile-back';
+import { useOffline } from './connectivity';
+import { OfflineLibrary } from './components/OfflineCache';
+import { cacheSnapshot, initializeCache } from './offline-cache';
 
-type View = 'tree' | 'favorites' | 'recent' | 'trash' | 'settings';
+type View = 'tree' | 'favorites' | 'recent' | 'offline' | 'trash' | 'settings';
 const routeId = () => window.location.pathname.match(/^\/n\/([a-zA-Z0-9_-]+)$/)?.[1] || null;
 
 export default function App() {
@@ -51,6 +56,7 @@ export default function App() {
   }, []);
   useEffect(() => {
     void refresh();
+    void initializeCache();
     const expired = () => {
       lockEdits();
       setStatus((previous) => (previous ? { ...previous, authenticated: false } : null));
@@ -61,10 +67,12 @@ export default function App() {
     };
     window.addEventListener('note:unauthenticated', expired);
     window.addEventListener('focus', focus);
+    window.addEventListener('note:cache-reset', focus);
     document.addEventListener('visibilitychange', focus);
     return () => {
       window.removeEventListener('note:unauthenticated', expired);
       window.removeEventListener('focus', focus);
+      window.removeEventListener('note:cache-reset', focus);
       document.removeEventListener('visibilitychange', focus);
     };
   }, [refresh]);
@@ -203,9 +211,7 @@ function AuthScreen({
             </button>
           )}
           {forgot && (
-            <p className="field-hint">
-              在部署端重置密码，使用新的设置链接登录。笔记和文件会保留。
-            </p>
+            <p className="field-hint">在部署端重置密码，使用新的设置链接登录。笔记和文件会保留。</p>
           )}
         </form>
       </div>
@@ -214,6 +220,7 @@ function AuthScreen({
 }
 
 function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<void> }) {
+  const offline = useOffline();
   const [view, setView] = useState<View>('tree'),
     [selected, setSelected] = useState<string | null>(routeId);
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
@@ -235,6 +242,22 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     [],
   );
   const changed = useCallback(() => setRevision((r) => r + 1), []);
+  useEffect(() => {
+    let live = true;
+    const revalidate = async () => {
+      setRevision((value) => value + 1);
+      setDetailRevision((value) => value + 1);
+      await initializeCache();
+      for (const item of cacheSnapshot().notes.filter((note) => note.pinned)) {
+        if (!live || !navigator.onLine) break;
+        await api(`/api/nodes/${item.node.id}`).catch(() => {});
+      }
+    };
+    if (!offline) void revalidate();
+    return () => {
+      live = false;
+    };
+  }, [offline]);
   useEffect(() => {
     let live = true;
     api<StorageInfo>('/api/storage')
@@ -343,11 +366,9 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     };
   }, []);
   const action = async (kind: NodeAction, node: NoteNode) => {
-    document
-      .querySelectorAll<HTMLDetailsElement>('details.node-menu[open]')
-      .forEach((element) => {
-        element.open = false;
-      });
+    document.querySelectorAll<HTMLDetailsElement>('details.node-menu[open]').forEach((element) => {
+      element.open = false;
+    });
     if (!(await leaveGuard.current())) return;
     if (kind === 'new') {
       setForm({ parent: node.id });
@@ -408,6 +429,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     { key: 'tree' as const, label: '全部笔记', icon: FolderOpen },
     { key: 'favorites' as const, label: '收藏', icon: Star },
     { key: 'recent' as const, label: '最近访问', icon: Clock3 },
+    { key: 'offline' as const, label: '离线阅读', icon: HardDriveDownload },
   ];
   return (
     <div className={`app-shell ${mobileOpen ? 'sidebar-open' : ''}`}>
@@ -507,12 +529,23 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
                     ? '收藏'
                     : view === 'recent'
                       ? '最近访问'
-                      : view === 'trash'
-                        ? '回收站'
-                        : '设置'}
+                      : view === 'offline'
+                        ? '离线阅读'
+                        : view === 'trash'
+                          ? '回收站'
+                          : '设置'}
               </span>
             </div>
           </header>
+        )}
+        {offline && (
+          <div className="offline-banner" role="status">
+            <WifiOff size={14} />
+            离线阅读
+            <button className="text-button" onClick={() => void onLogout()}>
+              重新连接
+            </button>
+          </div>
         )}
         {notice && (
           <div className="notice" role="alert">
@@ -565,12 +598,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
                     新建
                   </button>
                 </div>
-                <NodeList
-                  parent={null}
-                  refresh={revision}
-                  onOpen={openNode}
-                  onAction={action}
-                />
+                <NodeList parent={null} refresh={revision} onOpen={openNode} onAction={action} />
               </section>
             )
           ) : view === 'favorites' || view === 'recent' ? (
@@ -578,6 +606,8 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
               <h1>{view === 'favorites' ? '收藏' : '最近访问'}</h1>
               <NodeList view={view} refresh={revision} onOpen={openNode} onAction={action} />
             </section>
+          ) : view === 'offline' ? (
+            <OfflineLibrary onOpen={openNode} />
           ) : view === 'trash' ? (
             <TrashView confirm={question.confirm} onChanged={changed} onError={report} />
           ) : (

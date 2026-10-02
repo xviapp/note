@@ -441,7 +441,7 @@ test('switching language ignores a late response; stopping and outside dismissal
   await complete(waiting[2], '停止后到达的内容');
   await expect(panel(page).getByRole('alert')).toContainText('已停止');
   await expect(panel(page).locator('.markdown-body')).toHaveCount(0);
-  await page.locator('.note-toolbar').click({ position: { x: 4, y: 4 } });
+  await page.locator('.note-toolbar').click({ position: { x: 4, y: 24 } });
   await expect(panel(page)).toHaveCount(0);
 });
 

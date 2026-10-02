@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, ApiError } from './api';
 import type { ReadingPosition, ReadingState } from '../shared/types';
+import { cacheEpoch } from './offline-cache';
 
 // Each update compares the last confirmed cloud version. An old offline position
 // never wins over a newer position from another device.
@@ -16,6 +17,7 @@ export function useReading(id: string) {
     ready: false,
   });
   const persist = () => {
+    if (cacheEpoch().startsWith('signed-out:')) return;
     try {
       localStorage.setItem(`reading:${id}`, JSON.stringify(state.current));
     } catch {
@@ -68,10 +70,25 @@ export function useReading(id: string) {
           busy: false,
           ready: true,
         };
+        persist();
         setInitial(state.current.position);
       })
       .catch(() => {
-        if (active) setInitial({});
+        if (!active) return;
+        try {
+          const cached = JSON.parse(localStorage.getItem(`reading:${id}`) || 'null');
+          if (cached?.id === id && cached.position && Number.isFinite(cached.version))
+            state.current = {
+              ...state.current,
+              position: cached.position,
+              version: cached.version,
+              dirty: !!cached.dirty,
+            };
+        } catch {
+          /* Ignore corrupt progress. */
+        }
+        state.current.ready = true;
+        setInitial(state.current.position);
       });
     const timer = window.setInterval(() => {
       if (document.visibilityState === 'visible') void flush();
@@ -81,11 +98,13 @@ export function useReading(id: string) {
     };
     document.addEventListener('visibilitychange', hidden);
     window.addEventListener('pagehide', flush);
+    window.addEventListener('note:reconnected', flush);
     return () => {
       active = false;
       clearInterval(timer);
       document.removeEventListener('visibilitychange', hidden);
       window.removeEventListener('pagehide', flush);
+      window.removeEventListener('note:reconnected', flush);
       void flush();
     };
   }, [id, flush]);

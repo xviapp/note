@@ -1,8 +1,9 @@
 import { defineConfig } from 'vite';
 import react from '@vitejs/plugin-react';
+import { offlineShell } from './scripts/offline-shell';
 
 export default defineConfig(({ mode }) => ({
-  plugins: [react()],
+  plugins: [react(), offlineShell()],
   resolve: {
     // Android WebView updates separately from the OS. Ship PDF.js's supported
     // compatibility build, including its matching worker, inside the APK.

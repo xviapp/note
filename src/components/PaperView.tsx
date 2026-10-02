@@ -3,6 +3,8 @@ import type { NoteDetail } from '../../shared/types';
 import type { Heading } from './MarkdownView';
 import { paperFragment, paperText } from '../paper';
 import '../paper.css';
+import { fileBlob } from '../offline-cache';
+import { internalFileId } from './CachedImage';
 
 export const PaperView = memo(function PaperView({
   note,
@@ -69,10 +71,31 @@ export const PaperView = memo(function PaperView({
   useEffect(() => {
     ref.current?.replaceChildren(prepared.fragment.cloneNode(true));
     onHeadings(prepared.headings);
+    let active = true;
+    const urls: string[] = [];
+    for (const image of ref.current?.querySelectorAll('img') ?? []) {
+      const source = image.getAttribute('src') || '';
+      const id = internalFileId(source);
+      if (!id) continue;
+      image.removeAttribute('src');
+      image.dataset.fileSource = source;
+      void fileBlob(id)
+        .then((blob) => {
+          if (!active) return;
+          const url = URL.createObjectURL(blob);
+          urls.push(url);
+          image.src = url;
+        })
+        .catch(() => {});
+    }
+    return () => {
+      active = false;
+      urls.forEach((url) => URL.revokeObjectURL(url));
+    };
   }, [prepared, onHeadings]);
   const imageAction = (target: EventTarget | null) => {
     if (target instanceof HTMLImageElement) {
-      onImage(target.src, target.alt || '论文插图');
+      onImage(target.dataset.fileSource || target.src, target.alt || '论文插图');
       return true;
     }
     return false;
