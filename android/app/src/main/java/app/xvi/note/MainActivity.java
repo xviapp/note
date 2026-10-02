@@ -1,6 +1,7 @@
 package app.xvi.note;
 
 import android.content.Intent;
+import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
@@ -9,6 +10,9 @@ import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Toast;
+import androidx.core.graphics.ColorUtils;
+import androidx.core.view.WindowCompat;
+import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
 import com.getcapacitor.BridgeWebViewClient;
 import org.json.JSONObject;
@@ -24,15 +28,7 @@ public class MainActivity extends BridgeActivity {
         if (bridge == null) return;
         // The first WebView frame precedes the JS bridge/theme callback. Prime
         // every native surface now so the splash never reveals a light canvas.
-        String preference = getSharedPreferences(APPEARANCE_PREFS, MODE_PRIVATE)
-            .getString("theme", "system");
-        int background = switch (preference) {
-            case "light" -> R.color.note_surface_light;
-            case "dark" -> R.color.note_surface_dark;
-            case "starry" -> R.color.note_surface_starry;
-            default -> R.color.note_surface;
-        };
-        applyThemeBackground(getColor(background));
+        restoreThemeBackground();
         OriginPolicy policy = new OriginPolicy(bridge.getLocalUrl());
         CookieManager.getInstance().setAcceptThirdPartyCookies(bridge.getWebView(), false);
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
@@ -57,6 +53,26 @@ public class MainActivity extends BridgeActivity {
         });
     }
 
+    @Override
+    public void onConfigurationChanged(Configuration newConfig) {
+        super.onConfigurationChanged(newConfig);
+        // SystemBars reapplies the OS palette on configuration changes. Restore
+        // the app's palette and contrast before the next frame, preserving insets.
+        if (bridge != null) restoreThemeBackground();
+    }
+
+    private void restoreThemeBackground() {
+        String preference = getSharedPreferences(APPEARANCE_PREFS, MODE_PRIVATE)
+            .getString("theme", "system");
+        int background = switch (preference) {
+            case "light" -> R.color.note_surface_light;
+            case "dark" -> R.color.note_surface_dark;
+            case "starry" -> R.color.note_surface_starry;
+            default -> R.color.note_surface;
+        };
+        applyThemeBackground(getColor(background));
+    }
+
     void setThemeBackground(int color, String preference) {
         // Save the preference, not its resolved color: system appearance may
         // change while the process is stopped.
@@ -74,6 +90,13 @@ public class MainActivity extends BridgeActivity {
         } else themeBackground.setColor(color);
         getWindow().getDecorView().setBackgroundColor(color);
         bridge.getWebView().setBackgroundColor(color);
+        // Keep icon contrast and background in one update. SystemBars.setStyle
+        // also overwrites the decor background with the OS theme's color.
+        WindowInsetsControllerCompat bars = WindowCompat.getInsetsController(
+            getWindow(), getWindow().getDecorView());
+        boolean lightBackground = ColorUtils.calculateLuminance(color) > 0.5;
+        bars.setAppearanceLightStatusBars(lightBackground);
+        bars.setAppearanceLightNavigationBars(lightBackground);
     }
 
     void openExternal(Uri uri) {

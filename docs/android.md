@@ -16,6 +16,8 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 0.2.3 复用启动时创建的 `ColorDrawable`，后续只更新颜色。反复调用 `Window.setBackgroundDrawable` 会短暂清除 DecorView 的系统栏边距，引发 WebView 高度变化；原先的 `resize` 主题同步又重复替换背景，形成上下抖动。主题同步现在只响应实际主题选项变化和应用回到前台，保持正常键盘缩放与屏幕旋转。
 
+0.2.4 将系统栏背景与图标明暗合并到 `NoteDevice.setBackground` 的同一次原生更新。`SystemBars.setStyle` 会把 DecorView 背景改回 Android 系统主题色，因此不再从 JS 单独调用它；SystemBars 继续负责系统栏和键盘边距。配置变化后，`MainActivity` 在插件回调结束时按保存的主题重新设置颜色与对比度，避免白天主题配系统深色时出现深色底上的深色时间、电量图标。
+
 更换自建服务需修改 `capacitor.config.ts` 的 `server.hostname` 并重新构建；使用有效 HTTPS 证书及与之对应的 Worker 站点域名。不要改成加载外部网站的 `server.url`，或添加通配的 `allowNavigation`。
 
 ## 构建
@@ -33,7 +35,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.2.3-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 5，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.2.4-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 6，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -59,9 +61,16 @@ pnpm test:android-startup --device emulator-5560 --theme system
 
 ```bash
 pnpm test:android-layout --device emulator-5560 --theme dark
+pnpm test:android-layout --device emulator-5560 --theme dark --interaction
 ```
 
 同样只允许临时模拟器，支持 `light`、`dark`、`starry`、`system`。脚本延迟模拟的认证响应，逐帧记录加载标志的位置和视口高度，重复三次并包含后台返回；JSON 保存在 `.wrangler/layout-*`。0.2.2 的三次均失败（标志上下位移约 38 CSS px，视口高度相差 76 px）；只修改原生窗口背景复用后，同一测试三次位移均为 0。测试不会提交密码或写入正式笔记。
+
+`--interaction` 使用模拟登录状态和空笔记库，重复打开真实的新建节点弹窗、唤起/关闭软键盘，并检查目录按钮仍可使用。除网页内部位置外，还从 Android 的原生视图树和 InsetsState 读取 WebView、状态栏、导航栏和键盘的实际边界，避免网页内部坐标正常却压住系统栏的漏测；保存完整原生截图和 JSON。该模式需要 FFmpeg，另核对状态栏背景像素与当前应用主题色一致。不使用等待界面静止的 UIAutomator dump，因为旧版持续抖动会让它超时。
+
+边界检查在 0.2.2 复现菜单与时间、电量重叠，以及键盘遮住标题输入框、弹窗上下位移约 194 CSS px；同一台 Android 14 / WebView 128 模拟器安装原有的 0.2.3 APK 后，四种主题共 12 次边界检查均通过。WebView 顶边保持在系统状态栏下方，键盘出现时底边停在键盘上方，弹窗稳定后的位移为 0。随后新增的背景像素检查在 0.2.3 的白天主题/系统深色组合下失败：状态栏为 `#202824`，预期为 `#fcfdfb`；单独调用 `NoteDevice.setBackground` 恢复浅色，随后调用 `SystemBars.setStyle` 又变回深色，确认了第二处覆盖。
+
+0.2.4 通过四种主题共 12 次新建节点/键盘/系统栏边界与背景像素检查，弹窗稳定后位移均为 0；四种应用主题与系统深浅色的八种组合，以及白天主题的横竖屏切换均保持正确状态栏背景和图标对比度。夜间、星空、跟随系统的冷启动无亮帧或空白帧；4 项原生单元测试、Android Lint 及构建通过。冷启动脚本在切换主题后等待 WebView 将 localStorage 写入磁盘，再强制关闭进程，避免把上一主题误当作本次冷启动结果。签名与前版一致；验证仍在独立模拟器进行。
 
 0.2.3 在 Android 14 / WebView 128 模拟器完成四种主题共 12 次位置检查，位移均为 0。夜间、星空、跟随系统的冷启动录屏没有亮帧或空白帧；夜间冷启动的 179 个加载标志采样帧位置一致。键盘弹出/收起、切换主题、横竖屏切换正常，未出现 JavaScript 异常；4 项原生单元测试、Android Lint 和构建通过。APK 签名与前版一致；未操作实体手机。
 

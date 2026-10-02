@@ -1,4 +1,4 @@
-import { Capacitor, registerPlugin, SystemBars, SystemBarsStyle } from '@capacitor/core';
+import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 
 const device = registerPlugin<{
@@ -60,18 +60,12 @@ export function installMobile() {
     if (isActive) theme();
   });
   const theme = () =>
-    void Promise.all([
-      device.setBackground({
+    void device
+      .setBackground({
         color: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
         preference: document.documentElement.dataset.themePreference || 'system',
-      }),
-      SystemBars.setStyle({
-        style:
-          document.documentElement.dataset.theme === 'light'
-            ? SystemBarsStyle.Light
-            : SystemBarsStyle.Dark,
-      }),
-    ]).catch(() => {});
+      })
+      .catch(() => {});
   theme();
   // Insets and the keyboard resize the WebView without changing its theme.
   // Reapplying native appearance on resize can feed back into window layout.

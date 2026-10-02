@@ -36,8 +36,8 @@ public class NoteDevicePlugin extends Plugin {
         }
         getActivity().runOnUiThread(() -> {
             int value = Color.parseColor(color);
-            // SystemBars handles icons and insets; the surrounding native surface
-            // must also follow the app theme when it differs from Android's theme.
+            // SystemBars handles insets; background and icon contrast are updated
+            // together to follow the app even when Android uses another theme.
             ((MainActivity) getActivity()).setThemeBackground(value, preference);
             call.resolve();
         });

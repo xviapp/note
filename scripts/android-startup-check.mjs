@@ -56,7 +56,9 @@ try {
     'data-theme',
     values.theme === 'system' ? 'dark' : values.theme,
   );
-  await pause(500);
+  // WebView batches localStorage disk commits. Let the selected theme persist
+  // before force-stop; otherwise the recording may boot the previous palette.
+  await pause(6000);
 } finally {
   await device.close();
 }
