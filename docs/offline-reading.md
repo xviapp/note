@@ -22,6 +22,8 @@
 
 `scripts/offline-shell.ts` 在 Web 构建时生成 `/sw.js`，只预缓存构建自有的公共界面、字体与 PDF 辅助资源，不拦截 `/api/`。使用 `/` 缓存页面入口，避免 Cloudflare 对 `/index.html` 的重定向导致 Chromium 离线导航失败。资源按构建版本更新，不强制接管仍打开的旧页面。Android 直接使用安装包中的资源，不注册 Service Worker。
 
+首次安装将 WOFF2 字体和 PDF 字符映射合并为若干资源包下载，再恢复为原路径的缓存响应；跳过浏览器不会使用的 WOFF／TTF 回退文件，避免数百次小文件请求拖慢离线准备。每包约 2 MB 原始数据，资源内容参与版本摘要，更新未改名的公共文件也能刷新缓存。`npm run test:build` 检查二进制内容、路径还原、版本更新和 Android 构建隔离。
+
 手动保存时申请浏览器持久存储；浏览器可能不批准，用户清理站点数据或卸载应用也会移除本机副本。[浏览器存储配额和清理规则](https://developer.mozilla.org/en-US/docs/Web/API/Storage_API/Storage_quotas_and_eviction_criteria)决定最终可用空间，本机缓存不是备份。
 
 ## 验证

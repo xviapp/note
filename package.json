@@ -14,6 +14,7 @@
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
     "test": "vitest run",
+    "test:build": "node --experimental-strip-types --test scripts/offline-shell.test.mjs",
     "test:e2e": "playwright test",
     "db:local": "wrangler d1 migrations apply DB --local",
     "db:remote": "wrangler d1 migrations apply DB --remote --env production",

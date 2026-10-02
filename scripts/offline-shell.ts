@@ -28,34 +28,87 @@ export function offlineShell(): Plugin {
               .join('/'),
         )
         .filter(
-          (name) => name !== '/sw.js' && name !== '/android-webview.html' && !name.endsWith('.map'),
+          (name) =>
+            name !== '/sw.js' &&
+            name !== '/android-webview.html' &&
+            !name.startsWith('/offline-resources-') &&
+            !name.endsWith('.map'),
         )
+        // Supported browsers use WOFF2. Do not download the unused WOFF/TTF
+        // fallbacks for every Chinese subset and KaTeX font a second time.
+        .filter((name) => !/^\/assets\/.*\.(?:woff|ttf)$/.test(name))
         // Cloudflare redirects /index.html to /. Replaying a redirected response
         // for a navigation whose redirect mode is manual fails in Chromium.
         .map((name) => (name === '/index.html' ? '/' : name))
         .sort();
-      const hash = createHash('sha256')
-        .update(JSON.stringify(files))
-        .update(await readFile(path.join(output, 'index.html')))
-        .digest('hex')
-        .slice(0, 16);
+      const version = createHash('sha256');
+      const contents = new Map<string, Uint8Array>();
+      for (const file of files) {
+        const content = await readFile(
+          path.join(output, file === '/' ? 'index.html' : file.slice(1)),
+        );
+        contents.set(file, content);
+        version.update(file).update(content);
+      }
+      const hash = version.digest('hex').slice(0, 16);
+      // Hundreds of small CJK subsets and PDF character maps make first-time
+      // installation latency-bound. Fetch a few bounded public resource packs
+      // instead, then restore their original URLs in the service-worker cache.
+      const packed = new Set<string>();
+      const packs: string[] = [];
+      let entries: [string, string, string][] = [];
+      let packedBytes = 0;
+      const flushPack = async () => {
+        if (!entries.length) return;
+        const file = `/offline-resources-${hash}-${packs.length}.json`;
+        await writeFile(path.join(output, file.slice(1)), JSON.stringify(entries));
+        packs.push(file);
+        entries = [];
+        packedBytes = 0;
+      };
+      for (const [file, content] of contents) {
+        if (!/\.(?:woff2|bcmap|pfb|ttf|otf)$/.test(file)) continue;
+        if (packedBytes + content.length > 2_000_000) await flushPack();
+        entries.push([
+          file,
+          file.endsWith('.woff2') ? 'font/woff2' : 'application/octet-stream',
+          await readFile(path.join(output, file.slice(1)), 'base64'),
+        ]);
+        packed.add(file);
+        packedBytes += content.length;
+      }
+      await flushPack();
       await writeFile(
         path.join(output, 'sw.js'),
         `
 const CACHE = ${JSON.stringify(`yejian-shell-${hash}`)};
 const FILES = ${JSON.stringify(files)};
+const CORE = ${JSON.stringify(files.filter((file) => !packed.has(file)))};
+const PACKS = ${JSON.stringify(packs)};
 const PUBLIC = new Set(FILES);
 self.addEventListener('install', (event) => {
   event.waitUntil((async () => {
     const cache = await caches.open(CACHE);
-    let index = 0;
-    await Promise.all(Array.from({ length: 6 }, async () => {
-      while (index < FILES.length) {
-        const url = FILES[index++];
+    const jobs = [
+      ...CORE.map((url) => async () => {
         const response = await fetch(new Request(url, { cache: 'reload' }));
         if (!response.ok) throw new Error('Offline assets unavailable');
         await cache.put(url, response);
-      }
+      }),
+      ...PACKS.map((url) => async () => {
+        const response = await fetch(new Request(url, { cache: 'no-store' }));
+        if (!response.ok) throw new Error('Offline resources unavailable');
+        for (const [file, type, encoded] of await response.json()) {
+          const binary = atob(encoded);
+          const data = new Uint8Array(binary.length);
+          for (let i = 0; i < binary.length; i++) data[i] = binary.charCodeAt(i);
+          await cache.put(file, new Response(data, { headers: { 'Content-Type': type } }));
+        }
+      }),
+    ];
+    let index = 0;
+    await Promise.all(Array.from({ length: 6 }, async () => {
+      while (index < jobs.length) await jobs[index++]();
     }));
   })());
 });

@@ -63,7 +63,7 @@ SVG 文件和论文内嵌 SVG 均作为独立矢量图片保存，保留路径�
 
 ## Android 客户端
 
-首版使用 Capacitor，Android 工程位于同一仓库的 `android/`，共用 React 界面与 Cloudflare 服务。安装后连接 `https://note.xvi.app`，用现有密码登录；笔记、阅读位置、翻译记录和青藜会话沿用同一份云端数据。这版需要联网，不包含离线笔记库。
+Android 客户端使用 Capacitor，工程位于同一仓库的 `android/`，共用 React 界面与 Cloudflare 服务。安装后连接 `https://note.xvi.app`，用现有密码登录；笔记、阅读位置、翻译记录和青藜会话沿用同一份云端数据。0.2.0 支持阅读排版设置、自动缓存和手动离线保存；已缓存文件可以断网重开，编辑、翻译与青藜仍需联网。
 
 需要 Android 8.0+，以及 Android System WebView 125+。旧网页组件会显示更新提示。支持系统文件选择与保存、外部链接交给浏览器、系统返回键收起窗口或目录、未保存修改的离开确认，以及应用切到后台时补写阅读进度。
 
@@ -74,7 +74,7 @@ npm ci
 npm run android:apk
 ```
 
-安装包输出为 `artifacts/yejian-0.1.0-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.1.0-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
+安装包输出为 `artifacts/yejian-0.2.0-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.2.0-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
 
 只更新客户端资源可执行 `npm run build:android`，打开原生工程用 `npm run android:open`。Web 构建仍输出到 `dist/`，Android 单独输出到 `dist-android/`。修改客户端后需要重新构建并安装 APK；部署网站不会替换已安装包内的界面。实现与验证方式见 [Android 客户端](docs/android.md)。
 
@@ -167,6 +167,7 @@ npm run reset-password -- --remote --url https://你的站点
 ```bash
 npm run check          # 前后端 TypeScript 检查
 npm test               # 真实 workerd、D1 和 R2 集成测试
+npm run test:build     # 离线资源二进制完整性与构建版本更新
 npm run build          # 生产构建；PDF 资源本地打包，不依赖第三方 CDN
 npx playwright install chromium
 npm run test:e2e       # 1440px 电脑和 390px 手机浏览器测试
