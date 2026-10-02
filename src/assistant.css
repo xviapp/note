@@ -98,7 +98,7 @@
   font-size: 14px;
   font-weight: 500;
 }
-.assistant-heading span {
+.assistant-heading .assistant-note-title {
   display: block;
   color: var(--muted);
   font-size: 11px;

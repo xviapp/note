@@ -1,0 +1,9 @@
+.qingli-icon {
+  display: inline-block;
+  flex: 0 0 auto;
+  vertical-align: middle;
+  color: var(--blue);
+  background-color: currentColor;
+  -webkit-mask: url('/qingli/mark-128.png') center / contain no-repeat;
+  mask: url('/qingli/mark-128.png') center / contain no-repeat;
+}

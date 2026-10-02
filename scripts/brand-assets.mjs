@@ -82,4 +82,14 @@ ${paths.map((value) => `        <path android:fillColor="@color/brand_mark" andr
 </vector>
 `;
 await writeFile(path.join(native, 'drawable/ic_launcher_foreground.xml'), vector);
-console.log('Updated web icons, manifests, favicon and Android book-and-flame vectors.');
+
+const qingli = path.join(root, 'public/qingli');
+await mkdir(qingli, { recursive: true });
+run('magick', [
+  path.join(root, 'assets/qingli/mark.png'),
+  '-resize',
+  '128x128',
+  '-strip',
+  path.join(qingli, 'mark-128.png'),
+]);
+console.log('Updated web icons, manifests, favicon, Android vectors and Qingli mark.');

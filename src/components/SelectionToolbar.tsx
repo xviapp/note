@@ -1,6 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Languages, Quote } from 'lucide-react';
+import { Copy, Languages } from 'lucide-react';
+import { QingliIcon } from './QingliIcon';
 import { paperText } from '../paper';
 import { captureSourceLocation } from '../source-location';
 import type { TranslationLaunch } from '../translation';
@@ -273,7 +274,7 @@ export function SelectionToolbar({
             window.getSelection()?.removeAllRanges();
           }}
         >
-          <Quote size={16} />
+          <QingliIcon size={19} />
           问青藜
         </button>
         <button

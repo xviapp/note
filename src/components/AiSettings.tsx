@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { Bot } from 'lucide-react';
+import { QingliIcon } from './QingliIcon';
 import {
   AI_DEFAULT_MAX_TOKENS,
   AI_REPLY_LIMITS,
@@ -66,7 +66,7 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
   return (
     <section className="settings-section ai-settings">
       <h2>
-        <Bot size={19} />
+        <QingliIcon size={24} />
         青藜
       </h2>
       <div className="setting-row">

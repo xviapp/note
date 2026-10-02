@@ -21,6 +21,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import { QingliIcon } from './QingliIcon';
 import {
   AI_PROMPT_LIMIT,
   AI_QUOTE_LIMIT,
@@ -381,7 +382,7 @@ export function AssistantPanel(props: Props) {
             <Spinner label="正在读取会话…" />
           ) : !messages.length ? (
             <div className="assistant-empty">
-              <Quote size={25} />
+              <QingliIcon size={36} />
               <p>附上文件、选中文字或截图，开始提问。</p>
             </div>
           ) : null}

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, History, Locate, Quote, RotateCw, Square, Trash2 } from 'lucide-react';
+import { ArrowLeft, Copy, History, Locate, RotateCw, Square, Trash2 } from 'lucide-react';
+import { QingliIcon } from './QingliIcon';
 import {
   TRANSLATION_LANGUAGES,
   sourceLabel,
@@ -349,7 +350,7 @@ export function TranslationPanel(props: {
                     else props.onClose();
                   }}
                 >
-                  <Quote size={14} />
+                  <QingliIcon size={17} />
                   问青藜
                 </button>
                 <span className="toolbar-spacer" />

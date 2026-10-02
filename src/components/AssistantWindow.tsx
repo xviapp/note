@@ -8,7 +8,8 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
-import { Bot, Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react';
+import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react';
+import { QingliIcon } from './QingliIcon';
 
 export type AssistantMode = 'floating' | 'docked' | 'maximized';
 
@@ -151,7 +152,7 @@ export function AssistantWindow({
         title={busy ? `${title} · 正在回复` : title}
         onClick={onOpen}
       >
-        <Bot size={20} />
+        <QingliIcon size={24} />
         <span>青藜</span>
         {busy && <span className="assistant-busy-dot" aria-label="正在回复" />}
       </button>
@@ -248,10 +249,12 @@ export function AssistantWindow({
             }}
           >
             <strong>
-              <Bot size={18} />
+              <QingliIcon size={22} />
               青藜
             </strong>
-            <span title={title}>{title}</span>
+            <span className="assistant-note-title" title={title}>
+              {title}
+            </span>
           </div>
           {actions}
           <button
