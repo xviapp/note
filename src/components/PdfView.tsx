@@ -252,25 +252,6 @@ export default function PdfView({
     >
       <div className="pdf-toolbar" role="toolbar" aria-label="PDF 阅读工具">
         <button
-          type="button"
-          ref={outlineToggle}
-          className="icon-button"
-          aria-label="PDF 目录"
-          title={outlineOpen ? '隐藏 PDF 目录' : '显示 PDF 目录'}
-          aria-expanded={outlineOpen}
-          aria-controls={outlineId}
-          disabled={!layout}
-          onClick={() => {
-            if (outlineOpen) closeOutline();
-            else {
-              setOutlineLoaded(true);
-              setOutlineOpen(true);
-            }
-          }}
-        >
-          <List size={18} />
-        </button>
-        <button
           className="icon-button"
           aria-label="上一页"
           disabled={!document || page <= 1}
@@ -335,6 +316,25 @@ export default function PdfView({
         <a className="icon-button" href={fileUrl(fileId, true)} aria-label="下载 PDF">
           <Download size={17} />
         </a>
+        <button
+          type="button"
+          ref={outlineToggle}
+          className="icon-button"
+          aria-label="PDF 目录"
+          title={outlineOpen ? '隐藏 PDF 目录' : '显示 PDF 目录'}
+          aria-expanded={outlineOpen}
+          aria-controls={outlineId}
+          disabled={!layout}
+          onClick={() => {
+            if (outlineOpen) closeOutline();
+            else {
+              setOutlineLoaded(true);
+              setOutlineOpen(true);
+            }
+          }}
+        >
+          <List size={18} />
+        </button>
       </div>
       {locationError && (
         <p className="inline-error" role="alert">
@@ -342,45 +342,6 @@ export default function PdfView({
         </p>
       )}
       <div className="pdf-body">
-        <aside
-          id={outlineId}
-          className="pdf-outline"
-          hidden={!outlineOpen}
-          aria-label="PDF 目录面板"
-        >
-          <div className="pdf-outline-heading">
-            <span>目录</span>
-            <button
-              type="button"
-              ref={outlineClose}
-              className="icon-button"
-              aria-label="隐藏 PDF 目录"
-              onClick={closeOutline}
-            >
-              <X size={16} />
-            </button>
-          </div>
-          {document && outlineLoaded && (
-            <PdfOutline
-              pdf={document.pdf}
-              onNavigate={(target) => {
-                measure(target.page, target.aspect);
-                move(target.page, target.pageRatio);
-                if (compact) setOutlineOpen(false);
-                requestAnimationFrame(() => scroll.current?.focus({ preventScroll: true }));
-              }}
-            />
-          )}
-        </aside>
-        {outlineOpen && compact && (
-          <button
-            type="button"
-            className="pdf-outline-backdrop"
-            tabIndex={-1}
-            aria-label="收起 PDF 目录"
-            onClick={closeOutline}
-          />
-        )}
         <div
           className="pdf-scroll"
           ref={scroll}
@@ -419,6 +380,45 @@ export default function PdfView({
             </div>
           )}
         </div>
+        {outlineOpen && compact && (
+          <button
+            type="button"
+            className="pdf-outline-backdrop"
+            tabIndex={-1}
+            aria-label="收起 PDF 目录"
+            onClick={closeOutline}
+          />
+        )}
+        <aside
+          id={outlineId}
+          className="pdf-outline"
+          hidden={!outlineOpen}
+          aria-label="PDF 目录面板"
+        >
+          <div className="pdf-outline-heading">
+            <span>目录</span>
+            <button
+              type="button"
+              ref={outlineClose}
+              className="icon-button"
+              aria-label="隐藏 PDF 目录"
+              onClick={closeOutline}
+            >
+              <X size={16} />
+            </button>
+          </div>
+          {document && outlineLoaded && (
+            <PdfOutline
+              pdf={document.pdf}
+              onNavigate={(target) => {
+                measure(target.page, target.aspect);
+                move(target.page, target.pageRatio);
+                if (compact) setOutlineOpen(false);
+                requestAnimationFrame(() => scroll.current?.focus({ preventScroll: true }));
+              }}
+            />
+          )}
+        </aside>
       </div>
     </div>
   );

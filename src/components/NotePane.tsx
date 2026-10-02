@@ -1,4 +1,13 @@
-import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react';
 import {
   ArrowUpRight,
   Bot,
@@ -24,6 +33,7 @@ import {
   type FileInfo,
   type NoteDetail,
   type NoteNode,
+  type ReadingPosition,
   type VersionInfo,
 } from '../../shared/types';
 import { useReading } from '../useReading';
@@ -43,6 +53,27 @@ import { clearSourceHighlight, locateTextSource } from '../source-location';
 const Editor = lazy(() => import('./Editor'));
 const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
+
+function restoreTextPosition(area: HTMLElement, position: ReadingPosition) {
+  const anchors = Array.from(
+    area.querySelectorAll<HTMLElement>(
+      '.read-content [id^="heading-"], .read-content [data-paper-heading]',
+    ),
+  );
+  const index = anchors.findIndex((element) => element.id === position.heading),
+    anchor = anchors[index];
+  if (anchor) {
+    const nextTop =
+      anchors[index + 1]?.getBoundingClientRect().top ??
+      area.querySelector('.read-content')!.getBoundingClientRect().bottom;
+    const sectionHeight = Math.max(1, nextTop - anchor.getBoundingClientRect().top);
+    area.scrollTop +=
+      anchor.getBoundingClientRect().top -
+      area.getBoundingClientRect().top -
+      24 +
+      (position.headingRatio || 0) * sectionHeight;
+  } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
+}
 
 interface Props {
   id: string;
@@ -77,6 +108,13 @@ export default function NotePane(props: Props) {
   const [headings, setHeadings] = useState<Heading[]>([]),
     [activeHeading, setActiveHeading] = useState(''),
     [tocOpen, setTocOpen] = useState(false);
+  const [desktopTocOpen, setDesktopTocOpen] = useState(true);
+  const [compactToc, setCompactToc] = useState(
+    () => window.matchMedia('(max-width: 1150px)').matches,
+  );
+  const tocId = useId();
+  const tocToggle = useRef<HTMLButtonElement>(null);
+  const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
   const [historyOpen, setHistoryOpen] = useState(false),
@@ -96,6 +134,15 @@ export default function NotePane(props: Props) {
   const assistantActions = useRef<AssistantHandle>(null);
   const [translation, setTranslation] = useState<TranslationLaunch | null>(null);
   const [pdfLocation, setPdfLocation] = useState<PdfSourceLocation | null>(null);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 1150px)');
+    const update = () => {
+      setCompactToc(query.matches);
+      setTocOpen(false);
+    };
+    query.addEventListener('change', update);
+    return () => query.removeEventListener('change', update);
+  }, []);
   useEffect(() => {
     clearSourceHighlight();
     return clearSourceHighlight;
@@ -254,28 +301,7 @@ export default function NotePane(props: Props) {
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
   const restorePosition = useCallback(() => {
     if (!note || !reading.initial || editing || touched.current || !scroll.current) return;
-    const area = scroll.current,
-      position = reading.initial;
-    if (position.heading && (note.kind === 'markdown' || note.arxiv_id)) {
-      const anchors = Array.from(
-        area.querySelectorAll<HTMLElement>(
-          '.read-content [id^="heading-"], .read-content [data-paper-heading]',
-        ),
-      );
-      const index = anchors.findIndex((element) => element.id === position.heading),
-        anchor = anchors[index];
-      if (anchor) {
-        const nextTop =
-          anchors[index + 1]?.getBoundingClientRect().top ??
-          area.querySelector('.read-content')!.getBoundingClientRect().bottom;
-        const sectionHeight = Math.max(1, nextTop - anchor.getBoundingClientRect().top);
-        area.scrollTop +=
-          anchor.getBoundingClientRect().top -
-          area.getBoundingClientRect().top -
-          24 +
-          (position.headingRatio || 0) * sectionHeight;
-      } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
-    } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
+    restoreTextPosition(scroll.current, reading.initial);
     restored.current = true;
   }, [note?.id, reading.initial, editing]);
   useEffect(() => {
@@ -289,6 +315,12 @@ export default function NotePane(props: Props) {
     observer.observe(article);
     return () => observer.disconnect();
   }, [note?.id, restorePosition]);
+  useLayoutEffect(() => {
+    // Toggling the sidebar reflows the article; keep the same point in the chapter.
+    if (tocPosition.current && scroll.current)
+      restoreTextPosition(scroll.current, tocPosition.current);
+    tocPosition.current = null;
+  }, [desktopTocOpen]);
   const recordScroll = () => {
     const area = scroll.current;
     if (!note || !area || editing || (!restored.current && !touched.current)) return;
@@ -318,7 +350,22 @@ export default function NotePane(props: Props) {
       0,
       Math.min(1, area.scrollTop / Math.max(1, area.scrollHeight - area.clientHeight)),
     );
-    reading.update({ ratio, ...(heading ? { heading, headingRatio } : {}) });
+    const position = { ratio, ...(heading ? { heading, headingRatio } : {}) };
+    reading.update(position);
+    return position;
+  };
+  const toggleToc = () => {
+    if (compactToc) setTocOpen((open) => !open);
+    else {
+      touched.current = restored.current = true;
+      tocPosition.current = recordScroll() ?? null;
+      setDesktopTocOpen((open) => !open);
+      tocToggle.current?.focus({ preventScroll: true });
+    }
+  };
+  const closeToc = () => {
+    setTocOpen(false);
+    requestAnimationFrame(() => tocToggle.current?.focus({ preventScroll: true }));
   };
   const jump = (heading: Heading) => {
     touched.current = true;
@@ -334,12 +381,12 @@ export default function NotePane(props: Props) {
     );
   };
   const toc = (
-    <nav className="toc" aria-label="标题目录">
-      <div className="section-label">本篇目录</div>
+    <nav id={tocId} className="toc" aria-label="标题目录">
       {headings.map((heading) => (
         <button
           key={heading.id}
           className={activeHeading === heading.id ? 'active' : ''}
+          aria-current={activeHeading === heading.id ? 'location' : undefined}
           style={{ paddingLeft: 12 + (heading.level - 1) * 10 }}
           onClick={() => jump(heading)}
         >
@@ -492,9 +539,14 @@ export default function NotePane(props: Props) {
           )}
           {!editing && (note.kind === 'markdown' || note.arxiv_id) && headings.length > 0 && (
             <button
-              className="icon-button mobile-toc-button"
+              ref={tocToggle}
+              className="icon-button toc-toggle"
               aria-label="标题目录"
-              onClick={() => setTocOpen(true)}
+              title={(compactToc ? tocOpen : desktopTocOpen) ? '隐藏目录' : '显示目录'}
+              aria-expanded={compactToc ? tocOpen : desktopTocOpen}
+              aria-controls={tocId}
+              aria-haspopup={compactToc ? 'dialog' : undefined}
+              onClick={toggleToc}
             >
               <List size={18} />
             </button>
@@ -769,9 +821,31 @@ export default function NotePane(props: Props) {
               </article>
             </div>
           )}
-          {!editing && (note.kind === 'markdown' || note.arxiv_id) && headings.length > 0 && (
-            <aside className="desktop-toc">{toc}</aside>
-          )}
+          {!editing &&
+            (note.kind === 'markdown' || note.arxiv_id) &&
+            headings.length > 0 &&
+            !compactToc &&
+            desktopTocOpen && (
+              <aside
+                className="desktop-toc"
+                aria-label="标题目录面板"
+                onKeyDown={(event) => {
+                  if (event.key === 'Escape') {
+                    event.preventDefault();
+                    event.stopPropagation();
+                    toggleToc();
+                  }
+                }}
+              >
+                <div className="toc-heading">
+                  <span>本篇目录</span>
+                  <button className="icon-button" aria-label="隐藏标题目录" onClick={toggleToc}>
+                    <X size={16} />
+                  </button>
+                </div>
+                {toc}
+              </aside>
+            )}
         </div>
         {note.kind !== 'folder' && (
           <AssistantPanel
@@ -812,8 +886,8 @@ export default function NotePane(props: Props) {
           onImage={showImage}
         />
       )}
-      {tocOpen && (
-        <Modal title="标题目录" onClose={() => setTocOpen(false)}>
+      {compactToc && tocOpen && (
+        <Modal title="标题目录" className="toc-modal" onClose={closeToc}>
           {toc}
         </Modal>
       )}

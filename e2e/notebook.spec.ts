@@ -101,6 +101,14 @@ test('default preview, per-file edit confirmation, save/history, favorites, tras
       .getByRole('button', { name: '一些值得记住的事', exact: true })
       .click();
     await expect(page.getByRole('dialog')).toHaveCount(0);
+  } else {
+    const toggle = page.getByRole('button', { name: '标题目录', exact: true });
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await toggle.click();
+    await expect(page.locator('.desktop-toc')).toHaveCount(0);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    await expect(page.locator('.desktop-toc')).toBeVisible();
   }
   await page.screenshot({
     path: `test-results/reading-${info.project.name}.png`,
@@ -575,17 +583,23 @@ test('PDF outline toggles without losing position and navigates nested and named
   const position = () => page.evaluate(key => JSON.parse(localStorage.getItem(key) || '{}').position, `reading:${id}`);
   await expect.poll(async () => (await position())?.pageRatio).toBeGreaterThan(0.25);
   const before = await position();
-  const width = (await area.boundingBox())!.width;
+  const beforeBox = (await area.boundingBox())!;
+  const width = beforeBox.width;
   await toggle.click();
   await expect(toc.getByRole('button', { name: '2.1 Results', exact: true })).toBeVisible();
   await expect(toggle).toHaveAttribute('aria-expanded', 'true');
   await expect(number).toHaveValue('4');
   expect((await position()).pageRatio).toBeCloseTo(before.pageRatio, 2);
+  const panelBox = (await viewer.getByLabel('PDF 目录面板', { exact: true }).boundingBox())!;
+  const viewerBox = (await viewer.boundingBox())!;
+  expect(panelBox.x + panelBox.width).toBeCloseTo(viewerBox.x + viewerBox.width, 0);
+  expect((await area.boundingBox())!.x).toBe(beforeBox.x);
   if (info.project.name === 'mobile') {
     await expect(area).toHaveAttribute('inert', '');
     expect((await area.boundingBox())!.width).toBe(width);
   } else {
     expect((await area.boundingBox())!.width).toBeLessThan(width - 200);
+    expect(panelBox.x).toBeGreaterThanOrEqual(beforeBox.x + (await area.boundingBox())!.width);
   }
   await toc.getByRole('button', { name: '收起 2 Methods', exact: true }).click();
   await expect(toc.getByRole('button', { name: '2.1 Results', exact: true })).toBeHidden();
@@ -610,7 +624,7 @@ test('PDF outline toggles without losing position and navigates nested and named
   await expect(toc.getByRole('alert')).toContainText('无法定位');
   await expect(number).toHaveValue('5');
   if (info.project.name === 'mobile')
-    await viewer.getByRole('button', { name: '收起 PDF 目录', exact: true }).click({ position: { x: width - 16, y: 20 } });
+    await viewer.getByRole('button', { name: '收起 PDF 目录', exact: true }).click({ position: { x: 16, y: 20 } });
   else await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(toc).toBeHidden();
@@ -1158,6 +1172,7 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
   page,
 }, info) => {
   await login(page);
+  if (info.project.name === 'desktop') await page.setViewportSize({ width: 1200, height: 960 });
   await page.request.put('/api/ai/settings', {
     headers: { origin: 'http://127.0.0.1:8799' },
     data: { apiKey: 'sk-e2e-placeholder-key' },
@@ -1165,7 +1180,12 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
   const attacks = `<p class="app-header" style="position:fixed;inset:0" onclick="window.paperInjected=true">Untrusted styled text.</p><img src="https://paper-tracker.invalid/pixel.png" onerror="window.paperInjected=true"><a href="javascript:window.paperInjected=true">Bad link</a><math><annotation-xml encoding="text/html"><img src="x" onerror="window.paperInjected=true"></annotation-xml></math>`;
   const fixture = await paperImportFixture(
     page,
-    paperHtml.replace('</article>', attacks + '</article>'),
+    paperHtml
+      .replaceAll(
+        'Paragraph to exercise the continuous reading area and position memory.',
+        'Paragraph to exercise the continuous reading area and position memory. '.repeat(4),
+      )
+      .replace('</article>', attacks + '</article>'),
   );
   const chat = await assistantFixture(page);
   const remoteImages: string[] = [];
@@ -1214,13 +1234,65 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
   await expect
     .poll(() => page.locator('.note-scroll').evaluate((el) => el.scrollTop))
     .toBeGreaterThan(position * 0.8);
-  if (info.project.name === 'mobile')
-    await page.getByRole('button', { name: '标题目录', exact: true }).click();
+  const toggle = page.getByRole('button', { name: '标题目录', exact: true });
+  await expect(toggle).toBeVisible();
   const toc =
     info.project.name === 'mobile'
       ? page.getByRole('dialog', { name: '标题目录', exact: true })
       : page.locator('.desktop-toc');
+  if (info.project.name === 'mobile') {
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    await toc.getByRole('button', { name: '关闭', exact: true }).click();
+    await expect(toc).toHaveCount(0);
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await page.keyboard.press('Escape');
+    await expect(toc).toHaveCount(0);
+    await toggle.click();
+    await page.mouse.click(12, 200);
+    await expect(toc).toHaveCount(0);
+    await toggle.click();
+  } else {
+    await expect(toggle).toHaveAttribute('aria-expanded', 'true');
+    const area = page.locator('.note-scroll');
+    await toc.getByRole('button', { name: '2 Main result', exact: true }).click();
+    const chapter = paper.getByRole('heading', { name: '2 Main result', exact: true });
+    await expect
+      .poll(async () => Math.abs((await chapter.boundingBox())!.y - (await area.boundingBox())!.y - 24))
+      .toBeLessThan(2);
+    const beforeWidth = (await area.boundingBox())!.width;
+    const beforeHeight = await area.evaluate((element) => element.scrollHeight);
+    const equation = paper.locator('.ltx_equation');
+    const equationTop = (await equation.boundingBox())!.y;
+    await toggle.click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toc).toHaveCount(0);
+    expect((await area.boundingBox())!.width).toBeGreaterThan(beforeWidth + 150);
+    expect(await area.evaluate((element) => element.scrollHeight)).toBeLessThan(beforeHeight);
+    expect(Math.abs((await equation.boundingBox())!.y - equationTop)).toBeLessThan(4);
+    await toggle.click();
+    await toc.getByRole('button', { name: '隐藏标题目录', exact: true }).click();
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await expect(toggle).toBeFocused();
+    await toggle.click();
+    await toc.getByRole('button', { name: '隐藏标题目录', exact: true }).press('Escape');
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await toggle.click();
+  }
+  const tocBox = (await toc.boundingBox())!;
+  expect(tocBox.x + tocBox.width).toBeCloseTo(page.viewportSize()!.width, 0);
+  if (info.project.name === 'mobile') {
+    expect(tocBox.y).toBe(0);
+    expect(tocBox.height).toBe(page.viewportSize()!.height);
+  }
+  await page.screenshot({ path: `test-results/arxiv-outline-${info.project.name}.png` });
   await toc.getByRole('button', { name: '1 Introduction', exact: true }).click();
+  if (info.project.name === 'mobile') {
+    await expect(toc).toHaveCount(0);
+    await expect(toggle).toHaveAttribute('aria-expanded', 'false');
+  }
   await paper.getByRole('button', { name: '放大图片：Paper diagram', exact: true }).click();
   await expect(page.getByRole('dialog', { name: 'Paper diagram', exact: true })).toBeVisible();
   await page

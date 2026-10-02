@@ -1129,17 +1129,22 @@ progress::-moz-progress-bar {
 .desktop-toc {
   width: 195px;
   flex-shrink: 0;
-  padding: 52px 16px 24px 5px;
+  padding: 41px 16px 24px 5px;
   overflow: auto;
   scrollbar-width: thin;
 }
 .toc {
   border-left: 1px solid var(--line);
 }
-.toc .section-label {
+.toc-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
   padding-left: 13px;
-  font-size: 10px;
-  padding-bottom: 15px;
+  padding-bottom: 8px;
+  font-size: 11px;
+  color: var(--muted);
 }
 .toc button {
   display: block;
@@ -1160,8 +1165,9 @@ progress::-moz-progress-bar {
   background: var(--surface-subtle);
   border-left-color: var(--focus);
 }
-.mobile-toc-button {
-  display: none;
+.toc-toggle[aria-expanded='true'] {
+  background: var(--selected);
+  color: var(--blue);
 }
 .children-section {
   margin-top: 52px;
@@ -1396,6 +1402,37 @@ progress::-moz-progress-bar {
 }
 .modal-heading .icon-button {
   margin-right: -7px;
+}
+.modal.toc-modal {
+  inset: 0 0 0 auto;
+  margin: 0;
+  width: min(320px, calc(100vw - 48px));
+  height: 100dvh;
+  max-height: 100dvh;
+  padding: 22px;
+  border-right: 0;
+  border-radius: var(--radius-panel) 0 0 var(--radius-panel);
+  overflow: hidden;
+}
+.toc-modal[open] {
+  display: flex;
+  flex-direction: column;
+}
+.toc-modal .modal-heading {
+  flex-shrink: 0;
+}
+.toc-modal .modal-heading h2 {
+  font-size: 15px;
+}
+.toc-modal .toc {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+}
+.toc-modal .toc button {
+  font-size: 13px;
+  padding-top: 9px;
+  padding-bottom: 9px;
 }
 .dialog-copy {
   font-size: 13px;
@@ -1638,7 +1675,7 @@ progress::-moz-progress-bar {
   flex-shrink: 0;
   min-height: 0;
   background: var(--surface);
-  border-right: 1px solid var(--line);
+  border-left: 1px solid var(--line);
 }
 .pdf-outline[hidden] {
   display: none;
@@ -1720,10 +1757,10 @@ progress::-moz-progress-bar {
 @container (max-width: 720px) {
   .pdf-outline {
     position: absolute;
-    inset: 0 auto 0 0;
+    inset: 0 0 0 auto;
     width: min(300px, calc(100% - 48px));
     z-index: 3;
-    border-radius: 0 0 var(--radius-menu) 0;
+    border-radius: 0 0 0 var(--radius-menu);
     box-shadow: var(--shadow-popover);
   }
   .pdf-outline-backdrop {
@@ -1955,9 +1992,6 @@ progress::-moz-progress-bar {
   }
   .desktop-toc {
     display: none;
-  }
-  .mobile-toc-button {
-    display: inline-flex;
   }
   .note-article {
     padding: 37px 42px 70px;
