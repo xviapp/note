@@ -35,7 +35,7 @@ export function NodeIcon({
     arxiv: BookOpen,
   }[kind];
   return (
-    <Icon size={size} strokeWidth={1.7} className={`node-icon kind-${kind}`} aria-hidden="true" />
+    <Icon size={size} strokeWidth={1.8} className={`node-icon kind-${kind}`} aria-hidden="true" />
   );
 }
 export function Spinner({ label = '正在加载…' }: { label?: string }) {
@@ -44,6 +44,15 @@ export function Spinner({ label = '正在加载…' }: { label?: string }) {
       <LoaderCircle size={22} className="spin" />
       <span>{label}</span>
     </div>
+  );
+}
+export function ActivityDots() {
+  return (
+    <span className="activity-dots" role="status" aria-label="正在思考">
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+      <span aria-hidden="true" />
+    </span>
   );
 }
 export function Modal({

@@ -48,9 +48,10 @@ export function AssistantWindow({
   actions: ReactNode;
   children: ReactNode;
 }) {
-  const fullscreen = mode === 'maximized';
   const restoreMode = useRef<AssistantMode>('floating');
   const [viewport, setViewport] = useState(viewportBounds);
+  const compact = viewport.width <= 760;
+  const fullscreen = compact || mode === 'maximized';
   const [dockBounds, setDockBounds] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -59,7 +60,6 @@ export function AssistantWindow({
   const drag = useRef<{ id: number; startX: number; startY: number; x: number; y: number } | null>(
     null,
   );
-  const compact = viewport.width <= 760;
   const margin = compact ? 12 : 24;
   const width = Math.max(1, Math.min(440, viewport.width - margin * 2));
   const height = Math.max(
@@ -158,7 +158,7 @@ export function AssistantWindow({
       </button>
       <aside
         ref={panel}
-        className={`assistant-panel assistant-${mode}${dragging ? ' is-dragging' : ''}`}
+        className={`assistant-panel assistant-${compact ? 'maximized' : mode}${dragging ? ' is-dragging' : ''}`}
         style={geometry}
         aria-label="青藜"
         hidden={!visible || hidden}
@@ -168,7 +168,7 @@ export function AssistantWindow({
           if (event.key === 'Escape') {
             event.preventDefault();
             event.stopPropagation();
-            if (fullscreen) toggleMaximized();
+            if (fullscreen && !compact) toggleMaximized();
             else close();
           } else if (fullscreen && event.key === 'Tab') {
             const focusable = [
@@ -201,10 +201,10 @@ export function AssistantWindow({
             className="assistant-drag-handle"
             role="group"
             aria-label="移动青藜窗口"
-            tabIndex={mode === 'floating' ? 0 : -1}
-            title={mode === 'floating' ? '拖动移动，方向键微调' : undefined}
+            tabIndex={!compact && mode === 'floating' ? 0 : -1}
+            title={!compact && mode === 'floating' ? '拖动移动，方向键微调' : undefined}
             onPointerDown={(event) => {
-              if (mode !== 'floating' || event.button !== 0) return;
+              if (compact || mode !== 'floating' || event.button !== 0) return;
               event.preventDefault();
               event.currentTarget.focus({ preventScroll: true });
               event.currentTarget.setPointerCapture(event.pointerId);
@@ -231,6 +231,7 @@ export function AssistantWindow({
             onLostPointerCapture={endDrag}
             onKeyDown={(event) => {
               if (
+                compact ||
                 mode !== 'floating' ||
                 !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
               )
@@ -259,6 +260,7 @@ export function AssistantWindow({
           {actions}
           <button
             className="icon-button"
+            hidden={compact}
             aria-label={mode === 'docked' ? '悬浮青藜' : '贴边青藜'}
             title={mode === 'docked' ? '悬浮' : '贴边'}
             onClick={() => onModeChange(mode === 'docked' ? 'floating' : 'docked')}
@@ -267,6 +269,7 @@ export function AssistantWindow({
           </button>
           <button
             className="icon-button"
+            hidden={compact}
             aria-label={fullscreen ? '还原青藜' : '最大化青藜'}
             title={fullscreen ? '还原' : '最大化'}
             onClick={toggleMaximized}

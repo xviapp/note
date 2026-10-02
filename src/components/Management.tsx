@@ -37,6 +37,8 @@ import { ShareSettings } from './ShareSettings';
 import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
 import { useNodeListing } from '../use-node-listing';
+import { settingsTitles, type SettingsSection } from '../navigation';
+import { SettingsIndex } from './SettingsIndex';
 
 export type Confirm = (
   title: string,
@@ -339,7 +341,7 @@ export function NodeList({
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
   const query = view ? `view=${view}` : `parent=${parent || ''}`;
-  const { listing, error, loading, more } = useNodeListing(query, refresh);
+  const { listing, error, loading, more } = useNodeListing(query, refresh, true);
   if (!listing)
     return error ? (
       <p className="inline-error" role="status">
@@ -508,12 +510,16 @@ export function TrashView({
 }
 
 export function Settings({
+  section,
+  onOpen,
   storage,
   confirm,
   onChanged,
   onLogout,
   onError,
 }: {
+  section: SettingsSection | null;
+  onOpen: (section: SettingsSection) => void;
   storage: StorageInfo | null;
   confirm: Confirm;
   onChanged: () => void;
@@ -527,156 +533,165 @@ export function Settings({
     [newPassword, setNewPassword] = useState(''),
     [repeat, setRepeat] = useState(''),
     [error, setError] = useState('');
+  if (!section) return <SettingsIndex onOpen={onOpen} />;
   return (
-    <section className="collection-page settings-page">
-      <h1>设置</h1>
-      <AppUpdates />
-      <section className="settings-section">
-        <h2>
-          <Palette size={19} />
-          外观
-        </h2>
-        <ThemeChoices />
-      </section>
-      <section className="settings-section">
-        <h2>
-          <Type size={19} />
-          阅读
-        </h2>
-        <ReadingControls />
-      </section>
-      <CacheSettings />
-      <ShareSettings />
-      <BackupSettings confirm={confirm} onChanged={onChanged} />
-      <AiSettings confirm={confirm} />
-      <section className="settings-section">
-        <h2>
-          <HardDrive size={19} />
-          存储空间
-        </h2>
-        {storage ? (
-          <>
-            <div className="usage-heading">
-              <strong>{formatBytes(storage.allocatedBytes)}</strong>
-              <span> / {formatBytes(storage.quotaBytes)}</span>
-            </div>
-            <progress value={storage.allocatedBytes} max={storage.quotaBytes} />
-            <div className="storage-breakdown">
-              {[
-                ['当前内容', storage.currentBytes],
-                ['历史版本', storage.historyBytes],
-                ['回收站', storage.trashBytes],
-                ['等待清理', storage.orphanBytes],
-                ['上传预留', storage.reservedBytes],
-              ].map(([label, size]) => (
-                <div key={label}>
-                  <span>{label}</span>
-                  <strong>{formatBytes(Number(size))}</strong>
-                </div>
-              ))}
-            </div>
-          </>
-        ) : (
-          <Spinner />
-        )}
-        <form
-          className="quota-form"
-          onSubmit={async (e) => {
-            e.preventDefault();
-            setBusy(true);
-            try {
-              await api('/api/settings', 'PATCH', {
-                quotaBytes: Math.round(Number(quota) * 1e9),
-              });
-              onChanged();
-            } catch (e) {
-              onError(e);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <label>
-            全库容量上限{' '}
-            <span className="input-unit">
-              <input
-                aria-label="容量上限 GB"
-                type="number"
-                min="0.001"
-                max="1000"
-                step="0.001"
-                value={quota}
-                onChange={(e) => setQuota(e.target.value)}
-              />
-              <span>GB</span>
-            </span>
-          </label>
-          <button className="button" disabled={busy}>
-            更新上限
-          </button>
-        </form>
-        <p className="field-hint">
-          容量上限包含历史和回收站；Cloudflare 账号的免费额度由所有项目共享。
-        </p>
-        <button
-          className="text-button"
-          disabled={busy}
-          onClick={async () => {
-            setBusy(true);
-            try {
-              await api('/api/cleanup', 'POST', {});
-              onChanged();
-            } catch (e) {
-              onError(e);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <RotateCcw size={15} />
-          立即执行一批清理
-        </button>
-      </section>
-      <section className="settings-section">
-        <h2>
-          <ShieldCheck size={19} />
-          密码与设备
-        </h2>
-        <div className="setting-row">
-          <div>
-            <strong>登录密码</strong>
-            <p>修改后，所有设备都需要重新登录。</p>
-          </div>
-          <button className="button" onClick={() => setPasswordOpen(true)}>
-            修改密码
-          </button>
-        </div>
-        <div className="setting-row">
-          <div>
-            <strong>所有设备</strong>
-            <p>同时结束电脑、手机和当前页面的登录。</p>
-          </div>
-          <button
-            className="button"
-            onClick={async () => {
-              if (
-                await confirm(
-                  '退出所有设备？',
-                  '所有设备将在下次访问时要求重新输入密码，当前设备也会退出。',
-                  '退出所有设备',
-                )
-              )
-                await onLogout(true);
+    <section className="collection-page settings-page settings-detail">
+      <h1>{settingsTitles[section]}</h1>
+      {section === 'about' && <AppUpdates />}
+      {section === 'theme' && (
+        <section className="settings-section">
+          <h2>
+            <Palette size={19} />
+            外观
+          </h2>
+          <ThemeChoices />
+        </section>
+      )}
+      {section === 'reading' && (
+        <section className="settings-section">
+          <h2>
+            <Type size={19} />
+            阅读
+          </h2>
+          <ReadingControls />
+        </section>
+      )}
+      {section === 'offline' && <CacheSettings />}
+      {section === 'share' && <ShareSettings />}
+      {section === 'backup' && <BackupSettings confirm={confirm} onChanged={onChanged} />}
+      {section === 'ai' && <AiSettings confirm={confirm} />}
+      {section === 'storage' && (
+        <section className="settings-section">
+          <h2>
+            <HardDrive size={19} />
+            存储空间
+          </h2>
+          {storage ? (
+            <>
+              <div className="usage-heading">
+                <strong>{formatBytes(storage.allocatedBytes)}</strong>
+                <span> / {formatBytes(storage.quotaBytes)}</span>
+              </div>
+              <progress value={storage.allocatedBytes} max={storage.quotaBytes} />
+              <div className="storage-breakdown">
+                {[
+                  ['当前内容', storage.currentBytes],
+                  ['历史版本', storage.historyBytes],
+                  ['回收站', storage.trashBytes],
+                  ['等待清理', storage.orphanBytes],
+                  ['上传预留', storage.reservedBytes],
+                ].map(([label, size]) => (
+                  <div key={label}>
+                    <span>{label}</span>
+                    <strong>{formatBytes(Number(size))}</strong>
+                  </div>
+                ))}
+              </div>
+            </>
+          ) : (
+            <Spinner />
+          )}
+          <form
+            className="quota-form"
+            onSubmit={async (e) => {
+              e.preventDefault();
+              setBusy(true);
+              try {
+                await api('/api/settings', 'PATCH', {
+                  quotaBytes: Math.round(Number(quota) * 1e9),
+                });
+                onChanged();
+              } catch (e) {
+                onError(e);
+              } finally {
+                setBusy(false);
+              }
             }}
           >
-            退出所有设备
+            <label>
+              全库容量上限{' '}
+              <span className="input-unit">
+                <input
+                  aria-label="容量上限 GB"
+                  type="number"
+                  min="0.001"
+                  max="1000"
+                  step="0.001"
+                  value={quota}
+                  onChange={(e) => setQuota(e.target.value)}
+                />
+                <span>GB</span>
+              </span>
+            </label>
+            <button className="button" disabled={busy}>
+              更新上限
+            </button>
+          </form>
+          <p className="field-hint">
+            容量上限包含历史和回收站；Cloudflare 账号的免费额度由所有项目共享。
+          </p>
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              try {
+                await api('/api/cleanup', 'POST', {});
+                onChanged();
+              } catch (e) {
+                onError(e);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <RotateCcw size={15} />
+            立即执行一批清理
           </button>
-        </div>
-        <button className="text-button" onClick={() => onLogout()}>
-          <LogOut size={16} />
-          退出当前设备
-        </button>
-      </section>
+        </section>
+      )}
+      {section === 'account' && (
+        <section className="settings-section">
+          <h2>
+            <ShieldCheck size={19} />
+            密码与设备
+          </h2>
+          <div className="setting-row">
+            <div>
+              <strong>登录密码</strong>
+              <p>修改后，所有设备都需要重新登录。</p>
+            </div>
+            <button className="button" onClick={() => setPasswordOpen(true)}>
+              修改密码
+            </button>
+          </div>
+          <div className="setting-row">
+            <div>
+              <strong>所有设备</strong>
+              <p>同时结束电脑、手机和当前页面的登录。</p>
+            </div>
+            <button
+              className="button"
+              onClick={async () => {
+                if (
+                  await confirm(
+                    '退出所有设备？',
+                    '所有设备将在下次访问时要求重新输入密码，当前设备也会退出。',
+                    '退出所有设备',
+                  )
+                )
+                  await onLogout(true);
+              }}
+            >
+              退出所有设备
+            </button>
+          </div>
+          <button className="text-button" onClick={() => onLogout()}>
+            <LogOut size={16} />
+            退出当前设备
+          </button>
+        </section>
+      )}
       {passwordOpen && (
         <Modal
           title="修改密码"

@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- Match src/themes.css while the WebView is still preparing its first frame. -->
-    <color name="note_surface_light">#FCFDFB</color>
-    <color name="note_surface_dark">#202824</color>
+    <color name="note_surface_light">#FFF8EF</color>
+    <color name="note_surface_dark">#242220</color>
     <color name="note_surface_starry">#20263B</color>
     <color name="note_surface">@color/note_surface_light</color>
 </resources>

@@ -1,6 +1,17 @@
-import { expect, test } from '@playwright/test';
+import { expect, test, type Locator } from '@playwright/test';
 import { preparePassword } from '../shared/password';
 import { paperHtml } from '../tests/fixtures/arxiv';
+
+async function loadUntil(list: Locator, entry: Locator) {
+  await expect(list).toHaveAttribute('aria-busy', 'false');
+  for (let page = 0; page < 10 && !(await entry.count()); page++) {
+    const more = list.locator(':scope > .load-more, :scope > li > .load-more');
+    if (!(await more.count())) break;
+    await more.click();
+    await expect(list).toHaveAttribute('aria-busy', 'false');
+  }
+  await expect(entry).toBeAttached();
+}
 
 test('reopens a saved arXiv paper internally from the tree, lists, favorites and recent visits', async ({
   page,
@@ -79,6 +90,10 @@ test('reopens a saved arXiv paper internally from the tree, lists, favorites and
   });
   const drawer = page.getByRole('button', { name: '打开笔记目录', exact: true });
   if (await drawer.isVisible()) await drawer.click();
+  await loadUntil(
+    page.getByRole('tree'),
+    page.getByRole('tree').getByRole('button', { name: paper.title, exact: true }),
+  );
   await page.getByRole('tree').getByRole('button', { name: paper.title, exact: true }).click();
   expect(await page.evaluate(() => (window as any).openedUrls)).toEqual([]);
   await expect(page).toHaveURL(`/n/${paper.id}`);
@@ -97,6 +112,7 @@ test('reopens a saved arXiv paper internally from the tree, lists, favorites and
     if (await drawer.isVisible()) await drawer.click();
     await page.locator('.main-nav').getByRole('button', { name, exact: true }).click();
     const entry = page.locator('.node-list-main').filter({ hasText: paper.title });
+    await loadUntil(page.locator('.node-list'), entry);
     await expect(entry).toContainText('arXiv 论文 · 2503.01800v1');
     await entry.click();
     expect(await page.evaluate(() => (window as any).openedUrls)).toEqual([]);
@@ -104,6 +120,10 @@ test('reopens a saved arXiv paper internally from the tree, lists, favorites and
     await expect(page.locator('.paper-body')).toContainText('Reading a mathematical paper.');
   }
   if (await drawer.isVisible()) await drawer.click();
+  await loadUntil(
+    page.getByRole('tree'),
+    page.getByRole('tree').getByRole('button', { name: link.title, exact: true }),
+  );
   await page.getByRole('tree').getByRole('button', { name: link.title, exact: true }).click();
   expect(await page.evaluate(() => (window as any).openedUrls)).toEqual([link.url]);
   await expect(page.locator('.paper-body')).toContainText('Reading a mathematical paper.');

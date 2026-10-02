@@ -14,10 +14,7 @@ async function login(page: Page) {
   const status = await (await page.request.get('/api/auth/status')).json();
   await page.goto(status.initialized ? '/' : `/#setup=${token}`);
   if (!status.initialized) {
-    await expect(page.getByLabel('设置密码', { exact: true })).toHaveAttribute(
-      'minlength',
-      '8',
-    );
+    await expect(page.getByLabel('设置密码', { exact: true })).toHaveAttribute('minlength', '8');
     await page.getByLabel('设置密码', { exact: true }).fill(password);
     await page.getByLabel('确认密码', { exact: true }).fill(password);
     await page.getByRole('button', { name: '创建笔记库' }).click();
@@ -47,14 +44,19 @@ async function edit(page: Page) {
 async function selectTheme(page: Page, value: string) {
   const theme = page.getByRole('combobox', { name: '主题', exact: true });
   const openDrawer = !(await theme.isVisible());
+  const reopenAssistant = openDrawer && (await page.locator('.assistant-panel').isVisible());
+  if (reopenAssistant) await page.getByRole('button', { name: '关闭青藜', exact: true }).click();
   if (openDrawer) await page.getByRole('button', { name: '打开笔记目录', exact: true }).click();
   await theme.selectOption(value);
   if (openDrawer) await page.getByRole('button', { name: '关闭侧栏', exact: true }).click();
+  if (reopenAssistant) await page.getByRole('button', { name: '打开青藜', exact: true }).click();
 }
-async function nav(page: Page, name: string) {
+async function nav(page: Page, name: string, section = '青藜') {
   const drawer = page.getByRole('button', { name: '打开笔记目录' });
   if (await drawer.isVisible()) await drawer.click();
   await page.locator('.main-nav').getByRole('button', { name, exact: true }).click();
+  if (name === '设置')
+    await page.locator('.settings-entry').getByText(section, { exact: true }).click();
 }
 
 test('default preview, per-file edit confirmation, save/history, favorites, trash and restore', async ({
@@ -114,9 +116,9 @@ test('default preview, per-file edit confirmation, save/history, favorites, tras
     path: `test-results/reading-${info.project.name}.png`,
     fullPage: true,
   });
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-  ).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
   await edit(page);
   await page.getByRole('textbox', { name: 'Markdown 源码' }).fill(`${content}\n修改后的内容。`);
   await page.getByRole('button', { name: '保存', exact: true }).click();
@@ -167,11 +169,20 @@ test('default preview, per-file edit confirmation, save/history, favorites, tras
   expect(errors).toEqual([]);
 });
 
-test('Android back dismisses reading surfaces and protects unsaved files', async ({ page }, info) => {
-  const back = (canGoBack = false) => page.evaluate((value) =>
-    window.dispatchEvent(new CustomEvent('note:native-back', {
-      cancelable: true, detail: { canGoBack: value },
-    })), canGoBack);
+test('Android back dismisses reading surfaces and protects unsaved files', async ({
+  page,
+}, info) => {
+  const back = (canGoBack = false) =>
+    page.evaluate(
+      (value) =>
+        window.dispatchEvent(
+          new CustomEvent('note:native-back', {
+            cancelable: true,
+            detail: { canGoBack: value },
+          }),
+        ),
+      canGoBack,
+    );
   await login(page);
   await createNote(page, `Android 返回 · ${info.project.name}`);
   const noteUrl = page.url();
@@ -186,17 +197,21 @@ test('Android back dismisses reading surfaces and protects unsaved files', async
   await expect(page.getByRole('dialog', { name: '还有未保存的修改' })).toBeVisible();
   expect(await back()).toBe(false);
   await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toContainText('未保存的手机草稿');
+  await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toContainText(
+    '未保存的手机草稿',
+  );
   expect(page.url()).toBe(noteUrl);
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expectPreview(page);
 
   await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   const assistant = page.getByRole('complementary', { name: '青藜', exact: true });
-  await assistant.getByRole('button', { name: '最大化青藜', exact: true }).click();
-  expect(await back()).toBe(false);
-  await expect(assistant).toBeVisible();
-  await expect(assistant).not.toHaveClass(/assistant-maximized/);
+  if (info.project.name === 'desktop') {
+    await assistant.getByRole('button', { name: '最大化青藜', exact: true }).click();
+    expect(await back()).toBe(false);
+    await expect(assistant).toBeVisible();
+    await expect(assistant).not.toHaveClass(/assistant-maximized/);
+  }
   expect(await back()).toBe(false);
   await expect(assistant).toBeHidden();
   expect(page.url()).toBe(noteUrl);
@@ -284,9 +299,7 @@ test('creation, rename, moving and storage settings work without unlocking file 
   const rename = page.getByRole('dialog', { name: '修改笔记信息', exact: true });
   await rename.getByLabel('标题', { exact: true }).fill(`${title}已改名`);
   await rename.getByRole('button', { name: '保存信息', exact: true }).click();
-  await expect(
-    page.getByRole('heading', { name: `${title}已改名`, exact: true }),
-  ).toBeVisible();
+  await expect(page.getByRole('heading', { name: `${title}已改名`, exact: true })).toBeVisible();
   await actions.getByRole('button', { name: `管理 ${title}已改名`, exact: true }).click();
   await actions.getByRole('button', { name: '移动到…', exact: true }).click();
   const move = page.getByRole('dialog', { name: `移动「${title}已改名」`, exact: true });
@@ -305,7 +318,15 @@ test('creation, rename, moving and storage settings work without unlocking file 
       .locator('.tree-row')
       .filter({ has: page.getByRole('button', { name: `${title}已改名`, exact: true }) });
     await expect(row).toHaveAttribute('draggable', 'true');
-    await row.dragTo(page.locator('.tree > .section-label'));
+    // The root target is sticky. dragTo's automatic target scrolling can move
+    // a different row under the pressed pointer before Chromium starts dragging.
+    await row.scrollIntoViewIfNeeded();
+    const sourceBox = (await row.boundingBox())!;
+    const targetBox = (await page.locator('.tree > .section-label').boundingBox())!;
+    await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 });
+    await page.mouse.up();
     await expect
       .poll(async () => (await (await page.request.get(`/api/nodes/${id}`)).json()).parent_id)
       .toBeNull();
@@ -319,10 +340,8 @@ test('creation, rename, moving and storage settings work without unlocking file 
   expect(blocked.status()).toBe(403);
   expect((await (await page.request.get(`/api/nodes/${id}`)).json()).content).toBe('');
   const storage = await (await page.request.get('/api/storage')).json();
-  await nav(page, '设置');
-  await page
-    .getByLabel('容量上限 GB', { exact: true })
-    .fill(String(storage.quotaBytes / 1e9 + 1));
+  await nav(page, '设置', '存储空间');
+  await page.getByLabel('容量上限 GB', { exact: true }).fill(String(storage.quotaBytes / 1e9 + 1));
   await page.getByRole('button', { name: '更新上限', exact: true }).click();
   await expect
     .poll(async () => (await (await page.request.get('/api/storage')).json()).quotaBytes)
@@ -367,13 +386,14 @@ function pdfFixture(count = 2, mixedSizes = false, imageOnly = false, withOutlin
       ];
     }),
   ];
-  if (withOutline) objects.push(
-    `<< /Type /Outlines /First ${outlineRoot + 1} 0 R /Last ${outlineRoot + 4} 0 R /Count 4 >>`,
-    `<< /Title (1 Introduction) /Parent ${outlineRoot} 0 R /Next ${outlineRoot + 2} 0 R /Dest [${pageRef(1)} 0 R /Fit] >>`,
-    `<< /Title (2 Methods) /Parent ${outlineRoot} 0 R /Prev ${outlineRoot + 1} 0 R /Next ${outlineRoot + 4} 0 R /Dest (methods) /First ${outlineRoot + 3} 0 R /Last ${outlineRoot + 3} 0 R /Count 1 >>`,
-    `<< /Title (2.1 Results) /Parent ${outlineRoot + 2} 0 R /Dest [${pageRef(5)} 0 R /FitH 480] >>`,
-    `<< /Title (Unresolved chapter) /Parent ${outlineRoot} 0 R /Prev ${outlineRoot + 2} 0 R /Dest (missing-chapter) >>`,
-  );
+  if (withOutline)
+    objects.push(
+      `<< /Type /Outlines /First ${outlineRoot + 1} 0 R /Last ${outlineRoot + 4} 0 R /Count 4 >>`,
+      `<< /Title (1 Introduction) /Parent ${outlineRoot} 0 R /Next ${outlineRoot + 2} 0 R /Dest [${pageRef(1)} 0 R /Fit] >>`,
+      `<< /Title (2 Methods) /Parent ${outlineRoot} 0 R /Prev ${outlineRoot + 1} 0 R /Next ${outlineRoot + 4} 0 R /Dest (methods) /First ${outlineRoot + 3} 0 R /Last ${outlineRoot + 3} 0 R /Count 1 >>`,
+      `<< /Title (2.1 Results) /Parent ${outlineRoot + 2} 0 R /Dest [${pageRef(5)} 0 R /FitH 480] >>`,
+      `<< /Title (Unresolved chapter) /Parent ${outlineRoot} 0 R /Prev ${outlineRoot + 2} 0 R /Dest (missing-chapter) >>`,
+    );
   let data = '%PDF-1.4\n';
   const offsets = [0];
   objects.forEach((object, index) => {
@@ -384,9 +404,7 @@ function pdfFixture(count = 2, mixedSizes = false, imageOnly = false, withOutlin
   data += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
     .slice(1)
     .map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`)
-    .join(
-      '',
-    )}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+    .join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
   return Buffer.from(data);
 }
 
@@ -403,7 +421,11 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
     .fill('# 附件资料\n\n点开附件即可阅读。');
   await page
     .getByLabel('上传附件', { exact: true })
-    .setInputFiles({ name: 'reading.pdf', mimeType: 'application/pdf', buffer: pdfFixture(2, false, false, true) });
+    .setInputFiles({
+      name: 'reading.pdf',
+      mimeType: 'application/pdf',
+      buffer: pdfFixture(2, false, false, true),
+    });
   await expect(page.getByText('上传中…')).toHaveCount(0);
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.locator('.attachment-name').filter({ hasText: 'reading.pdf' }).click();
@@ -411,10 +433,15 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
   await expect(pdfDialog.locator('canvas').first()).toBeVisible();
   await expect(pdfDialog.locator('.pdf-page').first()).toHaveAttribute('aria-busy', 'false');
   await pdfDialog.getByRole('button', { name: 'PDF 目录', exact: true }).click();
-  await expect(pdfDialog.getByRole('navigation', { name: 'PDF 目录', exact: true })).toContainText('1 Introduction');
+  await expect(pdfDialog.getByRole('navigation', { name: 'PDF 目录', exact: true })).toContainText(
+    '1 Introduction',
+  );
   await page.keyboard.press('Escape');
   await expect(pdfDialog).toBeVisible();
-  await expect(pdfDialog.getByRole('button', { name: 'PDF 目录', exact: true })).toHaveAttribute('aria-expanded', 'false');
+  await expect(pdfDialog.getByRole('button', { name: 'PDF 目录', exact: true })).toHaveAttribute(
+    'aria-expanded',
+    'false',
+  );
   await pdfDialog.getByRole('button', { name: '下一页', exact: true }).click();
   await expect(pdfDialog.getByRole('spinbutton', { name: 'PDF 页码' })).toHaveValue('2');
   await page.screenshot({ path: `test-results/pdf-${info.project.name}.png` });
@@ -470,13 +497,10 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   const origin = new URL(page.url()).origin;
   const headers = { origin };
   const buffer = pdfFixture(40, true);
-  const uploaded = await page.request.post(
-    `/api/files?name=continuous.pdf&size=${buffer.length}`,
-    {
-      headers: { ...headers, 'content-type': 'application/pdf' },
-      data: buffer,
-    },
-  );
+  const uploaded = await page.request.post(`/api/files?name=continuous.pdf&size=${buffer.length}`, {
+    headers: { ...headers, 'content-type': 'application/pdf' },
+    data: buffer,
+  });
   expect(uploaded.ok()).toBe(true);
   const created = await page.request.post('/api/nodes', {
     headers: { ...headers, 'x-idempotency-key': crypto.randomUUID() },
@@ -492,9 +516,7 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   const sheet = (number: number) => viewer.locator(`.pdf-page[data-page="${number}"]`);
   await expect(sheet(1)).toHaveAttribute('aria-busy', 'false');
   await expectPreview(page);
-  await expect(page.locator('.note-scroll, .document-heading, iframe, .cm-editor')).toHaveCount(
-    0,
-  );
+  await expect(page.locator('.note-scroll, .document-heading, iframe, .cm-editor')).toHaveCount(0);
   const workspace = (await page.locator('.note-workspace').boundingBox())!;
   const reader = (await viewer.boundingBox())!;
   expect(reader.width).toBeCloseTo(workspace.width, 0);
@@ -532,10 +554,7 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   await area.hover();
   await page.mouse.wheel(0, (await sheet(31).boundingBox())!.height * 0.35);
   const stored = () =>
-    page.evaluate(
-      (key) => JSON.parse(localStorage.getItem(key) || '{}').position,
-      `reading:${id}`,
-    );
+    page.evaluate((key) => JSON.parse(localStorage.getItem(key) || '{}').position, `reading:${id}`);
   await expect.poll(async () => (await stored())?.pageRatio || 0).toBeGreaterThan(0.3);
   const offset = async (target: Page) =>
     target.locator('.pdf-scroll').evaluate((element) => {
@@ -564,9 +583,9 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   await expect(viewer.getByRole('button', { name: 'PDF 适应宽度' })).toHaveText('100%');
   await expect.poll(async () => Math.abs((await offset(page)) - beforeZoom)).toBeLessThan(0.04);
   expect(await viewer.locator('canvas').count()).toBeLessThan(12);
-  expect(
-    await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth),
-  ).toBe(true);
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= window.innerWidth)).toBe(
+    true,
+  );
 
   await nav(page, '最近访问');
   const reading = () =>
@@ -577,13 +596,8 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   other.on('pageerror', (error) => errors.push(error.message));
   await other.goto(url);
   await expect(other.getByRole('spinbutton', { name: 'PDF 页码' })).toHaveValue('31');
-  await expect(other.locator('.pdf-page[data-page="31"]')).toHaveAttribute(
-    'aria-busy',
-    'false',
-  );
-  await expect
-    .poll(async () => Math.abs((await offset(other)) - beforeZoom))
-    .toBeLessThan(0.04);
+  await expect(other.locator('.pdf-page[data-page="31"]')).toHaveAttribute('aria-busy', 'false');
+  await expect.poll(async () => Math.abs((await offset(other)) - beforeZoom)).toBeLessThan(0.04);
   await other.getByRole('spinbutton', { name: 'PDF 页码' }).fill('999');
   await other.getByRole('spinbutton', { name: 'PDF 页码' }).press('Enter');
   await expect(other.getByRole('spinbutton', { name: 'PDF 页码' })).toHaveValue('40');
@@ -592,18 +606,22 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   expect(errors).toEqual([]);
 });
 
-test('PDF outline toggles without losing position and navigates nested and named bookmarks', async ({ page }, info) => {
+test('PDF outline toggles without losing position and navigates nested and named bookmarks', async ({
+  page,
+}, info) => {
   const errors: string[] = [];
   page.on('pageerror', (error) => errors.push(error.message));
   await login(page);
   const headers = { origin: new URL(page.url()).origin };
   const bytes = pdfFixture(8, true, false, true);
   const uploaded = await page.request.post(`/api/files?name=chapters.pdf&size=${bytes.length}`, {
-    headers, data: bytes,
+    headers,
+    data: bytes,
   });
   expect(uploaded.ok()).toBe(true);
   const created = await page.request.post('/api/nodes', {
-    headers, data: { title: '章节阅读', kind: 'pdf', fileId: (await uploaded.json()).id },
+    headers,
+    data: { title: '章节阅读', kind: 'pdf', fileId: (await uploaded.json()).id },
   });
   expect(created.ok()).toBe(true);
   const id = (await created.json()).id;
@@ -620,11 +638,12 @@ test('PDF outline toggles without losing position and navigates nested and named
   await number.fill('4');
   await number.press('Enter');
   await expect(sheet(4)).toHaveAttribute('aria-busy', 'false');
-  await area.evaluate(element => {
+  await area.evaluate((element) => {
     const page = element.querySelector<HTMLElement>('.pdf-page[data-page="4"]')!;
     element.scrollTop += page.clientHeight * 0.3;
   });
-  const position = () => page.evaluate(key => JSON.parse(localStorage.getItem(key) || '{}').position, `reading:${id}`);
+  const position = () =>
+    page.evaluate((key) => JSON.parse(localStorage.getItem(key) || '{}').position, `reading:${id}`);
   await expect.poll(async () => (await position())?.pageRatio).toBeGreaterThan(0.25);
   const before = await position();
   const beforeBox = (await area.boundingBox())!;
@@ -656,7 +675,10 @@ test('PDF outline toggles without losing position and navigates nested and named
     await expect(toggle).toHaveAttribute('aria-expanded', 'false');
     await toggle.click();
   } else {
-    await expect(toc.getByRole('button', { name: '2 Methods', exact: true })).toHaveAttribute('aria-current', 'location');
+    await expect(toc.getByRole('button', { name: '2 Methods', exact: true })).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
   }
   await page.screenshot({ path: `test-results/pdf-outline-${info.project.name}.png` });
   await toc.getByRole('button', { name: '2.1 Results', exact: true }).click();
@@ -668,7 +690,9 @@ test('PDF outline toggles without losing position and navigates nested and named
   await expect(toc.getByRole('alert')).toContainText('无法定位');
   await expect(number).toHaveValue('5');
   if (info.project.name === 'mobile')
-    await viewer.getByRole('button', { name: '收起 PDF 目录', exact: true }).click({ position: { x: 16, y: 20 } });
+    await viewer
+      .getByRole('button', { name: '收起 PDF 目录', exact: true })
+      .click({ position: { x: 16, y: 20 } });
   else await toggle.click();
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
   await expect(toc).toBeHidden();
@@ -715,8 +739,7 @@ test('reading positions resume across devices and a conflicting save preserves t
       page
         .locator('.note-scroll')
         .evaluate(
-          (element) =>
-            element.scrollTop / Math.max(1, element.scrollHeight - element.clientHeight),
+          (element) => element.scrollTop / Math.max(1, element.scrollHeight - element.clientHeight),
         ),
     )
     // End and the mobile heading jump animate; leave only after reaching the
@@ -791,9 +814,7 @@ test('themes persist, follow the system and preserve the current note and unsave
       };
       const foreground = luminance(getComputedStyle(element).color);
       const background = luminance(getComputedStyle(document.documentElement).backgroundColor);
-      return (
-        (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05)
-      );
+      return (Math.max(foreground, background) + 0.05) / (Math.min(foreground, background) + 0.05);
     });
     expect(contrast).toBeGreaterThanOrEqual(4.5);
     await page.screenshot({ path: `test-results/theme-${palette}-${info.project.name}.png` });
@@ -837,10 +858,11 @@ test('themes persist, follow the system and preserve the current note and unsave
   await expect(other.locator('html')).toHaveAttribute('data-theme', 'dark');
   await other.close();
 
-  await nav(page, '设置');
+  await nav(page, '设置', '外观');
   await page.getByRole('radio', { name: '星空', exact: true }).check();
   await expect(theme).toHaveValue('starry');
   await page.screenshot({ path: `test-results/theme-settings-${info.project.name}.png` });
+  await nav(page, '设置', '密码与设备');
   await page.getByRole('button', { name: '退出当前设备', exact: true }).click();
   await expect(page.getByRole('button', { name: '打开笔记库', exact: true })).toBeVisible();
   await expect(theme).toHaveValue('starry');
@@ -852,7 +874,7 @@ test('themes persist, follow the system and preserve the current note and unsave
 
 test('settings change password and revoke every open device', async ({ page, context }) => {
   await login(page);
-  await nav(page, '设置');
+  await nav(page, '设置', '密码与设备');
   await page.getByRole('button', { name: '修改密码', exact: true }).click();
   const form = page.getByRole('dialog', { name: '修改密码', exact: true }),
     temporary = 'Next2026';
@@ -879,7 +901,7 @@ test('settings change password and revoke every open device', async ({ page, con
   const other = await context.newPage();
   await other.goto('/');
   await expectPreview(other);
-  await nav(page, '设置');
+  await nav(page, '设置', '密码与设备');
   await page.getByRole('button', { name: '退出所有设备', exact: true }).click();
   await page
     .getByRole('dialog', { name: '退出所有设备？' })
@@ -1185,13 +1207,11 @@ test('SVG paper diagrams remain vector images and appear in screenshots and AI a
   await crop.getByRole('button', { name: '选择整个阅读区', exact: true }).click();
   await crop.getByRole('button', { name: '采用截图', exact: true }).click();
   expect(await bluePixels(page.getByAltText('待发送截图'))).toBeGreaterThan(1000);
-  await page
-    .getByLabel('选择聊天附件', { exact: true })
-    .setInputFiles({
-      name: 'plot.svg',
-      mimeType: 'image/svg+xml',
-      buffer: Buffer.from(hostileSvg),
-    });
+  await page.getByLabel('选择聊天附件', { exact: true }).setInputFiles({
+    name: 'plot.svg',
+    mimeType: 'image/svg+xml',
+    buffer: Buffer.from(hostileSvg),
+  });
   const file = page.getByRole('dialog', { name: '附上文件', exact: true });
   await expect(file.getByAltText('文件图片预览')).toBeVisible();
   expect(await bluePixels(file.getByAltText('文件图片预览'))).toBeGreaterThan(1000);
@@ -1304,7 +1324,9 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
     await toc.getByRole('button', { name: '2 Main result', exact: true }).click();
     const chapter = paper.getByRole('heading', { name: '2 Main result', exact: true });
     await expect
-      .poll(async () => Math.abs((await chapter.boundingBox())!.y - (await area.boundingBox())!.y - 24))
+      .poll(async () =>
+        Math.abs((await chapter.boundingBox())!.y - (await area.boundingBox())!.y - 24),
+      )
       .toBeLessThan(2);
     const beforeWidth = (await area.boundingBox())!.width;
     const beforeHeight = await area.evaluate((element) => element.scrollHeight);
@@ -1458,7 +1480,9 @@ test('context overflow keeps the draft and attachment and allows a smaller submi
   // browser's SSE parser with an echoed attachment snapshot larger than 1 MiB.
   const fittingText = 'Long research text. '.repeat(60_000) + 'COMPLETE END';
   await page.getByLabel('选择聊天附件', { exact: true }).setInputFiles({
-    name: 'fitting.txt', mimeType: 'text/plain', buffer: Buffer.from(fittingText),
+    name: 'fitting.txt',
+    mimeType: 'text/plain',
+    buffer: Buffer.from(fittingText),
   });
   await file.getByRole('button', { name: '附到对话', exact: true }).click();
   const chat = await assistantFixture(page);
@@ -1526,56 +1550,61 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
   await expect(panel).toBeVisible();
   await expect.poll(async () => (await workspace.boundingBox())!.width).toBe(original.width);
   const floating = (await panel.boundingBox())!;
-  expect(floating.height).toBeLessThan(page.viewportSize()!.height);
+  if (info.project.name === 'desktop')
+    expect(floating.height).toBeLessThan(page.viewportSize()!.height);
+  else expect(floating.height).toBe(page.viewportSize()!.height);
   await input.fill('切换窗口后继续这个问题。');
   await panel.getByRole('button', { name: '附上当前文件', exact: true }).click();
   const attachment = page.getByRole('dialog', { name: '附上文件', exact: true });
   await attachment.getByRole('button', { name: '附到对话', exact: true }).click();
-  const handle = panel.getByRole('group', { name: '移动青藜窗口' });
-  const grip = (await handle.boundingBox())!;
-  const start = { x: grip.x + 25, y: grip.y + grip.height / 2 };
-  const end = { x: start.x - (info.project.name === 'mobile' ? 0 : 170), y: start.y - 90 };
-  if (info.project.name === 'mobile') {
-    const session = await page.context().newCDPSession(page);
-    await session.send('Input.dispatchTouchEvent', {
-      type: 'touchStart',
-      touchPoints: [start],
-    });
-    await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] });
-    await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
-    await session.detach();
-  } else {
-    await page.mouse.move(start.x, start.y);
-    await page.mouse.down();
-    await page.mouse.move(end.x, end.y, { steps: 6 });
-    await page.mouse.up();
+  let position = floating;
+  if (info.project.name === 'desktop') {
+    const handle = panel.getByRole('group', { name: '移动青藜窗口' });
+    const grip = (await handle.boundingBox())!;
+    const start = { x: grip.x + 25, y: grip.y + grip.height / 2 };
+    const end = { x: start.x - (info.project.name === 'mobile' ? 0 : 170), y: start.y - 90 };
+    if (info.project.name === 'mobile') {
+      const session = await page.context().newCDPSession(page);
+      await session.send('Input.dispatchTouchEvent', {
+        type: 'touchStart',
+        touchPoints: [start],
+      });
+      await session.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [end] });
+      await session.send('Input.dispatchTouchEvent', { type: 'touchEnd', touchPoints: [] });
+      await session.detach();
+    } else {
+      await page.mouse.move(start.x, start.y);
+      await page.mouse.down();
+      await page.mouse.move(end.x, end.y, { steps: 6 });
+      await page.mouse.up();
+    }
+    await expect
+      .poll(async () => Math.round((await panel.boundingBox())!.y))
+      .toBe(Math.round(floating.y - 90));
+    const moved = (await panel.boundingBox())!;
+    await handle.focus();
+    await page.keyboard.press('ArrowUp');
+    await expect
+      .poll(async () => Math.round((await panel.boundingBox())!.y))
+      .toBe(Math.round(moved.y - 10));
+    position = (await panel.boundingBox())!;
+    await page.screenshot({ path: `test-results/assistant-floating-${info.project.name}.png` });
+
+    await panel.getByRole('button', { name: '贴边青藜', exact: true }).click();
+    const area = (await page.locator('.reading-with-assistant').boundingBox())!;
+    await expect
+      .poll(async () => Math.round((await panel.boundingBox())!.y))
+      .toBe(Math.round(area.y));
+    const docked = (await panel.boundingBox())!;
+    expect(Math.round(docked.x + docked.width)).toBe(Math.round(area.x + area.width));
+    expect(Math.round(docked.height)).toBe(Math.round(area.height));
+    expect((await workspace.boundingBox())!.width).toBe(
+      info.project.name === 'desktop' ? original.width - 400 : original.width,
+    );
+    await page.screenshot({ path: `test-results/assistant-docked-${info.project.name}.png` });
+
+    await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
   }
-  await expect
-    .poll(async () => Math.round((await panel.boundingBox())!.y))
-    .toBe(Math.round(floating.y - 90));
-  const moved = (await panel.boundingBox())!;
-  await handle.focus();
-  await page.keyboard.press('ArrowUp');
-  await expect
-    .poll(async () => Math.round((await panel.boundingBox())!.y))
-    .toBe(Math.round(moved.y - 10));
-  const position = (await panel.boundingBox())!;
-  await page.screenshot({ path: `test-results/assistant-floating-${info.project.name}.png` });
-
-  await panel.getByRole('button', { name: '贴边青藜', exact: true }).click();
-  const area = (await page.locator('.reading-with-assistant').boundingBox())!;
-  await expect
-    .poll(async () => Math.round((await panel.boundingBox())!.y))
-    .toBe(Math.round(area.y));
-  const docked = (await panel.boundingBox())!;
-  expect(Math.round(docked.x + docked.width)).toBe(Math.round(area.x + area.width));
-  expect(Math.round(docked.height)).toBe(Math.round(area.height));
-  expect((await workspace.boundingBox())!.width).toBe(
-    info.project.name === 'desktop' ? original.width - 400 : original.width,
-  );
-  await page.screenshot({ path: `test-results/assistant-docked-${info.project.name}.png` });
-
-  await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await expect
     .poll(async () => (await panel.boundingBox())!.width)
     .toBe(page.viewportSize()!.width);
@@ -1596,33 +1625,31 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
   await expect(attachment).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(attachment).toHaveCount(0);
-  await expect(panel.getByRole('button', { name: '还原青藜', exact: true })).toBeVisible();
+  await expect(panel).toHaveClass(/assistant-maximized/);
   await page.screenshot({ path: `test-results/assistant-maximized-${info.project.name}.png` });
-  await panel.getByRole('button', { name: '还原青藜', exact: true }).click();
-  await expect(panel.getByRole('button', { name: '悬浮青藜', exact: true })).toBeVisible();
-  await panel.getByRole('button', { name: '悬浮青藜', exact: true }).click();
-  expect(await panel.boundingBox()).toEqual(position);
-  await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
-  await page.keyboard.press('Escape');
-  expect(await panel.boundingBox()).toEqual(position);
+  if (info.project.name === 'desktop') {
+    await panel.getByRole('button', { name: '还原青藜', exact: true }).click();
+    await expect(panel.getByRole('button', { name: '悬浮青藜', exact: true })).toBeVisible();
+    await panel.getByRole('button', { name: '悬浮青藜', exact: true }).click();
+    expect(await panel.boundingBox()).toEqual(position);
+    await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
+    await page.keyboard.press('Escape');
+    expect(await panel.boundingBox()).toEqual(position);
+  }
 
   const viewport = page.viewportSize()!;
   await page.setViewportSize({ width: 320, height: 560 });
-  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(296);
+  await expect.poll(async () => (await panel.boundingBox())!.width).toBe(320);
   const small = (await panel.boundingBox())!;
   expect(small.x).toBeGreaterThanOrEqual(0);
   expect(small.y).toBeGreaterThanOrEqual(0);
   expect(small.x + small.width).toBeLessThanOrEqual(320);
   expect(small.y + small.height).toBeLessThanOrEqual(560);
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-    true,
-  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await page.setViewportSize({ width: 320, height: 300 });
-  await panel.getByRole('button', { name: '贴边青藜', exact: true }).click();
   await send.scrollIntoViewIfNeeded();
   await expect(send).toBeInViewport({ ratio: 1 });
-  await expect(panel.getByRole('button', { name: '最大化青藜', exact: true })).toBeInViewport();
-  await panel.getByRole('button', { name: '悬浮青藜', exact: true }).click();
+  await expect(panel.getByRole('button', { name: '关闭青藜', exact: true })).toBeInViewport();
   await page.setViewportSize(viewport);
   await panel.getByRole('button', { name: '关闭青藜', exact: true }).click();
   await expect(launcher).toBeVisible();
@@ -1634,7 +1661,8 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
   await expect(panel.locator('.chat-assistant')).toContainText('结构要点');
   expect(fixture.sent).toHaveLength(1);
   expect(fixture.sent[0].files).toHaveLength(1);
-  await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
+  if (info.project.name === 'desktop')
+    await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await panel.getByRole('button', { name: '保存为子笔记', exact: true }).click();
   await expect(panel.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
   expect(errors).toEqual([]);
@@ -1703,9 +1731,9 @@ test('file assistant quotes, crops, previews, exports and retains independent co
   await expect(panel.getByRole('heading', { name: '结构要点', exact: true })).toBeVisible();
   expect(fixture.sent[0].quote).toBe('桥面承受荷载，通过主梁、支座传递给桥墩与基础。');
   expect(fixture.sent[0].image).toMatch(/^data:image\/jpeg;base64,/);
-  expect(
-    Buffer.from(fixture.sent[0].image!.split(',')[1], 'base64').length,
-  ).toBeLessThanOrEqual(1048576);
+  expect(Buffer.from(fixture.sent[0].image!.split(',')[1], 'base64').length).toBeLessThanOrEqual(
+    1048576,
+  );
   expect(remoteImages).toEqual([]);
   await expectPreview(page);
   await expect(page.locator('.cm-editor')).toHaveCount(0);
@@ -1713,9 +1741,7 @@ test('file assistant quotes, crops, previews, exports and retains independent co
     await selectTheme(page, theme);
     await page.screenshot({ path: `test-results/assistant-${theme}-${info.project.name}.png` });
   }
-  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(
-    true,
-  );
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   await panel.getByRole('button', { name: '保存为子笔记', exact: true }).click();
   await expect(panel.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
   const savedId = fixture.threads.get(node.id)!.messages[1].exportedNodeId!;
@@ -1723,9 +1749,7 @@ test('file assistant quotes, crops, previews, exports and retains independent co
   expect(saved.parent_id).toBe(node.id);
   expect(saved.kind).toBe('markdown');
   expect(saved.content).toContain('# 结构要点');
-  expect((await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe(
-    content,
-  );
+  expect((await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe(content);
   await page.reload();
   await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await expect(panel.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
@@ -1833,9 +1857,7 @@ test('chat attachments preview current notes and local text or images before sen
   await expect(page.locator('.chat-file-card')).toHaveCount(2);
   await page.locator('.chat-file-card').first().locator('summary').click();
   await expect(page.locator('.chat-file-card').first().locator('pre')).toHaveText(content);
-  expect((await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe(
-    content,
-  );
+  expect((await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe(content);
 });
 
 test('PDF attachments select pages, extract text and send page images with source references', async ({
@@ -1879,9 +1901,7 @@ test('PDF attachments select pages, extract text and send page images with sourc
     .getByLabel('选择聊天附件')
     .setInputFiles({ name: 'charts.pdf', mimeType: 'application/pdf', buffer: bytes });
   await page.getByLabel('页码范围', { exact: true }).waitFor();
-  await dialog
-    .getByRole('combobox', { name: 'PDF 处理方式', exact: true })
-    .selectOption('images');
+  await dialog.getByRole('combobox', { name: 'PDF 处理方式', exact: true }).selectOption('images');
   await dialog.getByRole('button', { name: '处理所选页面' }).click();
   await expect(dialog.getByRole('alert')).toContainText('最多 6 页');
   await dialog.getByLabel('页码范围').fill('1,4');
@@ -1890,9 +1910,7 @@ test('PDF attachments select pages, extract text and send page images with sourc
   await page.screenshot({ path: `test-results/pdf-file-preview-${info.project.name}.png` });
   expect(fixture.sent).toHaveLength(0);
   await dialog.getByRole('button', { name: '附到对话' }).click();
-  await page
-    .getByRole('textbox', { name: '发给青藜的问题' })
-    .fill('解释这些页面，并注明页码。');
+  await page.getByRole('textbox', { name: '发给青藜的问题' }).fill('解释这些页面，并注明页码。');
   await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('.chat-assistant')).toContainText('结构要点');
   const files = fixture.sent[0].files!;
@@ -1986,10 +2004,7 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   ).json();
   const fixture = await assistantFixture(page);
   await page.goto(`/n/${node.id}`);
-  const text = page
-    .locator('.pdf-text-layer span')
-    .filter({ hasText: 'A quiet page - 1' })
-    .first();
+  const text = page.locator('.pdf-text-layer span').filter({ hasText: 'A quiet page - 1' }).first();
   await expect(text).toBeAttached();
   await text.evaluate((element) => {
     const range = document.createRange();
@@ -2000,9 +2015,10 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '引用选中文字', exact: true }).click();
   await expect(page.locator('.context-quote')).toContainText('A quiet page - 1');
-  await page.getByRole('button', { name: '最大化青藜', exact: true }).click();
+  if (info.project.name === 'desktop')
+    await page.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await cropInBrowser(page, info.project.name === 'mobile');
-  await expect(page.getByRole('button', { name: '还原青藜', exact: true })).toBeVisible();
+  await expect(page.locator('.assistant-panel')).toHaveClass(/assistant-maximized/);
   await page.getByRole('textbox', { name: '发给青藜的问题' }).fill('解释这一页。');
   await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('.chat-assistant')).toContainText('结构要点');
@@ -2010,9 +2026,7 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   await page.getByRole('button', { name: '保存为子笔记', exact: true }).click();
   await expect(page.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
   const saved = fixture.threads.get(node.id)!.messages[1].exportedNodeId!;
-  expect((await (await page.request.get(`/api/nodes/${saved}`)).json()).parent_id).toBe(
-    node.id,
-  );
+  expect((await (await page.request.get(`/api/nodes/${saved}`)).json()).parent_id).toBe(node.id);
   await page.getByRole('button', { name: '关闭青藜', exact: true }).click();
   await expect(page.locator('.pdf-scroll')).toBeVisible();
   await expect(page.locator('iframe,embed,object')).toHaveCount(0);

@@ -187,6 +187,10 @@ npm run reset-password -- --remote --url https://你的站点
 
 ## 验证
 
+界面基础颜色、字号、圆角与点击尺寸从共享主题导出到 `src/family-tokens.css`，青绿色与星空主题在 `src/themes.css` 中保留。独立构建使用仓库内的 CSS，无需依赖其他应用；在完整工作区可运行 `npm run theme:check` 检查同步，`npm run theme:sync` 更新，也可用 `-- --source=/path/to/brand-theme.ts` 指定主题源。
+
+手机使用「笔记／收藏／设置」底部导航，电脑保留目录树。收藏、最近访问、离线阅读、回收站和各项设置使用独立地址；进入笔记后返回原列表，离开未保存的编辑仍需确认。青藜在手机全屏打开，电脑保留悬浮、贴边与最大化模式。
+
 ```bash
 npm run check          # 前后端 TypeScript 检查
 npm test               # 真实 workerd、D1 和 R2 集成测试

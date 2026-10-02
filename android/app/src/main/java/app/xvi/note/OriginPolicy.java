@@ -34,7 +34,8 @@ final class OriginPolicy {
     boolean isDocument(String value) {
         if (!sameOrigin(value)) return false;
         String path = URI.create(value).getRawPath();
-        return path.isEmpty() || path.equals("/") || path.matches("/n/[a-zA-Z0-9_-]{1,80}");
+        return path.isEmpty() || path.equals("/") || path.matches("/n/[a-zA-Z0-9_-]{1,80}")
+            || path.matches("/(favorites|recent|offline|trash|settings(/(theme|reading|ai|offline|share|backup|storage|account|about))?)");
     }
 
     private static int port(URI uri) {

@@ -1,5 +1,7 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
+  ArrowLeft,
+  BookOpen,
   Clock3,
   FolderOpen,
   HardDriveDownload,
@@ -33,9 +35,13 @@ import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
 import { Brand } from './components/Brand';
-
-type View = 'tree' | 'favorites' | 'recent' | 'offline' | 'trash' | 'settings';
-const routeId = () => window.location.pathname.match(/^\/n\/([a-zA-Z0-9_-]+)$/)?.[1] || null;
+import { ListingPagesContext } from './use-node-listing';
+import {
+  settingsTitles,
+  useNotebookNavigation,
+  type SettingsSection,
+  type View,
+} from './navigation';
 
 export default function App() {
   const [status, setStatus] = useState<AuthStatus | null>(null),
@@ -239,8 +245,6 @@ function Notebook({
   onCheckSession: () => Promise<boolean>;
 }) {
   const offline = useOffline();
-  const [view, setView] = useState<View>('tree'),
-    [selected, setSelected] = useState<string | null>(routeId);
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
     [mobileOpen, setMobileOpen] = useState(false);
   const [revision, setRevision] = useState(0),
@@ -256,6 +260,14 @@ function Notebook({
     [moving, setMoving] = useState<NoteNode | null>(null);
   const leaveGuard = useRef<() => Promise<boolean>>(async () => true),
     question = useQuestion();
+  const navigation = useNotebookNavigation(leaveGuard);
+  const listingPages = useRef(new Map<string, number>());
+  const { view, id: selected, section: settingsSection } = navigation.route;
+  const subpage = !!selected || !!settingsSection || ['recent', 'offline', 'trash'].includes(view);
+  useEffect(() => {
+    setMobileOpen(false);
+    setLoaded(null);
+  }, [navigation.key]);
   const report = useCallback(
     (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
     [],
@@ -301,19 +313,14 @@ function Notebook({
     };
   }, [revision, report]);
   const setRoute = (id: string | null, replace = false) => {
-    const path = id ? `/n/${id}` : '/';
-    history[replace ? 'replaceState' : 'pushState'](null, '', path);
-    setSelected(id);
-    setView('tree');
-    setMobileOpen(false);
-    setLoaded(null);
+    void navigation.go(id ? `/n/${id}` : '/', replace, false);
   };
   const navigate = async (id: string) => {
     if (id === selected && view === 'tree') {
       setMobileOpen(false);
       return;
     }
-    if (await leaveGuard.current()) setRoute(id || null);
+    await navigation.go(id ? `/n/${id}` : '/');
   };
   const openNode = (node: NoteNode) => {
     if (node.kind === 'link' && !node.arxiv_id && node.url) {
@@ -325,44 +332,29 @@ function Notebook({
     void navigate(node.id);
   };
   const switchView = async (next: View) => {
-    if (!(await leaveGuard.current())) return;
-    setView(next);
-    setSelected(null);
-    setLoaded(null);
-    history.pushState(null, '', '/');
+    if (await navigation.go(next === 'tree' ? '/' : `/${next}`)) changed();
     setMobileOpen(false);
-    changed();
   };
-  useEffect(() => {
-    const pop = async () => {
-      const target = routeId();
-      if (await leaveGuard.current()) {
-        setSelected(target);
-        setView('tree');
-        setMobileOpen(false);
-        setLoaded(null);
-      } else history.pushState(null, '', selected ? `/n/${selected}` : '/');
-    };
-    window.addEventListener('popstate', pop);
-    return () => window.removeEventListener('popstate', pop);
-  }, [selected]);
+  const openSettings = (section: SettingsSection) => {
+    void navigation.go(`/settings/${section}`);
+  };
   useEffect(() => {
     const back = (event: Event) => {
       if (dismissReadingOverlay()) event.preventDefault();
       else if (mobileOpen) {
         event.preventDefault();
         setMobileOpen(false);
-      } else if ((event as CustomEvent<{ canGoBack: boolean }>).detail?.canGoBack) {
+      } else if (subpage) {
         event.preventDefault();
-        history.back();
-      } else if (selected || view !== 'tree') {
+        navigation.back();
+      } else if (view !== 'tree') {
         event.preventDefault();
         void navigate('');
       }
     };
     window.addEventListener('note:native-back', back);
     return () => window.removeEventListener('note:native-back', back);
-  }, [selected, view, mobileOpen]);
+  }, [view, subpage, mobileOpen, navigation.back]);
   useEffect(() => {
     if (!mobileOpen) return;
     const escape = (e: KeyboardEvent) => {
@@ -464,7 +456,9 @@ function Notebook({
     { key: 'offline' as const, label: '离线阅读', icon: HardDriveDownload },
   ];
   return (
-    <div className={`app-shell ${mobileOpen ? 'sidebar-open' : ''}`}>
+    <div
+      className={`app-shell ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
+    >
       <ShareImport
         onImported={(nodes) => {
           changed();
@@ -536,7 +530,7 @@ function Notebook({
           {storage && (
             <button
               className={`sidebar-usage ${storage.allocatedBytes >= storage.quotaBytes * 0.8 ? 'warning' : ''}`}
-              onClick={() => switchView('settings')}
+              onClick={() => openSettings('storage')}
             >
               <span>
                 <span>存储空间</span>
@@ -553,6 +547,15 @@ function Notebook({
         {!(view === 'tree' && selected) && (
           <header className="app-header">
             <div className="header-location">
+              {subpage && (
+                <button
+                  className="icon-button page-back"
+                  aria-label="返回"
+                  onClick={navigation.back}
+                >
+                  <ArrowLeft size={22} />
+                </button>
+              )}
               <button
                 className="icon-button mobile-menu"
                 aria-label="打开笔记目录"
@@ -573,7 +576,9 @@ function Notebook({
                         ? '离线阅读'
                         : view === 'trash'
                           ? '回收站'
-                          : '设置'}
+                          : settingsSection
+                            ? settingsTitles[settingsSection]
+                            : '设置'}
               </span>
             </div>
           </header>
@@ -599,67 +604,111 @@ function Notebook({
           <div className="capacity-warning">
             空间已使用 {Math.round((storage.allocatedBytes / storage.quotaBytes) * 100)}
             %。可在设置中查看历史和回收站占用。
-            <button className="text-button" onClick={() => switchView('settings')}>
+            <button className="text-button" onClick={() => openSettings('storage')}>
               管理空间
             </button>
           </div>
         )}
-        <div className="main-content">
-          {view === 'tree' ? (
-            selected ? (
-              <NotePane
-                key={selected}
-                id={selected}
-                refresh={detailRevision}
-                treeRefresh={revision}
-                sidebarOpen={mobileOpen}
-                onOpenSidebar={openSidebar}
-                onNavigate={navigate}
-                onOpen={openNode}
-                onAction={action}
-                onChanged={changed}
-                onLoaded={setLoaded}
-                onFileNode={async (file, parent) => {
-                  if (await leaveGuard.current()) setForm({ file, parent });
-                }}
-                setLeaveGuard={(guard) => {
-                  leaveGuard.current = guard;
-                }}
-                onError={report}
-                onTrash={() => switchView('trash')}
-                onSettings={() => switchView('settings')}
-              />
-            ) : (
-              <section className="collection-page library-home">
-                <div className="collection-title">
-                  <h1>全部笔记</h1>
-                  <button className="button" onClick={newNode}>
-                    <Plus size={16} />
-                    新建
-                  </button>
-                </div>
-                <NodeList parent={null} refresh={revision} onOpen={openNode} onAction={action} />
+        <ListingPagesContext.Provider value={listingPages.current}>
+          <div
+            ref={navigation.scroll}
+            key={navigation.key}
+            className={`main-content page-${navigation.direction}`}
+          >
+            {view === 'tree' ? (
+              selected ? (
+                <NotePane
+                  key={selected}
+                  id={selected}
+                  refresh={detailRevision}
+                  treeRefresh={revision}
+                  sidebarOpen={mobileOpen}
+                  onOpenSidebar={openSidebar}
+                  onBack={navigation.back}
+                  onNavigate={navigate}
+                  onOpen={openNode}
+                  onAction={action}
+                  onChanged={changed}
+                  onLoaded={setLoaded}
+                  onFileNode={async (file, parent) => {
+                    if (await leaveGuard.current()) setForm({ file, parent });
+                  }}
+                  setLeaveGuard={(guard) => {
+                    leaveGuard.current = guard;
+                  }}
+                  onError={report}
+                  onTrash={() => switchView('trash')}
+                  onSettings={() => openSettings('ai')}
+                />
+              ) : (
+                <section className="collection-page library-home">
+                  <div className="collection-title">
+                    <h1>全部笔记</h1>
+                    <button className="button" onClick={newNode}>
+                      <Plus size={16} />
+                      新建
+                    </button>
+                  </div>
+                  <nav className="library-shortcuts" aria-label="笔记快捷入口">
+                    <button onClick={() => switchView('recent')}>
+                      <Clock3 size={20} />
+                      最近访问
+                    </button>
+                    <button onClick={() => switchView('offline')}>
+                      <HardDriveDownload size={20} />
+                      离线阅读
+                    </button>
+                    <button onClick={() => switchView('trash')}>
+                      <Trash2 size={20} />
+                      回收站
+                    </button>
+                  </nav>
+                  <NodeList parent={null} refresh={revision} onOpen={openNode} onAction={action} />
+                </section>
+              )
+            ) : view === 'favorites' || view === 'recent' ? (
+              <section className="collection-page">
+                <h1>{view === 'favorites' ? '收藏' : '最近访问'}</h1>
+                <NodeList view={view} refresh={revision} onOpen={openNode} onAction={action} />
               </section>
-            )
-          ) : view === 'favorites' || view === 'recent' ? (
-            <section className="collection-page">
-              <h1>{view === 'favorites' ? '收藏' : '最近访问'}</h1>
-              <NodeList view={view} refresh={revision} onOpen={openNode} onAction={action} />
-            </section>
-          ) : view === 'offline' ? (
-            <OfflineLibrary onOpen={openNode} />
-          ) : view === 'trash' ? (
-            <TrashView confirm={question.confirm} onChanged={changed} onError={report} />
-          ) : (
-            <Settings
-              storage={storage}
-              confirm={question.confirm}
-              onChanged={changed}
-              onLogout={logout}
-              onError={report}
-            />
-          )}
-        </div>
+            ) : view === 'offline' ? (
+              <OfflineLibrary onOpen={openNode} />
+            ) : view === 'trash' ? (
+              <TrashView confirm={question.confirm} onChanged={changed} onError={report} />
+            ) : (
+              <Settings
+                section={settingsSection}
+                onOpen={openSettings}
+                storage={storage}
+                confirm={question.confirm}
+                onChanged={changed}
+                onLogout={logout}
+                onError={report}
+              />
+            )}
+          </div>
+        </ListingPagesContext.Provider>
+        {!subpage && (
+          <nav className="phone-bottom-nav" aria-label="底部导航">
+            {[
+              { key: 'tree' as const, label: '笔记', icon: BookOpen },
+              { key: 'favorites' as const, label: '收藏', icon: Star },
+              { key: 'settings' as const, label: '设置', icon: Settings2 },
+            ].map(({ key, label, icon: Icon }) => (
+              <button
+                key={key}
+                className={view === key ? 'active' : ''}
+                aria-current={view === key ? 'page' : undefined}
+                onClick={() => switchView(key)}
+              >
+                <span>
+                  <Icon size={22} />
+                </span>
+                {label}
+              </button>
+            ))}
+          </nav>
+        )}
       </main>
       {form && (
         <NodeForm

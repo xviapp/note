@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { mkdtemp, mkdir, readFile, readdir, rm, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { runInNewContext } from 'node:vm';
 import { offlineShell } from './offline-shell.ts';
 
 async function fixture(run) {
@@ -77,4 +78,55 @@ test('Android uses the APK assets without generating a web service worker or res
     const files = await readdir(output);
     assert(!files.includes('sw.js'));
     assert(!files.some((file) => file.startsWith('offline-resources-')));
+  }));
+
+test('collection and settings deep links reopen offline without caching API requests', () =>
+  fixture(async ({ output, build }) => {
+    await build();
+    const handlers = new Map();
+    const shell = { body: 'offline application shell' };
+    runInNewContext(await readFile(path.join(output, 'sw.js'), 'utf8'), {
+      URL,
+      self: {
+        location: { origin: 'https://note.test' },
+        addEventListener: (name, callback) => handlers.set(name, callback),
+      },
+      fetch: async () => {
+        throw new Error('offline');
+      },
+      caches: { open: async () => ({ match: async (path) => (path === '/' ? shell : undefined) }) },
+    });
+    for (const path of [
+      '/',
+      '/n/abc',
+      '/favorites',
+      '/recent',
+      '/offline',
+      '/trash',
+      '/settings',
+      '/settings/theme',
+      '/settings/reading',
+      '/settings/ai',
+      '/settings/offline',
+      '/settings/share',
+      '/settings/backup',
+      '/settings/storage',
+      '/settings/account',
+      '/settings/about',
+    ]) {
+      let response;
+      handlers.get('fetch')({
+        request: { method: 'GET', mode: 'navigate', url: `https://note.test${path}` },
+        respondWith: (promise) => {
+          response = promise;
+        },
+      });
+      assert.equal(await response, shell, path);
+    }
+    for (const path of ['/api/nodes', '/settings/unknown', '/unknown']) {
+      handlers.get('fetch')({
+        request: { method: 'GET', mode: 'navigate', url: `https://note.test${path}` },
+        respondWith: () => assert.fail(`Unexpected offline handler: ${path}`),
+      });
+    }
   }));

@@ -45,7 +45,7 @@ import { ChatFileDialog } from './ChatFileDialog';
 import { AssistantWindow, type AssistantMode } from './AssistantWindow';
 import { MarkdownView } from './MarkdownView';
 import { ScreenshotCrop } from './ScreenshotCrop';
-import { Spinner, useQuestion } from './Primitives';
+import { ActivityDots, Spinner, useQuestion } from './Primitives';
 
 export interface AssistantHandle {
   addQuote: (text: string) => string | undefined;
@@ -455,9 +455,7 @@ export function AssistantPanel(props: Props) {
                   onImage={props.onImage}
                 />
               ) : message.status === 'pending' ? (
-                <span className="field-hint" role="status">
-                  正在思考…
-                </span>
+                <ActivityDots />
               ) : null}
               {message.error && <p className="chat-error">{message.error}</p>}
               {message.role === 'assistant' && !!message.content && (

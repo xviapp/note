@@ -6,8 +6,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#fcfdfb",
-  "theme_color": "#fcfdfb",
+  "background_color": "#F9EFE2",
+  "theme_color": "#F9EFE2",
   "icons": [
     {
       "src": "/brand/day-192.png",

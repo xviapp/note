@@ -11,6 +11,7 @@ import {
 import {
   ArrowUpRight,
   Check,
+  ChevronLeft,
   ChevronRight,
   FileText,
   History,
@@ -85,6 +86,7 @@ interface Props {
   treeRefresh: number;
   sidebarOpen: boolean;
   onOpenSidebar: () => void;
+  onBack: () => void;
   onNavigate: (id: string) => void;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
@@ -450,6 +452,9 @@ export default function NotePane(props: Props) {
   };
   const navigation = (
     <div className="note-location">
+      <button className="icon-button page-back" aria-label="返回" onClick={props.onBack}>
+        <ChevronLeft size={22} />
+      </button>
       <button
         className="icon-button mobile-menu"
         aria-label="打开笔记目录"

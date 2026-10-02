@@ -19,6 +19,20 @@ public class OriginPolicyTest {
     }
 
     @Test
+    public void collectionAndSettingsRoutesStayInTheBundledApp() {
+        for (String path : new String[] {
+            "/favorites", "/recent", "/offline", "/trash", "/settings",
+            "/settings/theme", "/settings/reading", "/settings/ai", "/settings/offline",
+            "/settings/share", "/settings/backup", "/settings/storage", "/settings/account", "/settings/about"
+        }) {
+            assertTrue(path, policy.isDocument("https://note.xvi.app" + path));
+            assertFalse(path, policy.isDocument("https://other.test" + path));
+        }
+        for (String path : new String[] { "/settings/unknown", "/settings/../api/auth", "/settings%2Ftheme", "/favorites/other" })
+            assertFalse(path, policy.isDocument("https://note.xvi.app" + path));
+    }
+
+    @Test
     public void downloadCookiesNeverGoToAnotherOrigin() {
         assertTrue(policy.isDownload("https://note.xvi.app/api/files/file_1?download=1"));
         assertTrue(policy.isDownload("https://NOTE.xvi.app:443/api/files/file-1"));

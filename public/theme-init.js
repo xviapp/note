@@ -16,6 +16,8 @@
   document.documentElement.dataset.theme = theme;
   document.documentElement.dataset.themePreference = preference;
   document.documentElement.style.colorScheme = theme === 'light' ? 'light' : 'dark';
+  document.querySelector('meta[name="theme-color"]')?.setAttribute('content',
+    { light: '#F9EFE2', dark: '#191817', starry: '#20263b' }[theme]);
   // Keep browser/install icons in sync with the chosen app palette, including
   // explicit night/starry choices when the operating system is in light mode.
   const icons = () => {

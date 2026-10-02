@@ -2,18 +2,20 @@
   color-scheme: light;
   --font-ui: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans CJK SC', system-ui, sans-serif;
   --font-book: 'Iowan Old Style', 'Palatino Linotype', 'Songti SC', 'Noto Serif CJK SC', serif;
-  --radius-control: 10px;
-  --radius-menu: 14px;
-  --radius-panel: 20px;
-  --surface: #fcfdfb;
-  --surface-subtle: #f2f6f0;
-  --sidebar: #edf2ec;
-  --hover: #e5ede3;
+  --radius-control: var(--family-radius-control);
+  --radius-menu: var(--family-radius-card);
+  --radius-panel: var(--family-radius-sheet);
+  --canvas: var(--family-canvas);
+  --surface: var(--family-surface);
+  --surface-raised: var(--family-raised);
+  --surface-subtle: var(--family-soft);
+  --sidebar: var(--canvas);
+  --hover: #efe6d8;
   --selected: #dce9dc;
-  --ink: #2c3d33;
-  --muted: #5e7065;
-  --line: #e0e8dd;
-  --line-strong: #a0b4a5;
+  --ink: var(--family-ink);
+  --muted: var(--family-muted);
+  --line: var(--family-line);
+  --line-strong: var(--family-line-strong);
   --blue: #426b55;
   --focus: #578568;
   --focus-ring: #57856866;
@@ -28,25 +30,18 @@
   --warning-line: #ead9c6;
   --favorite: #a57929;
   --success: #527e6a;
-  --pdf-stage: #e5ebe3;
+  --pdf-stage: var(--canvas);
   --shadow-soft: #293e2e0d;
   --shadow-strong: #203e2c2e;
   --shadow-popover: 0 18px 52px -12px var(--shadow-strong), 0 3px 12px var(--shadow-soft);
-  --scrim: #263e3252;
+  --scrim: var(--family-scrim);
   --star-pattern: none;
 }
 
 :root[data-theme='dark'] {
   color-scheme: dark;
-  --surface: #202824;
-  --surface-subtle: #28332d;
-  --sidebar: #19211d;
-  --hover: #303f35;
+  --hover: #302d29;
   --selected: #354b3c;
-  --ink: #e1e8df;
-  --muted: #acbdb0;
-  --line: #344238;
-  --line-strong: #607465;
   --blue: #b1d0ae;
   --focus: #b7d7b4;
   --focus-ring: #b7d7b480;
@@ -61,14 +56,14 @@
   --warning-line: #61503a;
   --favorite: #e5be78;
   --success: #9bc9b1;
-  --pdf-stage: #151d18;
   --shadow-soft: #00000030;
   --shadow-strong: #00000066;
-  --scrim: #0d1712a6;
 }
 
 :root[data-theme='starry'] {
   color-scheme: dark;
+  --canvas: #181e31;
+  --surface-raised: #282f47;
   --surface: #20263b;
   --surface-subtle: #282f47;
   --sidebar: #181e31;

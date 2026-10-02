@@ -28,8 +28,8 @@ function apply(preference: ThemePreference) {
   document.querySelector('meta[name="theme-color"]')?.setAttribute(
     'content',
     {
-      light: '#fcfdfb',
-      dark: '#202824',
+      light: '#F9EFE2',
+      dark: '#191817',
       starry: '#20263b',
     }[theme],
   );

@@ -13,6 +13,8 @@
     "prebuild": "node scripts/assets.mjs",
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
+    "theme:check": "node --experimental-strip-types scripts/sync-theme.mjs",
+    "theme:sync": "node --experimental-strip-types scripts/sync-theme.mjs --write",
     "test": "vitest run",
     "test:build": "node --experimental-strip-types --test scripts/offline-shell.test.mjs",
     "test:android-cli": "node --test scripts/android.test.mjs",

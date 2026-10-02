@@ -19,10 +19,12 @@ async function create(page: Page, data: object) {
   expect(response.ok()).toBeTruthy();
   return response.json();
 }
-async function nav(page: Page, name: string) {
+async function nav(page: Page, name: string, section = '离线缓存') {
   const drawer = page.getByRole('button', { name: '打开笔记目录', exact: true });
   if (await drawer.isVisible()) await drawer.click();
   await page.locator('.main-nav').getByRole('button', { name, exact: true }).click();
+  if (name === '设置')
+    await page.locator('.settings-entry').getByText(section, { exact: true }).click();
 }
 async function pin(page: Page, title: string) {
   const menu = page.locator('.note-actions .node-menu');
@@ -248,7 +250,7 @@ test('logout clears private offline snapshots across tabs and they cannot return
   const other = await context.newPage();
   await other.goto(`/n/${note.id}`);
   await expect(other.locator('.plain-text')).toHaveText(note.content || '不应在退出后出现的正文');
-  await nav(page, '设置');
+  await nav(page, '设置', '密码与设备');
   await page.getByRole('button', { name: '退出当前设备', exact: true }).click();
   await expect(page.locator('.auth-form')).toBeVisible();
   await expect(other.locator('.auth-form')).toBeVisible();

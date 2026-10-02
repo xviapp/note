@@ -57,8 +57,8 @@ for (const variant of ['day', 'night']) {
     start_url: '/',
     scope: '/',
     display: 'standalone',
-    background_color: variant === 'day' ? '#fcfdfb' : '#202824',
-    theme_color: variant === 'day' ? '#fcfdfb' : '#202824',
+    background_color: variant === 'day' ? '#F9EFE2' : '#191817',
+    theme_color: variant === 'day' ? '#F9EFE2' : '#191817',
     icons: [192, 512].map((size) => ({
       src: `/brand/${variant}-${size}.png`,
       sizes: `${size}x${size}`,

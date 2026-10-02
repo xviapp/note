@@ -1,16 +1,20 @@
-import { useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import type { NoteNode } from '../shared/types';
 
 export type NodeListing = { nodes: NoteNode[]; nextOffset: number | null };
+// Page counts are scoped to the signed-in Notebook, never persisted with private data.
+export const ListingPagesContext = createContext<Map<string, number> | null>(null);
 
 // Refresh the pages the reader has already opened, without blanking the list.
 // A generation also prevents a late "load more" response from undoing a refresh.
-export function useNodeListing(query: string, refresh: number) {
+export function useNodeListing(query: string, refresh: number, rememberPages = false) {
+  const pageCounts = useContext(ListingPagesContext);
+  const rememberedPages = rememberPages ? pageCounts?.get(query) || 1 : 1;
   const current = useRef<{ query: string; listing: NodeListing | null; pages: number }>({
     query,
     listing: null,
-    pages: 1,
+    pages: rememberedPages,
   });
   const generation = useRef(0);
   const pending = useRef(false);
@@ -22,7 +26,8 @@ export function useNodeListing(query: string, refresh: number) {
   });
   useEffect(() => {
     const run = ++generation.current;
-    if (current.current.query !== query) current.current = { query, listing: null, pages: 1 };
+    if (current.current.query !== query)
+      current.current = { query, listing: null, pages: rememberedPages };
     const pages = current.current.pages;
     pending.current = true;
     setState({ query, listing: current.current.listing, loading: true, error: '' });
@@ -42,6 +47,7 @@ export function useNodeListing(query: string, refresh: number) {
         } while (nextOffset !== null && loaded < pages);
         const listing = { nodes: [...nodes.values()], nextOffset };
         current.current = { query, listing, pages: loaded };
+        if (rememberPages) pageCounts?.set(query, loaded);
         setState({ query, listing, loading: false, error: '' });
       } catch (error) {
         if (run === generation.current)
@@ -58,7 +64,7 @@ export function useNodeListing(query: string, refresh: number) {
     return () => {
       generation.current++;
     };
-  }, [query, refresh]);
+  }, [query, refresh, pageCounts, rememberPages]);
 
   const more = async () => {
     const previous = current.current;
@@ -76,6 +82,7 @@ export function useNodeListing(query: string, refresh: number) {
       );
       const listing = { nodes: [...nodes.values()], nextOffset: result.nextOffset };
       current.current = { query, listing, pages: previous.pages + 1 };
+      if (rememberPages) pageCounts?.set(query, current.current.pages);
       setState({ query, listing, loading: false, error: '' });
     } catch (error) {
       if (run === generation.current)

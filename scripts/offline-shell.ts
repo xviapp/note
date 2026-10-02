@@ -128,7 +128,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request, url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
-  const navigation = request.mode === 'navigate' && (url.pathname === '/' || /^\\/n\\/[\\w-]+$/.test(url.pathname));
+  const navigation = request.mode === 'navigate' && (url.pathname === '/' || /^\\/n\\/[\\w-]+$/.test(url.pathname) || /^\\/(?:favorites|recent|offline|trash|settings(?:\\/(?:theme|reading|ai|offline|share|backup|storage|account|about))?)$/.test(url.pathname));
   if (navigation) {
     event.respondWith(fetch(request).catch(async () => {
       const response = await (await caches.open(CACHE)).match('/');

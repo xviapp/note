@@ -6,8 +6,8 @@
   "start_url": "/",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#202824",
-  "theme_color": "#202824",
+  "background_color": "#191817",
+  "theme_color": "#191817",
   "icons": [
     {
       "src": "/brand/night-192.png",

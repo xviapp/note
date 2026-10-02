@@ -15,11 +15,12 @@ async function login(page: Page) {
   });
   expect(response.ok()).toBeTruthy();
 }
-async function settings(page: Page) {
+async function settings(page: Page, section = '分享保存') {
   await expect(page.locator('.app-shell')).toBeVisible();
   const menu = page.getByRole('button', { name: '打开笔记目录', exact: true });
   if (await menu.isVisible()) await menu.click();
   await page.locator('.main-nav').getByRole('button', { name: '设置', exact: true }).click();
+  await page.locator('.settings-entry').getByText(section, { exact: true }).click();
 }
 function pdfFixture(count = 12) {
   const objects = [
@@ -315,7 +316,7 @@ test('installed build is shown and update download is signature-aware with a che
   };
   await page.route('**/api/app/android-release', (route) => route.fulfill({ json: { release } }));
   await page.goto('/');
-  await settings(page);
+  await settings(page, '关于页间');
   await expect(page.getByText('Android 0.2.4', { exact: true })).toBeVisible();
   await expect(page.getByText('构建 6', { exact: true })).toBeVisible();
   await page.getByRole('button', { name: '检查 Android 更新' }).click();
@@ -430,6 +431,7 @@ test('PDF pinch previews without rerender, keeps an anchor, remembers zoom and d
   expect(await page.locator('.pdf-page').count()).toBeLessThan(10);
   await page.reload();
   await expect(page.getByRole('button', { name: 'PDF 适应宽度' })).toHaveText('180%');
+  await expect(page.getByRole('button', { name: 'PDF 适应宽度' })).toBeEnabled();
   await page.evaluate(() => {
     const area = document.querySelector<HTMLElement>('.pdf-scroll')!,
       rect = area.getBoundingClientRect();
@@ -469,7 +471,7 @@ test('exports a checked ZIP and restores it alongside existing notes', async ({ 
     })
   ).json();
   await page.goto('/');
-  await settings(page);
+  await settings(page, '备份与恢复');
   const downloadPromise = page.waitForEvent('download');
   await page.getByRole('button', { name: '导出整库备份' }).click();
   const download = await downloadPromise;

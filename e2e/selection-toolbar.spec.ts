@@ -166,7 +166,8 @@ test('selection quotes open the current assistant, retain a draft, and work in m
   await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
   await expect(panel.locator('.context-quote')).toHaveText('公式 $E=mc^2$。');
   await expect(input).toHaveValue('这个问题先留在草稿里');
-  await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
+  if (info.project.name === 'desktop')
+    await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await selectText(page, panel.locator('.chat-assistant .markdown-body p').first());
   await assertInViewport(page);
   await page.screenshot({ path: info.outputPath('selection-chat.png') });
