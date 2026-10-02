@@ -13,3 +13,8 @@ playwright-report/
 coverage/
 *.local
 .DS_Store
+
+# Local signing material
+*.jks
+*.keystore
+*.p12

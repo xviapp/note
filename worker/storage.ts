@@ -7,12 +7,14 @@ import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 export const MAX_FILE_BYTES = 50_000_000;
 export const MAX_TEXT_BYTES = 1_048_576;
 const DAY = 86400_000;
-export const UNREFERENCED = `NOT EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=blobs.id)
+export const LIBRARY_UNREFERENCED = `NOT EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=blobs.id OR m.image_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=blobs.id)`;
+export const UNREFERENCED = `${LIBRARY_UNREFERENCED}
+ AND NOT EXISTS(SELECT 1 FROM backup_files f WHERE f.blob_id=blobs.id)`;
 
 export async function getBlob(env: Env, id: string): Promise<BlobRow> {
   const file = await env.DB.prepare("SELECT * FROM blobs WHERE id=? AND state='ready'")

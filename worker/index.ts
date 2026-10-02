@@ -1,4 +1,13 @@
 import type { Env } from './types';
+import {
+  createBackup,
+  deleteBackup,
+  startRestore,
+  uploadRestoreFile,
+  finishRestore,
+} from './backups';
+import { BACKUP_METADATA_LIMIT } from '../shared/backup';
+import { androidRelease } from './releases';
 import { AppError, asError, body, enforceOrigin, idValue, integer, json } from './http';
 import { publicAuth, requireSession, accountAuth, editToken, requireEdit } from './auth';
 import {
@@ -39,6 +48,27 @@ export default {
       if (accountResponse) return accountResponse;
       const method = request.method,
         path = url.pathname;
+      if (path.startsWith('/api/app/android-release') && ['GET', 'HEAD'].includes(method))
+        return await androidRelease(request, env);
+      if (path === '/api/backups' && method === 'POST') return json(await createBackup(env));
+      if (path === '/api/backups/restore' && method === 'POST')
+        return json(
+          await startRestore(
+            env,
+            await body(request, BACKUP_METADATA_LIMIT),
+            operationKey(request),
+          ),
+        );
+      const backup = path.match(
+        /^\/api\/backups\/([a-zA-Z0-9_-]{1,80})(?:\/(commit|files)(?:\/([a-zA-Z0-9_-]{1,80}))?)?$/,
+      );
+      if (backup) {
+        if (!backup[2] && method === 'DELETE') return json(await deleteBackup(env, backup[1]));
+        if (backup[2] === 'files' && backup[3] && method === 'POST')
+          return json(await uploadRestoreFile(env, request, backup[1], backup[3]));
+        if (backup[2] === 'commit' && !backup[3] && method === 'POST')
+          return json(await finishRestore(env, backup[1]));
+      }
       if (path === '/api/edit/unlock' && method === 'POST') {
         const data = await body(request),
           nodeId = idValue(data.nodeId);

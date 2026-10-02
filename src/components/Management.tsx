@@ -29,6 +29,8 @@ import { ThemeChoices } from './ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../../shared/password';
 import { AiSettings } from './AiSettings';
 import { ReadingControls } from './ReadingSettings';
+import { BackupSettings } from './BackupSettings';
+import { AppUpdates } from './AppUpdates';
 import { CacheSettings } from './OfflineCache';
 
 export type Confirm = (
@@ -478,6 +480,7 @@ export function Settings({
   return (
     <section className="collection-page settings-page">
       <h1>设置</h1>
+      <AppUpdates />
       <section className="settings-section">
         <h2>
           <Palette size={19} />
@@ -493,6 +496,7 @@ export function Settings({
         <ReadingControls />
       </section>
       <CacheSettings />
+      <BackupSettings confirm={confirm} onChanged={onChanged} />
       <AiSettings confirm={confirm} />
       <section className="settings-section">
         <h2>

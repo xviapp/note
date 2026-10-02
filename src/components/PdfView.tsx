@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
+import { boundZoom, savedPdfZoom, usePdfGestures, type ZoomPoint } from '../pdf-gestures';
 import { openPdf } from '../pdf-document';
 import { ChevronLeft, ChevronRight, Minus, Plus, Download, List, X } from 'lucide-react';
 import { fileUrl } from '../api';
@@ -47,7 +48,10 @@ export default function PdfView({
   } | null>(null);
   const [page, setPage] = useState(initialPosition.page || 1);
   const [pageInput, setPageInput] = useState(String(page));
-  const [zoom, setZoom] = useState(1);
+  const [zoom, setZoom] = useState(() => savedPdfZoom(fileId));
+  const zoomAnchor = useRef<{ page: number; ratio: number; x: number; point: ZoomPoint } | null>(
+    null,
+  );
   const [error, setError] = useState('');
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [aspects, setAspects] = useState<Map<number, number>>(new Map());
@@ -155,6 +159,31 @@ export default function PdfView({
     return { boxes, height };
   }, [document, aspects, width, gap, viewport.width, viewport.height]);
 
+  const changeZoom = (value: number, point?: ZoomPoint, target?: ZoomPoint) => {
+    const area = scroll.current;
+    const next = boundZoom(value);
+    if (!layout || !area || Math.abs(next - zoom) < 0.001) return;
+    if (point) {
+      const at = point;
+      const index = pageAt(layout.boxes, area.scrollTop + at.y);
+      const box = layout.boxes[index];
+      const left = (Math.max(viewport.width, width + gap * 2) - width) / 2;
+      zoomAnchor.current = {
+        page: index,
+        ratio: (area.scrollTop + at.y - box.top) / box.height,
+        x: (area.scrollLeft + at.x - left) / width,
+        point: target || at,
+      };
+    }
+    setZoom(next);
+    try {
+      localStorage.setItem(`pdf-view:${fileId}`, String(next));
+    } catch {
+      /* Optional preference. */
+    }
+  };
+  usePdfGestures(scroll, zoom, changeZoom);
+
   const syncPage = (value: number) => {
     setPage(value);
     setPageInput(String(value));
@@ -164,6 +193,26 @@ export default function PdfView({
   // newly measured mixed-size page changes the offsets above the viewport.
   useLayoutEffect(() => {
     if (!layout || !scroll.current) return;
+    const zoomPoint = zoomAnchor.current;
+    if (zoomPoint) {
+      zoomAnchor.current = null;
+      const box = layout.boxes[zoomPoint.page];
+      scroll.current.scrollTop = box.top + zoomPoint.ratio * box.height - zoomPoint.point.y;
+      const left = (Math.max(viewport.width, width + gap * 2) - width) / 2;
+      scroll.current.scrollLeft = left + zoomPoint.x * width - zoomPoint.point.x;
+      const index = pageAt(layout.boxes, scroll.current.scrollTop + gap);
+      position.current = {
+        page: index + 1,
+        pageRatio: Math.max(
+          0,
+          Math.min(
+            1,
+            (scroll.current.scrollTop + gap - layout.boxes[index].top) / layout.boxes[index].height,
+          ),
+        ),
+      };
+      onPositionRef.current?.(position.current);
+    }
     const anchor = position.current;
     const box = layout.boxes[anchor.page - 1];
     scroll.current.scrollTop = box.top - gap + anchor.pageRatio * box.height;
@@ -312,7 +361,7 @@ export default function PdfView({
           className="icon-button"
           aria-label="缩小 PDF"
           disabled={!layout || zoom <= 0.5}
-          onClick={() => setZoom((value) => Math.max(0.5, +(value - 0.2).toFixed(1)))}
+          onClick={() => changeZoom(+(zoom - 0.2).toFixed(1))}
         >
           <Minus size={17} />
         </button>
@@ -321,7 +370,7 @@ export default function PdfView({
           aria-label="PDF 适应宽度"
           title="适应宽度"
           disabled={!layout}
-          onClick={() => setZoom(1)}
+          onClick={() => changeZoom(1)}
         >
           {Math.round(zoom * 100)}%
         </button>
@@ -329,7 +378,7 @@ export default function PdfView({
           className="icon-button"
           aria-label="放大 PDF"
           disabled={!layout || zoom >= 3}
-          onClick={() => setZoom((value) => Math.min(3, +(value + 0.2).toFixed(1)))}
+          onClick={() => changeZoom(+(zoom + 0.2).toFixed(1))}
         >
           <Plus size={17} />
         </button>

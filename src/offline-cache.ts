@@ -526,7 +526,7 @@ export async function clearPrivateCache() {
   }).catch(() => {});
   try {
     for (const key of Object.keys(localStorage))
-      if (key.startsWith('reading:')) localStorage.removeItem(key);
+      if (key.startsWith('reading:') || key.startsWith('pdf-view:')) localStorage.removeItem(key);
     sessionStorage.removeItem('expanded-nodes');
   } catch {
     /* Storage can be unavailable. */

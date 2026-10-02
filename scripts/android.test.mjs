@@ -52,16 +52,17 @@ process.exit(Number(process.env.FIXTURE_BUILD_EXIT || 0));
 ${helper}
 record('gradle');
 if (process.env.FIXTURE_GRADLE_EXIT) process.exit(Number(process.env.FIXTURE_GRADLE_EXIT));
-fs.mkdirSync('app/build/outputs/apk/debug', { recursive: true });
-fs.writeFileSync('app/build/outputs/apk/debug/app-debug.apk', 'fresh APK');
+const variant = args[0] === 'assembleRelease' ? 'release' : 'debug';
+fs.mkdirSync('app/build/outputs/apk/' + variant, { recursive: true });
+fs.writeFileSync('app/build/outputs/apk/' + variant + '/app-' + variant + '.apk', 'fresh APK');
 `,
       { mode: 0o755 },
     );
     await run({
       root,
-      execute: async (args = [], env = {}) => {
+      execute: async (args = [], env = {}, task = 'install') => {
         await writeFile(log, '');
-        const result = spawnSync(process.execPath, ['scripts/android.mjs', 'install', ...args], {
+        const result = spawnSync(process.execPath, ['scripts/android.mjs', task, ...args], {
           cwd: root,
           env: {
             ...process.env,
@@ -102,6 +103,33 @@ cliTest('builds and installs a fresh APK only on the one selected device', () =>
     const apk = path.join(root, 'artifacts/yejian-0.2.1-android-debug.apk');
     assert.deepEqual(result.calls[3].args, ['-s', 'phone-one', 'install', '-r', apk]);
     assert.equal(await readFile(apk, 'utf8'), 'fresh APK');
+  }),
+);
+
+cliTest('release refuses missing signing configuration and copies the signed build variant', () =>
+  fixture(async ({ execute, root }) => {
+    const missing = await execute([], { NOTE_ANDROID_KEYSTORE: '' }, 'assembleRelease');
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /NOTE_ANDROID_KEYSTORE/);
+    assert.deepEqual(missing.calls, []);
+    const release = await execute(
+      [],
+      {
+        NOTE_ANDROID_KEYSTORE: path.join(root, 'fixture.jks'),
+        NOTE_ANDROID_STORE_PASSWORD: 'fixture-only',
+        NOTE_ANDROID_KEY_ALIAS: 'fixture',
+        NOTE_ANDROID_KEY_PASSWORD: 'fixture-only',
+      },
+      'assembleRelease',
+    );
+    assert.equal(release.status, 0, release.stderr);
+    assert.deepEqual(release.calls, [
+      { name: 'gradle', args: ['assembleRelease', '--console=plain'] },
+    ]);
+    assert.equal(
+      await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-release.apk'), 'utf8'),
+      'fresh APK',
+    );
   }),
 );
 

@@ -31,6 +31,7 @@ import { dismissReadingOverlay } from './mobile-back';
 import { useOffline } from './connectivity';
 import { OfflineLibrary } from './components/OfflineCache';
 import { cacheSnapshot, initializeCache } from './offline-cache';
+import { ShareImport } from './components/ShareImport';
 import { Brand } from './components/Brand';
 
 type View = 'tree' | 'favorites' | 'recent' | 'offline' | 'trash' | 'settings';
@@ -423,6 +424,14 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
   ];
   return (
     <div className={`app-shell ${mobileOpen ? 'sidebar-open' : ''}`}>
+      <ShareImport
+        onImported={(nodes) => {
+          changed();
+          setNotice(`已保存 ${nodes.length} 项内容。`);
+          const first = nodes.find((node) => node.kind !== 'link');
+          if (first) void navigate(first.id);
+        }}
+      />
       <button
         className="sidebar-scrim"
         aria-label="关闭笔记目录"

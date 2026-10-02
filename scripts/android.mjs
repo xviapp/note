@@ -6,8 +6,22 @@ import path from 'node:path';
 import { parseArgs } from 'node:util';
 
 const task = process.argv[2] || 'assembleDebug';
-if (!['assembleDebug', 'testDebugUnitTest', 'lintDebug', 'install'].includes(task))
+if (
+  !['assembleDebug', 'assembleRelease', 'testDebugUnitTest', 'lintDebug', 'install'].includes(task)
+)
   throw new Error('Unsupported Android task');
+if (
+  task === 'assembleRelease' &&
+  [
+    'NOTE_ANDROID_KEYSTORE',
+    'NOTE_ANDROID_STORE_PASSWORD',
+    'NOTE_ANDROID_KEY_ALIAS',
+    'NOTE_ANDROID_KEY_PASSWORD',
+  ].some((key) => !process.env[key])
+)
+  throw new Error(
+    '正式构建需要配置 NOTE_ANDROID_KEYSTORE、NOTE_ANDROID_STORE_PASSWORD、NOTE_ANDROID_KEY_ALIAS、NOTE_ANDROID_KEY_PASSWORD。',
+  );
 const { values } = parseArgs({
   args: process.argv.slice(3),
   options: { device: { type: 'string', short: 's' }, help: { type: 'boolean', short: 'h' } },
@@ -92,11 +106,12 @@ await run(
     env: { ...process.env, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk },
   },
 );
-if (task === 'assembleDebug' || task === 'install') {
+if (task === 'assembleDebug' || task === 'assembleRelease' || task === 'install') {
   const { version } = JSON.parse(await readFile('package.json', 'utf8'));
-  const output = `artifacts/yejian-${version}-android-debug.apk`;
+  const variant = task === 'assembleRelease' ? 'release' : 'debug';
+  const output = `artifacts/yejian-${version}-android-${variant}.apk`;
   await mkdir('artifacts', { recursive: true });
-  await copyFile('android/app/build/outputs/apk/debug/app-debug.apk', output);
+  await copyFile(`android/app/build/outputs/apk/${variant}/app-${variant}.apk`, output);
   console.log(`APK: ${path.resolve(output)}`);
   if (task === 'install') {
     await run(adb, ['-s', serial, 'install', '-r', path.resolve(output)]);

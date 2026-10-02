@@ -27,7 +27,8 @@ final class OriginPolicy {
     }
 
     boolean isDownload(String value) {
-        return sameOrigin(value) && URI.create(value).getRawPath().matches("/api/files/[a-zA-Z0-9_-]{1,80}");
+        return sameOrigin(value) && (URI.create(value).getRawPath().matches("/api/files/[a-zA-Z0-9_-]{1,80}")
+            || URI.create(value).getRawPath().matches("/api/app/android-release/[1-9][0-9]{0,8}/[a-f0-9]{64}\\.apk"));
     }
 
     boolean isDocument(String value) {

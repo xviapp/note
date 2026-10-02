@@ -1,6 +1,11 @@
 package app.xvi.note;
 
 import android.app.Activity;
+import android.content.pm.PackageInfo;
+import android.content.pm.PackageManager;
+import android.content.pm.Signature;
+import android.os.Build;
+import java.security.MessageDigest;
 import android.content.Intent;
 import android.graphics.Color;
 import android.net.Uri;
@@ -25,6 +30,39 @@ import java.net.URI;
 public class NoteDevicePlugin extends Plugin {
     private volatile boolean saving;
     private static final long MAX_DOWNLOAD = 50L * 1024 * 1024;
+
+    private static String hex(byte[] bytes) {
+        StringBuilder result = new StringBuilder();
+        for (byte value : bytes) result.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));
+        return result.toString();
+    }
+
+    @PluginMethod
+    @SuppressWarnings("deprecation")
+    public void getBuildInfo(PluginCall call) {
+        try {
+            PackageInfo info = getContext().getPackageManager().getPackageInfo(getContext().getPackageName(),
+                Build.VERSION.SDK_INT >= 28 ? PackageManager.GET_SIGNING_CERTIFICATES : PackageManager.GET_SIGNATURES);
+            Signature[] certificates = Build.VERSION.SDK_INT >= 28
+                ? info.signingInfo.getApkContentsSigners() : info.signatures;
+            call.resolve(new JSObject().put("version", info.versionName)
+                .put("build", Build.VERSION.SDK_INT >= 28 ? info.getLongVersionCode() : info.versionCode)
+                .put("certificate", hex(MessageDigest.getInstance("SHA-256").digest(certificates[0].toByteArray()))));
+        } catch (Exception error) { call.reject("无法读取安装版本。", error); }
+    }
+
+    @PluginMethod
+    public void getPendingShare(PluginCall call) {
+        try { call.resolve(new JSObject().put("share", java.util.Objects.requireNonNullElse(
+            ((MainActivity) getActivity()).shareInbox.next(), org.json.JSONObject.NULL))); }
+        catch (Exception error) { call.reject("无法读取待导入内容。", error); }
+    }
+
+    @PluginMethod
+    public void discardShare(PluginCall call) {
+        ((MainActivity) getActivity()).shareInbox.discard(call.getString("id"));
+        call.resolve();
+    }
 
     @PluginMethod
     public void setBackground(PluginCall call) {
@@ -72,6 +110,8 @@ public class NoteDevicePlugin extends Plugin {
             call.reject("无法保存这个文件。");
             return;
         }
+        String checksum = call.getString("sha256");
+        if (checksum != null && !checksum.matches("[a-f0-9]{64}")) { call.reject("无效的文件校验值。"); return; }
         saving = true;
         Intent intent = new Intent(Intent.ACTION_CREATE_DOCUMENT)
             .addCategory(Intent.CATEGORY_OPENABLE)
@@ -115,6 +155,9 @@ public class NoteDevicePlugin extends Plugin {
                     if (status != 200) throw new java.io.IOException(status == 401 ? "登录已失效，请重新登录。" : "文件下载失败，请重试。");
                     source = connection.getInputStream();
                 } else source = new ByteArrayInputStream(Base64.decode(call.getString("data", ""), Base64.DEFAULT));
+                MessageDigest digest = MessageDigest.getInstance("SHA-256");
+                long maximum = url != null && URI.create(url).getPath().startsWith("/api/app/android-release/")
+                    ? 200L * 1024 * 1024 : MAX_DOWNLOAD;
                 try (InputStream input = source;
                      OutputStream output = getContext().getContentResolver().openOutputStream(destination, "w")) {
                     if (output == null) throw new java.io.IOException("无法写入所选位置。");
@@ -123,10 +166,14 @@ public class NoteDevicePlugin extends Plugin {
                     int length;
                     while ((length = input.read(buffer)) != -1) {
                         total += length;
-                        if (total > MAX_DOWNLOAD) throw new java.io.IOException("文件超过 50 MiB。");
+                        if (total > maximum) throw new java.io.IOException("文件超过允许的大小。");
+                        digest.update(buffer, 0, length);
                         output.write(buffer, 0, length);
                     }
                 }
+                String checksum = call.getString("sha256");
+                if (checksum != null && !checksum.equals(hex(digest.digest())))
+                    throw new java.io.IOException("文件校验失败，请重新下载。");
                 getActivity().runOnUiThread(() ->
                     Toast.makeText(getContext(), "已保存到所选位置", Toast.LENGTH_SHORT).show());
                 call.resolve(new JSObject().put("cancelled", false));

@@ -1795,6 +1795,7 @@ progress::-moz-progress-bar {
   background: var(--hover);
 }
 .pdf-scroll {
+  touch-action: pan-x pan-y;
   flex: 1;
   min-width: 0;
   min-height: 0;
@@ -2397,4 +2398,27 @@ progress::-moz-progress-bar {
     transition: none !important;
     animation: none !important;
   }
+}
+
+.update-notes {
+  white-space: pre-wrap;
+  line-height: 1.7;
+}
+.update-details {
+  display: grid;
+  gap: 12px;
+  justify-items: start;
+}
+
+.pdf-scroll[data-pinching] .pdf-text-layer {
+  visibility: hidden;
+}
+
+.backup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+.backup-preview {
+  margin-top: 16px;
 }

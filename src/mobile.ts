@@ -1,12 +1,16 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
 
-const device = registerPlugin<{
+export const device = registerPlugin<{
+  getPendingShare(): Promise<{ share: import('./shared-import').IncomingShare | null }>;
+  discardShare(options: { id: string }): Promise<void>;
+  getBuildInfo(): Promise<{ version: string; build: number; certificate: string }>;
   openExternal(options: { url: string }): Promise<void>;
   setBackground(options: { color: string; preference: string }): Promise<void>;
   notify(options: { message: string }): Promise<void>;
   saveFile(options: {
     url?: string;
+    sha256?: string;
     data?: string;
     name: string;
     mime: string;

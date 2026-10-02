@@ -7,8 +7,8 @@ android {
         applicationId "app.xvi.note"
         minSdkVersion rootProject.ext.minSdkVersion
         targetSdkVersion rootProject.ext.targetSdkVersion
-        versionCode 6
-        versionName "0.2.4"
+        versionCode 7
+        versionName "0.3.0"
         testInstrumentationRunner "androidx.test.runner.AndroidJUnitRunner"
         aaptOptions {
              // Files and dirs to omit from the packaged assets dir, modified to accommodate modern web apps.
@@ -16,8 +16,19 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        if (System.getenv('NOTE_ANDROID_KEYSTORE')) {
+            production {
+                storeFile file(System.getenv('NOTE_ANDROID_KEYSTORE'))
+                storePassword System.getenv('NOTE_ANDROID_STORE_PASSWORD')
+                keyAlias System.getenv('NOTE_ANDROID_KEY_ALIAS')
+                keyPassword System.getenv('NOTE_ANDROID_KEY_PASSWORD')
+            }
+        }
+    }
     buildTypes {
         release {
+            if (System.getenv('NOTE_ANDROID_KEYSTORE')) signingConfig signingConfigs.production
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

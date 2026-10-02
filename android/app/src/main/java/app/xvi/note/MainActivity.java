@@ -20,20 +20,26 @@ import org.json.JSONObject;
 public class MainActivity extends BridgeActivity {
     private static final String APPEARANCE_PREFS = "note-appearance";
     private ColorDrawable themeBackground;
+    ShareInbox shareInbox;
+    private final java.util.concurrent.ExecutorService shareExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
         registerPlugin(NoteDevicePlugin.class);
+        registerPlugin(NoteArchivePlugin.class);
         super.onCreate(savedInstanceState);
         if (bridge == null) return;
         // The first WebView frame precedes the JS bridge/theme callback. Prime
         // every native surface now so the splash never reveals a light canvas.
         restoreThemeBackground();
+        shareInbox = new ShareInbox(this);
         OriginPolicy policy = new OriginPolicy(bridge.getLocalUrl());
         CookieManager.getInstance().setAcceptThirdPartyCookies(bridge.getWebView(), false);
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
+                if (policy.sameOrigin(request.getUrl().toString()) && request.getUrl().getPath().startsWith("/__share/"))
+                    return shareInbox.open(request.getUrl().getPath());
                 // Let Chromium issue these requests itself: it keeps HttpOnly cookies,
                 // request bodies, Range responses and streaming fetch intact.
                 if (policy.isApi(request.getUrl().toString())) return null;
@@ -51,6 +57,34 @@ public class MainActivity extends BridgeActivity {
                 return true;
             }
         });
+        if (savedInstanceState == null) receiveShare(getIntent());
+    }
+
+    @Override
+    protected void onNewIntent(Intent intent) {
+        super.onNewIntent(intent);
+        receiveShare(intent);
+    }
+
+    private void receiveShare(Intent intent) {
+        if (!ShareInbox.accepts(intent) || shareInbox == null) return;
+        shareExecutor.execute(() -> {
+            try {
+                shareInbox.receive(intent);
+                runOnUiThread(() -> {
+                    if (!isDestroyed() && bridge != null)
+                        bridge.getWebView().evaluateJavascript("window.dispatchEvent(new Event('note:share'))", null);
+                });
+            } catch (Exception error) {
+                runOnUiThread(() -> Toast.makeText(this, error.getMessage() == null ? "无法读取分享内容。" : error.getMessage(), Toast.LENGTH_LONG).show());
+            }
+        });
+    }
+
+    @Override
+    public void onDestroy() {
+        shareExecutor.shutdown();
+        super.onDestroy();
     }
 
     @Override

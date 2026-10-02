@@ -1,0 +1,297 @@
+import { test, expect, type Page } from '@playwright/test';
+import { readFile } from 'node:fs/promises';
+import { BlobReader, ZipReader } from '@zip.js/zip.js';
+import { preparePassword } from '../shared/password';
+
+const headers = { origin: 'http://127.0.0.1:8799' };
+async function login(page: Page) {
+  const status = await (await page.request.get('/api/auth/status')).json();
+  const response = await page.request.post(`/api/auth/${status.initialized ? 'login' : 'setup'}`, {
+    headers,
+    data: {
+      password: await preparePassword('Note2026', status.initialized ? status.password : undefined),
+      ...(!status.initialized ? { token: 'e2e-test-only-setup-token-never-deploy-0001' } : {}),
+    },
+  });
+  expect(response.ok()).toBeTruthy();
+}
+async function settings(page: Page) {
+  await expect(page.locator('.app-shell')).toBeVisible();
+  const menu = page.getByRole('button', { name: '打开笔记目录', exact: true });
+  if (await menu.isVisible()) await menu.click();
+  await page.locator('.main-nav').getByRole('button', { name: '设置', exact: true }).click();
+}
+function pdfFixture(count = 12) {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    `<< /Type /Pages /Kids [${Array.from({ length: count }, (_, i) => `${4 + i * 2} 0 R`).join(' ')}] /Count ${count} >>`,
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  for (let i = 0; i < count; i++) {
+    const stream = `BT /F1 20 Tf 30 450 Td (Touch reading page ${i + 1}) Tj ET`;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 360 520] /Resources << /Font << /F1 3 0 R >> >> /Contents ${5 + i * 2} 0 R >>`,
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    );
+  }
+  let data = '%PDF-1.4\n';
+  const offsets = [0];
+  objects.forEach((object, i) => {
+    offsets.push(Buffer.byteLength(data));
+    data += `${i + 1} 0 obj\n${object}\nendobj\n`;
+  });
+  const xref = Buffer.byteLength(data);
+  data += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets
+    .slice(1)
+    .map((n) => `${String(n).padStart(10, '0')} 00000 n \n`)
+    .join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return Buffer.from(data);
+}
+async function nativeMock(page: Page, shares: unknown[] = []) {
+  await page.addInitScript((incoming) => {
+    const win = window as any;
+    win.androidBridge = {};
+    win.__nativeCalls = [];
+    win.Capacitor = {
+      PluginHeaders: [
+        {
+          name: 'NoteDevice',
+          methods: ['getBuildInfo', 'getPendingShare', 'discardShare', 'saveFile'].map((name) => ({
+            name,
+            rtype: 'promise',
+          })),
+        },
+      ],
+      nativePromise: async (plugin: string, method: string, options: any) => {
+        win.__nativeCalls.push({ plugin, method, options });
+        if (method === 'getBuildInfo')
+          return { version: '0.2.4', build: 6, certificate: 'b'.repeat(64) };
+        if (method === 'getPendingShare') return { share: incoming[0] || null };
+        if (method === 'discardShare') {
+          incoming.shift();
+          return {};
+        }
+        if (method === 'saveFile') return { cancelled: false };
+        return {};
+      },
+    };
+  }, shares);
+}
+test('installed build is shown and update download is signature-aware with a checksum', async ({
+  page,
+}) => {
+  await login(page);
+  await nativeMock(page);
+  const release = {
+    version: '0.3.0',
+    build: 7,
+    size: 30000,
+    sha256: 'a'.repeat(64),
+    certificate: 'b'.repeat(64),
+    publishedAt: new Date().toISOString(),
+    notes: '支持系统分享、PDF 手势和整库备份。',
+  };
+  await page.route('**/api/app/android-release', (route) => route.fulfill({ json: { release } }));
+  await page.goto('/');
+  await settings(page);
+  await expect(page.getByText('Android 0.2.4', { exact: true })).toBeVisible();
+  await expect(page.getByText('构建 6', { exact: true })).toBeVisible();
+  await page.getByRole('button', { name: '检查 Android 更新' }).click();
+  await page.getByRole('button', { name: '下载安装包' }).click();
+  await expect(page.getByText('安装包已校验并保存，打开文件即可安装。')).toBeVisible();
+  expect(
+    await page.evaluate(
+      () =>
+        (window as any).__nativeCalls.find((call: any) => call.method === 'saveFile').options
+          .sha256,
+    ),
+  ).toBe(release.sha256);
+  release.certificate = 'c'.repeat(64);
+  await page.getByRole('button', { name: '检查 Android 更新' }).click();
+  await expect(page.getByRole('button', { name: '下载安装包' })).toBeDisabled();
+});
+test('incoming links and PDFs wait for confirmation and import into the library', async ({
+  page,
+}, info) => {
+  await login(page);
+  const id = crypto.randomUUID(),
+    fileId = crypto.randomUUID();
+  const bytes = pdfFixture();
+  await nativeMock(page, [
+    {
+      id,
+      title: `分享链接 ${info.project.name}`,
+      text: 'https://arxiv.org/abs/2501.00001',
+      files: [],
+    },
+    {
+      id: fileId,
+      title: `分享 PDF ${info.project.name}`,
+      text: '',
+      files: [
+        {
+          id,
+          name: 'shared.pdf',
+          mime: 'application/pdf',
+          size: bytes.length,
+          path: `/__share/${fileId}/${id}`,
+        },
+      ],
+    },
+  ]);
+  await page.route('**/__share/**', (route) =>
+    route.fulfill({ contentType: 'application/pdf', body: bytes }),
+  );
+  let writes = 0;
+  page.on('request', (r) => {
+    if (r.method() === 'POST' && r.url().endsWith('/api/nodes')) writes++;
+  });
+  await page.goto('/');
+  const dialog = page.getByRole('dialog', { name: '保存到页间', exact: true });
+  await expect(dialog).toBeVisible();
+  expect(writes).toBe(0);
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(dialog.getByLabel('标题', { exact: true })).toHaveValue(
+    `分享 PDF ${info.project.name}`,
+  );
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page.getByRole('region', { name: 'PDF 阅读器' })).toBeVisible();
+  expect(writes).toBe(2);
+});
+test('PDF pinch previews without rerender, keeps an anchor, remembers zoom and double-taps to fit', async ({
+  page,
+}) => {
+  await login(page);
+  const data = pdfFixture(80);
+  const uploaded = await (
+    await page.request.post(`/api/files?name=touch.pdf&size=${data.length}`, { headers, data })
+  ).json();
+  const node = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: { kind: 'pdf', title: '触控长论文', fileId: uploaded.id },
+    })
+  ).json();
+  await page.goto(`/n/${node.id}`);
+  await expect(page.locator('.pdf-page canvas').first()).toBeVisible();
+  const number = page.getByRole('spinbutton', { name: 'PDF 页码' });
+  await number.fill('30');
+  await number.press('Enter');
+  await expect(page.locator('.pdf-page[data-page="30"]')).toBeVisible();
+  await page.evaluate(async () => {
+    const area = document.querySelector<HTMLElement>('.pdf-scroll')!;
+    const rect = area.getBoundingClientRect();
+    const touch = (identifier: number, x: number) =>
+      new Touch({ identifier, target: area, clientX: rect.left + x, clientY: rect.top + 200 });
+    const send = (type: string, touches: Touch[]) =>
+      area.dispatchEvent(
+        new TouchEvent(type, {
+          touches,
+          targetTouches: touches,
+          changedTouches: touches,
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    const first = area.querySelector('canvas');
+    (window as any).__beforePinch = first;
+    send('touchstart', [touch(1, 120), touch(2, 220)]);
+    send('touchmove', [touch(1, 80), touch(2, 260)]);
+    (window as any).__previewUnchanged =
+      first === area.querySelector('canvas') && area.dataset.pinching === 'true';
+    send('touchend', []);
+  });
+  expect(await page.evaluate(() => (window as any).__previewUnchanged)).toBe(true);
+  await expect(page.getByRole('button', { name: 'PDF 适应宽度' })).toHaveText('180%');
+  await expect(number).toHaveValue('30');
+  expect(await page.locator('.pdf-page').count()).toBeLessThan(10);
+  await page.reload();
+  await expect(page.getByRole('button', { name: 'PDF 适应宽度' })).toHaveText('180%');
+  await page.evaluate(() => {
+    const area = document.querySelector<HTMLElement>('.pdf-scroll')!,
+      rect = area.getBoundingClientRect();
+    window.getSelection()?.removeAllRanges();
+    const touch = new Touch({
+      identifier: 1,
+      target: area,
+      clientX: rect.left + 80,
+      clientY: rect.top + 160,
+    });
+    for (let i = 0; i < 2; i++) {
+      area.dispatchEvent(
+        new TouchEvent('touchstart', { touches: [touch], bubbles: true, cancelable: true }),
+      );
+      area.dispatchEvent(
+        new TouchEvent('touchend', {
+          touches: [],
+          changedTouches: [touch],
+          bubbles: true,
+          cancelable: true,
+        }),
+      );
+    }
+  });
+  await expect(page.getByRole('button', { name: 'PDF 适应宽度' })).toHaveText('100%');
+});
+test('exports a checked ZIP and restores it alongside existing notes', async ({ page }, info) => {
+  test.setTimeout(120000);
+  await login(page);
+  await page.addInitScript(() => {
+    (window as any).showSaveFilePicker = undefined;
+  });
+  const original = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: { kind: 'markdown', title: '备份正文', content: '# 保留这段文字\n\n$x^2$' },
+    })
+  ).json();
+  await page.goto('/');
+  await settings(page);
+  const downloadPromise = page.waitForEvent('download');
+  await page.getByRole('button', { name: '导出整库备份' }).click();
+  const download = await downloadPromise;
+  const archivePath = `.wrangler/client-backup-${info.project.name}.zip`;
+  await download.saveAs(archivePath);
+  await expect(page.getByText('备份已保存。', { exact: true })).toBeVisible();
+  const bytes = await readFile(archivePath);
+  const zip = new ZipReader(new BlobReader(new Blob([bytes])), {
+    useWebWorkers: false,
+    checkCrc32: true,
+  });
+  const entries = await zip.getEntries();
+  expect(entries.some((entry) => entry.filename === 'yejian.json')).toBe(true);
+  await zip.close();
+  await page.getByLabel('选择备份文件', { exact: true }).setInputFiles(archivePath);
+  await expect(page.getByRole('button', { name: '恢复到新目录', exact: true })).toBeVisible();
+  // A failed replacement must not leave the previous archive ready to restore.
+  await page
+    .getByLabel('选择备份文件', { exact: true })
+    .setInputFiles({
+      name: 'corrupt.zip',
+      mimeType: 'application/zip',
+      buffer: bytes.subarray(0, 32),
+    });
+  await expect(page.getByRole('button', { name: '恢复到新目录', exact: true })).toHaveCount(0);
+  await expect(page.getByLabel('选择备份文件', { exact: true })).toBeEnabled();
+  await page.getByLabel('选择备份文件', { exact: true }).setInputFiles(archivePath);
+  await page.getByRole('button', { name: '恢复到新目录', exact: true }).click();
+  await page
+    .getByRole('dialog', { name: '恢复这份备份？' })
+    .getByRole('button', { name: '恢复到新目录' })
+    .click();
+  await expect(page.getByText('已恢复，可在全部笔记中打开新的备份目录。')).toBeVisible({
+    timeout: 60000,
+  });
+  expect((await page.request.get(`/api/nodes/${original.id}`)).ok()).toBe(true);
+  const roots = await (await page.request.get('/api/nodes')).json();
+  expect(roots.nodes.some((node: any) => node.title.startsWith('备份恢复'))).toBe(true);
+  await page
+    .getByLabel('选择备份文件', { exact: true })
+    .setInputFiles({
+      name: 'corrupt.zip',
+      mimeType: 'application/zip',
+      buffer: bytes.subarray(0, 32),
+    });
+  await expect(page.getByRole('button', { name: '恢复到新目录', exact: true })).toHaveCount(0);
+});

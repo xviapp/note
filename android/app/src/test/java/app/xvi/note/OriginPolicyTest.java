@@ -51,4 +51,15 @@ public class OriginPolicyTest {
     public void serviceMustUseHttps() {
         new OriginPolicy("http://note.xvi.app");
     }
+
+    @Test
+    public void signedReleaseDownloadsStayOnTheServiceOrigin() {
+        String hash = new String(new char[64]).replace('\0', 'a');
+        String path = "/api/app/android-release/7/" + hash + ".apk";
+        assertTrue(policy.isDownload("https://note.xvi.app" + path));
+        assertFalse(policy.isDownload("https://other.test" + path));
+        assertFalse(policy.isDownload("https://note.xvi.app/api/app/android-release"));
+        assertFalse(policy.isDownload("https://note.xvi.app" + path.replace("/7/", "/../")));
+        assertFalse(policy.isDownload("https://note.xvi.app" + path.replace(hash, "bad-hash")));
+    }
 }

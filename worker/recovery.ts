@@ -100,6 +100,7 @@ async function purgeBatch(env: Env, id: string): Promise<void> {
 export async function cleanup(env: Env): Promise<{ removed: number }> {
   const now = Date.now();
   await env.DB.batch([
+    env.DB.prepare('DELETE FROM backup_jobs WHERE expires_at<=?').bind(now),
     env.DB.prepare('UPDATE trash_batches SET purging=1 WHERE expires_at<=? AND purging=0').bind(
       now,
     ),
