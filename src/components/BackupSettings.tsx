@@ -76,7 +76,7 @@ export function BackupSettings({
           <Download size={15} />
           导出整库备份
         </button>
-        <label className="button">
+        <label className="button file-input-button">
           <Upload size={15} />
           选择备份文件
           <input
