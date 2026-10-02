@@ -1,13 +1,14 @@
-import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
-import { createPortal } from 'react-dom';
 import {
-  ChevronDown,
-  ChevronRight,
-  CornerLeftUp,
-  MoreHorizontal,
-  Plus,
-  RefreshCw,
-} from 'lucide-react';
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useRef,
+  useState,
+  type ReactNode,
+} from 'react';
+import { createPortal } from 'react-dom';
+import { ChevronRight, CornerLeftUp, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import { PARENT_KINDS, type NoteNode } from '../../shared/types';
 import { NodeIcon, Spinner } from './Primitives';
@@ -39,13 +40,23 @@ type DragView = {
   expandListeners: Set<(id: string) => void>;
 };
 const DragContext = createContext<DragView | null>(null);
-export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreeProps['onAction'] }) {
+export function NodeMenu({
+  node,
+  onAction,
+  children,
+}: {
+  node: NoteNode;
+  onAction: TreeProps['onAction'];
+  // Extra items, e.g. toolbar actions that move into the menu on phones.
+  children?: ReactNode;
+}) {
   return (
     <details className="node-menu" name="node-actions">
       <summary role="button" className="icon-button" aria-label={`管理 ${node.title}`}>
         <MoreHorizontal size={18} />
       </summary>
       <div className="menu-popup">
+        {children}
         <OfflineSaveButton node={node} />
         {PARENT_KINDS.includes(node.kind) && (
           <button onClick={() => onAction('new', node)}>新建笔记</button>
@@ -182,7 +193,7 @@ function Branch({
                   aria-label={`${open ? '收起' : '展开'} ${node.title}`}
                   onClick={() => toggle(node.id)}
                 >
-                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                  <ChevronRight size={14} className={open ? 'is-open' : undefined} />
                 </button>
                 <button
                   className="tree-label"

@@ -147,15 +147,16 @@
 .assistant-empty {
   display: flex;
   flex-direction: column;
-  align-items: flex-start;
+  align-items: center;
   gap: 12px;
   color: var(--muted);
-  padding: 35px 6px;
-  line-height: 1.9;
+  padding: 40px 12px;
+  line-height: 1.8;
+  text-align: center;
 }
 .assistant-empty p {
   margin: 0;
-  max-width: 240px;
+  max-width: 320px;
 }
 .older-messages {
   margin: 10px auto;

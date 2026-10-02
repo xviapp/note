@@ -511,6 +511,15 @@ progress::-moz-progress-bar {
   justify-content: center;
   color: var(--muted);
 }
+.tree-chevron:hover {
+  color: var(--ink);
+}
+.tree-chevron > svg {
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+.tree-chevron > svg.is-open {
+  transform: rotate(90deg);
+}
 .node-icon {
   color: var(--muted);
 }
@@ -949,31 +958,6 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   padding: 55px 64px 80px;
   margin: auto;
 }
-.page-eyebrow {
-  display: flex;
-  align-items: center;
-  gap: 7px;
-  font-size: 11px;
-  color: var(--muted);
-  letter-spacing: 0.06em;
-}
-.collection-page > h1,
-.collection-title h1 {
-  font-family: var(--font-book);
-  font-size: 32px;
-  font-weight: 500;
-  line-height: 1.4;
-  margin-top: 12px;
-}
-.collection-title {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-}
-.collection-title,
-.collection-page > h1 {
-  margin-bottom: 28px;
-}
 .page-description {
   color: var(--muted);
   font-size: 13px;
@@ -1048,26 +1032,29 @@ html[data-tree-drag='blocked'] .tree-drag-card {
 /* Rows with children expand in place, one shallow level at a time. */
 .node-list-toggle {
   display: inline-flex;
-  flex: 0 0 auto;
+  flex: 0 0 28px;
   align-items: center;
   justify-content: center;
-  gap: 1px;
-  min-width: 34px;
-  height: 40px;
-  margin-right: -6px;
-  padding: 0 4px 0 2px;
-  border-radius: var(--radius-control);
+  width: 28px;
+  height: 28px;
+  margin-right: -4px;
+  padding: 0;
+  border-radius: 8px;
   color: var(--muted);
-  font-size: 11px;
-  font-variant-numeric: tabular-nums;
+  transition:
+    background-color 140ms ease,
+    color 140ms ease;
 }
 button.node-list-toggle:hover {
   background: var(--hover);
   color: var(--ink);
 }
+button.node-list-toggle:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 1px;
+}
 .node-list-toggle > svg {
-  flex-shrink: 0;
-  transition: transform 160ms ease;
+  transition: transform 180ms cubic-bezier(0.2, 0.7, 0.2, 1);
 }
 .node-list-toggle[aria-expanded='true'] {
   color: var(--blue);
@@ -1075,11 +1062,15 @@ button.node-list-toggle:hover {
 .node-list-toggle[aria-expanded='true'] > svg {
   transform: rotate(90deg);
 }
+/* The guide line sits under the arrow, so a group reads as one block. */
 .node-list-children {
-  margin: 0 0 6px 25px;
-  padding-left: 10px;
-  border-left: 1px solid var(--line);
+  margin: -2px 0 8px 21px;
+  padding-left: 9px;
+  border-left: 1.5px solid var(--line);
   animation: node-children-in 180ms ease-out;
+}
+.node-list-children .node-list-item + .node-list-item > .node-list-row::before {
+  display: none;
 }
 .node-list-children .node-list-main {
   min-height: 52px;
@@ -1181,10 +1172,59 @@ button.node-list-toggle:hover {
   color: var(--favorite);
 }
 .note-workspace {
+  position: relative;
   display: flex;
   flex: 1;
   min-height: 0;
   overflow: hidden;
+}
+/* Phone fast-scroll handle for long documents; see FastScroll.tsx. */
+.fast-scroll {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  width: 32px;
+  height: 48px;
+  padding-right: 3px;
+  touch-action: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+.fast-scroll.is-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.fast-scroll-thumb {
+  width: 6px;
+  height: 40px;
+  border-radius: 3px;
+  background: var(--line-strong);
+  box-shadow: 0 1px 4px var(--shadow-soft);
+  transition:
+    width 140ms ease,
+    background-color 140ms ease;
+}
+.fast-scroll.is-dragging .fast-scroll-thumb {
+  width: 10px;
+  border-radius: 5px;
+  background: var(--focus);
+}
+.fast-scroll-label {
+  position: absolute;
+  right: 28px;
+  padding: 4px 10px;
+  border-radius: var(--family-radius-pill);
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  box-shadow: var(--shadow-popover);
 }
 .note-scroll {
   flex: 1;
@@ -1200,7 +1240,7 @@ button.node-list-toggle:hover {
   min-height: 100%;
 }
 .document-heading {
-  margin-bottom: 33px;
+  margin-bottom: 24px;
 }
 .document-heading h1 {
   font-family: var(--font-book);
@@ -1209,20 +1249,30 @@ button.node-list-toggle:hover {
   letter-spacing: 0.015em;
   line-height: 1.5;
   overflow-wrap: anywhere;
-  margin: 15px 0 13px;
+  margin: 0 0 10px;
 }
 .document-meta {
   font-size: 11px;
   color: var(--muted);
   display: flex;
   align-items: center;
-  gap: 16px;
+  gap: 10px;
   min-height: 32px;
   padding-bottom: 8px;
   border-bottom: 1px solid var(--line);
 }
 .document-meta > .text-button {
   margin-left: auto;
+}
+.document-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.document-kind + *::before {
+  content: '·';
+  margin-right: 10px;
+  color: var(--line-strong);
 }
 
 .empty-body {
@@ -1298,11 +1348,11 @@ button.node-list-toggle:hover {
   border-color: var(--blue);
 }
 .markdown-body blockquote {
-  margin: 1.6em 0;
-  padding: 14px 20px;
+  margin: 1.4em 0;
+  padding: 10px 18px;
   border-left: 3px solid var(--focus);
-  border-radius: 0 12px 12px 0;
-  background: var(--surface-subtle);
+  border-radius: 0 10px 10px 0;
+  background: color-mix(in srgb, var(--surface-subtle) 55%, transparent);
   color: var(--muted);
 }
 .markdown-body blockquote p:last-child {
@@ -1373,7 +1423,7 @@ button.node-list-toggle:hover {
   margin-right: 0.6em;
 }
 .desktop-toc {
-  width: 195px;
+  width: 220px;
   flex-shrink: 0;
   padding: 41px 16px 24px 5px;
   overflow: auto;
@@ -1389,7 +1439,7 @@ button.node-list-toggle:hover {
   gap: 6px;
   padding-left: 13px;
   padding-bottom: 8px;
-  font-size: 11px;
+  font-size: 12px;
   color: var(--muted);
 }
 .toc button {
@@ -1397,19 +1447,25 @@ button.node-list-toggle:hover {
   width: 100%;
   text-align: left;
   color: var(--muted);
-  font-size: 11px;
-  line-height: 1.7;
-  padding: 5px 8px;
+  font-size: 13px;
+  line-height: 1.55;
+  padding: 6px 8px;
   border-left: 2px solid transparent;
   border-radius: 0 8px 8px 0;
   margin-left: -1px;
   overflow-wrap: anywhere;
 }
-.toc button:hover,
+.toc button:hover {
+  color: var(--ink);
+  background: var(--surface-subtle);
+}
+/* The section being read stands out from a hovered one. */
 .toc button.active {
   color: var(--blue);
-  background: var(--surface-subtle);
-  border-left-color: var(--focus);
+  font-weight: 600;
+  background: var(--selected);
+  border-left: 3px solid var(--focus);
+  margin-left: -2px;
 }
 .toc-toggle[aria-expanded='true'] {
   background: var(--selected);
@@ -1601,6 +1657,66 @@ button.node-list-toggle:hover {
 .attachment-row .icon-button {
   width: 28px;
   height: 28px;
+}
+.attachments-toggle {
+  position: relative;
+}
+.toolbar-badge {
+  position: absolute;
+  top: 3px;
+  right: 2px;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--button-bg);
+  color: var(--button-ink);
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 16px;
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+/* In the toolbar dialog the list needs no section heading or rule. */
+.attachments-modal .attachments {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.attachments-modal .attachments h3 {
+  display: none;
+}
+.attachments-modal .attachment-row + .attachment-row {
+  border-top: 1px solid var(--line);
+}
+.attachments-modal .attachment-name > span {
+  font-size: 13px;
+}
+.attachments-modal .attachment-name small {
+  font-size: 11px;
+}
+.attachment-thumb {
+  display: block;
+  flex: 0 0 auto;
+  width: 40px;
+  height: 40px;
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: var(--surface-subtle);
+}
+.attachment-thumb > img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.attachment-create {
+  flex-shrink: 0;
+  gap: 4px;
+  min-height: 30px;
+  padding: 4px 10px;
+  font-size: 12px;
 }
 .modal {
   border: 1px solid var(--line);
@@ -2460,17 +2576,14 @@ button.node-list-toggle:hover {
     padding: 29px 23px 65px;
   }
   .document-heading {
-    margin-bottom: 27px;
+    margin-bottom: 18px;
   }
   .document-heading h1 {
     font-size: 27px;
-    margin: 12px 0;
+    margin: 0 0 8px;
   }
   .document-meta {
-    font-size: 10px;
-  }
-  .page-eyebrow {
-    font-size: 10px;
+    font-size: 11px;
   }
 
   .markdown-body {
@@ -2496,18 +2609,9 @@ button.node-list-toggle:hover {
   .collection-page {
     padding: 34px 24px 60px;
   }
-  .collection-page > h1,
-  .collection-title h1 {
-    font-size: 28px;
-  }
   .page-description {
     font-size: 12px;
     margin: 11px 0 27px;
-  }
-  .collection-title .button {
-    font-size: 11px;
-    min-height: 32px;
-    padding: 6px 11px;
   }
   .node-list-main {
     gap: 13px;

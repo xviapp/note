@@ -182,7 +182,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await create.getByRole('button', { name: '使用 📚', exact: true }).click();
   await create.getByRole('button', { name: '创建', exact: true }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
-  await expect(page.locator('.page-eyebrow .custom-folder-icon')).toHaveText('📚');
+  await expect(page.locator('.document-kind .custom-folder-icon')).toHaveText('📚');
   const nodeId = new URL(page.url()).pathname.split('/').at(-1)!;
   const menu = page.locator('.note-actions .node-menu');
   const openIcons = async () => {
@@ -195,7 +195,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await expect(icons.getByRole('button', { name: '保存信息' })).toBeDisabled();
   await icons.getByLabel('自定义 Emoji', { exact: true }).fill('👩🏽‍🔬');
   await icons.getByRole('button', { name: '保存信息' }).click();
-  await expect(page.locator('.page-eyebrow .custom-folder-icon')).toHaveText('👩🏽‍🔬');
+  await expect(page.locator('.document-kind .custom-folder-icon')).toHaveText('👩🏽‍🔬');
   icons = await openIcons();
   await icons.getByLabel('上传文件夹图标', { exact: true }).setInputFiles({
     name: 'icon.svg',
@@ -207,7 +207,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await expect(icons.locator('.folder-icon-preview > img')).toBeVisible();
   await page.screenshot({ path: `.wrangler/folder-icons-${info.project.name}.png` });
   await icons.getByRole('button', { name: '保存信息' }).click();
-  await expect(page.locator('.page-eyebrow .custom-folder-icon img')).toBeVisible();
+  await expect(page.locator('.document-kind .custom-folder-icon img')).toBeVisible();
   const node = await (await page.request.get(`/api/nodes/${nodeId}`)).json();
   expect(node.icon_blob_id).toBeTruthy();
   expect(node.icon_emoji).toBeNull();
@@ -215,7 +215,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   expect(iconResponse.headers()['content-type']).toContain('image/webp');
   expect((await iconResponse.body()).length).toBeLessThan(128 * 1024);
   await page.reload();
-  await expect(page.locator('.page-eyebrow .custom-folder-icon img')).toBeVisible();
+  await expect(page.locator('.document-kind .custom-folder-icon img')).toBeVisible();
   await expect
     .poll(() =>
       page.evaluate(async (id) => {
@@ -237,12 +237,12 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
     .toBe(true);
   await context.setOffline(true);
   await page.reload();
-  await expect(page.locator('.page-eyebrow .custom-folder-icon img')).toBeVisible({
+  await expect(page.locator('.document-kind .custom-folder-icon img')).toBeVisible({
     timeout: 20000,
   });
   expect(
     await page
-      .locator('.page-eyebrow .custom-folder-icon img')
+      .locator('.document-kind .custom-folder-icon img')
       .evaluate((img: HTMLImageElement) => img.naturalWidth),
   ).toBe(192);
   await context.setOffline(false);
@@ -269,8 +269,8 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   icons = await openIcons();
   await icons.getByRole('button', { name: '恢复默认', exact: true }).click();
   await icons.getByRole('button', { name: '保存信息' }).click();
-  await expect(page.locator('.page-eyebrow .custom-folder-icon')).toHaveCount(0);
-  await expect(page.locator('.page-eyebrow .kind-folder')).toBeVisible();
+  await expect(page.locator('.document-kind .custom-folder-icon')).toHaveCount(0);
+  await expect(page.locator('.document-kind .kind-folder')).toBeVisible();
 });
 test('untitled notes open in preview and Qingli uses the floating entry', async ({ page }) => {
   await login(page);

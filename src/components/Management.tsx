@@ -26,6 +26,7 @@ import {
   type TrashBatch,
 } from '../../shared/types';
 import { Empty, Modal, NodeIcon, Spinner } from './Primitives';
+import { CachedImage } from './CachedImage';
 import { NodeMenu, NodePicker, type NodeAction } from './Tree';
 import { ThemeChoices } from './ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../../shared/password';
@@ -415,7 +416,6 @@ function NodeRows({
                   }
                 >
                   <ChevronRight size={16} />
-                  <span>{count}</span>
                 </button>
               ) : (
                 nestable && <span className="node-list-toggle" aria-hidden="true" />
@@ -882,15 +882,13 @@ export function Attachments({
       {files.map((file) => (
         <div key={file.id} className="attachment-row">
           <button className="attachment-name" onClick={() => onPreview(file)}>
-            <NodeIcon
-              kind={
-                file.mime === 'application/pdf'
-                  ? 'pdf'
-                  : file.mime.startsWith('image/')
-                    ? 'image'
-                    : 'text'
-              }
-            />
+            {file.mime.startsWith('image/') ? (
+              <span className="attachment-thumb">
+                <CachedImage src={fileUrl(file.id)} alt="" loading="lazy" draggable={false} />
+              </span>
+            ) : (
+              <NodeIcon kind={file.mime === 'application/pdf' ? 'pdf' : 'text'} />
+            )}
             <span>
               {file.name}
               <small>{formatBytes(file.size)}</small>
@@ -898,14 +896,20 @@ export function Attachments({
           </button>
           {onCreate && (file.mime === 'application/pdf' || file.mime.startsWith('image/')) && (
             <button
-              className="icon-button"
+              className="button compact attachment-create"
               aria-label={`将 ${file.name} 添加到笔记树`}
               onClick={() => onCreate(file)}
             >
-              <FolderOpen size={16} />
+              <FolderOpen size={15} />
+              放入目录
             </button>
           )}
-          <a className="icon-button" aria-label={`下载 ${file.name}`} href={fileUrl(file.id, true)}>
+          <a
+            className="icon-button"
+            aria-label={`下载 ${file.name}`}
+            title="下载"
+            href={fileUrl(file.id, true)}
+          >
             <Download size={16} />
           </a>
           {editing && (

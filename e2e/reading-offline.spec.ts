@@ -1,4 +1,5 @@
 import { test, expect, type Page } from '@playwright/test';
+import { openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { paperHtml, paperPng } from '../tests/fixtures/arxiv';
 
@@ -185,6 +186,7 @@ test('cached Markdown, images, full PDF and progress survive a fresh offline pag
   await page.locator('.read-content img').click();
   await expect(page.getByRole('dialog').locator('img')).toBeVisible();
   await page.keyboard.press('Escape');
+  await openAttachments(page);
   await page.locator('.attachment-name').filter({ hasText: 'offline.pdf' }).click();
   await expect(page.getByRole('dialog').locator('.pdf-page').first()).toContainText(
     'Offline page 1',

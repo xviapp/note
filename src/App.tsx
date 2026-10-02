@@ -613,7 +613,7 @@ function Notebook({
               )}
               <span className="header-title">
                 {view === 'tree'
-                  ? '我的笔记库'
+                  ? '全部笔记'
                   : view === 'favorites'
                     ? '收藏'
                     : view === 'recent'
@@ -627,6 +627,13 @@ function Notebook({
                             : '设置'}
               </span>
             </div>
+            {/* The header carries the page title, so pages keep theirs for screen readers only. */}
+            {view === 'tree' && !selected && (
+              <button className="button compact header-new" onClick={newNode}>
+                <Plus size={16} />
+                新建
+              </button>
+            )}
           </header>
         )}
         {offline && (
@@ -707,24 +714,18 @@ function Notebook({
                 />
               ) : (
                 <section className="collection-page library-home">
-                  <div className="collection-title">
-                    <h1>全部笔记</h1>
-                    <button className="button" onClick={newNode}>
-                      <Plus size={16} />
-                      新建
-                    </button>
-                  </div>
+                  <h1 className="sr-only">全部笔记</h1>
                   <nav className="library-shortcuts" aria-label="笔记快捷入口">
                     <button onClick={() => switchView('recent')}>
-                      <Clock3 size={20} />
+                      <Clock3 size={16} />
                       最近访问
                     </button>
                     <button onClick={() => switchView('offline')}>
-                      <HardDriveDownload size={20} />
+                      <HardDriveDownload size={16} />
                       离线阅读
                     </button>
                     <button onClick={() => switchView('trash')}>
-                      <Trash2 size={20} />
+                      <Trash2 size={16} />
                       回收站
                     </button>
                   </nav>

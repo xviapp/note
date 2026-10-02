@@ -61,9 +61,9 @@ textarea {
   font-size: 13px;
 }
 .app-header {
-  min-height: var(--family-header);
+  min-height: 56px;
   height: auto;
-  padding: 10px 32px;
+  padding: 8px 32px;
   background: var(--surface);
 }
 .header-title {
@@ -79,17 +79,16 @@ textarea {
   max-width: 960px;
   padding: 32px 48px 64px;
 }
-.collection-page > h1,
-.collection-title h1 {
-  font-family: var(--font-ui);
-  font-size: var(--family-type-pageTitle);
-  line-height: var(--family-leading-pageTitle);
-  font-weight: 700;
-  margin-top: 0;
-}
-.collection-title,
+/* The header shows the page title; the page heading stays for screen readers. */
 .collection-page > h1 {
-  margin-bottom: var(--family-space-xl);
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
 }
 .node-list-row {
   position: relative;
@@ -129,32 +128,40 @@ textarea {
 .library-shortcuts {
   display: flex;
   gap: var(--family-space-sm);
-  flex-wrap: wrap;
-  margin-bottom: var(--family-space-xl);
+  margin-bottom: var(--family-space-md);
+  overflow-x: auto;
+  scrollbar-width: none;
 }
 .library-shortcuts button {
   display: flex;
+  flex: 0 0 auto;
   align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  min-height: 48px;
+  gap: 6px;
+  min-height: 36px;
+  padding: 6px 14px 6px 12px;
   background: var(--surface-raised);
   border: 1px solid var(--line);
-  border-radius: var(--radius-control);
+  border-radius: var(--family-radius-pill);
   color: var(--muted);
   font-size: 13px;
+}
+/* The web sidebar already links to these pages on wide screens. */
+@media (min-width: 761px) {
+  .app-shell:not(.android-shell) .library-shortcuts {
+    display: none;
+  }
 }
 .library-shortcuts button:hover {
   background: var(--hover);
   color: var(--blue);
 }
 .note-toolbar {
-  min-height: var(--family-header);
-  padding: 10px 24px;
+  min-height: 56px;
+  padding: 6px 24px;
   gap: 12px;
 }
 .breadcrumbs {
-  font-size: 12px;
+  font-size: 13px;
 }
 .note-actions {
   gap: 4px;
@@ -414,19 +421,6 @@ textarea {
   .collection-page {
     padding: 24px 16px 32px;
   }
-  .collection-page > h1 {
-    position: absolute;
-    width: 1px;
-    height: 1px;
-    padding: 0;
-    margin: -1px;
-    overflow: hidden;
-    clip-path: inset(50%);
-    white-space: nowrap;
-  }
-  .collection-title h1 {
-    font-size: 20px;
-  }
   .node-list-main {
     padding: 12px 0;
     gap: 12px;
@@ -441,17 +435,14 @@ textarea {
   .node-list-main time {
     display: none;
   }
-  .library-shortcuts {
-    display: grid;
-    grid-template-columns: repeat(3, 1fr);
-    gap: 8px;
+  .node-list-toggle {
+    flex-basis: 36px;
+    width: 36px;
+    height: 36px;
+    margin-right: -6px;
   }
-  .library-shortcuts button {
-    flex-direction: column;
-    justify-content: center;
-    gap: 8px;
-    padding: 12px 4px;
-    font-size: 12px;
+  .node-list-children {
+    margin-left: 25px;
   }
   .phone-bottom-nav {
     display: flex;
@@ -541,7 +532,7 @@ textarea {
     font-size: 14px;
   }
   .note-article {
-    padding: 24px 20px 80px;
+    padding: 16px 20px 80px;
   }
   .document-heading > h1 {
     font-size: 22px;
@@ -689,5 +680,63 @@ body:has(.android-shell .phone-bottom-nav) .global-assistant-launcher {
   }
   body:has(.phone-bottom-nav) .global-assistant-launcher {
     transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 64px));
+  }
+}
+
+/* Header action, e.g. New on the home page. */
+.app-header .header-new {
+  flex-shrink: 0;
+  margin-left: auto;
+}
+.menu-popup .menu-compact-only {
+  display: none;
+}
+.menu-popup hr.menu-compact-only {
+  margin: 6px 4px;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+@media (max-width: 760px) {
+  .app-header:has(.header-new) .header-location {
+    flex: 1;
+    width: auto;
+    min-width: 0;
+  }
+  /* Keep the note toolbar on one row; these move into the ⋯ menu. */
+  .note-actions .toolbar-secondary {
+    display: none;
+  }
+  .menu-popup .menu-compact-only {
+    display: block;
+  }
+  /* A round icon launcher that steps aside while reading. */
+  .assistant-launcher {
+    justify-content: center;
+    width: 52px;
+    height: 52px;
+    min-height: 52px;
+    padding: 0;
+    border-radius: 50%;
+    transition:
+      opacity 180ms ease,
+      translate 220ms cubic-bezier(0.2, 0.7, 0.2, 1);
+  }
+  .assistant-launcher-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+  }
+  .assistant-launcher .assistant-busy-dot {
+    position: absolute;
+    top: 8px;
+    right: 8px;
+  }
+  .assistant-launcher.is-tucked,
+  html[data-fast-scroll] .assistant-launcher {
+    opacity: 0;
+    translate: 0 16px;
+    pointer-events: none;
   }
 }

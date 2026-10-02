@@ -23,6 +23,32 @@ function viewportBounds() {
   };
 }
 
+// While reading on a phone, the launcher steps aside as the page scrolls down
+// and returns when scrolling up or pausing (the CSS applies it on phones only).
+function useScrollAway() {
+  const [tucked, setTucked] = useState(false);
+  useEffect(() => {
+    const last = new WeakMap<EventTarget, number>();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const scrolled = (event: Event) => {
+      const target = event.target;
+      if (!(target instanceof Element) || target.closest('.assistant-panel')) return;
+      const top = target.scrollTop,
+        previous = last.get(target) ?? top;
+      last.set(target, top);
+      if (top - previous > 6) setTucked(true);
+      else if (previous - top > 6) setTucked(false);
+      clearTimeout(timer);
+      timer = setTimeout(() => setTucked(false), 900);
+    };
+    document.addEventListener('scroll', scrolled, { capture: true, passive: true });
+    return () => {
+      clearTimeout(timer);
+      document.removeEventListener('scroll', scrolled, { capture: true });
+    };
+  }, []);
+  return tucked;
+}
 export function AssistantWindow({
   title,
   label = '青藜',
@@ -61,6 +87,7 @@ export function AssistantWindow({
   const [dragging, setDragging] = useState(false);
   const panel = useRef<HTMLElement>(null),
     launcher = useRef<HTMLButtonElement>(null);
+  const tucked = useScrollAway();
   const drag = useRef<{ id: number; startX: number; startY: number; x: number; y: number } | null>(
     null,
   );
@@ -146,7 +173,7 @@ export function AssistantWindow({
     <>
       <button
         ref={launcher}
-        className={`assistant-launcher${label === '全局青藜' ? ' global-assistant-launcher' : ''}`}
+        className={`assistant-launcher${label === '全局青藜' ? ' global-assistant-launcher' : ''}${tucked ? ' is-tucked' : ''}`}
         hidden={!showLauncher || visible || hidden}
         style={{
           left: viewport.x + viewport.width - margin,
@@ -157,7 +184,7 @@ export function AssistantWindow({
         onClick={onOpen}
       >
         <QingliIcon size={24} />
-        <span>青藜</span>
+        <span className="assistant-launcher-label">青藜</span>
         {busy && <span className="assistant-busy-dot" aria-label="正在回复" />}
       </button>
       <aside

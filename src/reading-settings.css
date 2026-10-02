@@ -43,6 +43,10 @@
 .note-article .read-content :is(pre code, code, .katex, math) {
   letter-spacing: normal;
 }
+/* Paragraph spacing separates paragraphs, not a quote from what follows it. */
+.note-article .read-content .markdown-body blockquote > :last-child {
+  margin-bottom: 0;
+}
 .note-article .read-content .markdown-body li > p {
   margin-bottom: 0;
 }

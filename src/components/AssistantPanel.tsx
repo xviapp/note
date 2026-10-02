@@ -367,7 +367,8 @@ export function AssistantPanel(props: Props) {
           </>
         }
       >
-        {settings && !settings.configured && (
+        {/* An empty conversation carries the set-up guide itself. */}
+        {settings && !settings.configured && messages.length > 0 && (
           <div className="assistant-config">
             <span>先配置 DeepSeek API Key</span>
             <button className="text-button" onClick={props.onSettings}>
@@ -400,7 +401,16 @@ export function AssistantPanel(props: Props) {
           ) : !messages.length ? (
             <div className="assistant-empty">
               <QingliIcon size={36} />
-              <p>附上文件、选中文字或截图，开始提问。</p>
+              {settings && !settings.configured ? (
+                <>
+                  <p>配置 DeepSeek API Key 后，就可以向青藜提问。</p>
+                  <button className="button primary compact" onClick={props.onSettings}>
+                    打开设置
+                  </button>
+                </>
+              ) : (
+                <p>附上文件、选中文字或截图，开始提问。</p>
+              )}
             </div>
           ) : null}
           {messages.map((message) => (
@@ -627,13 +637,14 @@ export function AssistantPanel(props: Props) {
               type="button"
               className="text-button"
               disabled={!props.selection || sending}
+              title={props.selection ? undefined : '先在正文中选中文字'}
               onClick={() => {
                 const error = addQuote(props.selection);
                 if (error) setError(error);
               }}
             >
               <Quote size={15} />
-              引用选中文字
+              {props.selection ? '引用选中文字' : '选中正文后可引用'}
             </button>
             <button
               type="button"
@@ -651,8 +662,8 @@ export function AssistantPanel(props: Props) {
             rows={3}
             maxLength={AI_PROMPT_LIMIT}
             value={prompt}
-            placeholder="问问青藜…"
-            disabled={sending}
+            placeholder={settings && !settings.configured ? '配置 API Key 后即可提问' : '问问青藜…'}
+            disabled={sending || (!!settings && !settings.configured)}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {
               if (

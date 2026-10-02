@@ -1,4 +1,5 @@
 import { expect, test, type Page, type Locator } from '@playwright/test';
+import { noteAction, openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import {
   GLOBAL_ASSISTANT_ID,
@@ -128,7 +129,7 @@ test('default preview, per-file edit confirmation, save/history, favorites, tras
   await edit(page);
   await page.getByRole('textbox', { name: 'Markdown 源码' }).fill(`${content}\n修改后的内容。`);
   await page.getByRole('button', { name: '保存', exact: true }).click();
-  await page.getByRole('button', { name: '版本历史', exact: true }).click();
+  await noteAction(page, '版本历史');
   const history = page.getByRole('dialog', { name: '版本历史', exact: true });
   await history.getByRole('button', { name: /版本 2/ }).click();
   await history.getByRole('button', { name: '恢复此版本', exact: true }).click();
@@ -436,6 +437,7 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
   });
   await expect(page.getByText('上传中…')).toHaveCount(0);
   await page.getByRole('button', { name: '保存', exact: true }).click();
+  await openAttachments(page);
   await page.locator('.attachment-name').filter({ hasText: 'reading.pdf' }).click();
   const pdfDialog = page.getByRole('dialog', { name: 'reading.pdf' });
   await expect(pdfDialog.locator('canvas').first()).toBeVisible();
@@ -454,6 +456,7 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
   await expect(pdfDialog.getByRole('spinbutton', { name: 'PDF 页码' })).toHaveValue('2');
   await page.screenshot({ path: `test-results/pdf-${info.project.name}.png` });
   await pdfDialog.getByRole('button', { name: '关闭', exact: true }).click();
+  await openAttachments(page);
   await page.getByRole('button', { name: '将 reading.pdf 添加到笔记树' }).click();
   await page
     .getByRole('dialog', { name: '将附件添加到笔记树' })
@@ -485,6 +488,7 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
     .setInputFiles({ name: 'pixel.png', mimeType: 'image/png', buffer: image });
   await expect(page.getByText('上传中…')).toHaveCount(0);
   await page.getByRole('button', { name: '保存', exact: true }).click();
+  await openAttachments(page);
   await page.locator('.attachment-name').filter({ hasText: 'pixel.png' }).click();
   const viewer = page.getByRole('dialog', { name: 'pixel.png' });
   await expect(viewer.locator('img')).toBeVisible();

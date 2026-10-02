@@ -1,4 +1,5 @@
 import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
+import { noteAction, openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { sourceLabel, type Translation } from '../shared/translation';
 
@@ -41,6 +42,11 @@ async function setup(page: Page, baseURL: string) {
         },
   });
   expect(auth.ok()).toBe(true);
+  // Qingli only accepts a draft once a key is configured; the provider is mocked.
+  await page.request.put('/api/ai/settings', {
+    headers,
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
   const create = async (data: object) => {
     const response = await page.request.post('/api/nodes', { headers, data });
     expect(response.ok()).toBe(true);
@@ -237,10 +243,7 @@ test('history survives reload, retains a complete result after failure, and relo
   await expect(panel(page).getByRole('alert')).toContainText('未保存');
   await page.reload();
   const open = async () => {
-    await page
-      .locator('.note-actions')
-      .getByRole('button', { name: '翻译记录', exact: true })
-      .click();
+    await noteAction(page, '翻译记录');
     await panel(page)
       .getByRole('button', { name: new RegExp('^' + selected.slice(0, 20)) })
       .click();
@@ -348,10 +351,7 @@ test('PDF source locations return to pages and highlights at another zoom, inclu
   await pageInput.fill('1');
   await pageInput.press('Enter');
   await page.getByRole('button', { name: '放大 PDF' }).click();
-  await page
-    .locator('.note-actions')
-    .getByRole('button', { name: '翻译记录', exact: true })
-    .click();
+  await noteAction(page, '翻译记录');
   await panel(page)
     .getByRole('button', { name: /^Selected PDF page 3/ })
     .click();
@@ -366,6 +366,7 @@ test('PDF source locations return to pages and highlights at another zoom, inclu
     attachments: [file.id],
   });
   await page.goto(`/n/${parent.id}`);
+  await openAttachments(page);
   await page.getByRole('button', { name: /^translation.pdf / }).click();
   const dialog = page.getByRole('dialog', { name: 'translation.pdf', exact: true });
   await dialog.getByRole('spinbutton', { name: 'PDF 页码' }).fill('2');
@@ -380,10 +381,7 @@ test('PDF source locations return to pages and highlights at another zoom, inclu
   await expect(dialog).toBeVisible();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await page.reload();
-  await page
-    .locator('.note-actions')
-    .getByRole('button', { name: '翻译记录', exact: true })
-    .click();
+  await noteAction(page, '翻译记录');
   await panel(page)
     .getByRole('button', { name: /^Selected PDF page 2/ })
     .click();
@@ -480,10 +478,7 @@ test('unchanged repeated Markdown uses offsets, but ambiguous matches after an e
     ).ok(),
   ).toBe(true);
   await page.reload();
-  await page
-    .locator('.note-actions')
-    .getByRole('button', { name: '翻译记录', exact: true })
-    .click();
+  await noteAction(page, '翻译记录');
   await panel(page)
     .getByRole('button', { name: /^A conserved quantity/ })
     .click();

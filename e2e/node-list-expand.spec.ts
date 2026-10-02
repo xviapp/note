@@ -61,7 +61,6 @@ test('rows with children expand in place on the home list and show arrows only w
   await expect(row(list, plain.title)).toBeVisible();
   await expect(list.getByRole('button', { name: `展开 ${plain.title}` })).toHaveCount(0);
   const toggle = list.getByRole('button', { name: `展开 ${paper.title}`, exact: true });
-  await expect(toggle).toHaveText('2');
   await expect(toggle).toHaveAttribute('aria-expanded', 'false');
 
   await toggle.click();
