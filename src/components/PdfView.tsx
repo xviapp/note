@@ -1,12 +1,13 @@
-import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { openPdf } from '../pdf-document';
-import { ChevronLeft, ChevronRight, Minus, Plus, Download } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Minus, Plus, Download, List, X } from 'lucide-react';
 import { fileUrl } from '../api';
 import type { ReadingPosition } from '../../shared/types';
 import { Spinner } from './Primitives';
 import { PdfPage } from './PdfPage';
 import type { PdfSourceLocation } from '../../shared/translation';
+import { PdfOutline } from './PdfOutline';
 
 type Position = { page: number; pageRatio: number };
 type PageBox = { top: number; height: number };
@@ -48,6 +49,13 @@ export default function PdfView({
   const [viewport, setViewport] = useState({ width: 0, height: 0 });
   const [aspects, setAspects] = useState<Map<number, number>>(new Map());
   const [scrollTop, setScrollTop] = useState(0);
+  const [outlineOpen, setOutlineOpen] = useState(false);
+  const [outlineLoaded, setOutlineLoaded] = useState(false);
+  const [compact, setCompact] = useState(false);
+  const outlineId = useId();
+  const root = useRef<HTMLDivElement>(null);
+  const outlineToggle = useRef<HTMLButtonElement>(null);
+  const outlineClose = useRef<HTMLButtonElement>(null);
   const scroll = useRef<HTMLDivElement>(null);
   const position = useRef<Position>({
     page: initialPosition.page || 1,
@@ -94,12 +102,22 @@ export default function PdfView({
 
   useEffect(() => {
     const element = scroll.current!;
-    const observer = new ResizeObserver(() =>
-      setViewport({ width: element.clientWidth, height: element.clientHeight }),
-    );
+    const observer = new ResizeObserver(() => {
+      setViewport({ width: element.clientWidth, height: element.clientHeight });
+      setCompact(root.current!.clientWidth <= 720);
+    });
     observer.observe(element);
+    observer.observe(root.current!);
     return () => observer.disconnect();
   }, []);
+
+  const closeOutline = () => {
+    setOutlineOpen(false);
+    outlineToggle.current?.focus({ preventScroll: true });
+  };
+  useEffect(() => {
+    if (outlineOpen) outlineClose.current?.focus({ preventScroll: true });
+  }, [outlineOpen]);
 
   const gap = viewport.width <= 600 ? 12 : 24;
   const width = Math.max(1, viewport.width - 2 * gap) * zoom;
@@ -196,11 +214,12 @@ export default function PdfView({
     }
   };
 
-  const move = (value: number) => {
+  const move = (value: number, pageRatio = 0) => {
     if (!document || !layout || !scroll.current) return;
     const next = Math.max(1, Math.min(document.pdf.numPages, Math.trunc(value) || 1));
-    position.current = { page: next, pageRatio: 0 };
-    scroll.current.scrollTop = layout.boxes[next - 1].top - gap;
+    position.current = { page: next, pageRatio };
+    scroll.current.scrollTop =
+      layout.boxes[next - 1].top - gap + pageRatio * layout.boxes[next - 1].height;
     programmedScroll.current = scroll.current.scrollTop;
     setScrollTop(scroll.current.scrollTop);
     syncPage(next);
@@ -217,13 +236,40 @@ export default function PdfView({
 
   return (
     <div
+      ref={root}
       className="pdf-view"
       role="region"
       aria-label="PDF 阅读器"
       data-selection-owner={selectionOwner}
       data-pdf-file-id={fileId}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && outlineOpen && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          closeOutline();
+        }
+      }}
     >
       <div className="pdf-toolbar" role="toolbar" aria-label="PDF 阅读工具">
+        <button
+          type="button"
+          ref={outlineToggle}
+          className="icon-button"
+          aria-label="PDF 目录"
+          title={outlineOpen ? '隐藏 PDF 目录' : '显示 PDF 目录'}
+          aria-expanded={outlineOpen}
+          aria-controls={outlineId}
+          disabled={!layout}
+          onClick={() => {
+            if (outlineOpen) closeOutline();
+            else {
+              setOutlineLoaded(true);
+              setOutlineOpen(true);
+            }
+          }}
+        >
+          <List size={18} />
+        </button>
         <button
           className="icon-button"
           aria-label="上一页"
@@ -295,42 +341,84 @@ export default function PdfView({
           {locationError}
         </p>
       )}
-      <div
-        className="pdf-scroll"
-        ref={scroll}
-        tabIndex={0}
-        aria-label="PDF 阅读区"
-        onScroll={recordScroll}
-      >
-        {error ? (
-          <p className="inline-error" role="alert">
-            {error}
-          </p>
-        ) : !document || !layout ? (
-          <Spinner label="正在打开 PDF…" />
-        ) : (
-          <div
-            className="pdf-pages"
-            style={{ height: layout.height, width: Math.max(viewport.width, width + gap * 2) }}
-          >
-            {layout.boxes.slice(start, end + 1).map((box, offset) => (
-              <PdfPage
-                key={start + offset + 1}
-                document={document.pdf}
-                number={start + offset + 1}
-                width={width}
-                height={box.height}
-                top={box.top}
-                onMeasure={measure}
-                highlights={
-                  sourceLocation?.fileId === fileId
-                    ? sourceLocation.rects.filter((rect) => rect.page === start + offset + 1)
-                    : undefined
-                }
-              />
-            ))}
+      <div className="pdf-body">
+        <aside
+          id={outlineId}
+          className="pdf-outline"
+          hidden={!outlineOpen}
+          aria-label="PDF 目录面板"
+        >
+          <div className="pdf-outline-heading">
+            <span>目录</span>
+            <button
+              type="button"
+              ref={outlineClose}
+              className="icon-button"
+              aria-label="隐藏 PDF 目录"
+              onClick={closeOutline}
+            >
+              <X size={16} />
+            </button>
           </div>
+          {document && outlineLoaded && (
+            <PdfOutline
+              pdf={document.pdf}
+              onNavigate={(target) => {
+                measure(target.page, target.aspect);
+                move(target.page, target.pageRatio);
+                if (compact) setOutlineOpen(false);
+                requestAnimationFrame(() => scroll.current?.focus({ preventScroll: true }));
+              }}
+            />
+          )}
+        </aside>
+        {outlineOpen && compact && (
+          <button
+            type="button"
+            className="pdf-outline-backdrop"
+            tabIndex={-1}
+            aria-label="收起 PDF 目录"
+            onClick={closeOutline}
+          />
         )}
+        <div
+          className="pdf-scroll"
+          ref={scroll}
+          tabIndex={0}
+          aria-label="PDF 阅读区"
+          onScroll={recordScroll}
+          inert={outlineOpen && compact}
+        >
+          {error ? (
+            <p className="inline-error" role="alert">
+              {error}
+            </p>
+          ) : !document || !layout ? (
+            <Spinner label="正在打开 PDF…" />
+          ) : (
+            <div
+              className="pdf-pages"
+              style={{ height: layout.height, width: Math.max(viewport.width, width + gap * 2) }}
+            >
+              {layout.boxes.slice(start, end + 1).map((box, offset) => (
+                <PdfPage
+                  key={start + offset + 1}
+                  document={document.pdf}
+                  number={start + offset + 1}
+                  width={width}
+                  height={box.height}
+                  top={box.top}
+                  onMeasure={measure}
+                  highlights={
+                    sourceLocation?.fileId === fileId
+                      ? sourceLocation.rects.filter((rect) => rect.page === start + offset + 1)
+                      : undefined
+                  }
+                />
+              ))}
+            </div>
+          )}
+        </div>
       </div>
     </div>
   );

@@ -1603,6 +1603,7 @@ progress::-moz-progress-bar {
   min-height: 0;
   background: var(--pdf-stage);
   overflow: hidden;
+  container-type: inline-size;
 }
 .pdf-toolbar {
   display: flex;
@@ -1618,6 +1619,121 @@ progress::-moz-progress-bar {
 .pdf-toolbar label {
   width: 56px;
   flex-shrink: 0;
+}
+.pdf-toolbar button[aria-expanded='true'] {
+  background: var(--selected);
+  color: var(--blue);
+}
+.pdf-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+  position: relative;
+  isolation: isolate;
+}
+.pdf-outline {
+  display: flex;
+  flex-direction: column;
+  width: 252px;
+  flex-shrink: 0;
+  min-height: 0;
+  background: var(--surface);
+  border-right: 1px solid var(--line);
+}
+.pdf-outline[hidden] {
+  display: none;
+}
+.pdf-outline-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 14px 6px 20px;
+  flex-shrink: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.pdf-outline-content {
+  overflow: auto;
+  overscroll-behavior: contain;
+  scrollbar-width: thin;
+  padding: 4px 10px 18px;
+  font-size: 12px;
+}
+.pdf-outline-content ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+.pdf-outline-content ul ul {
+  padding-left: 14px;
+}
+.pdf-outline-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 2px 0;
+}
+.pdf-outline-expand,
+.pdf-outline-indent {
+  flex: 0 0 22px;
+  height: 34px;
+}
+.pdf-outline-expand {
+  display: grid;
+  place-items: center;
+  border: 0;
+  border-radius: 8px;
+  color: var(--muted);
+  background: transparent;
+}
+.pdf-outline-link,
+.pdf-outline-label {
+  display: block;
+  flex: 1;
+  min-width: 0;
+  padding: 8px;
+  line-height: 1.6;
+  text-align: left;
+  overflow-wrap: anywhere;
+  font-size: inherit;
+  color: var(--ink);
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+}
+.pdf-outline-expand:hover,
+.pdf-outline-link:hover {
+  background: var(--hover);
+}
+.pdf-outline-link[aria-current] {
+  background: var(--selected);
+  color: var(--blue);
+}
+.pdf-outline-message {
+  margin: 12px 10px;
+  line-height: 1.8;
+  color: var(--muted);
+}
+.pdf-outline-message[role='alert'] {
+  color: var(--danger);
+}
+@container (max-width: 720px) {
+  .pdf-outline {
+    position: absolute;
+    inset: 0 auto 0 0;
+    width: min(300px, calc(100% - 48px));
+    z-index: 3;
+    border-radius: 0 0 var(--radius-menu) 0;
+    box-shadow: var(--shadow-popover);
+  }
+  .pdf-outline-backdrop {
+    position: absolute;
+    inset: 0;
+    z-index: 2;
+    border: 0;
+    padding: 0;
+    background: var(--scrim);
+  }
 }
 .pdf-toolbar input {
   padding: 4px 6px !important;
@@ -1646,6 +1762,7 @@ progress::-moz-progress-bar {
 }
 .pdf-scroll {
   flex: 1;
+  min-width: 0;
   min-height: 0;
   overflow: auto;
   overscroll-behavior: contain;
