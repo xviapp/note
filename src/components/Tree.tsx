@@ -1,11 +1,20 @@
-import { useCallback, useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
+import { createContext, useCallback, useContext, useEffect, useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
+import {
+  ChevronDown,
+  ChevronRight,
+  CornerLeftUp,
+  MoreHorizontal,
+  Plus,
+  RefreshCw,
+} from 'lucide-react';
 import { api } from '../api';
 import { PARENT_KINDS, type NoteNode } from '../../shared/types';
 import { NodeIcon, Spinner } from './Primitives';
 import { OfflineSaveButton } from './OfflineCache';
 import { useNodeListing, type NodeListing as Listing } from '../use-node-listing';
 import { useOffline } from '../connectivity';
+import { ghostTransform, ROOT_TARGET, useTreeDrag, type TreeDrag } from '../use-tree-drag';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
 export interface TreeProps {
@@ -16,8 +25,20 @@ export interface TreeProps {
   selected: string | null;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
-  onDrop: (id: string, parent: string | null) => void;
+  // Resolves once the move is saved (true) or rejected (false).
+  onDrop: (id: string, parent: string | null, parentTitle: string) => Promise<boolean>;
+  // A completed move to reveal: the tree opens its folder and highlights it.
+  moved?: MovedNode | null;
 }
+export type MovedNode = { id: string; parent: string | null; key: number };
+type DragView = {
+  drag: TreeDrag | null;
+  saving?: string;
+  landed: { id: string; parent: string | null } | null;
+  start: ReturnType<typeof useTreeDrag>;
+  expandListeners: Set<(id: string) => void>;
+};
+const DragContext = createContext<DragView | null>(null);
 export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreeProps['onAction'] }) {
   return (
     <details className="node-menu" name="node-actions">
@@ -51,10 +72,7 @@ function Branch({
   depth?: number;
   onLoading: (request: symbol, loading: boolean) => void;
 }) {
-  const { listing, error, loading, more } = useNodeListing(
-    `parent=${parent || ''}`,
-    props.refresh,
-  );
+  const { listing, error, loading, more } = useNodeListing(`parent=${parent || ''}`, props.refresh);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     if (props.expansionState) return new Set(props.expansionState);
     try {
@@ -69,9 +87,12 @@ function Branch({
     onLoading(request, true);
     return () => onLoading(request, false);
   }, [loading, onLoading]);
-  const toggle = (id: string) => {
+  const view = useContext(DragContext);
+  const setOpen = (id: string, open: boolean) => {
     const next = new Set(props.expansionState || expanded);
-    next.has(id) ? next.delete(id) : next.add(id);
+    if (next.has(id) === open) return;
+    if (open) next.add(id);
+    else next.delete(id);
     if (props.expansionState) {
       props.expansionState.clear();
       for (const value of next) props.expansionState.add(value);
@@ -83,6 +104,21 @@ function Branch({
     }
     setExpanded(next);
   };
+  const toggle = (id: string) => setOpen(id, !expanded.has(id));
+  // Dragging over a folder, or landing a move in it, opens the folder.
+  const reveal = useRef<(id: string) => void>(() => {});
+  reveal.current = (id) => {
+    if (listing?.nodes.some((node) => node.id === id && PARENT_KINDS.includes(node.kind)))
+      setOpen(id, true);
+  };
+  useEffect(() => {
+    if (!view) return;
+    const listener = (id: string) => reveal.current(id);
+    view.expandListeners.add(listener);
+    return () => {
+      view.expandListeners.delete(listener);
+    };
+  }, [view]);
   if (!listing)
     return error ? (
       <p className="inline-error small" role="status">
@@ -106,40 +142,43 @@ function Branch({
         aria-busy={loading}
       >
         {listing.nodes.map((node) => {
-          const hasChildren = PARENT_KINDS.includes(node.kind),
+          // Any container accepts a drop; only one with children shows an arrow.
+          const container = PARENT_KINDS.includes(node.kind),
+            hasChildren = container && (node.child_count ?? 0) > 0,
             open = expanded.has(node.id);
           return (
             <li
               key={node.id}
               role="treeitem"
+              data-tree-item={node.id}
+              className={
+                view?.drag?.source.id === node.id || view?.saving === node.id
+                  ? 'is-drag-source'
+                  : undefined
+              }
               aria-selected={props.selected === node.id}
               aria-expanded={hasChildren ? open : undefined}
             >
               <div
-                className={`tree-row ${props.selected === node.id ? 'selected' : ''}`}
+                className={[
+                  'tree-row',
+                  props.selected === node.id && 'selected',
+                  view?.drag?.target === node.id && 'is-drop-over',
+                  view?.landed?.parent === node.id && 'is-drop-done',
+                  view?.landed?.id === node.id && view.landed.parent === parent && 'is-landed',
+                ]
+                  .filter(Boolean)
+                  .join(' ')}
                 style={{ paddingLeft: 8 + Math.min(depth, 10) * 15 }}
-                draggable
-                onDragStart={(e) => {
-                  e.dataTransfer.setData('text/x-note-id', node.id);
-                  e.dataTransfer.effectAllowed = 'move';
-                }}
-                onDragOver={(e) => {
-                  if (hasChildren && e.dataTransfer.types.includes('text/x-note-id')) {
-                    e.preventDefault();
-                    e.currentTarget.classList.add('drop-target');
-                  }
-                }}
-                onDragLeave={(e) => e.currentTarget.classList.remove('drop-target')}
-                onDrop={(e) => {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  e.currentTarget.classList.remove('drop-target');
-                  if (hasChildren) props.onDrop(e.dataTransfer.getData('text/x-note-id'), node.id);
-                }}
+                data-tree-node={node.id}
+                data-tree-container={container ? 'true' : undefined}
+                onPointerDown={(event) => view?.start.startMouse(event, node)}
+                onTouchStart={(event) => view?.start.startTouch(event, node)}
               >
                 <button
                   className={`tree-chevron ${hasChildren ? '' : 'invisible'}`}
                   tabIndex={hasChildren ? 0 : -1}
+                  aria-hidden={hasChildren ? undefined : true}
                   aria-label={`${open ? '收起' : '展开'} ${node.title}`}
                   onClick={() => toggle(node.id)}
                 >
@@ -188,6 +227,53 @@ export function Tree(props: TreeProps) {
     if (loading) setError('');
   }, []);
   const busy = manualBusy || requests.size > 0;
+  const root = useRef<HTMLDivElement>(null),
+    ghost = useRef<HTMLDivElement>(null);
+  const expandListeners = useRef(new Set<(id: string) => void>());
+  const expand = useCallback((id: string) => {
+    for (const listener of expandListeners.current) listener(id);
+  }, []);
+  const [saving, setSaving] = useState<string>();
+  const [landed, setLanded] = useState<DragView['landed']>(null);
+  const onDrop = props.onDrop;
+  const start = useTreeDrag(root, ghost, {
+    onDrop: (source, target) => {
+      const parent = target === ROOT_TARGET ? null : target;
+      const title = parent
+        ? root.current?.querySelector(`[data-tree-node="${CSS.escape(parent)}"] .tree-label span`)
+            ?.textContent || ''
+        : '';
+      setSaving(source.id);
+      void onDrop(source.id, parent, title).finally(() => setSaving(undefined));
+    },
+    onExpand: expand,
+  });
+  const { drag } = start;
+  const moved = props.moved;
+  useEffect(() => {
+    if (!moved) return;
+    const { id, parent } = moved;
+    if (parent) expand(parent);
+    setLanded({ id, parent });
+    // Bring the moved row into view once its new location has loaded.
+    const selector = parent
+      ? `[data-tree-item="${CSS.escape(parent)}"] > ul > li > [data-tree-node="${CSS.escape(id)}"]`
+      : `[role="tree"] > li > [data-tree-node="${CSS.escape(id)}"]`;
+    let frame = 0,
+      frames = 0;
+    const find = () => {
+      const row = root.current?.querySelector(selector);
+      if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+      else if (frames++ < 240) frame = requestAnimationFrame(find);
+    };
+    frame = requestAnimationFrame(find);
+    const timer = setTimeout(() => setLanded(null), 2400);
+    return () => {
+      cancelAnimationFrame(frame);
+      clearTimeout(timer);
+    };
+  }, [moved, expand]);
+  const rootAvailable = !!drag && drag.source.parent_id !== null;
   const refresh = async () => {
     if (busy) return;
     setManualBusy(true);
@@ -201,18 +287,25 @@ export function Tree(props: TreeProps) {
     }
   };
   return (
-    <div className="tree">
+    <div ref={root} className={`tree${drag ? ' is-dragging' : ''}`}>
       <div
-        className="section-label"
-        onDragOver={(e) => {
-          if (e.dataTransfer.types.includes('text/x-note-id')) e.preventDefault();
-        }}
-        onDrop={(e) => {
-          e.preventDefault();
-          props.onDrop(e.dataTransfer.getData('text/x-note-id'), null);
-        }}
+        className={[
+          'section-label',
+          rootAvailable && 'is-root-available',
+          drag?.target === ROOT_TARGET && 'is-root-over',
+        ]
+          .filter(Boolean)
+          .join(' ')}
+        data-tree-root
       >
-        <span title="可拖到此处移至根目录">我的笔记</span>
+        {rootAvailable ? (
+          <span className="tree-root-drop">
+            <CornerLeftUp size={14} />
+            移到根目录
+          </span>
+        ) : (
+          <span title="可拖到此处移至根目录">我的笔记</span>
+        )}
         {props.showRefresh !== false && (
           <button
             type="button"
@@ -237,7 +330,29 @@ export function Tree(props: TreeProps) {
           {error}
         </p>
       )}
-      <Branch {...props} onLoading={onLoading} parent={null} />
+      <DragContext.Provider
+        value={{ drag, saving, landed, start, expandListeners: expandListeners.current }}
+      >
+        <Branch {...props} onLoading={onLoading} parent={null} />
+      </DragContext.Provider>
+      {drag &&
+        createPortal(
+          <div
+            ref={ghost}
+            className={`tree-drag-ghost is-${drag.pointer}`}
+            style={{ transform: ghostTransform(drag.x, drag.y, drag.pointer) }}
+            aria-hidden="true"
+          >
+            <span className={`tree-drag-card${drag.target !== undefined ? ' can-drop' : ''}`}>
+              <NodeIcon
+                node={drag.source}
+                kind={drag.source.arxiv_id ? 'arxiv' : drag.source.kind}
+              />
+              <span>{drag.source.title}</span>
+            </span>
+          </div>,
+          document.body,
+        )}
     </div>
   );
 }

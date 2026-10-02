@@ -184,7 +184,7 @@ progress::-moz-progress-bar {
   color: var(--blue);
   text-decoration: none;
 }
-:where(.icon-button, .button, .main-nav button, .new-note-button) > .lucide {
+:where(.icon-button, .button, .main-nav button) > .lucide {
   stroke-width: 1.65;
 }
 .text-button {
@@ -377,64 +377,55 @@ progress::-moz-progress-bar {
   z-index: 30;
 }
 .sidebar-brand {
-  padding: 0 11px 27px;
-  display: flex;
-  justify-content: space-between;
-}
-.sidebar .brand {
-  font-size: 25px;
-}
-.sidebar .brand-mark {
-  width: 40px;
-  height: 40px;
-}
-.new-note-button {
+  padding: 0 0 12px 6px;
   display: flex;
   align-items: center;
-  gap: 9px;
-  padding: 11px 14px;
-  background: var(--surface);
-  border: 1px solid var(--line);
-  border-radius: 12px;
-  color: var(--blue);
-  font-weight: 500;
-  font-size: 13px;
-  text-align: left;
-  margin-bottom: 19px;
-  box-shadow: 0 3px 9px var(--shadow-soft);
+  justify-content: space-between;
+  gap: 8px;
 }
-.new-note-button:hover {
-  background: var(--hover);
-  border-color: var(--line);
+.sidebar .brand {
+  gap: 10px;
+  font-size: 20px;
+}
+.sidebar .brand-mark {
+  width: 30px;
+  height: 30px;
+}
+.sidebar-brand-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+.sidebar .new-note-button {
+  color: var(--blue);
 }
 
 .main-nav {
   display: flex;
-  flex-direction: column;
-  gap: 4px;
+  gap: 2px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid var(--line);
 }
 .main-nav button {
   display: flex;
+  flex: 1;
   align-items: center;
-  gap: 11px;
-  padding: 9px 12px;
+  justify-content: center;
+  min-width: 0;
+  padding: 0;
   border-radius: var(--radius-control);
   color: var(--muted);
-  text-align: left;
-  font-size: 13px;
-  min-height: 38px;
 }
 .main-nav button:hover {
   background: var(--hover);
+  color: var(--ink);
 }
 .main-nav button.active {
   background: var(--selected);
   color: var(--blue);
-  font-weight: 500;
-  box-shadow: inset 3px 0 0 var(--focus);
 }
 .sidebar-tree {
-  margin: 24px -9px 12px;
+  margin: 10px -9px 0;
   overflow: auto;
   flex: 1;
   min-height: 0;
@@ -558,31 +549,199 @@ progress::-moz-progress-bar {
   line-height: 2;
   padding: 8px 22px;
 }
-.drop-target {
-  outline: 2px solid var(--focus);
-  background: var(--selected) !important;
+.tree-row {
+  position: relative;
+  -webkit-user-select: none;
+  user-select: none;
+  -webkit-touch-callout: none;
+  transition:
+    background-color 140ms ease,
+    box-shadow 140ms ease;
 }
-.sidebar-bottom {
-  padding-top: 12px;
+/* Moving notes: the picked-up row stays as a dashed placeholder. */
+.tree li.is-drag-source > .tree-row {
+  opacity: 0.42;
+  outline: 1.5px dashed var(--line-strong);
+  outline-offset: -1.5px;
+  box-shadow: none;
 }
-.sidebar-usage {
-  padding: 18px 12px 0;
-  text-align: left;
-  width: 100%;
-  font-size: 9px;
-  color: var(--muted);
+.tree li.is-drag-source > .tree-branch {
+  opacity: 0.42;
 }
-.sidebar-usage > span {
+.tree.is-dragging .tree-row:hover:not(.selected) {
+  background: transparent;
+}
+.tree.is-dragging .tree-row .node-menu {
+  visibility: hidden;
+}
+.tree .tree-row.is-drop-over {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1.5px var(--focus);
+}
+.tree-row.is-drop-over::before {
+  content: '';
+  position: absolute;
+  left: 3px;
+  top: 8px;
+  bottom: 8px;
+  width: 3px;
+  border-radius: 3px;
+  background: var(--focus);
+}
+.tree-row.is-drop-over .tree-label,
+.tree-row.is-drop-over .node-icon {
+  color: var(--blue);
+}
+.tree-root-drop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: -5px 0 -5px -10px;
+  padding: 4px 10px;
+  border: 1.5px dashed var(--line-strong);
+  border-radius: var(--family-radius-pill);
+  letter-spacing: 0;
+  transition:
+    background-color 140ms ease,
+    border-color 140ms ease,
+    color 140ms ease;
+}
+.section-label.is-root-over .tree-root-drop {
+  border-style: solid;
+  border-color: var(--focus);
+  background: var(--selected);
+  color: var(--blue);
+}
+html[data-tree-drag],
+html[data-tree-drag] * {
+  cursor: grabbing !important;
+}
+html[data-tree-drag='blocked'],
+html[data-tree-drag='blocked'] * {
+  cursor: not-allowed !important;
+}
+.tree-drag-ghost {
+  position: fixed;
+  top: 0;
+  left: 0;
+  z-index: 1000;
+  pointer-events: none;
+  will-change: transform;
+}
+.tree-drag-card {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 240px;
+  padding: 8px 14px 8px 11px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 500;
+  box-shadow: var(--shadow-popover);
+  transform: rotate(-1.5deg);
+  animation: tree-ghost-lift 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+  transition:
+    border-color 120ms ease,
+    opacity 120ms ease;
+}
+.tree-drag-card > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.tree-drag-card.can-drop {
+  border-color: var(--focus);
+}
+html[data-tree-drag='blocked'] .tree-drag-card {
+  opacity: 0.72;
+}
+.tree-drag-ghost.is-touch .tree-drag-card {
+  padding: 10px 16px 10px 13px;
+  font-size: 14px;
+}
+@keyframes tree-ghost-lift {
+  from {
+    opacity: 0.6;
+    transform: scale(0.94) rotate(0deg);
+  }
+  to {
+    opacity: 1;
+    transform: rotate(-1.5deg);
+  }
+}
+/* After a move: the folder acknowledges it and the note settles into place. */
+.tree-row.is-drop-done {
+  animation: tree-drop-done 800ms ease-out;
+}
+.tree-row.is-landed {
+  animation: tree-landed 1800ms ease-out;
+}
+@keyframes tree-drop-done {
+  from {
+    background: var(--selected);
+    box-shadow: inset 0 0 0 1.5px var(--focus);
+  }
+}
+@keyframes tree-landed {
+  0% {
+    opacity: 0;
+    transform: translateY(-6px);
+    background: var(--selected);
+    box-shadow: inset 0 0 0 1.5px var(--focus);
+  }
+  16% {
+    opacity: 1;
+    transform: none;
+  }
+  60% {
+    background: var(--selected);
+    box-shadow: inset 0 0 0 1.5px var(--focus);
+  }
+}
+.move-toast {
+  position: fixed;
+  left: 50%;
+  bottom: calc(28px + env(safe-area-inset-bottom));
+  z-index: 60;
   display: flex;
-  justify-content: space-between;
-  margin-bottom: 9px;
-  gap: 4px;
+  align-items: center;
+  gap: 12px;
+  max-width: calc(100vw - 32px);
+  min-height: 44px;
+  padding: 6px 6px 6px 18px;
+  border-radius: var(--family-radius-pill);
+  background: var(--ink);
+  color: var(--canvas);
+  font-size: 13px;
+  box-shadow: var(--shadow-popover);
+  transform: translateX(-50%);
+  animation: move-toast-in 220ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
-.sidebar-usage.warning {
-  color: var(--warning);
+.move-toast > span {
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
 }
-.sidebar-usage.warning progress::-webkit-progress-value {
-  background: var(--favorite);
+.move-toast .text-button {
+  flex-shrink: 0;
+  min-height: 32px;
+  padding: 4px 12px;
+  border-radius: var(--family-radius-pill);
+  color: var(--canvas);
+  font-weight: 600;
+}
+.move-toast .text-button:hover {
+  text-decoration: none;
+  background: color-mix(in srgb, var(--canvas) 16%, transparent);
+}
+@keyframes move-toast-in {
+  from {
+    opacity: 0;
+    transform: translate(-50%, 12px);
+  }
 }
 .node-menu {
   position: relative;
@@ -658,22 +817,6 @@ progress::-moz-progress-bar {
   color: var(--muted);
   border-radius: var(--radius-control);
   flex-shrink: 0;
-}
-.theme-switcher-labeled {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  gap: 11px;
-  width: 100%;
-  height: 38px;
-  padding: 9px 12px;
-  margin-top: 4px;
-  font-size: 13px;
-  font-weight: 400;
-}
-.theme-switcher-value {
-  margin-left: auto;
-  font-size: 11px;
 }
 .theme-switcher:hover {
   color: var(--blue);
@@ -902,6 +1045,69 @@ progress::-moz-progress-bar {
 .load-more {
   margin: 14px;
 }
+/* Rows with children expand in place, one shallow level at a time. */
+.node-list-toggle {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 34px;
+  height: 40px;
+  margin-right: -6px;
+  padding: 0 4px 0 2px;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+button.node-list-toggle:hover {
+  background: var(--hover);
+  color: var(--ink);
+}
+.node-list-toggle > svg {
+  flex-shrink: 0;
+  transition: transform 160ms ease;
+}
+.node-list-toggle[aria-expanded='true'] {
+  color: var(--blue);
+}
+.node-list-toggle[aria-expanded='true'] > svg {
+  transform: rotate(90deg);
+}
+.node-list-children {
+  margin: 0 0 6px 25px;
+  padding-left: 10px;
+  border-left: 1px solid var(--line);
+  animation: node-children-in 180ms ease-out;
+}
+.node-list-children .node-list-main {
+  min-height: 52px;
+  padding: 8px 4px;
+}
+.node-list-children .node-list-main > .node-icon {
+  width: 32px;
+  height: 32px;
+  padding: 7px;
+}
+.node-list-children .node-list-main strong {
+  font-size: 13px;
+}
+.node-list-children > .children-empty {
+  margin: 0;
+  padding: 10px 8px;
+  font-size: 12px;
+}
+.node-list-children > .loading,
+.node-list-children > .load-more {
+  margin: 10px 8px;
+}
+@keyframes node-children-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+}
 
 .children-empty {
   color: var(--muted);
@@ -1011,6 +1217,12 @@ progress::-moz-progress-bar {
   display: flex;
   align-items: center;
   gap: 16px;
+  min-height: 32px;
+  padding-bottom: 8px;
+  border-bottom: 1px solid var(--line);
+}
+.document-meta > .text-button {
+  margin-left: auto;
 }
 
 .empty-body {
@@ -1205,23 +1417,11 @@ progress::-moz-progress-bar {
 }
 .children-section {
   margin-top: 52px;
+  border-top: 1px solid var(--line);
 }
-.children-heading {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  border-bottom: 1px solid var(--line);
-  padding-bottom: 10px;
-}
-.children-heading h2 {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-}
-.children-heading h2 span {
-  font-size: 10px;
-  padding-left: 8px;
-  color: var(--muted);
+.children-section.is-folder {
+  margin-top: 0;
+  border-top: 0;
 }
 .children-section .node-list {
   border-top: 0;
@@ -2185,11 +2385,7 @@ progress::-moz-progress-bar {
   .tree-row:not(:hover):not(:focus-within) .node-menu:not([open]) {
     opacity: 1;
   }
-  .main-nav button,
-  .theme-switcher-labeled {
-    min-height: 43px;
-  }
-  .new-note-button {
+  .main-nav button {
     min-height: 43px;
   }
   .main-area {

@@ -13,15 +13,7 @@ button:disabled {
 button:active:not(:disabled) {
   opacity: var(--family-pressed);
 }
-:where(
-    .icon-button,
-    .button,
-    .main-nav button,
-    .new-note-button,
-    .settings-entry,
-    .phone-bottom-nav
-  )
-  .lucide {
+:where(.icon-button, .button, .main-nav button, .settings-entry, .phone-bottom-nav) .lucide {
   stroke-width: var(--family-icon-stroke);
 }
 .button {
@@ -59,18 +51,10 @@ textarea {
   border-left: 1px solid var(--line);
 }
 .sidebar {
-  padding: var(--family-space-xl) var(--family-space-lg) var(--family-space-lg);
+  padding: var(--family-space-lg) var(--family-space-md) var(--family-space-sm);
 }
 .main-nav button {
-  min-height: 48px;
-  font-size: 14px;
-  border-radius: var(--radius-control);
-}
-.main-nav button.active {
-  font-weight: 600;
-}
-.new-note-button {
-  min-height: 48px;
+  min-height: 40px;
   border-radius: var(--radius-control);
 }
 .tree-label {
@@ -113,7 +97,7 @@ textarea {
   margin: 0;
   padding: 4px 8px;
 }
-.node-list-row + .node-list-row::before {
+.node-list-item + .node-list-item > .node-list-row::before {
   content: '';
   position: absolute;
   top: 0;
@@ -421,9 +405,8 @@ textarea {
     padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
     border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
   }
-  .main-nav button,
-  .new-note-button {
-    min-height: 48px;
+  .main-nav button {
+    min-height: 44px;
   }
   .tree-label {
     font-size: 14px;
@@ -694,10 +677,16 @@ textarea {
   overflow: hidden;
 }
 
+body:has(.android-shell .phone-bottom-nav) .move-toast {
+  bottom: calc(env(safe-area-inset-bottom) + 84px);
+}
 body:has(.android-shell .phone-bottom-nav) .global-assistant-launcher {
   transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 56px));
 }
 @media (max-width: 760px) {
+  body:has(.phone-bottom-nav) .move-toast {
+    bottom: calc(env(safe-area-inset-bottom) + 84px);
+  }
   body:has(.phone-bottom-nav) .global-assistant-launcher {
     transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 64px));
   }

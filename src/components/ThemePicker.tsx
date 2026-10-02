@@ -3,22 +3,13 @@ import { setTheme, themeOptions, useTheme, type ThemePreference } from '../theme
 
 const icons = { system: Monitor, light: Sun, dark: Moon, starry: Sparkles };
 
-export function ThemeSwitcher({ showLabel = false }: { showLabel?: boolean }) {
+export function ThemeSwitcher() {
   const { preference } = useTheme();
   const Icon = icons[preference];
   const label = themeOptions.find((option) => option.value === preference)!.label;
   return (
-    <label
-      className={`theme-switcher${showLabel ? ' theme-switcher-labeled' : ''}`}
-      title={`主题：${label}`}
-    >
+    <label className="theme-switcher" title={`主题：${label}`}>
       <Icon size={18} aria-hidden="true" />
-      {showLabel && (
-        <>
-          <span>主题</span>
-          <span className="theme-switcher-value">{label}</span>
-        </>
-      )}
       <select
         aria-label="主题"
         value={preference}

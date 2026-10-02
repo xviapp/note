@@ -8,6 +8,7 @@ export const device = registerPlugin<{
   openExternal(options: { url: string }): Promise<void>;
   setBackground(options: { color: string; preference: string }): Promise<void>;
   notify(options: { message: string }): Promise<void>;
+  haptic(): Promise<void>;
   saveFile(options: {
     url?: string;
     sha256?: string;

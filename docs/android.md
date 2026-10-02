@@ -35,7 +35,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.4.7-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 16，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.4.8-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 17，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -52,7 +52,7 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 ```bash
 pnpm android:apk
 pnpm run deploy
-pnpm android:publish --apk artifacts/yejian-0.4.7-android-debug.apk --notes docs/releases/0.4.7.txt --remote
+pnpm android:publish --apk artifacts/yejian-0.4.8-android-debug.apk --notes docs/releases/0.4.8.txt --remote
 ```
 
 安装包保存在 R2 的 `releases/android/` 中，通过登录接口访问，GitHub 仓库保持私有。发行文件不计入应用的笔记库容量统计，但使用同一 Cloudflare 账号的 R2 存储额度。历史安装包采用构建号与摘要寻址，不被新发布覆盖。
@@ -71,7 +71,15 @@ Android 使用首页树形目录和底部「笔记／收藏／设置」导航，
 
 浏览器侧栏“我的笔记”右侧的刷新按钮固定在目录滚动区顶部，点击会重新检查连接并更新已展开的目录与当前列表；按钮在加载中旋转并暂时禁用。离线或请求失败时保留已有内容，显示状态并允许重试。`useNodeListing` 按已加载页数重新取数，保留展开结构，忽略过期请求的界面更新；目录刷新不重新加载当前正文，也不离开编辑模式。
 
-## 全局青藜
+## 移动笔记
+
+目录树的移动不使用浏览器原生拖放：Android WebView 无法从触摸启动原生拖动，浏览器生成的拖动残影也无法定制样式。`src/use-tree-drag.ts` 用指针事件统一处理鼠标与触摸。电脑按住移动超过 5px 即拿起；手机长按 0.35 秒拿起并轻振一次（原生 `NoteDevice.haptic`，无需振动权限），长按前移动超过 8px 视为普通滚动，不影响下拉刷新。
+
+拖动时显示跟随指针的标题卡片，原位置留虚线占位。可放入的位置显示左侧色条与描边，自身、自身的下级、当前所在位置不可放入，鼠标显示禁止图标。目录顶部「我的笔记」在可移到根目录时变为「移到根目录」放置区。悬停在收起的目录上 0.6 秒自动展开，靠近滚动区上下边缘自动滚动，`Esc` 取消。
+
+放下后目标目录自动展开，移入的笔记短暂高亮并滚动到可见处，底部提示「已移到…」并可在 6 秒内撤销。「移动到…」弹窗保留作为键盘和无障碍入口，完成后同样显示落点和撤销。
+
+
 
 首页、收藏、设置等页面提供全局青藜悬浮入口，文件对话内可切换到全局对话。全局记录独立保存，使用同一套 DeepSeek 配置，支持附件和保存回复为根目录笔记；阅读文件时可主动附上当前文件。文件会话及草稿保留。备份包含全局记录，恢复时放入恢复目录中的「青藜全局对话（恢复）」笔记，不覆盖当前全局会话。
 
@@ -86,6 +94,12 @@ Android 使用首页树形目录和底部「笔记／收藏／设置」导航，
 清单分块和批量插入按 UTF-8 字节数打包，每个绑定值不超过 1.5 MB；恢复事务最多 40 条语句，为认证和任务检查留出空间，适配 [D1 免费方案的单次 50 查询及单值 2 MB 限制](https://developers.cloudflare.com/d1/platform/limits/)。超过单次恢复边界时返回错误，当前资料保持完整。
 
 ## 验证
+
+0.4.8 验证记录（2026-10-02）：
+
+- Worker 85 项、离线构建 4 项检查通过；类型检查、Web 与 Android 构建及原生单元测试通过。
+- 电脑／手机界面检查 135 项通过，新增拖动移动（目标高亮、不可放入、根目录、悬停展开、`Esc` 取消、撤销）、Android 长按拿起与快速滑动滚动、主页面列表原地展开。白天、夜间、星空主题检查了拖动、落点、侧栏和列表。手机「移动」对话框一项因 e2e 数据累积使目标超出首页而失败，修改前同样失败。
+- 本次未在实体手机上验证长按振动。
 
 0.4.7 验证记录（2026-10-02）：
 

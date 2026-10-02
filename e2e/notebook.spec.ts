@@ -316,14 +316,16 @@ test('creation, rename, moving and storage settings work without unlocking file 
     .poll(async () => (await (await page.request.get(`/api/nodes/${id}`)).json()).parent_id)
     .toBe(destination.id);
   if (info.project.name === 'desktop') {
-    await page
-      .locator('.sidebar-tree')
-      .getByRole('button', { name: `展开 ${destination.title}`, exact: true })
-      .click();
+    // A completed move opens its destination folder and reveals the note.
+    await expect(
+      page
+        .locator('.sidebar-tree')
+        .getByRole('button', { name: `收起 ${destination.title}`, exact: true }),
+    ).toBeVisible();
     const row = page
       .locator('.tree-row')
       .filter({ has: page.getByRole('button', { name: `${title}已改名`, exact: true }) });
-    await expect(row).toHaveAttribute('draggable', 'true');
+    await expect(row).toHaveAttribute('data-tree-node', id);
     // The root target is sticky. dragTo's automatic target scrolling can move
     // a different row under the pressed pointer before Chromium starts dragging.
     await row.scrollIntoViewIfNeeded();

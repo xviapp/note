@@ -11,6 +11,7 @@ import android.graphics.Color;
 import android.net.Uri;
 import android.provider.DocumentsContract;
 import android.util.Base64;
+import android.view.HapticFeedbackConstants;
 import android.webkit.CookieManager;
 import android.widget.Toast;
 import androidx.activity.result.ActivityResult;
@@ -86,6 +87,15 @@ public class NoteDevicePlugin extends Plugin {
         String url = call.getString("url", "");
         getActivity().runOnUiThread(() -> {
             ((MainActivity) getActivity()).openExternal(Uri.parse(url));
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void haptic(PluginCall call) {
+        // View haptics need no VIBRATE permission and follow the system setting.
+        getActivity().runOnUiThread(() -> {
+            getBridge().getWebView().performHapticFeedback(HapticFeedbackConstants.LONG_PRESS);
             call.resolve();
         });
     }

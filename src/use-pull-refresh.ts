@@ -34,6 +34,8 @@ export function usePullRefresh(
     };
     const move = (event: TouchEvent) => {
       if (!start) return;
+      // A long press that picked up a tree row is a move, not a pull.
+      if (document.documentElement.dataset.treeDrag) return reset();
       if (event.touches.length !== 1 || element.scrollTop > 0) return reset();
       const dy = event.touches[0].clientY - start.y;
       const dx = Math.abs(event.touches[0].clientX - start.x);

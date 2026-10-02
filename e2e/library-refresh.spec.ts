@@ -80,6 +80,8 @@ test('manual refresh preserves expanded branches and loaded pages, including aft
 }, info) => {
   await login(page);
   const folder = await create(page, { kind: 'folder', title: `分页目录 ${info.project.name}` });
+  // Only folders with children show an expand arrow; the listing below is mocked.
+  await create(page, { kind: 'markdown', title: '占位', parentId: folder.id });
   let version = '原';
   let failing = false;
   let secondPages = 0;
@@ -103,7 +105,10 @@ test('manual refresh preserves expanded branches and loaded pages, including aft
   });
   await page.goto('/');
   await openSidebar(page);
-  await page.getByRole('button', { name: `展开 ${folder.title}`, exact: true }).click();
+  await page
+    .locator('.tree')
+    .getByRole('button', { name: `展开 ${folder.title}`, exact: true })
+    .click();
   await page.locator('.tree').getByRole('button', { name: '加载更多', exact: true }).click();
   await expect(page.locator('.tree-label').filter({ hasText: '原子目录3' })).toBeVisible();
   const refresh = page.getByRole('button', { name: '刷新目录', exact: true });
@@ -139,6 +144,8 @@ test('manual refresh preserves expanded branches and loaded pages, including aft
 test('a late load-more response cannot overwrite a refreshed branch', async ({ page }, info) => {
   await login(page);
   const folder = await create(page, { kind: 'folder', title: `并发目录 ${info.project.name}` });
+  // Only folders with children show an expand arrow; the listing below is mocked.
+  await create(page, { kind: 'markdown', title: '占位', parentId: folder.id });
   let latest = false;
   let release: (() => void) | undefined;
   let completed: Promise<void> | undefined;
@@ -171,7 +178,10 @@ test('a late load-more response cannot overwrite a refreshed branch', async ({ p
   });
   await page.goto('/');
   await openSidebar(page);
-  await page.getByRole('button', { name: `展开 ${folder.title}`, exact: true }).click();
+  await page
+    .locator('.tree')
+    .getByRole('button', { name: `展开 ${folder.title}`, exact: true })
+    .click();
   await page.locator('.tree').getByRole('button', { name: '加载更多', exact: true }).click();
   await expect.poll(() => !!release).toBe(true);
   latest = true;

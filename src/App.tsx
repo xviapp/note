@@ -17,7 +17,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { api, formatBytes, lockEdits } from './api';
+import { api, lockEdits } from './api';
 import {
   PARENT_KINDS,
   type AuthStatus,
@@ -27,7 +27,7 @@ import {
   type StorageInfo,
 } from '../shared/types';
 import { Spinner, useQuestion } from './components/Primitives';
-import { Tree, type NodeAction } from './components/Tree';
+import { Tree, type MovedNode, type NodeAction } from './components/Tree';
 import { MoveDialog, NodeForm, NodeList, Settings, TrashView } from './components/Management';
 import NotePane from './components/NotePane';
 import { ThemeSwitcher } from './components/ThemePicker';
@@ -445,15 +445,54 @@ function Notebook({
       report(e);
     }
   };
-  const drop = async (id: string, parent: string | null) => {
-    if (!id || id === parent || !(await leaveGuard.current())) return;
+  const [moved, setMoved] = useState<MovedNode | null>(null);
+  const [moveToast, setMoveToast] = useState<{
+    key: number;
+    message: string;
+    undo?: () => Promise<void>;
+  } | null>(null);
+  const relocate = async (id: string, parent: string | null) => {
+    const node = await api<NoteNode>(`/api/nodes/${id}`);
+    if (node.parent_id === parent) return null;
+    await api(`/api/nodes/${id}`, 'PATCH', { parentId: parent, revision: node.revision });
+    changed();
+    setDetailRevision((r) => r + 1);
+    return node;
+  };
+  // Every completed move reveals its new location and can be undone once.
+  const announceMove = (id: string, from: string | null, to: string | null, title: string) => {
+    const key = Date.now();
+    setMoved({ id, parent: to, key });
+    setMoveToast({
+      key,
+      message: to ? `已移到「${title || '目标文件夹'}」` : '已移到根目录',
+      undo: async () => {
+        setMoveToast(null);
+        try {
+          if (!(await relocate(id, from))) return;
+          setMoved({ id, parent: from, key: Date.now() });
+          setMoveToast({ key: Date.now(), message: '已撤销移动' });
+        } catch (e) {
+          report(e);
+        }
+      },
+    });
+  };
+  useEffect(() => {
+    if (!moveToast) return;
+    const timer = setTimeout(() => setMoveToast(null), moveToast.undo ? 6000 : 2500);
+    return () => clearTimeout(timer);
+  }, [moveToast]);
+  const drop = async (id: string, parent: string | null, title: string) => {
+    if (!id || id === parent || !(await leaveGuard.current())) return false;
     try {
-      const node = await api<NoteNode>(`/api/nodes/${id}`);
-      await api(`/api/nodes/${id}`, 'PATCH', { parentId: parent, revision: node.revision });
-      changed();
-      setDetailRevision((r) => r + 1);
+      const node = await relocate(id, parent);
+      if (!node) return false;
+      announceMove(id, node.parent_id, parent, title);
+      return true;
     } catch (e) {
       report(e);
+      return false;
     }
   };
   const newNode = async () => {
@@ -475,6 +514,8 @@ function Notebook({
     { key: 'favorites' as const, label: '收藏', icon: Star },
     { key: 'recent' as const, label: '最近访问', icon: Clock3 },
     { key: 'offline' as const, label: '离线阅读', icon: HardDriveDownload },
+    { key: 'trash' as const, label: '回收站', icon: Trash2 },
+    { key: 'settings' as const, label: '设置', icon: Settings2 },
   ];
   return (
     <div
@@ -496,29 +537,39 @@ function Notebook({
             onClick={() => setMobileOpen(false)}
           />
           <aside id="notebook-sidebar" className="sidebar" aria-label="主导航">
+            {/* Kept compact so the note tree gets most of the sidebar's height. */}
             <div className="sidebar-brand">
               <Brand name={name} />
-              <button
-                className="icon-button close-sidebar"
-                aria-label="关闭侧栏"
-                onClick={() => setMobileOpen(false)}
-              >
-                <X size={20} />
-              </button>
+              <div className="sidebar-brand-actions">
+                <ThemeSwitcher />
+                <button
+                  className="icon-button new-note-button"
+                  aria-label="新建笔记"
+                  title="新建笔记"
+                  onClick={newNode}
+                >
+                  <Plus size={19} />
+                </button>
+                <button
+                  className="icon-button close-sidebar"
+                  aria-label="关闭侧栏"
+                  onClick={() => setMobileOpen(false)}
+                >
+                  <X size={20} />
+                </button>
+              </div>
             </div>
-            <button className="new-note-button" onClick={newNode}>
-              <Plus size={18} />
-              新建笔记
-            </button>
-            <nav className="main-nav">
+            <nav className="main-nav" aria-label="页面">
               {navItems.map((item) => (
                 <button
                   key={item.key}
                   className={view === item.key ? 'active' : ''}
+                  aria-label={item.label}
+                  aria-current={view === item.key ? 'page' : undefined}
+                  title={item.label}
                   onClick={() => switchView(item.key)}
                 >
                   <item.icon size={18} />
-                  <span>{item.label}</span>
                 </button>
               ))}
             </nav>
@@ -530,40 +581,8 @@ function Notebook({
                 onOpen={openNode}
                 onAction={action}
                 onDrop={drop}
+                moved={moved}
               />
-            </div>
-            <div className="sidebar-bottom">
-              <nav className="main-nav">
-                <button
-                  className={view === 'trash' ? 'active' : ''}
-                  onClick={() => switchView('trash')}
-                >
-                  <Trash2 size={17} />
-                  回收站
-                </button>
-                <button
-                  className={view === 'settings' ? 'active' : ''}
-                  onClick={() => switchView('settings')}
-                >
-                  <Settings2 size={17} />
-                  设置
-                </button>
-              </nav>
-              <ThemeSwitcher showLabel />
-              {storage && (
-                <button
-                  className={`sidebar-usage ${storage.allocatedBytes >= storage.quotaBytes * 0.8 ? 'warning' : ''}`}
-                  onClick={() => openSettings('storage')}
-                >
-                  <span>
-                    <span>存储空间</span>
-                    <span>
-                      {formatBytes(storage.allocatedBytes)} / {formatBytes(storage.quotaBytes)}
-                    </span>
-                  </span>
-                  <progress value={storage.allocatedBytes} max={storage.quotaBytes} />
-                </button>
-              )}
             </div>
           </aside>
         </>
@@ -717,6 +736,7 @@ function Notebook({
                       onOpen={openNode}
                       onAction={action}
                       onDrop={drop}
+                      moved={moved}
                       expansionState={treeExpansion.current}
                       showRefresh={false}
                     />
@@ -773,6 +793,16 @@ function Notebook({
             ))}
           </nav>
         )}
+        {moveToast && (
+          <div key={moveToast.key} className="move-toast" role="status">
+            <span>{moveToast.message}</span>
+            {moveToast.undo && (
+              <button className="text-button" onClick={() => void moveToast.undo?.()}>
+                撤销
+              </button>
+            )}
+          </div>
+        )}
       </main>
       <AssistantPanel
         global
@@ -822,7 +852,8 @@ function Notebook({
         <MoveDialog
           node={moving}
           onClose={() => setMoving(null)}
-          onSaved={() => {
+          onSaved={(parent, title) => {
+            announceMove(moving.id, moving.parent_id, parent, title);
             setMoving(null);
             changed();
             setDetailRevision((r) => r + 1);

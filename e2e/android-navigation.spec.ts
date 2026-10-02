@@ -32,9 +32,9 @@ test('Android home tree replaces the sidebar and restores nested pages after rea
     const second = url.searchParams.has('offset');
     const nodes =
       parent === ''
-        ? [{ ...root, title }]
+        ? [{ ...root, title, child_count: 1 }]
         : parent === root.id
-          ? [inner]
+          ? [{ ...inner, child_count: 26 }]
           : parent === inner.id
             ? second
               ? [note]

@@ -778,10 +778,13 @@ export default function NotePane(props: Props) {
                         <ArrowUpRight size={13} />
                       </a>
                     ) : (
-                      <>更新于 {formatDate(note.updated_at)}</>
+                      <span>更新于 {formatDate(note.updated_at)}</span>
                     )}
-                    {PARENT_KINDS.includes(note.kind) && !!note.child_count && (
-                      <span>{note.child_count} 个下级笔记</span>
+                    {PARENT_KINDS.includes(note.kind) && !editing && (
+                      <button className="text-button" onClick={() => props.onAction('new', note)}>
+                        <Plus size={14} />
+                        新建
+                      </button>
                     )}
                   </div>
                 </header>
@@ -846,23 +849,22 @@ export default function NotePane(props: Props) {
                     onCreate={!editing ? (file) => props.onFileNode(file, id) : undefined}
                   />
                 )}
-                {PARENT_KINDS.includes(note.kind) && !editing && (
-                  <section className="children-section">
-                    <div className="children-heading">
-                      <h2>下级笔记{note.child_count ? <span>{note.child_count}</span> : null}</h2>
-                      <button className="text-button" onClick={() => props.onAction('new', note)}>
-                        <Plus size={14} />
-                        新建
-                      </button>
-                    </div>
-                    <NodeList
-                      parent={id}
-                      refresh={props.treeRefresh}
-                      onOpen={props.onOpen}
-                      onAction={props.onAction}
-                    />
-                  </section>
-                )}
+                {/* A folder is its list; other kinds list children below their body. */}
+                {PARENT_KINDS.includes(note.kind) &&
+                  !editing &&
+                  (note.kind === 'folder' || !!note.child_count) && (
+                    <section
+                      className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
+                      aria-label="下级笔记"
+                    >
+                      <NodeList
+                        parent={id}
+                        refresh={props.treeRefresh}
+                        onOpen={props.onOpen}
+                        onAction={props.onAction}
+                      />
+                    </section>
+                  )}
               </article>
             </div>
           )}
