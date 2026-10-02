@@ -19,7 +19,16 @@ async function settings(page: Page, section = '分享保存') {
   await expect(page.locator('.app-shell')).toBeVisible();
   const menu = page.getByRole('button', { name: '打开笔记目录', exact: true });
   if (await menu.isVisible()) await menu.click();
-  await page.locator('.main-nav').getByRole('button', { name: '设置', exact: true }).click();
+  if (await page.locator('.android-shell').count()) {
+    const tabs = page.locator('.phone-bottom-nav');
+    for (let i = 0; i < 5 && !(await tabs.isVisible()); i++) {
+      const previous = page.url();
+      await page.getByRole('button', { name: '返回', exact: true }).click();
+      await expect(page).not.toHaveURL(previous);
+    }
+    await expect(tabs).toBeVisible();
+    await tabs.getByRole('button', { name: '设置', exact: true }).click();
+  } else await page.locator('.main-nav').getByRole('button', { name: '设置', exact: true }).click();
   await page.locator('.settings-entry').getByText(section, { exact: true }).click();
 }
 function pdfFixture(count = 12) {

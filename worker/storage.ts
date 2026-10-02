@@ -1,3 +1,4 @@
+import { GLOBAL_ASSISTANT_ID } from '../shared/assistant';
 import type { BlobRow, Env } from './types';
 import { AppError, idValue } from './http';
 import type { StorageInfo } from '../shared/types';
@@ -299,7 +300,7 @@ export async function discardFile(env: Env, id: string): Promise<boolean> {
 }
 export async function storageInfo(env: Env): Promise<StorageInfo> {
   const siteQuery = env.DB.prepare('SELECT quota_bytes,allocated_bytes FROM site WHERE id=1');
-  const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m JOIN nodes n ON n.id=m.node_id WHERE n.trash_id IS NULL AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id JOIN nodes n ON n.id=m.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t JOIN nodes n ON n.id=t.node_id WHERE n.trash_id IS NULL AND t.body_blob_id=b.id))`;
+  const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t JOIN nodes n ON n.id=t.node_id WHERE n.trash_id IS NULL AND t.body_blob_id=b.id))`;
   const aiReferenced = `(EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=b.id OR m.image_blob_id=b.id) OR EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=b.id))`;
   const sumsQuery = env.DB.prepare(
     `SELECT

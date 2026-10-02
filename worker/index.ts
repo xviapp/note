@@ -1,3 +1,4 @@
+import { assistantNode } from './assistant';
 import type { Env } from './types';
 import {
   createBackup,
@@ -164,8 +165,7 @@ export default {
           return json({ ok: true });
         }
         if (action === 'assistant/files' && method === 'POST') {
-          const node = await getNode(env, id);
-          if (node.kind === 'folder') throw new AppError(400, '请打开一个文件与青藜对话。');
+          await assistantNode(env, id);
           return json(await uploadChatFile(env, request), 201);
         }
         if (action === 'assistant' && method === 'GET')

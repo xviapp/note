@@ -1,3 +1,4 @@
+import { GLOBAL_ASSISTANT_ID, type ChatHistory } from '../shared/assistant';
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import { env, SELF, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, expect, it } from 'vitest';
@@ -40,6 +41,7 @@ beforeEach(async () => {
     [
       'DELETE FROM backup_jobs',
       'DELETE FROM backup_restore_nodes',
+      'DELETE FROM assistant_threads',
       'DELETE FROM nodes',
       'DELETE FROM trash_batches',
       'DELETE FROM blobs',
@@ -382,3 +384,31 @@ it('restores a large directory within the free-plan query budget and per-value b
       .first<{ count: number }>())!.count,
   ).toBe(4000);
 }, 30000);
+
+it('restores global conversation into its own note without overwriting the current global history', async () => {
+  const body = await storeChatBody(bindings, JSON.stringify({ content: '全局记录' }));
+  await bindings.DB.prepare('INSERT INTO assistant_threads(node_id) VALUES(?)')
+    .bind(GLOBAL_ASSISTANT_ID)
+    .run();
+  await bindings.DB.prepare(
+    "INSERT INTO assistant_messages(id,node_id,request_id,role,status,body_blob_id,created_at) VALUES(?,?,?,'assistant','completed',?,1)",
+  )
+    .bind(crypto.randomUUID(), GLOBAL_ASSISTANT_ID, 'global-request', body.id)
+    .run();
+  const snapshot = await ok<{ archive: LibraryBackup }>('/api/backups', 'POST', {});
+  const stage = await ok<{ id: string }>('/api/backups/restore', 'POST', snapshot.archive, {
+    'x-idempotency-key': crypto.randomUUID(),
+  });
+  await uploadArchive(stage.id, snapshot.archive);
+  const { rootId } = await ok<{ rootId: string }>(`/api/backups/${stage.id}/commit`, 'POST', {});
+  const restored = (await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${rootId}`)).nodes.find(
+    (n) => n.title === '青藜全局对话（恢复）',
+  )!;
+  expect(restored.kind).toBe('text');
+  expect((await ok<ChatHistory>(`/api/nodes/${restored.id}/assistant`)).messages[0].content).toBe(
+    '全局记录',
+  );
+  expect(
+    (await ok<ChatHistory>(`/api/nodes/${GLOBAL_ASSISTANT_ID}/assistant`)).messages,
+  ).toHaveLength(1);
+});

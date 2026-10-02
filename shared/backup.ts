@@ -1,3 +1,4 @@
+import { GLOBAL_ASSISTANT_ID } from './assistant';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folder-icons';
 
 export const BACKUP_FORMAT = 'yejian-library';
@@ -214,7 +215,13 @@ export function validateBackup(input: unknown): LibraryBackup {
     'assistant_messages',
     'translations',
   ] as const)
-    for (const row of data.tables[table]) if (!nodes.has(row.node_id)) invalid('所属笔记缺失。');
+    for (const row of data.tables[table]) {
+      const global =
+        (table === 'assistant_threads' || table === 'assistant_messages') &&
+        row.node_id === GLOBAL_ASSISTANT_ID;
+      if (!global && !nodes.has(row.node_id)) invalid('所属笔记缺失。');
+    }
+  if (nodes.has(GLOBAL_ASSISTANT_ID)) invalid('笔记 ID 使用了保留名称。');
   for (const version of data.tables.versions) {
     hasFile(version.body_blob_id);
     if (

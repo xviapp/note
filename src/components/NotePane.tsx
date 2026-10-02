@@ -84,6 +84,9 @@ interface Props {
   id: string;
   refresh: number;
   treeRefresh: number;
+  showSidebar: boolean;
+  globalAssistantOpen: boolean;
+  onGlobalAssistant: (selection: string) => void;
   sidebarOpen: boolean;
   onOpenSidebar: () => void;
   onBack: () => void;
@@ -455,15 +458,17 @@ export default function NotePane(props: Props) {
       <button className="icon-button page-back" aria-label="返回" onClick={props.onBack}>
         <ChevronLeft size={22} />
       </button>
-      <button
-        className="icon-button mobile-menu"
-        aria-label="打开笔记目录"
-        aria-controls="notebook-sidebar"
-        aria-expanded={props.sidebarOpen}
-        onClick={props.onOpenSidebar}
-      >
-        <Menu size={21} />
-      </button>
+      {props.showSidebar && (
+        <button
+          className="icon-button mobile-menu"
+          aria-label="打开笔记目录"
+          aria-controls="notebook-sidebar"
+          aria-expanded={props.sidebarOpen}
+          onClick={props.onOpenSidebar}
+        >
+          <Menu size={21} />
+        </button>
+      )}
       <div className="breadcrumbs">
         <button onClick={() => props.onNavigate('')}>全部笔记</button>
         {note?.breadcrumbs.map((part, index) => (
@@ -692,7 +697,7 @@ export default function NotePane(props: Props) {
         </div>
       )}
       <div
-        className={`reading-with-assistant${assistantOpen && !editing && assistantMode === 'docked' ? ' assistant-docked' : ''}`}
+        className={`reading-with-assistant${assistantOpen && !editing && !props.globalAssistantOpen && assistantMode === 'docked' ? ' assistant-docked' : ''}`}
       >
         <div
           ref={readingRoot}
@@ -892,7 +897,8 @@ export default function NotePane(props: Props) {
             actionsRef={assistantActions}
             node={note}
             visible={assistantOpen && !editing}
-            enabled={!editing}
+            enabled={!editing && !props.globalAssistantOpen}
+            onGlobal={() => props.onGlobalAssistant(selection)}
             mode={assistantMode}
             onModeChange={setAssistantMode}
             selection={selection}

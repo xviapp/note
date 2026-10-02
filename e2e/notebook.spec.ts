@@ -1,6 +1,11 @@
 import { expect, test, type Page, type Locator } from '@playwright/test';
 import { preparePassword } from '../shared/password';
-import type { ChatHistory, ChatMessage, ChatInput } from '../shared/assistant';
+import {
+  GLOBAL_ASSISTANT_ID,
+  type ChatHistory,
+  type ChatMessage,
+  type ChatInput,
+} from '../shared/assistant';
 import { paperHtml, paperPng } from '../tests/fixtures/arxiv';
 import { hostileSvg } from '../tests/fixtures/svg';
 
@@ -44,7 +49,8 @@ async function edit(page: Page) {
 async function selectTheme(page: Page, value: string) {
   const theme = page.getByRole('combobox', { name: '主题', exact: true });
   const openDrawer = !(await theme.isVisible());
-  const reopenAssistant = openDrawer && (await page.locator('.assistant-panel').isVisible());
+  const reopenAssistant =
+    openDrawer && (await page.locator('.assistant-panel[aria-label="青藜"]').isVisible());
   if (reopenAssistant) await page.getByRole('button', { name: '关闭青藜', exact: true }).click();
   if (openDrawer) await page.getByRole('button', { name: '打开笔记目录', exact: true }).click();
   await theme.selectOption(value);
@@ -325,7 +331,9 @@ test('creation, rename, moving and storage settings work without unlocking file 
     const targetBox = (await page.locator('.tree > .section-label').boundingBox())!;
     await page.mouse.move(sourceBox.x + sourceBox.width / 2, sourceBox.y + sourceBox.height / 2);
     await page.mouse.down();
-    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, { steps: 8 });
+    await page.mouse.move(targetBox.x + targetBox.width / 2, targetBox.y + targetBox.height / 2, {
+      steps: 8,
+    });
     await page.mouse.up();
     await expect
       .poll(async () => (await (await page.request.get(`/api/nodes/${id}`)).json()).parent_id)
@@ -419,13 +427,11 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
   await page
     .getByRole('textbox', { name: 'Markdown 源码' })
     .fill('# 附件资料\n\n点开附件即可阅读。');
-  await page
-    .getByLabel('上传附件', { exact: true })
-    .setInputFiles({
-      name: 'reading.pdf',
-      mimeType: 'application/pdf',
-      buffer: pdfFixture(2, false, false, true),
-    });
+  await page.getByLabel('上传附件', { exact: true }).setInputFiles({
+    name: 'reading.pdf',
+    mimeType: 'application/pdf',
+    buffer: pdfFixture(2, false, false, true),
+  });
   await expect(page.getByText('上传中…')).toHaveCount(0);
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await page.locator('.attachment-name').filter({ hasText: 'reading.pdf' }).click();
@@ -946,7 +952,12 @@ async function assistantFixture(page: Page, options: { interruptFirst?: boolean 
           origin: 'http://127.0.0.1:8799',
           'x-idempotency-key': `ai-${message.id}`,
         },
-        data: { parentId: id, kind: 'markdown', title: '结构要点', content: message.content },
+        data: {
+          parentId: id === GLOBAL_ASSISTANT_ID ? null : id,
+          kind: 'markdown',
+          title: '结构要点',
+          content: message.content,
+        },
       });
       const node = await response.json();
       message.exportedNodeId = node.id;
@@ -1618,7 +1629,7 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
   await expect(send).toBeEnabled();
   await send.focus();
   await page.keyboard.press('Tab');
-  await expect(panel.getByRole('button', { name: '刷新会话', exact: true })).toBeFocused();
+  await expect(panel.getByRole('button', { name: '全局对话', exact: true })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(send).toBeFocused();
   await panel.getByRole('button', { name: '附上当前文件', exact: true }).click();
@@ -2018,7 +2029,9 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   if (info.project.name === 'desktop')
     await page.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await cropInBrowser(page, info.project.name === 'mobile');
-  await expect(page.locator('.assistant-panel')).toHaveClass(/assistant-maximized/);
+  await expect(page.locator('.assistant-panel[aria-label="青藜"]')).toHaveClass(
+    /assistant-maximized/,
+  );
   await page.getByRole('textbox', { name: '发给青藜的问题' }).fill('解释这一页。');
   await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('.chat-assistant')).toContainText('结构要点');
@@ -2031,4 +2044,62 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   await expect(page.locator('.pdf-scroll')).toBeVisible();
   await expect(page.locator('iframe,embed,object')).toHaveCount(0);
   await page.screenshot({ path: `test-results/pdf-assistant-${info.project.name}.png` });
+});
+
+test('global Qingli is available across pages, separate from file chats and saves root notes', async ({
+  page,
+}, info) => {
+  await page.addInitScript(() => {
+    (window as any).androidBridge = {};
+  });
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers: { origin: 'http://127.0.0.1:8799' },
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
+  const { node } = await assistantSeed(page, {
+    kind: 'markdown',
+    title: `独立对话 ${info.project.name}`,
+    content: '# 当前正文',
+  });
+  const fixture = await assistantFixture(page);
+  const launcher = page.getByRole('button', { name: '打开全局青藜', exact: true });
+  await expect(launcher).toBeVisible();
+  const buttonBox = (await launcher.boundingBox())!;
+  const navBox = (await page.locator('.phone-bottom-nav').boundingBox())!;
+  expect(buttonBox.y + buttonBox.height).toBeLessThan(navBox.y);
+  await launcher.click();
+  const global = page.getByRole('complementary', { name: '全局青藜', exact: true });
+  await expect(global.getByRole('button', { name: '附上当前文件', exact: true })).toHaveCount(0);
+  const input = global.getByRole('textbox', { name: '发给青藜的问题', exact: true });
+  await input.fill('独立的全局问题');
+  await global.getByRole('button', { name: '发送', exact: true }).click();
+  await expect(global.getByRole('heading', { name: '结构要点', exact: true })).toBeVisible();
+  await global.getByRole('button', { name: '保存为笔记', exact: true }).click();
+  await expect(global.getByRole('button', { name: '打开笔记', exact: true })).toBeVisible();
+  const reply = fixture.threads.get(GLOBAL_ASSISTANT_ID)!.messages[1];
+  const saved = await (await page.request.get(`/api/nodes/${reply.exportedNodeId}`)).json();
+  expect(saved.parent_id).toBeNull();
+  await global.getByRole('button', { name: '关闭青藜', exact: true }).click();
+  await page
+    .locator('.phone-bottom-nav')
+    .getByRole('button', { name: '设置', exact: true })
+    .click();
+  await launcher.click();
+  await expect(global.getByText('独立的全局问题', { exact: true })).toBeVisible();
+  await global.getByRole('button', { name: '关闭青藜', exact: true }).click();
+  await page.goto(`/n/${node.id}`);
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
+  const file = page.getByRole('complementary', { name: '青藜', exact: true });
+  await expect(file.getByText('独立的全局问题', { exact: true })).toHaveCount(0);
+  await file.getByRole('textbox', { name: '发给青藜的问题', exact: true }).fill('保留文件草稿');
+  await file.getByRole('button', { name: '全局对话', exact: true }).click();
+  await expect(file).toBeHidden();
+  await expect(global.getByText('独立的全局问题', { exact: true })).toBeVisible();
+  await expect(global.getByRole('button', { name: '附上当前文件', exact: true })).toBeVisible();
+  await page.screenshot({ path: `test-results/global-qingli-${info.project.name}.png` });
+  await global.getByRole('button', { name: '文件对话', exact: true }).click();
+  await expect(file.getByRole('textbox', { name: '发给青藜的问题', exact: true })).toHaveValue(
+    '保留文件草稿',
+  );
 });

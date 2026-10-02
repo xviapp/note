@@ -1,3 +1,4 @@
+import { GLOBAL_ASSISTANT_ID } from '../shared/assistant';
 import {
   backupColumns,
   BACKUP_FORMAT,
@@ -139,6 +140,9 @@ export async function startRestore(env: Env, input: unknown, key: string) {
   if (!Number.isSafeInteger(total) || total > site!.quota_bytes - site!.allocated_bytes)
     throw new AppError(413, '恢复所需空间不足，请先调整容量或清理空间。');
   const ids = [
+    ...(archive.tables.assistant_messages.some((row) => row.node_id === GLOBAL_ASSISTANT_ID)
+      ? [GLOBAL_ASSISTANT_ID]
+      : []),
     ...archive.files.map((file) => file.id),
     ...Object.values(archive.tables).flatMap((rows) =>
       rows.filter((r) => r.id).map((r) => String(r.id)),
@@ -349,6 +353,11 @@ export async function finishRestore(env: Env, jobId: string) {
             ? trashRoot
             : root,
   }));
+  if (mapping[GLOBAL_ASSISTANT_ID])
+    restoredNodes.push({
+      ...folder(mapping[GLOBAL_ASSISTANT_ID], '青藜全局对话（恢复）', root),
+      kind: 'text',
+    });
   const rows: Record<BackupTable, BackupRow[]> = {
     ...archive.tables,
     nodes: [

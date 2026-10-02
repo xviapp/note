@@ -1,4 +1,8 @@
-import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { AssistantPanel, type AssistantHandle } from './components/AssistantPanel';
+import type { AssistantMode } from './components/AssistantWindow';
+import { usePullRefresh } from './use-pull-refresh';
+import { Capacitor } from '@capacitor/core';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
   ArrowLeft,
   BookOpen,
@@ -42,6 +46,8 @@ import {
   type SettingsSection,
   type View,
 } from './navigation';
+
+const ImageViewer = lazy(() => import('./components/ImageViewer'));
 
 export default function App() {
   const [status, setStatus] = useState<AuthStatus | null>(null),
@@ -244,6 +250,13 @@ function Notebook({
   name: string;
   onCheckSession: () => Promise<boolean>;
 }) {
+  const android = Capacitor.getPlatform() === 'android';
+  const treeExpansion = useRef(new Set<string>());
+  const [globalOpen, setGlobalOpen] = useState(false);
+  const [globalSelection, setGlobalSelection] = useState('');
+  const [globalMode, setGlobalMode] = useState<AssistantMode>('floating');
+  const [globalImage, setGlobalImage] = useState<{ src: string; alt: string } | null>(null);
+  const globalActions = useRef<AssistantHandle | null>(null);
   const offline = useOffline();
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
     [mobileOpen, setMobileOpen] = useState(false);
@@ -267,6 +280,7 @@ function Notebook({
   useEffect(() => {
     setMobileOpen(false);
     setLoaded(null);
+    setGlobalSelection('');
   }, [navigation.key]);
   const report = useCallback(
     (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
@@ -286,6 +300,13 @@ function Notebook({
     if (!(await onCheckSession()))
       throw new Error('暂时无法刷新，仍显示已有目录。请检查连接后重试。');
   };
+  const pullRefresh = usePullRefresh(
+    navigation.scroll,
+    navigation.key,
+    android && !selected && (view === 'tree' || view === 'favorites'),
+    refreshLibrary,
+    report,
+  );
   useEffect(() => {
     let live = true;
     const revalidate = async () => {
@@ -457,7 +478,7 @@ function Notebook({
   ];
   return (
     <div
-      className={`app-shell ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
+      className={`app-shell ${android ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
     >
       <ShareImport
         onImported={(nodes) => {
@@ -467,82 +488,86 @@ function Notebook({
           if (first) void navigate(first.id);
         }}
       />
-      <button
-        className="sidebar-scrim"
-        aria-label="关闭笔记目录"
-        onClick={() => setMobileOpen(false)}
-      />
-      <aside id="notebook-sidebar" className="sidebar" aria-label="主导航">
-        <div className="sidebar-brand">
-          <Brand name={name} />
+      {!android && (
+        <>
           <button
-            className="icon-button close-sidebar"
-            aria-label="关闭侧栏"
+            className="sidebar-scrim"
+            aria-label="关闭笔记目录"
             onClick={() => setMobileOpen(false)}
-          >
-            <X size={20} />
-          </button>
-        </div>
-        <button className="new-note-button" onClick={newNode}>
-          <Plus size={18} />
-          新建笔记
-        </button>
-        <nav className="main-nav">
-          {navItems.map((item) => (
-            <button
-              key={item.key}
-              className={view === item.key ? 'active' : ''}
-              onClick={() => switchView(item.key)}
-            >
-              <item.icon size={18} />
-              <span>{item.label}</span>
-            </button>
-          ))}
-        </nav>
-        <div className="sidebar-tree">
-          <Tree
-            refresh={revision}
-            onRefresh={refreshLibrary}
-            selected={selected}
-            onOpen={openNode}
-            onAction={action}
-            onDrop={drop}
           />
-        </div>
-        <div className="sidebar-bottom">
-          <nav className="main-nav">
-            <button
-              className={view === 'trash' ? 'active' : ''}
-              onClick={() => switchView('trash')}
-            >
-              <Trash2 size={17} />
-              回收站
+          <aside id="notebook-sidebar" className="sidebar" aria-label="主导航">
+            <div className="sidebar-brand">
+              <Brand name={name} />
+              <button
+                className="icon-button close-sidebar"
+                aria-label="关闭侧栏"
+                onClick={() => setMobileOpen(false)}
+              >
+                <X size={20} />
+              </button>
+            </div>
+            <button className="new-note-button" onClick={newNode}>
+              <Plus size={18} />
+              新建笔记
             </button>
-            <button
-              className={view === 'settings' ? 'active' : ''}
-              onClick={() => switchView('settings')}
-            >
-              <Settings2 size={17} />
-              设置
-            </button>
-          </nav>
-          <ThemeSwitcher showLabel />
-          {storage && (
-            <button
-              className={`sidebar-usage ${storage.allocatedBytes >= storage.quotaBytes * 0.8 ? 'warning' : ''}`}
-              onClick={() => openSettings('storage')}
-            >
-              <span>
-                <span>存储空间</span>
-                <span>
-                  {formatBytes(storage.allocatedBytes)} / {formatBytes(storage.quotaBytes)}
-                </span>
-              </span>
-              <progress value={storage.allocatedBytes} max={storage.quotaBytes} />
-            </button>
-          )}
-        </div>
-      </aside>
+            <nav className="main-nav">
+              {navItems.map((item) => (
+                <button
+                  key={item.key}
+                  className={view === item.key ? 'active' : ''}
+                  onClick={() => switchView(item.key)}
+                >
+                  <item.icon size={18} />
+                  <span>{item.label}</span>
+                </button>
+              ))}
+            </nav>
+            <div className="sidebar-tree">
+              <Tree
+                refresh={revision}
+                onRefresh={refreshLibrary}
+                selected={selected}
+                onOpen={openNode}
+                onAction={action}
+                onDrop={drop}
+              />
+            </div>
+            <div className="sidebar-bottom">
+              <nav className="main-nav">
+                <button
+                  className={view === 'trash' ? 'active' : ''}
+                  onClick={() => switchView('trash')}
+                >
+                  <Trash2 size={17} />
+                  回收站
+                </button>
+                <button
+                  className={view === 'settings' ? 'active' : ''}
+                  onClick={() => switchView('settings')}
+                >
+                  <Settings2 size={17} />
+                  设置
+                </button>
+              </nav>
+              <ThemeSwitcher showLabel />
+              {storage && (
+                <button
+                  className={`sidebar-usage ${storage.allocatedBytes >= storage.quotaBytes * 0.8 ? 'warning' : ''}`}
+                  onClick={() => openSettings('storage')}
+                >
+                  <span>
+                    <span>存储空间</span>
+                    <span>
+                      {formatBytes(storage.allocatedBytes)} / {formatBytes(storage.quotaBytes)}
+                    </span>
+                  </span>
+                  <progress value={storage.allocatedBytes} max={storage.quotaBytes} />
+                </button>
+              )}
+            </div>
+          </aside>
+        </>
+      )}
       <main className="main-area">
         {!(view === 'tree' && selected) && (
           <header className="app-header">
@@ -556,15 +581,17 @@ function Notebook({
                   <ArrowLeft size={22} />
                 </button>
               )}
-              <button
-                className="icon-button mobile-menu"
-                aria-label="打开笔记目录"
-                aria-controls="notebook-sidebar"
-                aria-expanded={mobileOpen}
-                onClick={openSidebar}
-              >
-                <Menu size={21} />
-              </button>
+              {!android && (
+                <button
+                  className="icon-button mobile-menu"
+                  aria-label="打开笔记目录"
+                  aria-controls="notebook-sidebar"
+                  aria-expanded={mobileOpen}
+                  onClick={openSidebar}
+                >
+                  <Menu size={21} />
+                </button>
+              )}
               <span className="header-title">
                 {view === 'tree'
                   ? '我的笔记库'
@@ -609,6 +636,19 @@ function Notebook({
             </button>
           </div>
         )}
+        {android && (pullRefresh.distance > 0 || pullRefresh.refreshing) && (
+          <div
+            className="pull-refresh"
+            role="status"
+            style={{ height: pullRefresh.refreshing ? 44 : pullRefresh.distance }}
+          >
+            {pullRefresh.refreshing
+              ? '正在刷新…'
+              : pullRefresh.distance >= 64
+                ? '松开刷新'
+                : '下拉刷新'}
+          </div>
+        )}
         <ListingPagesContext.Provider value={listingPages.current}>
           <div
             ref={navigation.scroll}
@@ -622,6 +662,12 @@ function Notebook({
                   id={selected}
                   refresh={detailRevision}
                   treeRefresh={revision}
+                  showSidebar={!android}
+                  globalAssistantOpen={globalOpen}
+                  onGlobalAssistant={(selection) => {
+                    setGlobalSelection(selection);
+                    setGlobalOpen(true);
+                  }}
                   sidebarOpen={mobileOpen}
                   onOpenSidebar={openSidebar}
                   onBack={navigation.back}
@@ -663,7 +709,26 @@ function Notebook({
                       回收站
                     </button>
                   </nav>
-                  <NodeList parent={null} refresh={revision} onOpen={openNode} onAction={action} />
+                  {android ? (
+                    <Tree
+                      refresh={revision}
+                      onRefresh={refreshLibrary}
+                      selected={selected}
+                      onOpen={openNode}
+                      onAction={action}
+                      onDrop={drop}
+                      expansionState={treeExpansion.current}
+                      rememberPages
+                      showRefresh={false}
+                    />
+                  ) : (
+                    <NodeList
+                      parent={null}
+                      refresh={revision}
+                      onOpen={openNode}
+                      onAction={action}
+                    />
+                  )}
                 </section>
               )
             ) : view === 'favorites' || view === 'recent' ? (
@@ -710,6 +775,35 @@ function Notebook({
           </nav>
         )}
       </main>
+      <AssistantPanel
+        global
+        node={loaded?.kind !== 'folder' ? (loaded ?? undefined) : undefined}
+        actionsRef={globalActions}
+        visible={globalOpen}
+        enabled
+        showLauncher={!selected || loaded?.kind === 'folder'}
+        mode={globalMode}
+        onModeChange={setGlobalMode}
+        selection={globalSelection}
+        readingRoot={navigation.scroll}
+        onOpen={() => setGlobalOpen(true)}
+        onClose={() => setGlobalOpen(false)}
+        onChanged={changed}
+        onSettings={() => {
+          setGlobalOpen(false);
+          void openSettings('ai');
+        }}
+        onNavigate={(id) => {
+          setGlobalOpen(false);
+          void navigate(id);
+        }}
+        onImage={(src, alt) => setGlobalImage({ src, alt })}
+      />
+      {globalImage && (
+        <Suspense fallback={<Spinner />}>
+          <ImageViewer {...globalImage} onClose={() => setGlobalImage(null)} />
+        </Suspense>
+      )}
       {form && (
         <NodeForm
           node={form.node}

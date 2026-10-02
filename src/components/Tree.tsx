@@ -9,6 +9,9 @@ import { useOffline } from '../connectivity';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
 export interface TreeProps {
+  expansionState?: Set<string>;
+  rememberPages?: boolean;
+  showRefresh?: boolean;
   refresh: number;
   onRefresh: () => Promise<void>;
   selected: string | null;
@@ -49,8 +52,13 @@ function Branch({
   depth?: number;
   onLoading: (request: symbol, loading: boolean) => void;
 }) {
-  const { listing, error, loading, more } = useNodeListing(`parent=${parent || ''}`, props.refresh);
+  const { listing, error, loading, more } = useNodeListing(
+    `parent=${parent || ''}`,
+    props.refresh,
+    props.rememberPages,
+  );
   const [expanded, setExpanded] = useState<Set<string>>(() => {
+    if (props.expansionState) return new Set(props.expansionState);
     try {
       return new Set(JSON.parse(sessionStorage.getItem('expanded-nodes') || '[]'));
     } catch {
@@ -63,17 +71,20 @@ function Branch({
     onLoading(request, true);
     return () => onLoading(request, false);
   }, [loading, onLoading]);
-  const toggle = (id: string) =>
-    setExpanded((previous) => {
-      const next = new Set(previous);
-      next.has(id) ? next.delete(id) : next.add(id);
-      try {
-        sessionStorage.setItem('expanded-nodes', JSON.stringify([...next]));
-      } catch {
-        /* Optional UI preference. */
-      }
-      return next;
-    });
+  const toggle = (id: string) => {
+    const next = new Set(props.expansionState || expanded);
+    next.has(id) ? next.delete(id) : next.add(id);
+    if (props.expansionState) {
+      props.expansionState.clear();
+      for (const value of next) props.expansionState.add(value);
+    }
+    try {
+      sessionStorage.setItem('expanded-nodes', JSON.stringify([...next]));
+    } catch {
+      /* Optional UI preference. */
+    }
+    setExpanded(next);
+  };
   if (!listing)
     return error ? (
       <p className="inline-error small" role="status">
@@ -204,17 +215,19 @@ export function Tree(props: TreeProps) {
         }}
       >
         <span title="可拖到此处移至根目录">我的笔记</span>
-        <button
-          type="button"
-          className={`icon-button tree-refresh ${busy ? 'is-loading' : ''}`}
-          aria-label="刷新目录"
-          title={busy ? '正在刷新目录' : '刷新目录'}
-          aria-busy={busy}
-          disabled={busy}
-          onClick={refresh}
-        >
-          <RefreshCw size={16} />
-        </button>
+        {props.showRefresh !== false && (
+          <button
+            type="button"
+            className={`icon-button tree-refresh ${busy ? 'is-loading' : ''}`}
+            aria-label="刷新目录"
+            title={busy ? '正在刷新目录' : '刷新目录'}
+            aria-busy={busy}
+            disabled={busy}
+            onClick={refresh}
+          >
+            <RefreshCw size={16} />
+          </button>
+        )}
       </div>
       {offline && (
         <p className="tree-offline" role="status">

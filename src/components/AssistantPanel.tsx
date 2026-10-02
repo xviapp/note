@@ -1,3 +1,4 @@
+import { GLOBAL_ASSISTANT_ID } from '../../shared/assistant';
 import {
   useCallback,
   useEffect,
@@ -53,7 +54,10 @@ export interface AssistantHandle {
 
 interface Props {
   actionsRef: RefObject<AssistantHandle | null>;
-  node: NoteDetail;
+  node?: NoteDetail;
+  global?: boolean;
+  showLauncher?: boolean;
+  onGlobal?: () => void;
   visible: boolean;
   enabled: boolean;
   mode: AssistantMode;
@@ -69,6 +73,7 @@ interface Props {
 }
 export function AssistantPanel(props: Props) {
   const { node, visible } = props;
+  const scopeId = props.global ? GLOBAL_ASSISTANT_ID : node!.id;
   const [messages, setMessages] = useState<ChatMessage[]>([]),
     [nextBefore, setNextBefore] = useState<number | null>(null);
   const [settings, setSettings] = useState<AssistantSettings | null>(null);
@@ -105,7 +110,7 @@ export function AssistantPanel(props: Props) {
     requestAnimationFrame(() => promptInput.current?.focus({ preventScroll: true }));
   };
   useImperativeHandle(props.actionsRef, () => ({ addQuote }));
-  const base = `/api/nodes/${node.id}/assistant`;
+  const base = `/api/nodes/${scopeId}/assistant`;
   const load = useCallback(
     async (before?: number, quiet = false) => {
       if (!quiet) setError('');
@@ -188,7 +193,7 @@ export function AssistantPanel(props: Props) {
         setUploading(files.length > 0);
         const attached = [];
         for (const file of files)
-          attached.push(await uploadPreparedFile(node.id, file, controller.signal));
+          attached.push(await uploadPreparedFile(scopeId, file, controller.signal));
         data = {
           content: prompt.trim(),
           ...(quote ? { quote } : {}),
@@ -201,7 +206,7 @@ export function AssistantPanel(props: Props) {
       const payload = JSON.stringify(data);
       if (requestKey.current?.payload !== payload)
         requestKey.current = { payload, key: crypto.randomUUID() };
-      await streamChat(node.id, data, requestKey.current.key, controller.signal, (event) => {
+      await streamChat(scopeId, data, requestKey.current.key, controller.signal, (event) => {
         if (!mounted.current) return;
         if (event.type === 'start') {
           setContextNotice(
@@ -301,7 +306,9 @@ export function AssistantPanel(props: Props) {
   return (
     <>
       <AssistantWindow
-        title={node.title}
+        title={props.global ? '全局对话' : node!.title}
+        showLauncher={props.showLauncher}
+        label={props.global ? '全局青藜' : '青藜'}
         visible={visible}
         hidden={!props.enabled || capturing}
         busy={sending || remoteBusy}
@@ -312,6 +319,16 @@ export function AssistantPanel(props: Props) {
         onClose={props.onClose}
         actions={
           <>
+            {props.onGlobal && (
+              <button className="text-button" onClick={props.onGlobal}>
+                全局对话
+              </button>
+            )}
+            {props.global && node && (
+              <button className="text-button" onClick={props.onClose}>
+                文件对话
+              </button>
+            )}
             <button
               className="icon-button"
               aria-label="刷新会话"
@@ -327,8 +344,8 @@ export function AssistantPanel(props: Props) {
               onClick={async () => {
                 if (
                   !(await question.confirm(
-                    '清空这个文件的会话？',
-                    '会话、截图和会话附件将被清理，已生成的 Markdown 子笔记会保留。',
+                    props.global ? '清空全局会话？' : '清空这个文件的会话？',
+                    '会话、截图和会话附件将被清理，已保存的笔记会保留。',
                     '清空会话',
                     true,
                   ))
@@ -360,7 +377,7 @@ export function AssistantPanel(props: Props) {
         )}
         <div
           className="assistant-messages"
-          data-selection-owner={node.id}
+          data-selection-owner={scopeId}
           ref={list}
           onScroll={() => {
             const el = list.current!;
@@ -470,8 +487,12 @@ export function AssistantPanel(props: Props) {
                       {exporting === message.id
                         ? '保存中…'
                         : message.exportedNodeId
-                          ? '打开子笔记'
-                          : '保存为子笔记'}
+                          ? props.global
+                            ? '打开笔记'
+                            : '打开子笔记'
+                          : props.global
+                            ? '保存为笔记'
+                            : '保存为子笔记'}
                     </button>
                   )}
                   {message.status === 'interrupted' && (
@@ -570,15 +591,17 @@ export function AssistantPanel(props: Props) {
             </div>
           )}
           <div className="context-actions">
-            <button
-              type="button"
-              className="text-button"
-              disabled={sending || files.length >= CHAT_FILE_LIMIT}
-              onClick={() => setFileSource({ type: 'note', note: node })}
-            >
-              <FileText size={15} />
-              附上当前文件
-            </button>
+            {node && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={sending || files.length >= CHAT_FILE_LIMIT}
+                onClick={() => setFileSource({ type: 'note', note: node })}
+              >
+                <FileText size={15} />
+                附上当前文件
+              </button>
+            )}
             <button
               type="button"
               className="text-button"
@@ -592,7 +615,7 @@ export function AssistantPanel(props: Props) {
               ref={fileInput}
               type="file"
               hidden
-              aria-label="选择聊天附件"
+              aria-label={props.global ? '选择全局聊天附件' : '选择聊天附件'}
               accept=".md,.markdown,.txt,.pdf,.png,.jpg,.jpeg,.gif,.webp,.avif,.svg"
               onChange={(event) => {
                 const file = event.target.files?.[0];
@@ -615,7 +638,7 @@ export function AssistantPanel(props: Props) {
             <button
               type="button"
               className="text-button"
-              disabled={sending || capturing}
+              disabled={!node || sending || capturing}
               onClick={() => void capture()}
             >
               <Camera size={15} />

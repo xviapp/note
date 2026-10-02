@@ -1,3 +1,4 @@
+import { GLOBAL_ASSISTANT_ID } from '../shared/assistant';
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import {
   env,
@@ -137,6 +138,7 @@ beforeEach(async () => {
   contexts = [];
   cookie = '';
   await bindings.DB.batch([
+    bindings.DB.prepare('DELETE FROM assistant_threads'),
     bindings.DB.prepare('DELETE FROM nodes'),
     bindings.DB.prepare('DELETE FROM trash_batches'),
     bindings.DB.prepare('DELETE FROM blobs'),
@@ -1026,4 +1028,49 @@ describe('per-file DeepSeek assistant', () => {
       content: '停止前已生成的内容。',
     });
   });
+});
+
+it('isolates global history, accepts attachments and exports to the library root', async () => {
+  await configure();
+  const file = await create();
+  const global = { ...file, id: GLOBAL_ASSISTANT_ID };
+  expect(
+    (await request(`/api/nodes/${global.id}/assistant`, 'GET', undefined, { anonymous: true }))
+      .status,
+  ).toBe(401);
+  const fetch = vi
+    .spyOn(globalThis, 'fetch')
+    .mockImplementation(async () => provider('# 全局结论'));
+  const attachment = (await (
+    await uploadAttachment(global, 'global.txt', new TextEncoder().encode('全局附件'))
+  ).json()) as FileInfo;
+  await chat(global, {
+    content: '全局问题',
+    files: [
+      { name: 'global.txt', kind: 'text', sourceId: attachment.id, text: '全局附件', images: [] },
+    ],
+  });
+  await Promise.all(contexts.map(waitOnExecutionContext));
+  const globalHistory = await history(global);
+  expect(globalHistory.messages).toHaveLength(2);
+  expect((await history(file)).messages).toHaveLength(0);
+  const sent = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+  expect(JSON.stringify(sent)).toContain('独立的全局对话');
+  expect(JSON.stringify(sent)).not.toContain(file.title);
+  const reply = globalHistory.messages.find((m) => m.role === 'assistant')!;
+  const saved = await ok<NoteNode>(
+    `/api/nodes/${global.id}/assistant/${reply.id}/export`,
+    'POST',
+    {},
+  );
+  expect(saved.parent_id).toBeNull();
+  const storage = await ok<StorageInfo>('/api/storage');
+  expect(storage.trashBytes).toBe(0);
+  await chat(file);
+  await Promise.all(contexts.map(waitOnExecutionContext));
+  expect((await history(global)).messages).toHaveLength(2);
+  await ok(`/api/nodes/${global.id}/assistant`, 'DELETE');
+  expect((await history(global)).messages).toHaveLength(0);
+  expect((await history(file)).messages).toHaveLength(2);
+  expect((await request(`/api/nodes/${saved.id}`)).status).toBe(200);
 });

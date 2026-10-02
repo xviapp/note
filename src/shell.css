@@ -620,3 +620,85 @@ textarea {
     animation: none;
   }
 }
+
+/* Native Android uses the home tree and bottom tabs at every window width. */
+.android-shell .main-area {
+  border: 0;
+}
+.android-shell .phone-bottom-nav {
+  display: flex;
+  justify-content: space-around;
+  flex-shrink: 0;
+  padding: 2px 16px env(safe-area-inset-bottom);
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.android-shell .phone-bottom-nav button {
+  display: flex;
+  flex: 1;
+  max-width: 88px;
+  min-height: 48px;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  font-size: 12px;
+  color: var(--muted);
+}
+.android-shell .phone-bottom-nav button.active {
+  color: var(--blue);
+  font-weight: 600;
+}
+.android-shell .phone-bottom-nav button > span {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 64px;
+  height: 28px;
+  border-radius: var(--family-radius-pill);
+}
+.android-shell .phone-bottom-nav button.active > span {
+  background: var(--selected);
+}
+.android-shell .library-home .tree > .section-label {
+  background: var(--surface);
+}
+.android-shell .library-home .tree-row {
+  min-height: 52px;
+}
+.android-shell .library-home .tree-chevron,
+.android-shell .library-home .tree-label,
+.android-shell .library-home .node-menu > summary {
+  min-height: 48px;
+}
+.android-shell .library-home .tree-chevron {
+  min-width: 36px;
+}
+.android-shell .library-home .tree-label {
+  font-size: 14px;
+}
+.android-shell .library-home .tree-row:not(:hover):not(:focus-within) .node-menu:not([open]) {
+  opacity: 1;
+}
+
+.android-shell .main-content {
+  overscroll-behavior-y: contain;
+}
+.pull-refresh {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  justify-content: center;
+  color: var(--muted);
+  font-size: 12px;
+  overflow: hidden;
+}
+
+body:has(.android-shell .phone-bottom-nav) .global-assistant-launcher {
+  transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 56px));
+}
+@media (max-width: 760px) {
+  body:has(.phone-bottom-nav) .global-assistant-launcher {
+    transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 64px));
+  }
+}

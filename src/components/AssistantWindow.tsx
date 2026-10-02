@@ -25,6 +25,8 @@ function viewportBounds() {
 
 export function AssistantWindow({
   title,
+  label = '青藜',
+  showLauncher = true,
   visible,
   hidden,
   busy,
@@ -37,6 +39,8 @@ export function AssistantWindow({
   children,
 }: {
   title: string;
+  label?: string;
+  showLauncher?: boolean;
   visible: boolean;
   hidden: boolean;
   busy: boolean;
@@ -142,13 +146,13 @@ export function AssistantWindow({
     <>
       <button
         ref={launcher}
-        className="assistant-launcher"
-        hidden={visible || hidden}
+        className={`assistant-launcher${label === '全局青藜' ? ' global-assistant-launcher' : ''}`}
+        hidden={!showLauncher || visible || hidden}
         style={{
           left: viewport.x + viewport.width - margin,
           top: viewport.y + viewport.height - margin,
         }}
-        aria-label="打开青藜"
+        aria-label={`打开${label}`}
         title={busy ? `${title} · 正在回复` : title}
         onClick={onOpen}
       >
@@ -160,7 +164,7 @@ export function AssistantWindow({
         ref={panel}
         className={`assistant-panel assistant-${compact ? 'maximized' : mode}${dragging ? ' is-dragging' : ''}`}
         style={geometry}
-        aria-label="青藜"
+        aria-label={label}
         hidden={!visible || hidden}
         tabIndex={-1}
         onKeyDown={(event) => {

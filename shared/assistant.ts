@@ -2,6 +2,9 @@ import type { FileInfo } from './types';
 import type { ChatFile, ChatFileInput } from './chat-files';
 import type { ChatContextUsage } from './ai-context';
 
+// Reserved conversation scope; never a library node.
+export const GLOBAL_ASSISTANT_ID = 'qingli-global';
+
 export const AI_MODEL = 'deepseek-flash';
 export const AI_PROMPT_LIMIT = 8_000;
 export const AI_QUOTE_LIMIT = 20_000;
