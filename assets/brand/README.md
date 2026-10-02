@@ -1,16 +1,11 @@
 # 页间图标来源
 
-- `day-original.png`：用户于 2026-10-02 提供的叶片与书页原稿，保留原始尺寸、图案和浅色背景。
-- `night-original.png`：内置 `image_gen.imagegen` 根据原稿生成的夜间配色，青色背景、米白图案。
+0.4.4 使用用户确认的直接拼合版本，保留新版书页，木杖和叶片原样取自旧版。没有重新生成、描摹或改变三条轮廓。
+
+- `mark.json`：统一的矢量源数据。`staff` 与 `leaf` 原样复制自提交 `5fa03c8` 的 `android/app/src/main/res/drawable/ic_launcher_foreground.xml` 第 1、2 条路径；`pages` 原样复制自提交 `6dbe7bf` 同一文件的第 3 条路径。
+- 路径坐标单位为原稿像素的十分之一。`staffOffsetX: 940` 让木杖与叶片整体向右平移 94 px，与书页凹口对齐；保持其原始大小、比例和曲线。
+- `day-original.png` 与 `night-original.png`：同一组轮廓导出的 1254 px PNG，分别使用米白 `#F9F7F3` 与青色 `#155B57` 底色。文件内容与用户确认的日夜预览一致。
 - `../../public/brand/` 与 `../../public/favicon.ico`：通过 `pnpm icons` 缩放打包的网页资源。
-- Android 自适应、单色和启动图标：同一脚本从白天原稿提取三个轮廓，使用原生主题颜色。
+- Android 自适应、单色和启动图标：同一脚本直接使用 `mark.json` 中的路径和位移，颜色取自 Android 主题资源。
 
-夜间配色的生成参数：`transparent_background: false`；输入为 `day-original.png`。完整提示如下：
-
-```text
-Use case: precise-object-edit
-Asset type: dark-theme app icon for 页间.
-Input image is the exact light-theme icon to edit.
-Create its dark-theme color variant ONLY. Keep the three leaf-and-open-book shapes EXACTLY in their current positions and sizes, with the same silhouettes, proportions, gaps and square canvas. Do not redraw, move, rotate, enlarge, crop or redesign the mark.
-Recolor all three dark teal shapes to warm ivory #F9F7F3. Replace all light background areas, including the cream rounded tile and white outside margin, with one seamless deep teal #155B57 background filling the entire square, edge to edge. A barely perceptible paper texture is acceptable. No white outer margin, no additional border, no shadow, no text, no extra objects. Output opaque PNG.
-```
+运行 `pnpm icons` 更新全部资源，需要 ImageMagick。脚本不再对页间图标进行位图描摹，避免重复转换改变已确认的形状；普通 Web / Android 构建直接使用已生成并提交的文件。

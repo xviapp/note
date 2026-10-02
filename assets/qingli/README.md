@@ -1,16 +1,10 @@
 # 青藜图标来源
 
-- `original.png`：用户于 2026-10-02 提供的图标原稿。
-- `mark.png`：内置 `image_gen.imagegen` 根据原稿提取的透明 PNG，保留叶片与书页构成。
-- `../../public/qingli/mark-128.png`：应用使用的 128 px PNG，通过 `pnpm icons` 中的 ImageMagick 缩放步骤生成。
-- 显示时以 alpha mask 配合当前主题颜色，深色主题无需单独生成位图。
+- `original.png`：用户于 2026-10-02 提供的读书人物图标原稿，完整保留。
+- `mark.svg`：从原稿提取的 11 条深色轮廓，保留发髻、飘带、头发、五官与书页构成，移除浅色底板。没有使用图像生成或重画人物。
+- `mark.png`：将上述轮廓直接栅格化为透明 PNG；整体等比缩放至 900 px，再居中置于 1024 px 方形画布。
+- `../../public/qingli/mark-128.png`：应用使用的 128 px alpha mask，由 `pnpm icons` 生成。
 
-生成参数：`transparent_background: true`；输入为原稿。完整提示如下：
+首次从原稿提取轮廓使用 ImageMagick 的灰度 50% 阈值与 Potrace 的 `--opttolerance 0.2`。后续 `pnpm icons` 直接读取已确认的 `mark.svg`，无需重复描摹。SVG 轮廓和 PNG 的颜色只是蒙版内容，应用通过 CSS `currentColor` 统一着色。
 
-```text
-Use case: background-extraction
-Asset type: Qingli assistant brand icon for an existing app.
-Input image: exact supplied logo, edit target.
-Remove the entire white outer background and cream rounded-square tile. Keep ONLY the three dark teal curved shapes: the detached upper leaf/flame, the tall curved central blade, and the wide sweeping open-book base. Preserve their exact silhouettes, relative placement, spacing, proportions, and the original dark teal color. This is a faithful extraction, not a redesign.
-Output a clean square RGBA PNG with genuinely transparent background, no rounded tile, no shadows, no extra text or elements, and no visible white or cream fringes. Center the complete mark as one unit, scaled proportionally to occupy approximately 88% of the image width, with comfortable transparent padding around all edges. Preserve the gap between the upper leaf and central blade and the gap between the central blade and the sweeping base. Smooth antialiased edges and solid opaque interiors, suitable as an alpha mask at small UI sizes.
-```
+白天、夜间、星空分别沿用主题强调色 `--blue`，跟随系统时自动切换。悬浮按钮、窗口标题、设置、空会话、选文和翻译入口共用同一资源。
