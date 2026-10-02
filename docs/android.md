@@ -14,6 +14,8 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 0.2.2 起，`MainActivity` 在首帧前设置窗口、DecorView 和 WebView 的主题背景，避免 Splash 退出时露出浅色底。`NoteDevice.setBackground` 同步保存主题选项；手动选择白天、夜间或星空时下次启动直接采用对应颜色，跟随系统时重新读取系统资源，避免应用关闭期间的系统主题变化留下旧颜色。原生背景色与 `src/themes.css` 保持一致，不依赖网络请求完成。
 
+0.2.3 复用启动时创建的 `ColorDrawable`，后续只更新颜色。反复调用 `Window.setBackgroundDrawable` 会短暂清除 DecorView 的系统栏边距，引发 WebView 高度变化；原先的 `resize` 主题同步又重复替换背景，形成上下抖动。主题同步现在只响应实际主题选项变化和应用回到前台，保持正常键盘缩放与屏幕旋转。
+
 更换自建服务需修改 `capacitor.config.ts` 的 `server.hostname` 并重新构建；使用有效 HTTPS 证书及与之对应的 Worker 站点域名。不要改成加载外部网站的 `server.url`，或添加通配的 `allowNavigation`。
 
 ## 构建
@@ -31,7 +33,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.2.2-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 4，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.2.3-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 5，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -52,6 +54,16 @@ pnpm test:android-startup --device emulator-5560 --theme system
 脚本拒绝真机，使用模拟登录状态设置本机主题，然后关闭进程并录下 6 秒冷启动。检测夜间 Splash 之后的浅色亮帧、全白或全黑空帧，同时确认启动画面确实退出；录屏和像素数据保存在 `.wrangler/startup-*`。检测范围排除居中的标识，保留 Android Splash 圆形退出动画中被染浅的背景区域。0.2.1 在同一环境出现了 3–5 个亮帧（约 50–80 ms）；只把固定的浅色 WebView 背景改成深色，对照试验即消除亮帧，正式实现按保存的主题选择背景。
 
 0.2.2 在 Android 14 / WebView 128 模拟器通过夜间、星空及跟随系统的冷启动录屏检查，亮帧和空白帧均为 0；应用关闭期间由系统深色切换到浅色、升级后尚无原生主题记录的场景也通过。4 项原生单元测试、Android Lint 及 APK 构建通过，签名与旧包一致。回归脚本未在实体手机上执行。
+
+初始化位置回归：
+
+```bash
+pnpm test:android-layout --device emulator-5560 --theme dark
+```
+
+同样只允许临时模拟器，支持 `light`、`dark`、`starry`、`system`。脚本延迟模拟的认证响应，逐帧记录加载标志的位置和视口高度，重复三次并包含后台返回；JSON 保存在 `.wrangler/layout-*`。0.2.2 的三次均失败（标志上下位移约 38 CSS px，视口高度相差 76 px）；只修改原生窗口背景复用后，同一测试三次位移均为 0。测试不会提交密码或写入正式笔记。
+
+0.2.3 在 Android 14 / WebView 128 模拟器完成四种主题共 12 次位置检查，位移均为 0。夜间、星空、跟随系统的冷启动录屏没有亮帧或空白帧；夜间冷启动的 179 个加载标志采样帧位置一致。键盘弹出/收起、切换主题、横竖屏切换正常，未出现 JavaScript 异常；4 项原生单元测试、Android Lint 和构建通过。APK 签名与前版一致；未操作实体手机。
 
 2026-10-02，0.1.0 验证记录：
 

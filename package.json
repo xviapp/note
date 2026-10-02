@@ -1,6 +1,6 @@
 {
   "name": "xvi-note",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "private": true,
   "type": "module",
   "engines": {
@@ -17,6 +17,7 @@
     "test:build": "node --experimental-strip-types --test scripts/offline-shell.test.mjs",
     "test:android-cli": "node --test scripts/android.test.mjs",
     "test:android-startup": "node scripts/android-startup-check.mjs",
+    "test:android-layout": "node scripts/android-layout-check.mjs",
     "icons": "node scripts/brand-assets.mjs",
     "test:e2e": "playwright test",
     "db:local": "wrangler d1 migrations apply DB --local",

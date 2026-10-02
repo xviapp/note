@@ -74,7 +74,7 @@ npm ci
 npm run android:apk
 ```
 
-安装包输出为 `artifacts/yejian-0.2.2-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.2.2-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
+安装包输出为 `artifacts/yejian-0.2.3-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.2.3-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
 
 连接并授权 USB 调试后，可以一条命令构建、复制 APK 并覆盖安装，保留应用数据：
 
@@ -89,6 +89,8 @@ pnpm install:android
 0.2.1 统一替换页间图标：白天使用浅底青色书页，夜间和星空使用青底白色书页，覆盖登录、侧栏、加载页、网页图标和桌面安装入口。Android 桌面图标及启动画面提供系统深浅色资源，桌面图标的缓存刷新由系统控制。原稿、生成方式和平台适配见[应用图标](docs/branding.md)。
 
 0.2.2 修复深色主题下启动画面结束时的亮闪：原生窗口和 WebView 从首帧就采用保存的主题背景，跟随系统时按本次系统深浅色选择。
+
+0.2.3 修复初始化时的上下抖动：主题更新复用窗口背景，保留系统栏边距；窗口或键盘尺寸变化不再重复设置主题。
 
 ## 本地运行
 

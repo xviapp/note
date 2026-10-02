@@ -15,6 +15,7 @@ import org.json.JSONObject;
 
 public class MainActivity extends BridgeActivity {
     private static final String APPEARANCE_PREFS = "note-appearance";
+    private ColorDrawable themeBackground;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -65,7 +66,12 @@ public class MainActivity extends BridgeActivity {
     }
 
     private void applyThemeBackground(int color) {
-        getWindow().setBackgroundDrawable(new ColorDrawable(color));
+        // Replacing the window drawable resets DecorView's system-bar padding.
+        // Mutate the existing drawable after startup to preserve the viewport.
+        if (themeBackground == null) {
+            themeBackground = new ColorDrawable(color);
+            getWindow().setBackgroundDrawable(themeBackground);
+        } else themeBackground.setColor(color);
         getWindow().getDecorView().setBackgroundColor(color);
         bridge.getWebView().setBackgroundColor(color);
     }

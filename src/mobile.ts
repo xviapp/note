@@ -73,7 +73,8 @@ export function installMobile() {
       }),
     ]).catch(() => {});
   theme();
-  window.addEventListener('resize', theme);
+  // Insets and the keyboard resize the WebView without changing its theme.
+  // Reapplying native appearance on resize can feed back into window layout.
   new MutationObserver(theme).observe(document.documentElement, {
     attributes: true,
     attributeFilter: ['data-theme', 'data-theme-preference'],
