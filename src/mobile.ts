@@ -3,7 +3,7 @@ import { App } from '@capacitor/app';
 
 const device = registerPlugin<{
   openExternal(options: { url: string }): Promise<void>;
-  setBackground(options: { color: string }): Promise<void>;
+  setBackground(options: { color: string; preference: string }): Promise<void>;
   notify(options: { message: string }): Promise<void>;
   saveFile(options: {
     url?: string;
@@ -60,23 +60,23 @@ export function installMobile() {
     if (isActive) theme();
   });
   const theme = () =>
-    void SystemBars.setStyle({
-      style:
-        document.documentElement.dataset.theme === 'light'
-          ? SystemBarsStyle.Light
-          : SystemBarsStyle.Dark,
-    })
-      .then(() =>
-        device.setBackground({
-          color: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
-        }),
-      )
-      .catch(() => {});
+    void Promise.all([
+      device.setBackground({
+        color: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
+        preference: document.documentElement.dataset.themePreference || 'system',
+      }),
+      SystemBars.setStyle({
+        style:
+          document.documentElement.dataset.theme === 'light'
+            ? SystemBarsStyle.Light
+            : SystemBarsStyle.Dark,
+      }),
+    ]).catch(() => {});
   theme();
   window.addEventListener('resize', theme);
   new MutationObserver(theme).observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ['data-theme'],
+    attributeFilter: ['data-theme', 'data-theme-preference'],
   });
   const open = (url: URL) => (isFile(url) ? download(url) : device.openExternal({ url: url.href }));
   window.addEventListener('note:open-link', (event) => {

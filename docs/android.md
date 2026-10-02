@@ -12,6 +12,8 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 应用后台切换会触发已有阅读进度补写；系统返回键先处理当前浮层、弹窗、菜单、青藜和侧栏，再进入带草稿保护的页面导航，首页返回则最小化应用。系统栏图标跟随当前主题。Android 系统备份和设备迁移排除本地会话、缓存与草稿，正式内容保存在服务端。
 
+0.2.2 起，`MainActivity` 在首帧前设置窗口、DecorView 和 WebView 的主题背景，避免 Splash 退出时露出浅色底。`NoteDevice.setBackground` 同步保存主题选项；手动选择白天、夜间或星空时下次启动直接采用对应颜色，跟随系统时重新读取系统资源，避免应用关闭期间的系统主题变化留下旧颜色。原生背景色与 `src/themes.css` 保持一致，不依赖网络请求完成。
+
 更换自建服务需修改 `capacitor.config.ts` 的 `server.hostname` 并重新构建；使用有效 HTTPS 证书及与之对应的 Worker 站点域名。不要改成加载外部网站的 `server.url`，或添加通配的 `allowNavigation`。
 
 ## 构建
@@ -29,7 +31,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.2.1-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 3，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.2.2-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 4，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -38,6 +40,18 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 `e2e/notebook.spec.ts` 的 Android 返回测试覆盖弹窗关闭、最大化还原、侧栏收起、页面返回和未保存草稿保护；同一套测试同时运行在电脑和手机视口。已有预览、附件 PDF、图片和青藜窗口测试用于验证共用界面的回归。
 
 原生调试可在隔离模拟器中安装 APK，再使用 Playwright 的 `_android.devices()` 按模拟器序列号选取设备，通过 `device.webView({ pkg: 'app.xvi.note' }).page()` 连接 WebView。测试写入需将 `/api/` 请求全部转发到独立本地 Worker，使用测试密码与模拟 AI，避免触碰正式笔记或产生模型调用费用。原生文件下载不经过 Playwright 网络拦截，应另用本地生成的草稿或截图验证文档选择器和写入。
+
+启动闪烁回归使用已安装测试包、WebView 125+ 的临时 Android 14 模拟器，并需要本机 FFmpeg：
+
+```bash
+pnpm test:android-startup --device emulator-5560 --theme dark
+pnpm test:android-startup --device emulator-5560 --theme starry
+pnpm test:android-startup --device emulator-5560 --theme system
+```
+
+脚本拒绝真机，使用模拟登录状态设置本机主题，然后关闭进程并录下 6 秒冷启动。检测夜间 Splash 之后的浅色亮帧、全白或全黑空帧，同时确认启动画面确实退出；录屏和像素数据保存在 `.wrangler/startup-*`。检测范围排除居中的标识，保留 Android Splash 圆形退出动画中被染浅的背景区域。0.2.1 在同一环境出现了 3–5 个亮帧（约 50–80 ms）；只把固定的浅色 WebView 背景改成深色，对照试验即消除亮帧，正式实现按保存的主题选择背景。
+
+0.2.2 在 Android 14 / WebView 128 模拟器通过夜间、星空及跟随系统的冷启动录屏检查，亮帧和空白帧均为 0；应用关闭期间由系统深色切换到浅色、升级后尚无原生主题记录的场景也通过。4 项原生单元测试、Android Lint 及 APK 构建通过，签名与旧包一致。回归脚本未在实体手机上执行。
 
 2026-10-02，0.1.0 验证记录：
 

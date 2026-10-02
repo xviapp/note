@@ -29,7 +29,8 @@ public class NoteDevicePlugin extends Plugin {
     @PluginMethod
     public void setBackground(PluginCall call) {
         String color = call.getString("color", "");
-        if (!color.matches("#[0-9a-fA-F]{6}")) {
+        String preference = call.getString("preference", "system");
+        if (!color.matches("#[0-9a-fA-F]{6}") || !preference.matches("system|light|dark|starry")) {
             call.reject("无效的主题颜色。");
             return;
         }
@@ -37,8 +38,7 @@ public class NoteDevicePlugin extends Plugin {
             int value = Color.parseColor(color);
             // SystemBars handles icons and insets; the surrounding native surface
             // must also follow the app theme when it differs from Android's theme.
-            getActivity().getWindow().getDecorView().setBackgroundColor(value);
-            bridge.getWebView().setBackgroundColor(value);
+            ((MainActivity) getActivity()).setThemeBackground(value, preference);
             call.resolve();
         });
     }
