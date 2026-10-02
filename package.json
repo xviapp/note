@@ -15,6 +15,7 @@
     "check": "tsc --noEmit",
     "test": "vitest run",
     "test:build": "node --experimental-strip-types --test scripts/offline-shell.test.mjs",
+    "test:android-cli": "node --test scripts/android.test.mjs",
     "icons": "node scripts/brand-assets.mjs",
     "test:e2e": "playwright test",
     "db:local": "wrangler d1 migrations apply DB --local",
@@ -24,6 +25,7 @@
     "deploy": "npm run build && npm run db:remote && wrangler deploy --env production",
     "build:android": "node scripts/assets.mjs && tsc --noEmit && vite build --mode android && cap sync android",
     "android:apk": "npm run build:android && node scripts/android.mjs assembleDebug",
+    "install:android": "node scripts/android.mjs install",
     "android:open": "cap open android"
   },
   "dependencies": {

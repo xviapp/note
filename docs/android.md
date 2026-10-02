@@ -18,10 +18,12 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 - JDK 21；Node.js 22.12+；Android SDK Platform 36 / Build Tools 36。
 - `npm run android:apk`：构建前端、同步 Capacitor、编译调试 APK，并复制到 `artifacts/`。
+- `pnpm install:android`：先选定唯一可用设备，再完成上述构建并覆盖安装，保留应用数据；支持 `--device <序列号>` 或 `ANDROID_SERIAL` 指定目标。连接多个可用设备时必须指定，离线或未授权设备会报错，构建失败不会安装旧包。
 - `npm run build:android`：仅构建与同步包内资源。
 - `npm run android:open`：在 Android Studio 打开工程。
 - `node scripts/android.mjs testDebugUnitTest`：原生地址路由及下载边界测试。
 - `node scripts/android.mjs lintDebug`：Android 静态检查。
+- `pnpm test:android-cli`：用临时 SDK 和构建工具验证设备选择、安装顺序及失败时停止，不连接真实设备。
 
 构建脚本优先使用 `ANDROID_SDK_ROOT`，其次为有效的 `ANDROID_HOME` 和常见 SDK 目录，将本机 SDK 路径写入被 Git 忽略的 `android/local.properties`。APK、构建缓存、私钥及复制进原生工程的 Web 资源都不进入 Git；从新检出运行 `npm ci` 与 `npm run android:apk` 即可重建。
 

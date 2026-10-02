@@ -15,7 +15,7 @@
 | 迁移          | `0001_initial.sql`、`0002_assistant.sql`、`0003_chat_files.sql`、`0004_ai_reply_limit.sql` |
 | 清理任务      | 每 30 分钟                                                      |
 
-生产 D1 与 R2 是新建的独立资源，本地 `.wrangler/state` 和密码未改动。首次密码由使用者通过专属链接设置，部署验证没有初始化生产账号。专属链接和初始密钥保存在 Git 忽略的 `.wrangler/deploy/`，目录权限 0700，敏感文件权限 0600；不写入本记录。后续部署使用 `npm run deploy`，保留线上密钥；远端密码重置命令固定选择 `production`。
+生产 D1 与 R2 是新建的独立资源，本地 `.wrangler/state` 和密码未改动。首次密码由使用者通过专属链接设置，部署验证没有初始化生产账号。专属链接和初始密钥保存在 Git 忽略的 `.wrangler/deploy/`，目录权限 0700，敏感文件权限 0600；不写入本记录。后续部署使用 `pnpm run deploy`（或 `npm run deploy`），保留线上密钥；远端密码重置命令固定选择 `production`。`pnpm deploy` 是 pnpm 内置命令，不能省略 `run`。
 
 ## AI 回复更新
 

@@ -59,7 +59,7 @@ SVG 文件和论文内嵌 SVG 均作为独立矢量图片保存，保留路径�
 
 会话正文、附件原件及处理后的图片存在私有 R2，计入全库空间；文字按发送时的内容保存快照。随源文件进入回收站时保留，清空会话或永久删除源文件后由清理流程回收；其他笔记仍在使用的共享原文件不受影响，已生成的 Markdown 是独立子笔记。取消或失败留下的未引用上传由既有草稿清理机制回收。API Key 由 `APP_SECRET` 派生 AES-GCM 密钥加密后存入 D1，浏览器仅收到配置状态；轮换 `APP_SECRET` 后需要重新保存 AI Key，修改登录密码无需重新配置。
 
-`npm run deploy` 会先构建、应用生产数据库迁移，再部署新版；也可单独运行 `npm run db:remote`。本地启动脚本自动应用迁移。自动测试使用模拟 DeepSeek 响应；真实 API 联调需配置自己的有效 Key。
+`pnpm run deploy` 会先构建、应用生产数据库迁移，再部署新版；也可单独运行 `pnpm db:remote`。本地启动脚本自动应用迁移。自动测试使用模拟 DeepSeek 响应；真实 API 联调需配置自己的有效 Key。
 
 ## Android 客户端
 
@@ -75,6 +75,14 @@ npm run android:apk
 ```
 
 安装包输出为 `artifacts/yejian-0.2.1-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.2.1-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
+
+连接并授权 USB 调试后，可以一条命令构建、复制 APK 并覆盖安装，保留应用数据：
+
+```bash
+pnpm install:android
+```
+
+只有一个可用手机或模拟器时自动选择；多个设备时用 `pnpm install:android --device <设备序列号>`，也可通过 `ANDROID_SERIAL` 指定。脚本先检查设备，再开始构建，任一步失败即停止。查看帮助用 `pnpm install:android --help`；只生成安装包用 `pnpm android:apk`。也保留 `npm run install:android` 用法，npm 传参时需加 `--`。
 
 只更新客户端资源可执行 `npm run build:android`，打开原生工程用 `npm run android:open`。Web 构建仍输出到 `dist/`，Android 单独输出到 `dist-android/`。修改客户端后需要重新构建并安装 APK；部署网站不会替换已安装包内的界面。实现与验证方式见 [Android 客户端](docs/android.md)。
 
@@ -104,8 +112,10 @@ npm run dev
 后续更新：
 
 ```bash
-npm run deploy
+pnpm run deploy
 ```
+
+这里的 `run` 不能省略：[`pnpm deploy` 是 pnpm 内置的工作区打包命令](https://pnpm.io/10.x/cli/deploy)，不执行本站的部署脚本。也可以继续使用 `npm run deploy`。
 
 此命令在构建或数据库迁移失败时停止，不会继续发布。部署保留既有云端 Secrets。当前部署的专属首次设置链接保存在本机 `.wrangler/deploy/setup-link.txt`，不进入 Git；初始化后该链接不能再次设置密码。
 
@@ -130,7 +140,7 @@ npm run deploy
    npx wrangler secret put SETUP_TOKEN --env production
    ```
 
-3. 运行 `npm run deploy`，打开 `https://你的站点/#setup=刚设置的SETUP_TOKEN`，由自己设置密码。初始化原子提交，完成后此链接无法再次设置密码。首次部署也支持 `npm run deploy -- --secrets-file 私有JSON文件路径`，JSON 包含上述两个密钥；仅将其作为首次配置使用，后续更新直接运行 `npm run deploy`。
+3. 运行 `pnpm run deploy`，打开 `https://你的站点/#setup=刚设置的SETUP_TOKEN`，由自己设置密码。初始化原子提交，完成后此链接无法再次设置密码。首次部署也支持 `pnpm run deploy --secrets-file 私有JSON文件路径`，JSON 包含上述两个密钥；仅将其作为首次配置使用，后续更新直接运行 `pnpm run deploy`。
 
 4. 在 Cloudflare 控制台检查 Cron、请求日志、CPU 和 R2/D1 用量。可以在 `env.production.vars.APP_NAME` 修改站点名称。部署端重置命令的 `--remote` 已固定使用生产环境。
 
