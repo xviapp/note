@@ -75,7 +75,7 @@ npm ci
 npm run android:apk
 ```
 
-安装包输出为 `artifacts/yejian-0.4.4-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.4.4-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
+安装包输出为 `artifacts/yejian-0.4.5-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后执行 `adb install -r artifacts/yejian-0.4.5-android-debug.apk`。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
 
 连接并授权 USB 调试后，可以一条命令构建、复制 APK 并覆盖安装，保留应用数据：
 
