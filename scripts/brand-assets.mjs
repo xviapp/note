@@ -9,6 +9,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'public/brand');
 const native = path.join(root, 'android/app/src/main/res');
 const temporary = path.join(root, '.wrangler/brand');
+const palette = { paper: '#F9F2E7', green: '#426B55' };
 const run = (command, args) => {
   const result = spawnSync(command, args, { stdio: 'inherit' });
   if (result.error || result.status !== 0) throw result.error || new Error(`${command} failed`);
@@ -23,8 +24,17 @@ if (
   throw new Error('Expected the approved staff, leaf and book paths');
 for (const variant of ['day', 'night']) {
   const source = path.join(root, `assets/brand/${variant}-original.png`);
-  const background = variant === 'day' ? '#F9F7F3' : '#155B57';
-  const foreground = variant === 'day' ? '#155B57' : '#F9F7F3';
+  const background = variant === 'day' ? palette.paper : palette.green;
+  const foreground = variant === 'day' ? palette.green : palette.paper;
+  await writeFile(
+    path.join(native, variant === 'day' ? 'values' : 'values-night', 'ic_launcher_background.xml'),
+    `<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <color name="ic_launcher_background">${background}</color>
+    <color name="brand_mark">${foreground}</color>
+</resources>
+`,
+  );
   const svg = path.join(temporary, `${variant}.svg`);
   await writeFile(
     svg,

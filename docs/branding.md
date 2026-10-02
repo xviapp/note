@@ -11,7 +11,7 @@
 - `public/android-webview.html`：旧系统网页组件提示页使用相同标识和主题规则。
 - `android/app/src/main/res/`：普通和圆形桌面图标共用自适应前景，单色主题图标复用其轮廓；启动画面也使用同一前景。
 
-Android 原生图标直接复用同一组三条路径及木杖、叶片的位移，使用米白 `#F9F7F3` 与青色 `#155B57`，通过 `values/` 与 `values-night/` 对换前景和背景。前景采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
+Android 原生图标直接复用同一组三条路径及木杖、叶片的位移，使用暖米白 `#F9F2E7` 与柔和深绿 `#426B55`，通过 `values/` 与 `values-night/` 对换前景和背景。网页与 Android 配色由 `scripts/brand-assets.mjs` 统一生成，保留原矢量轮廓，不加入位图纹理。前景采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
 
 网页与应用内标识跟随页间所选主题。Android 桌面图标和启动画面跟随系统深浅色，桌面的图标缓存刷新时间由系统决定。浏览器添加到主屏幕时使用当前主题的安装图标；已经安装的网页快捷方式是否刷新图标由浏览器及系统决定。
 
