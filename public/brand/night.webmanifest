@@ -1,0 +1,25 @@
+{
+  "id": "/",
+  "name": "页间",
+  "short_name": "页间",
+  "lang": "zh-CN",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "background_color": "#202824",
+  "theme_color": "#202824",
+  "icons": [
+    {
+      "src": "/brand/night-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/brand/night-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    }
+  ]
+}

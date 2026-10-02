@@ -3,6 +3,14 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <link
+      rel="icon"
+      type="image/png"
+      href="/brand/day-64.png"
+      data-brand-light="/brand/day-64.png"
+      data-brand-dark="/brand/night-64.png"
+    />
+    <script src="/theme-init.js"></script>
     <title>页间</title>
     <style>
       :root {
@@ -15,6 +23,24 @@
         min-height: 75vh;
         display: grid;
         align-content: center;
+        background: #f9f7f3;
+        color: #155b57;
+      }
+      :root[data-theme='dark'] body,
+      :root[data-theme='starry'] body {
+        background: #202824;
+        color: #f9f7f3;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        font-size: 22px;
+      }
+      .brand img {
+        width: 56px;
+        height: 56px;
+        border-radius: 14px;
       }
       h1 {
         font-size: 24px;
@@ -28,6 +54,14 @@
     </style>
   </head>
   <body>
+    <div class="brand">
+      <img
+        src="/brand/day-128.png"
+        data-brand-light="/brand/day-128.png"
+        data-brand-dark="/brand/night-128.png"
+        alt=""
+      /><span>页间</span>
+    </div>
     <h1>请更新系统网页组件</h1>
     <p>
       页间需要 Android System WebView 125 或更新版本。请在手机应用商店更新 Android System WebView 和

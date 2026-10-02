@@ -184,7 +184,7 @@ progress::-moz-progress-bar {
   color: var(--blue);
   text-decoration: none;
 }
-:where(.icon-button, .button, .main-nav button, .new-note-button, .brand-mark) > .lucide {
+:where(.icon-button, .button, .main-nav button, .new-note-button) > .lucide {
   stroke-width: 1.65;
 }
 .text-button {
@@ -298,15 +298,12 @@ progress::-moz-progress-bar {
   white-space: nowrap;
 }
 .brand-mark {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
+  display: block;
+  flex-shrink: 0;
+  width: 44px;
   height: 44px;
-  border-radius: 6px 14px 14px 6px;
-  color: var(--blue);
-  background: var(--selected);
-  box-shadow: inset 3px 0 0 var(--line-strong);
+  object-fit: contain;
+  border-radius: 12px;
 }
 
 .auth-screen {
@@ -388,8 +385,8 @@ progress::-moz-progress-bar {
   font-size: 25px;
 }
 .sidebar .brand-mark {
-  width: 38px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
 }
 .new-note-button {
   display: flex;

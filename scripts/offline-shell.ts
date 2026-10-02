@@ -67,11 +67,17 @@ export function offlineShell(): Plugin {
         packedBytes = 0;
       };
       for (const [file, content] of contents) {
-        if (!/\.(?:woff2|bcmap|pfb|ttf|otf)$/.test(file)) continue;
+        if (!/\.(?:woff2|bcmap|pfb|ttf|otf|png|ico)$/.test(file)) continue;
         if (packedBytes + content.length > 2_000_000) await flushPack();
         entries.push([
           file,
-          file.endsWith('.woff2') ? 'font/woff2' : 'application/octet-stream',
+          file.endsWith('.woff2')
+            ? 'font/woff2'
+            : file.endsWith('.png')
+              ? 'image/png'
+              : file.endsWith('.ico')
+                ? 'image/x-icon'
+                : 'application/octet-stream',
           await readFile(path.join(output, file.slice(1)), 'base64'),
         ]);
         packed.add(file);

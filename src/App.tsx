@@ -1,6 +1,5 @@
 import { useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
 import {
-  BookOpen,
   Clock3,
   FolderOpen,
   HardDriveDownload,
@@ -32,6 +31,7 @@ import { dismissReadingOverlay } from './mobile-back';
 import { useOffline } from './connectivity';
 import { OfflineLibrary } from './components/OfflineCache';
 import { cacheSnapshot, initializeCache } from './offline-cache';
+import { Brand } from './components/Brand';
 
 type View = 'tree' | 'favorites' | 'recent' | 'offline' | 'trash' | 'settings';
 const routeId = () => window.location.pathname.match(/^\/n\/([a-zA-Z0-9_-]+)$/)?.[1] || null;
@@ -98,16 +98,6 @@ export default function App() {
     <Notebook name={status.name} onLogout={refresh} />
   ) : (
     <AuthScreen status={status} token={setupToken} onSuccess={refresh} />
-  );
-}
-function Brand({ name = '页间' }: { name?: string }) {
-  return (
-    <div className="brand">
-      <span className="brand-mark">
-        <BookOpen size={22} strokeWidth={1.6} />
-      </span>
-      <span>{name}</span>
-    </div>
   );
 }
 function AuthScreen({
