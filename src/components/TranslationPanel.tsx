@@ -350,7 +350,7 @@ export function TranslationPanel(props: {
                   }}
                 >
                   <Quote size={14} />
-                  加入助手
+                  问青藜
                 </button>
                 <span className="toolbar-spacer" />
                 {busy === 'translation' ? (

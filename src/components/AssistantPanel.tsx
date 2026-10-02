@@ -387,7 +387,7 @@ export function AssistantPanel(props: Props) {
           ) : null}
           {messages.map((message) => (
             <article className={`chat-message chat-${message.role}`} key={message.id}>
-              <div className="chat-role">{message.role === 'user' ? '你' : 'DeepSeek'}</div>
+              <div className="chat-role">{message.role === 'user' ? '你' : '青藜'}</div>
               {message.quote && (
                 <details className="chat-quote">
                   <summary>引用文字</summary>
@@ -400,7 +400,7 @@ export function AssistantPanel(props: Props) {
                   aria-label="查看会话截图"
                   onClick={() => props.onImage(fileUrl(message.image!.id), '会话截图')}
                 >
-                  <img src={fileUrl(message.image.id)} alt="发送给助手的截图" loading="lazy" />
+                  <img src={fileUrl(message.image.id)} alt="发送给青藜的截图" loading="lazy" />
                 </button>
               )}
               {message.files?.map((file, index) => (
@@ -625,11 +625,11 @@ export function AssistantPanel(props: Props) {
           </div>
           <textarea
             ref={promptInput}
-            aria-label="发给助手的问题"
+            aria-label="发给青藜的问题"
             rows={3}
             maxLength={AI_PROMPT_LIMIT}
             value={prompt}
-            placeholder="问问这篇文件…"
+            placeholder="问问青藜…"
             disabled={sending}
             onChange={(e) => setPrompt(e.target.value)}
             onKeyDown={(e) => {

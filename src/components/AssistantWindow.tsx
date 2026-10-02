@@ -147,19 +147,19 @@ export function AssistantWindow({
           left: viewport.x + viewport.width - margin,
           top: viewport.y + viewport.height - margin,
         }}
-        aria-label="打开文件助手"
+        aria-label="打开青藜"
         title={busy ? `${title} · 正在回复` : title}
         onClick={onOpen}
       >
         <Bot size={20} />
-        <span>文件助手</span>
+        <span>青藜</span>
         {busy && <span className="assistant-busy-dot" aria-label="正在回复" />}
       </button>
       <aside
         ref={panel}
         className={`assistant-panel assistant-${mode}${dragging ? ' is-dragging' : ''}`}
         style={geometry}
-        aria-label="文件 AI 助手"
+        aria-label="青藜"
         hidden={!visible || hidden}
         tabIndex={-1}
         onKeyDown={(event) => {
@@ -199,7 +199,7 @@ export function AssistantWindow({
           <div
             className="assistant-drag-handle"
             role="group"
-            aria-label="移动助手窗口"
+            aria-label="移动青藜窗口"
             tabIndex={mode === 'floating' ? 0 : -1}
             title={mode === 'floating' ? '拖动移动，方向键微调' : undefined}
             onPointerDown={(event) => {
@@ -249,14 +249,14 @@ export function AssistantWindow({
           >
             <strong>
               <Bot size={18} />
-              文件助手
+              青藜
             </strong>
             <span title={title}>{title}</span>
           </div>
           {actions}
           <button
             className="icon-button"
-            aria-label={mode === 'docked' ? '悬浮助手' : '贴边助手'}
+            aria-label={mode === 'docked' ? '悬浮青藜' : '贴边青藜'}
             title={mode === 'docked' ? '悬浮' : '贴边'}
             onClick={() => onModeChange(mode === 'docked' ? 'floating' : 'docked')}
           >
@@ -264,13 +264,13 @@ export function AssistantWindow({
           </button>
           <button
             className="icon-button"
-            aria-label={fullscreen ? '还原助手' : '最大化助手'}
+            aria-label={fullscreen ? '还原青藜' : '最大化青藜'}
             title={fullscreen ? '还原' : '最大化'}
             onClick={toggleMaximized}
           >
             {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
-          <button className="icon-button" aria-label="关闭助手" title="收起助手" onClick={close}>
+          <button className="icon-button" aria-label="关闭青藜" title="收起青藜" onClick={close}>
             <X size={18} />
           </button>
         </header>

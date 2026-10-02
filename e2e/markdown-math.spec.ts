@@ -130,7 +130,7 @@ test('chat renders the reported formula and exported Markdown while keeping TeX 
     await route.fulfill({ status: response.status(), json: saved });
   });
   await page.goto(`/n/${node.id}`);
-  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  await page.getByRole('button', { name: '青藜', exact: true }).click();
   const reply = page.locator('.chat-assistant');
   await expect(reply.locator('.katex-display')).toHaveCount(1);
   await expect(reply.locator('.katex-error')).toHaveCount(0);

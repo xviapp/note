@@ -131,7 +131,7 @@ export default {
         }
         if (action === 'assistant/files' && method === 'POST') {
           const node = await getNode(env, id);
-          if (node.kind === 'folder') throw new AppError(400, '请打开一个文件使用助手。');
+          if (node.kind === 'folder') throw new AppError(400, '请打开一个文件与青藜对话。');
           return json(await uploadChatFile(env, request), 201);
         }
         if (action === 'assistant' && method === 'GET')

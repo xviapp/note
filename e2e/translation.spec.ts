@@ -208,15 +208,15 @@ test('floating translations save, remember language, copy, pin, maximize, and qu
   await launch(page, page.locator('.read-content p').first());
   await expect(panel(page).getByRole('combobox')).toHaveValue('en');
   expect(fixture.generated).toHaveLength(2);
-  await panel(page).getByRole('button', { name: '加入助手', exact: true }).click();
-  const assistant = page.getByRole('complementary', { name: '文件 AI 助手' });
+  await panel(page).getByRole('button', { name: '问青藜', exact: true }).click();
+  const assistant = page.getByRole('complementary', { name: '青藜' });
   await expect(assistant.locator('.context-quote')).toContainText(selected);
   await expect(assistant.locator('.context-quote')).toContainText('The translated passage.');
-  await assistant.getByRole('textbox', { name: '发给助手的问题' }).fill('保留问题草稿');
-  await assistant.getByRole('button', { name: '关闭助手' }).click();
+  await assistant.getByRole('textbox', { name: '发给青藜的问题' }).fill('保留问题草稿');
+  await assistant.getByRole('button', { name: '关闭青藜' }).click();
   await launch(page, page.locator('.read-content p').first());
-  await panel(page).getByRole('button', { name: '加入助手', exact: true }).click();
-  await expect(assistant.getByRole('textbox', { name: '发给助手的问题' })).toHaveValue(
+  await panel(page).getByRole('button', { name: '问青藜', exact: true }).click();
+  await expect(assistant.getByRole('textbox', { name: '发给青藜的问题' })).toHaveValue(
     '保留问题草稿',
   );
   expect(fixture.chatPosts).toEqual([]);

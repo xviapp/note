@@ -67,7 +67,7 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
     <section className="settings-section ai-settings">
       <h2>
         <Bot size={19} />
-        AI 助手
+        青藜
       </h2>
       <div className="setting-row">
         <div>

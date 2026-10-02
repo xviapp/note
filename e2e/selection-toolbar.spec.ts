@@ -118,7 +118,7 @@ test('selection toolbar copies, offers translation, and dismisses without editin
   await page.keyboard.press('Tab');
   await expect(toolbar(page).getByRole('button', { name: '复制', exact: true })).toBeFocused();
   await page.keyboard.press('ArrowRight');
-  await expect(toolbar(page).getByRole('button', { name: '加入助手', exact: true })).toBeFocused();
+  await expect(toolbar(page).getByRole('button', { name: '问青藜', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(toolbar(page)).toHaveCount(0);
   await selectText(page, text);
@@ -152,25 +152,25 @@ test('selection quotes open the current assistant, retain a draft, and work in m
 }, info) => {
   const { create, posts } = await prepare(page, baseURL!);
   await selectText(page, page.locator('.read-content p').first());
-  const join = toolbar(page).getByRole('button', { name: '加入助手', exact: true });
+  const join = toolbar(page).getByRole('button', { name: '问青藜', exact: true });
   if (info.project.name === 'mobile') await join.tap();
   else await join.click();
-  const panel = page.getByRole('complementary', { name: '文件 AI 助手' });
+  const panel = page.getByRole('complementary', { name: '青藜' });
   await expect(panel).toBeVisible();
   await expect(panel.locator('.context-quote')).toContainText(paragraph);
   await expect(toolbar(page)).toHaveCount(0);
-  const input = panel.getByRole('textbox', { name: '发给助手的问题' });
+  const input = panel.getByRole('textbox', { name: '发给青藜的问题' });
   await input.fill('这个问题先留在草稿里');
-  await panel.getByRole('button', { name: '关闭助手', exact: true }).click();
+  await panel.getByRole('button', { name: '关闭青藜', exact: true }).click();
   await selectText(page, page.locator('.read-content p').nth(1));
-  await toolbar(page).getByRole('button', { name: '加入助手', exact: true }).click();
+  await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
   await expect(panel.locator('.context-quote')).toHaveText('公式 $E=mc^2$。');
   await expect(input).toHaveValue('这个问题先留在草稿里');
-  await panel.getByRole('button', { name: '最大化助手', exact: true }).click();
+  await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await selectText(page, panel.locator('.chat-assistant .markdown-body p').first());
   await assertInViewport(page);
   await page.screenshot({ path: info.outputPath('selection-chat.png') });
-  await toolbar(page).getByRole('button', { name: '加入助手', exact: true }).click();
+  await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
   await expect(panel.locator('.context-quote')).toContainText('这里是助手的一段回复');
   await expect(input).toHaveValue('这个问题先留在草稿里');
   expect(posts).toEqual([]);
@@ -178,7 +178,7 @@ test('selection quotes open the current assistant, retain a draft, and work in m
   const other = await create({ kind: 'text', title: '另一个文件', content: '另一个文件的内容。' });
   await page.goto(`/n/${other.id}`);
   await expect(toolbar(page)).toHaveCount(0);
-  await page.getByRole('button', { name: 'AI 助手', exact: true }).click();
+  await page.getByRole('button', { name: '青藜', exact: true }).click();
   await expect(panel.locator('.context-quote')).toHaveCount(0);
   await expect(input).toHaveValue('');
 });
@@ -219,7 +219,7 @@ test('PDF text and modal attachments support selection actions, including dialog
   await selectText(page, text);
   await assertInViewport(page);
   await page.screenshot({ path: info.outputPath('selection-pdf.png') });
-  await toolbar(page).getByRole('button', { name: '加入助手', exact: true }).click();
+  await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
   await expect(page.locator('.context-quote')).toContainText('Selected PDF text');
   const parent = await create({
     kind: 'markdown',
@@ -236,7 +236,7 @@ test('PDF text and modal attachments support selection actions, including dialog
   await expect(toolbar(page)).toHaveCount(0);
   await expect(dialog).toBeVisible();
   await selectText(page, dialog.locator('.pdf-text-layer span').first());
-  await toolbar(page).getByRole('button', { name: '加入助手', exact: true }).click();
+  await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
   await expect(dialog).toHaveCount(0);
   await expect(page.locator('.context-quote')).toContainText('Selected PDF text');
 });
@@ -253,8 +253,8 @@ test('oversized quotes are not silently truncated or substituted for a draft', a
   });
   await page.goto(`/n/${node.id}`);
   await selectText(page, page.locator('.plain-text'));
-  await toolbar(page).getByRole('button', { name: '加入助手', exact: true }).click();
-  await expect(page.getByRole('complementary', { name: '文件 AI 助手' })).toBeHidden();
+  await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
+  await expect(page.getByRole('complementary', { name: '青藜' })).toBeHidden();
   await expect(page.locator('.context-quote')).toHaveCount(0);
   await expect(toolbar(page).getByRole('status')).toContainText('请缩小选择范围');
   expect(posts).toEqual([]);

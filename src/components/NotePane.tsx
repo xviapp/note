@@ -148,7 +148,7 @@ export default function NotePane(props: Props) {
     return clearSourceHighlight;
   }, [id, note?.content, editing]);
   const addQuote = (text: string) => {
-    if (!assistantActions.current) return '助手尚未就绪，请稍后重试。';
+    if (!assistantActions.current) return '青藜尚未就绪，请稍后重试。';
     const error = assistantActions.current.addQuote(text);
     if (error) return error;
     setTranslation(null);
@@ -488,9 +488,9 @@ export default function NotePane(props: Props) {
           {note.kind !== 'folder' && !editing && (
             <button
               className={`icon-button ${assistantOpen ? 'is-active' : ''}`}
-              aria-label="AI 助手"
+              aria-label="青藜"
               aria-expanded={assistantOpen}
-              title="AI 助手"
+              title="青藜"
               onClick={() => {
                 setAssistantOpen((value) => !value);
               }}
