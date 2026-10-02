@@ -1,19 +1,20 @@
-import { useEffect, useState } from 'react';
-import { ChevronDown, ChevronRight, MoreHorizontal, Plus } from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { ChevronDown, ChevronRight, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import { PARENT_KINDS, type NoteNode } from '../../shared/types';
 import { NodeIcon, Spinner } from './Primitives';
 import { OfflineSaveButton } from './OfflineCache';
+import { useNodeListing, type NodeListing as Listing } from '../use-node-listing';
+import { useOffline } from '../connectivity';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
-type Listing = { nodes: NoteNode[]; nextOffset: number | null };
 export interface TreeProps {
   refresh: number;
+  onRefresh: () => Promise<void>;
   selected: string | null;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
   onDrop: (id: string, parent: string | null) => void;
-  onError: (error: unknown) => void;
 }
 export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreeProps['onAction'] }) {
   return (
@@ -41,10 +42,14 @@ export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreePro
 function Branch({
   parent,
   depth = 0,
+  onLoading,
   ...props
-}: TreeProps & { parent: string | null; depth?: number }) {
-  const [listing, setListing] = useState<Listing | null>(null);
-  const [error, setError] = useState('');
+}: TreeProps & {
+  parent: string | null;
+  depth?: number;
+  onLoading: (request: symbol, loading: boolean) => void;
+}) {
+  const { listing, error, loading, more } = useNodeListing(`parent=${parent || ''}`, props.refresh);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     try {
       return new Set(JSON.parse(sessionStorage.getItem('expanded-nodes') || '[]'));
@@ -53,19 +58,11 @@ function Branch({
     }
   });
   useEffect(() => {
-    let live = true;
-    setError('');
-    api<Listing>(`/api/nodes?parent=${parent || ''}`)
-      .then((result) => {
-        if (live) setListing(result);
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [parent, props.refresh]);
+    if (!loading) return;
+    const request = Symbol();
+    onLoading(request, true);
+    return () => onLoading(request, false);
+  }, [loading, onLoading]);
   const toggle = (id: string) =>
     setExpanded((previous) => {
       const next = new Set(previous);
@@ -77,91 +74,123 @@ function Branch({
       }
       return next;
     });
-  const more = async () => {
-    try {
-      const result = await api<Listing>(
-        `/api/nodes?parent=${parent || ''}&offset=${listing?.nextOffset}`,
-      );
-      setListing((previous) => ({
-        nodes: [...(previous?.nodes || []), ...result.nodes],
-        nextOffset: result.nextOffset,
-      }));
-    } catch (e) {
-      props.onError(e);
-    }
-  };
-  if (error) return <p className="inline-error small">{error}</p>;
-  if (!listing) return <Spinner label="加载目录…" />;
-  if (!listing.nodes.length) return depth === 0 ? <p className="tree-empty">暂无笔记</p> : null;
+  if (!listing)
+    return error ? (
+      <p className="inline-error small" role="status">
+        {error}
+      </p>
+    ) : (
+      <Spinner label="加载目录…" />
+    );
   return (
-    <ul
-      className="tree-branch"
-      role={depth ? 'group' : 'tree'}
-      aria-label={depth ? undefined : '笔记树'}
-    >
-      {listing.nodes.map((node) => {
-        const hasChildren = PARENT_KINDS.includes(node.kind),
-          open = expanded.has(node.id);
-        return (
-          <li
-            key={node.id}
-            role="treeitem"
-            aria-selected={props.selected === node.id}
-            aria-expanded={hasChildren ? open : undefined}
-          >
-            <div
-              className={`tree-row ${props.selected === node.id ? 'selected' : ''}`}
-              style={{ paddingLeft: 8 + Math.min(depth, 10) * 15 }}
-              draggable
-              onDragStart={(e) => {
-                e.dataTransfer.setData('text/x-note-id', node.id);
-                e.dataTransfer.effectAllowed = 'move';
-              }}
-              onDragOver={(e) => {
-                if (hasChildren && e.dataTransfer.types.includes('text/x-note-id')) {
-                  e.preventDefault();
-                  e.currentTarget.classList.add('drop-target');
-                }
-              }}
-              onDragLeave={(e) => e.currentTarget.classList.remove('drop-target')}
-              onDrop={(e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                e.currentTarget.classList.remove('drop-target');
-                if (hasChildren) props.onDrop(e.dataTransfer.getData('text/x-note-id'), node.id);
-              }}
-            >
-              <button
-                className={`tree-chevron ${hasChildren ? '' : 'invisible'}`}
-                tabIndex={hasChildren ? 0 : -1}
-                aria-label={`${open ? '收起' : '展开'} ${node.title}`}
-                onClick={() => toggle(node.id)}
-              >
-                {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
-              </button>
-              <button className="tree-label" onClick={() => props.onOpen(node)} title={node.title}>
-                <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
-                <span>{node.title}</span>
-              </button>
-              <NodeMenu node={node} onAction={props.onAction} />
-            </div>
-            {hasChildren && open && depth < 100 && (
-              <Branch {...props} parent={node.id} depth={depth + 1} />
-            )}
-          </li>
-        );
-      })}
-      {listing.nextOffset !== null && (
-        <li role="none">
-          <button className="text-button load-more" onClick={more}>
-            加载更多
-          </button>
-        </li>
+    <>
+      {error && (
+        <p className="inline-error small" role="status">
+          {error}
+        </p>
       )}
-    </ul>
+      {!listing.nodes.length && depth === 0 && <p className="tree-empty">暂无笔记</p>}
+      <ul
+        className="tree-branch"
+        role={depth ? 'group' : 'tree'}
+        aria-label={depth ? undefined : '笔记树'}
+        aria-busy={loading}
+      >
+        {listing.nodes.map((node) => {
+          const hasChildren = PARENT_KINDS.includes(node.kind),
+            open = expanded.has(node.id);
+          return (
+            <li
+              key={node.id}
+              role="treeitem"
+              aria-selected={props.selected === node.id}
+              aria-expanded={hasChildren ? open : undefined}
+            >
+              <div
+                className={`tree-row ${props.selected === node.id ? 'selected' : ''}`}
+                style={{ paddingLeft: 8 + Math.min(depth, 10) * 15 }}
+                draggable
+                onDragStart={(e) => {
+                  e.dataTransfer.setData('text/x-note-id', node.id);
+                  e.dataTransfer.effectAllowed = 'move';
+                }}
+                onDragOver={(e) => {
+                  if (hasChildren && e.dataTransfer.types.includes('text/x-note-id')) {
+                    e.preventDefault();
+                    e.currentTarget.classList.add('drop-target');
+                  }
+                }}
+                onDragLeave={(e) => e.currentTarget.classList.remove('drop-target')}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  e.stopPropagation();
+                  e.currentTarget.classList.remove('drop-target');
+                  if (hasChildren) props.onDrop(e.dataTransfer.getData('text/x-note-id'), node.id);
+                }}
+              >
+                <button
+                  className={`tree-chevron ${hasChildren ? '' : 'invisible'}`}
+                  tabIndex={hasChildren ? 0 : -1}
+                  aria-label={`${open ? '收起' : '展开'} ${node.title}`}
+                  onClick={() => toggle(node.id)}
+                >
+                  {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                </button>
+                <button
+                  className="tree-label"
+                  onClick={() => props.onOpen(node)}
+                  title={node.title}
+                >
+                  <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
+                  <span>{node.title}</span>
+                </button>
+                <NodeMenu node={node} onAction={props.onAction} />
+              </div>
+              {hasChildren && open && depth < 100 && (
+                <Branch {...props} onLoading={onLoading} parent={node.id} depth={depth + 1} />
+              )}
+            </li>
+          );
+        })}
+        {listing.nextOffset !== null && (
+          <li role="none">
+            <button className="text-button load-more" onClick={more} disabled={loading}>
+              {loading ? '正在加载…' : '加载更多'}
+            </button>
+          </li>
+        )}
+      </ul>
+    </>
   );
 }
 export function Tree(props: TreeProps) {
+  const offline = useOffline();
+  const [requests, setRequests] = useState(new Set<symbol>());
+  const [manualBusy, setManualBusy] = useState(false);
+  const [error, setError] = useState('');
+  const onLoading = useCallback((request: symbol, loading: boolean) => {
+    setRequests((previous) => {
+      if (previous.has(request) === loading) return previous;
+      const next = new Set(previous);
+      if (loading) next.add(request);
+      else next.delete(request);
+      return next;
+    });
+    if (loading) setError('');
+  }, []);
+  const busy = manualBusy || requests.size > 0;
+  const refresh = async () => {
+    if (busy) return;
+    setManualBusy(true);
+    setError('');
+    try {
+      await props.onRefresh();
+    } catch (error) {
+      setError((error as Error).message);
+    } finally {
+      setManualBusy(false);
+    }
+  };
   return (
     <div className="tree">
       <div
@@ -174,10 +203,30 @@ export function Tree(props: TreeProps) {
           props.onDrop(e.dataTransfer.getData('text/x-note-id'), null);
         }}
       >
-        <span>我的笔记</span>
-        <span className="root-drop-hint">可拖到此处移至根目录</span>
+        <span title="可拖到此处移至根目录">我的笔记</span>
+        <button
+          type="button"
+          className={`icon-button tree-refresh ${busy ? 'is-loading' : ''}`}
+          aria-label="刷新目录"
+          title={busy ? '正在刷新目录' : '刷新目录'}
+          aria-busy={busy}
+          disabled={busy}
+          onClick={refresh}
+        >
+          <RefreshCw size={16} />
+        </button>
       </div>
-      <Branch {...props} parent={null} />
+      {offline && (
+        <p className="tree-offline" role="status">
+          离线目录
+        </p>
+      )}
+      {error && (
+        <p className="inline-error small tree-refresh-error" role="status">
+          {error}
+        </p>
+      )}
+      <Branch {...props} onLoading={onLoading} parent={null} />
     </div>
   );
 }
@@ -246,10 +295,7 @@ export function NodePicker({
         .filter((node) => node.id !== exclude && (!parentsOnly || PARENT_KINDS.includes(node.kind)))
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
-            <button
-              type="button"
-              onClick={() => onSelect(node.id, node.title)}
-            >
+            <button type="button" onClick={() => onSelect(node.id, node.title)}>
               <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
               <span>{node.title}</span>
             </button>

@@ -28,9 +28,9 @@ import { ThemeSwitcher } from './components/ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../shared/password';
 import { openLink } from './open-link';
 import { dismissReadingOverlay } from './mobile-back';
-import { useOffline } from './connectivity';
+import { isOffline, useOffline } from './connectivity';
 import { OfflineLibrary } from './components/OfflineCache';
-import { cacheSnapshot, initializeCache } from './offline-cache';
+import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
 import { Brand } from './components/Brand';
 
@@ -45,15 +45,32 @@ export default function App() {
     if (value) history.replaceState(null, '', window.location.pathname);
     return value;
   });
-  const refresh = useCallback(async () => {
-    try {
-      const state = await api<AuthStatus>('/api/auth/status');
-      if (!state.authenticated) lockEdits();
-      setStatus(state);
-      setError('');
-    } catch (e) {
-      setError((e as Error).message);
-    }
+  const authRequest = useRef<{
+    epoch: ReturnType<typeof cacheEpoch>;
+    promise: Promise<boolean>;
+  } | null>(null);
+  const refresh = useCallback(() => {
+    const epoch = cacheEpoch();
+    if (authRequest.current?.epoch === epoch) return authRequest.current.promise;
+    const request = (async () => {
+      try {
+        const state = await api<AuthStatus>('/api/auth/status');
+        if (!state.authenticated) lockEdits();
+        setStatus(state);
+        setError('');
+        const connected = state.authenticated && !isOffline();
+        if (connected) window.dispatchEvent(new Event('note:library-refresh'));
+        return connected;
+      } catch (e) {
+        setError((e as Error).message);
+        return false;
+      }
+    })();
+    authRequest.current = { epoch, promise: request };
+    void request.finally(() => {
+      if (authRequest.current?.promise === request) authRequest.current = null;
+    });
+    return request;
   }, []);
   useEffect(() => {
     void refresh();
@@ -63,14 +80,18 @@ export default function App() {
       setStatus((previous) => (previous ? { ...previous, authenticated: false } : null));
       void refresh();
     };
+    let focusTimer: ReturnType<typeof setTimeout> | undefined;
     const focus = () => {
-      if (document.visibilityState === 'visible') void refresh();
+      clearTimeout(focusTimer);
+      if (document.visibilityState === 'visible')
+        focusTimer = setTimeout(() => void refresh(), 100);
     };
     window.addEventListener('note:unauthenticated', expired);
     window.addEventListener('focus', focus);
     window.addEventListener('note:cache-reset', focus);
     document.addEventListener('visibilitychange', focus);
     return () => {
+      clearTimeout(focusTimer);
       window.removeEventListener('note:unauthenticated', expired);
       window.removeEventListener('focus', focus);
       window.removeEventListener('note:cache-reset', focus);
@@ -96,7 +117,7 @@ export default function App() {
       </div>
     );
   return status.authenticated ? (
-    <Notebook name={status.name} onLogout={refresh} />
+    <Notebook name={status.name} onCheckSession={refresh} />
   ) : (
     <AuthScreen status={status} token={setupToken} onSuccess={refresh} />
   );
@@ -108,7 +129,7 @@ function AuthScreen({
 }: {
   status: AuthStatus;
   token: string;
-  onSuccess: () => Promise<void>;
+  onSuccess: () => Promise<boolean>;
 }) {
   const setup = !status.initialized;
   const [password, setPassword] = useState(''),
@@ -210,7 +231,13 @@ function AuthScreen({
   );
 }
 
-function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<void> }) {
+function Notebook({
+  name,
+  onCheckSession,
+}: {
+  name: string;
+  onCheckSession: () => Promise<boolean>;
+}) {
   const offline = useOffline();
   const [view, setView] = useState<View>('tree'),
     [selected, setSelected] = useState<string | null>(routeId);
@@ -235,9 +262,21 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
   );
   const changed = useCallback(() => setRevision((r) => r + 1), []);
   useEffect(() => {
+    window.addEventListener('note:library-refresh', changed);
+    return () => window.removeEventListener('note:library-refresh', changed);
+  }, [changed]);
+  const openSidebar = () => {
+    setMobileOpen(true);
+    if (isOffline()) void onCheckSession();
+    else changed();
+  };
+  const refreshLibrary = async () => {
+    if (!(await onCheckSession()))
+      throw new Error('暂时无法刷新，仍显示已有目录。请检查连接后重试。');
+  };
+  useEffect(() => {
     let live = true;
     const revalidate = async () => {
-      setRevision((value) => value + 1);
       setDetailRevision((value) => value + 1);
       await initializeCache();
       for (const item of cacheSnapshot().notes.filter((note) => note.pinned)) {
@@ -413,7 +452,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     try {
       await api(`/api/auth/${all ? 'logout-all' : 'logout'}`, 'POST', {});
       lockEdits();
-      await onLogout();
+      await onCheckSession();
     } catch (e) {
       report(e);
     }
@@ -469,11 +508,11 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
         <div className="sidebar-tree">
           <Tree
             refresh={revision}
+            onRefresh={refreshLibrary}
             selected={selected}
             onOpen={openNode}
             onAction={action}
             onDrop={drop}
-            onError={report}
           />
         </div>
         <div className="sidebar-bottom">
@@ -519,7 +558,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
                 aria-label="打开笔记目录"
                 aria-controls="notebook-sidebar"
                 aria-expanded={mobileOpen}
-                onClick={() => setMobileOpen(true)}
+                onClick={openSidebar}
               >
                 <Menu size={21} />
               </button>
@@ -543,7 +582,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
           <div className="offline-banner" role="status">
             <WifiOff size={14} />
             离线阅读
-            <button className="text-button" onClick={() => void onLogout()}>
+            <button className="text-button" onClick={() => void onCheckSession()}>
               重新连接
             </button>
           </div>
@@ -574,7 +613,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
                 refresh={detailRevision}
                 treeRefresh={revision}
                 sidebarOpen={mobileOpen}
-                onOpenSidebar={() => setMobileOpen(true)}
+                onOpenSidebar={openSidebar}
                 onNavigate={navigate}
                 onOpen={openNode}
                 onAction={action}

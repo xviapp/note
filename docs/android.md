@@ -35,7 +35,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.4.0-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 9，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.4.1-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 10，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -48,7 +48,7 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 ```bash
 pnpm android:apk
 pnpm run deploy
-pnpm android:publish --apk artifacts/yejian-0.4.0-android-debug.apk --notes docs/releases/0.4.0.txt --remote
+pnpm android:publish --apk artifacts/yejian-0.4.1-android-debug.apk --notes docs/releases/0.4.1.txt --remote
 ```
 
 安装包保存在 R2 的 `releases/android/` 中，通过登录接口访问，GitHub 仓库保持私有。发行文件不计入应用的笔记库容量统计，但使用同一 Cloudflare 账号的 R2 存储额度。历史安装包采用构建号与摘要寻址，不被新发布覆盖。
@@ -58,6 +58,12 @@ pnpm android:publish --apk artifacts/yejian-0.4.0-android-debug.apk --notes docs
 Android 注册文字、PDF、图片的 `ACTION_SEND` / `ACTION_SEND_MULTIPLE` 和 PDF、图片的 `ACTION_VIEW`。收到文件后，在后台线程读取获得临时授权的 `content://` URI，保存到应用私有暂存区。冷启动或再次分享均进入同一个导入流程；登录后使用设置中的默认目录，仍可临时更改目录并确认保存。默认目录属于账号设置，跨设备共用；删除该目录或其上级后自动回到根目录。取消会删除暂存内容，未处理内容保留最多 7 天。一次最多 10 个文件、总计 100 MiB，单文件沿用服务端的 50 MB 上限；不会请求全盘存储权限。
 
 PDF 缩放时先变换现有画布，手指离开后再渲染清晰页面，并保留手指所在位置。单指滚动与长按选字继续可用；双击恢复适应宽度。缩放比例按文件保存在本机，退出登录时随私人阅读状态清理。
+
+## 目录刷新
+
+0.4.1 修复两个刷新缺口：手机侧栏一直挂载，重新打开时原先不会重新请求；原生 `appStateChange` 转发的 `focus` 原先只检查会话，没有通知目录更新。现在重开侧栏会刷新目录，回到前台或网络恢复则在会话检查成功后刷新；短时间内的焦点与可见性事件合并，不做定时轮询。本机创建、重命名、移动、删除、分享导入与备份恢复继续立即通知目录。
+
+“我的笔记”右侧的刷新按钮固定在目录滚动区顶部，点击会重新检查连接并更新已展开的目录与当前列表；按钮在加载中旋转并暂时禁用。离线或请求失败时保留已有内容，显示状态并允许重试。`useNodeListing` 按已加载页数重新取数，保留展开结构，忽略过期请求的界面更新；目录刷新不重新加载当前正文，也不离开编辑模式。
 
 ## 整库备份与恢复
 
@@ -70,6 +76,12 @@ PDF 缩放时先变换现有画布，手指离开后再渲染清晰页面，并�
 清单分块和批量插入按 UTF-8 字节数打包，每个绑定值不超过 1.5 MB；恢复事务最多 40 条语句，为认证和任务检查留出空间，适配 [D1 免费方案的单次 50 查询及单值 2 MB 限制](https://developers.cloudflare.com/d1/platform/limits/)。超过单次恢复边界时返回错误，当前资料保持完整。
 
 ## 验证
+
+0.4.1 验证记录（2026-10-02）：
+
+- `e2e/library-refresh.spec.ts` 在电脑与手机视口共 11 项检查通过，覆盖重开侧栏、切回前台、展开与分页保留、请求失败重试、迟到请求、断网重连和编辑草稿保护。
+- 16 项相关检查通过，包含目录滚动后的手动刷新、分享导入、编辑与回收站、重命名和移动、修改密码、退出所有设备、缓存重连及跨标签页退出清理。
+- Worker 79 项、离线构建 3 项检查通过；类型检查、Web 与 Android 构建通过。安装包为 0.4.1 / 构建 10，签名与前版一致。本次未操作实体手机，原生生命周期转发沿用已有实现。
 
 0.4.0 验证记录（2026-10-02）：
 

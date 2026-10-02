@@ -36,6 +36,7 @@ import { CacheSettings } from './OfflineCache';
 import { ShareSettings } from './ShareSettings';
 import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
+import { useNodeListing } from '../use-node-listing';
 
 export type Confirm = (
   title: string,
@@ -337,29 +338,23 @@ export function NodeList({
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
-  const [items, setItems] = useState<NoteNode[] | null>(null),
-    [next, setNext] = useState<number | null>(null),
-    [error, setError] = useState('');
   const query = view ? `view=${view}` : `parent=${parent || ''}`;
-  useEffect(() => {
-    let live = true;
-    setError('');
-    api<{ nodes: NoteNode[]; nextOffset: number | null }>(`/api/nodes?${query}`)
-      .then((data) => {
-        if (live) {
-          setItems(data.nodes);
-          setNext(data.nextOffset);
-        }
-      })
-      .catch((e) => {
-        if (live) setError(e.message);
-      });
-    return () => {
-      live = false;
-    };
-  }, [query, refresh]);
-  if (error) return <p className="inline-error">{error}</p>;
-  if (!items) return <Spinner />;
+  const { listing, error, loading, more } = useNodeListing(query, refresh);
+  if (!listing)
+    return error ? (
+      <p className="inline-error" role="status">
+        {error}
+      </p>
+    ) : (
+      <Spinner />
+    );
+  const items = listing.nodes;
+  if (error && !items.length)
+    return (
+      <p className="inline-error" role="status">
+        {error}
+      </p>
+    );
   if (!items.length)
     return view ? (
       <Empty
@@ -372,7 +367,12 @@ export function NodeList({
       <p className="children-empty">此目录还没有内容</p>
     );
   return (
-    <div className="node-list">
+    <div className="node-list" aria-busy={loading}>
+      {error && (
+        <p className="inline-error" role="status">
+          {error}
+        </p>
+      )}
       {items.map((node) => (
         <div className="node-list-row" key={node.id}>
           <button className="node-list-main" onClick={() => onOpen(node)}>
@@ -396,22 +396,9 @@ export function NodeList({
           <NodeMenu node={node} onAction={onAction} />
         </div>
       ))}
-      {next !== null && (
-        <button
-          className="text-button load-more"
-          onClick={async () => {
-            try {
-              const data = await api<{ nodes: NoteNode[]; nextOffset: number | null }>(
-                `/api/nodes?${query}&offset=${next}`,
-              );
-              setItems((previous) => [...(previous || []), ...data.nodes]);
-              setNext(data.nextOffset);
-            } catch (e) {
-              setError((e as Error).message);
-            }
-          }}
-        >
-          加载更多
+      {listing.nextOffset !== null && (
+        <button className="text-button load-more" onClick={more} disabled={loading}>
+          {loading ? '正在加载…' : '加载更多'}
         </button>
       )}
     </div>
