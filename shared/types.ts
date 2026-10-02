@@ -10,6 +10,14 @@ export interface AuthStatus {
 export type NodeKind = 'folder' | 'markdown' | 'text' | 'pdf' | 'image' | 'link';
 export const TEXT_KINDS: NodeKind[] = ['markdown', 'text'];
 export const PARENT_KINDS: NodeKind[] = ['folder', 'markdown', 'text', 'pdf', 'image', 'link'];
+export const UNTITLED_NAMES: Record<NodeKind, string> = {
+  folder: '未命名文件夹',
+  markdown: '未命名笔记',
+  text: '未命名文本',
+  pdf: '未命名 PDF',
+  image: '未命名图片',
+  link: '未命名链接',
+};
 export interface NoteNode {
   id: string;
   parent_id: string | null;
@@ -19,6 +27,8 @@ export interface NoteNode {
   url: string | null;
   arxiv_id?: string | null;
   file_blob_id: string | null;
+  icon_emoji?: string | null;
+  icon_blob_id?: string | null;
   current_version_id: string | null;
   revision: number;
   trash_id: string | null;
@@ -32,6 +42,10 @@ export interface FileInfo {
   name: string;
   mime: string;
   size: number;
+}
+export interface ShareSettings {
+  parentId: string | null;
+  breadcrumbs: { id: string; title: string }[];
 }
 export interface NoteDetail extends NoteNode {
   content: string;

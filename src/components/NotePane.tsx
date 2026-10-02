@@ -10,7 +10,6 @@ import {
 } from 'react';
 import {
   ArrowUpRight,
-  Bot,
   Check,
   ChevronRight,
   FileText,
@@ -523,20 +522,6 @@ export default function NotePane(props: Props) {
           )}
           {note.kind !== 'folder' && !editing && (
             <button
-              className={`icon-button ${assistantOpen ? 'is-active' : ''}`}
-              aria-label="青藜"
-              disabled={offline}
-              aria-expanded={assistantOpen}
-              title="青藜"
-              onClick={() => {
-                setAssistantOpen((value) => !value);
-              }}
-            >
-              <Bot size={18} />
-            </button>
-          )}
-          {note.kind !== 'folder' && !editing && (
-            <button
               className="icon-button"
               aria-label="翻译记录"
               disabled={offline}
@@ -767,7 +752,7 @@ export default function NotePane(props: Props) {
               <article className="note-article">
                 <header className="document-heading">
                   <div className="page-eyebrow">
-                    <NodeIcon kind={note.arxiv_id ? 'arxiv' : note.kind} size={14} />
+                    <NodeIcon node={note} kind={note.arxiv_id ? 'arxiv' : note.kind} size={14} />
                     {note.arxiv_id ? 'arXiv 论文' : KIND_LABELS[note.kind]}
                   </div>
                   <h1>{note.title}</h1>
@@ -786,7 +771,7 @@ export default function NotePane(props: Props) {
                       <>更新于 {formatDate(note.updated_at)}</>
                     )}
                     {PARENT_KINDS.includes(note.kind) && !!note.child_count && (
-                      <span>{note.child_count} 个子节点</span>
+                      <span>{note.child_count} 个下级笔记</span>
                     )}
                   </div>
                 </header>
@@ -854,7 +839,7 @@ export default function NotePane(props: Props) {
                 {PARENT_KINDS.includes(note.kind) && !editing && (
                   <section className="children-section">
                     <div className="children-heading">
-                      <h2>子节点{note.child_count ? <span>{note.child_count}</span> : null}</h2>
+                      <h2>下级笔记{note.child_count ? <span>{note.child_count}</span> : null}</h2>
                       <button className="text-button" onClick={() => props.onAction('new', note)}>
                         <Plus size={14} />
                         新建

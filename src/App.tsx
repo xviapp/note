@@ -224,6 +224,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
       node?: NoteNode;
       parent: string | null;
       file?: FileInfo;
+      iconOnly?: boolean;
     } | null>(null),
     [moving, setMoving] = useState<NoteNode | null>(null);
   const leaveGuard = useRef<() => Promise<boolean>>(async () => true),
@@ -368,6 +369,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
     try {
       const fresh = await api<NoteDetail>(`/api/nodes/${node.id}`);
       if (kind === 'rename') setForm({ node: fresh, parent: fresh.parent_id });
+      else if (kind === 'icon') setForm({ node: fresh, parent: fresh.parent_id, iconOnly: true });
       else if (kind === 'move') setMoving(fresh);
       else {
         const preview = await api<{ count: number; title: string }>(
@@ -376,7 +378,7 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
         if (
           !(await question.confirm(
             '移到回收站？',
-            `「${preview.title}」${preview.count > 1 ? `及其子节点，共 ${preview.count} 个节点` : ''}将保留 7 天，到期后清理。`,
+            `「${preview.title}」${preview.count > 1 ? `及其下级笔记，共 ${preview.count} 项内容` : ''}将保留 7 天，到期后清理。`,
             '移到回收站',
             true,
           ))
@@ -625,12 +627,13 @@ function Notebook({ name, onLogout }: { name: string; onLogout: () => Promise<vo
           node={form.node}
           parent={form.parent}
           existingFile={form.file}
+          iconOnly={form.iconOnly}
           onClose={() => setForm(null)}
           onSaved={(node) => {
             setForm(null);
             changed();
             if (selected === node.id) setDetailRevision((r) => r + 1);
-            else setRoute(node.id);
+            else if (!form.iconOnly) setRoute(node.id);
           }}
         />
       )}{' '}

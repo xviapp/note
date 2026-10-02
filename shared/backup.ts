@@ -1,3 +1,5 @@
+import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folder-icons';
+
 export const BACKUP_FORMAT = 'yejian-library';
 export const BACKUP_METADATA_LIMIT = 16 * 1024 * 1024;
 export const backupColumns = {
@@ -10,6 +12,8 @@ export const backupColumns = {
     'url',
     'arxiv_id',
     'file_blob_id',
+    'icon_emoji',
+    'icon_blob_id',
     'current_version_id',
     'revision',
     'trash_id',
@@ -128,6 +132,11 @@ export function validateBackup(input: unknown): LibraryBackup {
     if (!Array.isArray(rows)) invalid(`缺少 ${table}。`);
     for (const row of rows) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) invalid('记录格式错误。');
+      // Older v1 archives predate custom folder icons.
+      if (table === 'nodes') {
+        if (row.icon_emoji === undefined) row.icon_emoji = null;
+        if (row.icon_blob_id === undefined) row.icon_blob_id = null;
+      }
       for (const column of columns) {
         const value = row[column];
         if (
@@ -179,6 +188,17 @@ export function validateBackup(input: unknown): LibraryBackup {
       invalid('PDF 类型不正确。');
     if (node.kind === 'image' && !files.get(String(node.file_blob_id))?.mime.startsWith('image/'))
       invalid('图片类型不正确。');
+    hasFile(node.icon_blob_id, true);
+    if (
+      (node.kind !== 'folder' && (node.icon_emoji !== null || node.icon_blob_id !== null)) ||
+      (node.icon_emoji !== null && (!isFolderEmoji(node.icon_emoji) || node.icon_blob_id !== null))
+    )
+      invalid('文件夹图标不正确。');
+    if (node.icon_blob_id !== null) {
+      const icon = files.get(String(node.icon_blob_id))!;
+      if (!FOLDER_ICON_MIMES.includes(icon.mime) || icon.size > FOLDER_ICON_MAX_BYTES)
+        invalid('文件夹图标图片不正确。');
+    }
     if (
       node.current_version_id !== null &&
       versions.get(node.current_version_id)?.node_id !== node.id

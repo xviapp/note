@@ -99,6 +99,7 @@ export function asError(error: unknown): AppError {
     ['INVALID_PARENT', 409, '目标位置不存在、已删除或不能包含子节点。'],
     ['TREE_CYCLE', 400, '不能把节点移动到自己的子节点中。'],
     ['FILE_UNAVAILABLE', 409, '文件尚未上传完成或已被清理，请重新上传。'],
+    ['INVALID_FOLDER_ICON', 400, '文件夹图标需要使用不超过 128 KiB 的图片。'],
     ['NODE_UNAVAILABLE', 404, '节点不存在或已进入回收站。'],
     ['TREE_CHANGED', 409, '目录内容发生了变化，请重新确认删除范围。'],
     ['UNIQUE constraint failed: idempotency', 409, '相同操作正在处理中，请稍后刷新。'],

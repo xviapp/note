@@ -1,8 +1,9 @@
 import type { Env } from './types';
 import type { FileInfo, NoteDetail, NoteNode, NodeKind, VersionInfo } from '../shared/types';
-import { PARENT_KINDS, TEXT_KINDS } from '../shared/types';
+import { PARENT_KINDS, TEXT_KINDS, UNTITLED_NAMES } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
 import { discardFile, getBlob, readText, storePaper, storeText } from './storage';
+import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
 
 const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite`;
@@ -53,8 +54,7 @@ async function attachments(env: Env, version: string | null): Promise<FileInfo[]
       .all<FileInfo>()
   ).results;
 }
-export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
-  const node = await getNode(env, id);
+export async function nodePath(env: Env, id: string) {
   const crumbs = await env.DB.prepare(
     `WITH RECURSIVE parents(id,title,parent_id,depth) AS (
     SELECT id,title,parent_id,0 FROM nodes WHERE id=?
@@ -63,6 +63,10 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   )
     .bind(id)
     .all<{ id: string; title: string }>();
+  return crumbs.results;
+}
+export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
+  const node = await getNode(env, id);
   let content = '';
   if (node.current_version_id) {
     const version = await env.DB.prepare('SELECT body_blob_id FROM versions WHERE id=?')
@@ -76,7 +80,7 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
     content,
     attachments: await attachments(env, node.current_version_id),
     file: file ? { id: file.id, name: file.name, mime: file.mime, size: file.size } : undefined,
-    breadcrumbs: crumbs.results,
+    breadcrumbs: await nodePath(env, id),
   };
 }
 export function operationKey(request: Request): string {
@@ -116,6 +120,31 @@ function attachmentIds(content: string, ids: unknown): string[] {
   if (values.size > 100) throw new AppError(400, '每篇笔记最多关联 100 个附件。');
   return [...values].sort();
 }
+async function folderIcon(
+  env: Env,
+  kind: NodeKind,
+  input: unknown,
+  current?: NoteNode,
+): Promise<{ emoji: string | null; fileId: string | null }> {
+  if (input === undefined)
+    return { emoji: current?.icon_emoji ?? null, fileId: current?.icon_blob_id ?? null };
+  if (kind !== 'folder') throw new AppError(400, '只有文件夹可以自定义图标。');
+  if (input === null) return { emoji: null, fileId: null };
+  if (!input || typeof input !== 'object' || Array.isArray(input))
+    throw new AppError(400, '图标格式不正确。');
+  const value = input as Record<string, unknown>;
+  const emoji = value.emoji ?? null,
+    fileId = value.fileId ?? null;
+  if (emoji !== null && !isFolderEmoji(emoji)) throw new AppError(400, '请输入一个 Emoji。');
+  if (emoji !== null && fileId !== null) throw new AppError(400, '请选择 Emoji 或图片作为图标。');
+  if (fileId !== null) {
+    const file = await getBlob(env, idValue(fileId));
+    if (!FOLDER_ICON_MIMES.includes(file.mime) || file.size > FOLDER_ICON_MAX_BYTES)
+      throw new AppError(400, '文件夹图标需要使用不超过 128 KiB 的图片。');
+    return { emoji: null, fileId: file.id };
+  }
+  return { emoji: emoji as string | null, fileId: null };
+}
 export async function createNode(
   env: Env,
   data: Record<string, unknown>,
@@ -125,10 +154,12 @@ export async function createNode(
   const operation = paper ? 'import-arxiv' : 'create';
   const previous = await priorOperation(env, key, operation);
   if (previous) return previous;
-  const title = textValue(data.title, '标题').trim(),
-    kind = data.kind as NodeKind;
+  const kind = data.kind as NodeKind;
   if (!['folder', 'markdown', 'text', 'pdf', 'image', 'link'].includes(kind))
     throw new AppError(400, '节点类型不正确。');
+  const suppliedTitle = textValue(data.title ?? '', '标题', 200, true).trim();
+  let title = suppliedTitle || UNTITLED_NAMES[kind];
+  const icon = await folderIcon(env, kind, data.icon);
   const parent = data.parentId == null ? null : idValue(data.parentId);
   if (parent) {
     const p = await getNode(env, parent);
@@ -141,6 +172,7 @@ export async function createNode(
     if (kind === 'pdf' ? file.mime !== 'application/pdf' : !file.mime.startsWith('image/'))
       throw new AppError(400, '文件内容与节点类型不符。');
     fileId = file.id;
+    if (!suppliedTitle && file.name.trim()) title = file.name.trim();
   }
   const isText = TEXT_KINDS.includes(kind),
     content = isText ? textValue(data.content ?? '', '正文', 1_048_576, true) : '';
@@ -162,8 +194,8 @@ export async function createNode(
       'INSERT INTO idempotency(key,operation,node_id,result_revision,created_at) VALUES(?,?,?,?,?)',
     ).bind(key, operation, id, 1, now),
     env.DB.prepare(
-      `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at,arxiv_id)
-      VALUES(?,?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?),?,?,?,?,?,?)`,
+      `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at,arxiv_id,icon_emoji,icon_blob_id)
+      VALUES(?,?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?),?,?,?,?,?,?,?,?)`,
     ).bind(
       id,
       parent,
@@ -176,6 +208,8 @@ export async function createNode(
       now,
       now,
       paper?.arxivId ?? null,
+      icon.emoji,
+      icon.fileId,
     ),
   ];
   if (blob)
@@ -270,17 +304,29 @@ export async function updateNode(
   const url = data.url === undefined ? node.url : node.kind === 'link' ? validUrl(data.url) : null;
   if (node.arxiv_id && url !== node.url)
     throw new AppError(400, '已保存论文的原文地址不能修改，请重新导入其他论文。');
+  const icon = await folderIcon(env, node.kind, data.icon, node);
   const position = data.position === undefined ? Date.now() : data.position;
   if (typeof position !== 'number' || !Number.isFinite(position))
     throw new AppError(400, '节点顺序不正确。');
   // Only write parent_id when moving; renaming must not depend on an unrelated parent update trigger.
   const moving = data.parentId !== undefined;
   const result = await env.DB.prepare(
-    `UPDATE nodes SET title=?,url=?,${moving ? 'parent_id=?,position=?,' : ''} revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id`,
+    `UPDATE nodes SET title=?,url=?,icon_emoji=?,icon_blob_id=?,${moving ? 'parent_id=?,position=?,' : ''} revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id`,
   )
-    .bind(title, url, ...(moving ? [parent, position] : []), Date.now(), id, revision)
+    .bind(
+      title,
+      url,
+      icon.emoji,
+      icon.fileId,
+      ...(moving ? [parent, position] : []),
+      Date.now(),
+      id,
+      revision,
+    )
     .first();
   if (!result) throw new AppError(409, '节点已在其他页面更新，请刷新后重试。', 'VERSION_CONFLICT');
+  if (node.icon_blob_id && node.icon_blob_id !== icon.fileId)
+    await discardFile(env, node.icon_blob_id).catch(() => {});
   return getNode(env, id);
 }
 export async function versionsList(env: Env, id: string): Promise<VersionInfo[]> {

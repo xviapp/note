@@ -508,6 +508,23 @@ progress::-moz-progress-bar {
 .node-icon {
   color: var(--muted);
 }
+.custom-folder-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex: 0 0 auto;
+  width: var(--node-icon-size);
+  height: var(--node-icon-size);
+  font-size: var(--node-icon-size);
+  line-height: 1;
+  overflow: hidden;
+}
+.custom-folder-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  border-radius: 4px;
+}
 .kind-folder {
   color: var(--muted);
 }
@@ -838,6 +855,11 @@ progress::-moz-progress-bar {
   padding: 10px;
   border-radius: 5px 11px 11px 5px;
   background: var(--surface-subtle);
+}
+.node-list-main > .custom-folder-icon {
+  flex: 0 0 38px;
+  padding: 7px;
+  font-size: 24px;
 }
 .node-list-main strong {
   font-size: 14px;
@@ -1487,6 +1509,95 @@ progress::-moz-progress-bar {
 }
 .kind-choices label:has(:focus-visible) {
   outline: 2px solid var(--focus);
+}
+.folder-icon-picker {
+  min-width: 0;
+}
+.folder-icon-current {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin: 8px 0 14px;
+}
+.folder-icon-preview {
+  flex: 0 0 64px;
+  width: 64px;
+  height: 64px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--surface-subtle);
+  border-radius: 16px;
+  overflow: hidden;
+}
+.folder-icon-preview > img {
+  width: 48px;
+  height: 48px;
+  object-fit: cover;
+  border-radius: 10px;
+}
+.folder-emoji-input {
+  flex: 1;
+  min-width: 0;
+}
+.folder-emoji-choices {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  gap: 5px;
+}
+.folder-emoji-choices button {
+  height: 44px;
+  font-size: 23px;
+  border-radius: var(--radius-control);
+  border: 1px solid transparent;
+}
+.folder-emoji-choices button:hover,
+.folder-emoji-choices button[aria-pressed='true'] {
+  background: var(--selected);
+  border-color: var(--line-strong);
+}
+.folder-icon-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  align-items: center;
+  margin-top: 16px;
+}
+.folder-icon-actions .text-button {
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+}
+.folder-icon-picker:disabled .file-input-button {
+  opacity: 0.5;
+  cursor: default;
+}
+.file-input-button:has(:focus-visible) {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.share-setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+.share-setting-row > div {
+  flex: 1;
+  min-width: min(180px, 100%);
+}
+.destination-summary {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+  margin: 8px 0;
+}
+.destination-summary svg {
+  flex-shrink: 0;
+  color: var(--muted);
 }
 .node-picker {
   max-height: 310px;

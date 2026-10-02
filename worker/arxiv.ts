@@ -332,7 +332,7 @@ export async function importArxiv(
       env,
       {
         kind: 'link',
-        title: data.title ? textValue(data.title, '标题').trim() : titleText(title),
+        title: textValue(data.title ?? '', '标题', 200, true).trim() || titleText(title),
         parentId: parent,
         url: paper.href,
       },

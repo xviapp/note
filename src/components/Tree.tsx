@@ -5,7 +5,7 @@ import { PARENT_KINDS, type NoteNode } from '../../shared/types';
 import { NodeIcon, Spinner } from './Primitives';
 import { OfflineSaveButton } from './OfflineCache';
 
-export type NodeAction = 'rename' | 'move' | 'delete' | 'new';
+export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
 type Listing = { nodes: NoteNode[]; nextOffset: number | null };
 export interface TreeProps {
   refresh: number;
@@ -24,11 +24,12 @@ export function NodeMenu({ node, onAction }: { node: NoteNode; onAction: TreePro
       <div className="menu-popup">
         <OfflineSaveButton node={node} />
         {PARENT_KINDS.includes(node.kind) && (
-          <button onClick={() => onAction('new', node)}>新建子节点</button>
+          <button onClick={() => onAction('new', node)}>新建笔记</button>
         )}
         <button onClick={() => onAction('rename', node)}>
           重命名{node.kind === 'link' && !node.arxiv_id ? ' / 修改链接' : ''}
         </button>
+        {node.kind === 'folder' && <button onClick={() => onAction('icon', node)}>更换图标</button>}
         <button onClick={() => onAction('move', node)}>移动到…</button>
         <button className="danger-text" onClick={() => onAction('delete', node)}>
           移到回收站
@@ -139,7 +140,7 @@ function Branch({
                 {open ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
               </button>
               <button className="tree-label" onClick={() => props.onOpen(node)} title={node.title}>
-                <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} />
+                <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
                 <span>{node.title}</span>
               </button>
               <NodeMenu node={node} onAction={props.onAction} />
@@ -189,14 +190,16 @@ export function NodePicker({
   parentsOnly = false,
   exclude,
   label = '选择位置',
+  initialPath = [],
 }: {
   value: string | null;
   onSelect: (id: string | null, title: string) => void;
   parentsOnly?: boolean;
   exclude?: string;
   label?: string;
+  initialPath?: { id: string; title: string }[];
 }) {
-  const [path, setPath] = useState<{ id: string; title: string }[]>([]);
+  const [path, setPath] = useState(initialPath);
   const [listing, setListing] = useState<Listing | null>(null),
     [error, setError] = useState('');
   const parent = path.at(-1)?.id || null;
@@ -218,15 +221,18 @@ export function NodePicker({
   return (
     <div className="node-picker" aria-label={label}>
       <div className="picker-breadcrumb">
-        <button onClick={() => setPath([])}>全部笔记</button>
+        <button type="button" onClick={() => setPath([])}>
+          全部笔记
+        </button>
         {path.map((part, i) => (
-          <button key={part.id} onClick={() => setPath((p) => p.slice(0, i + 1))}>
+          <button type="button" key={part.id} onClick={() => setPath((p) => p.slice(0, i + 1))}>
             / {part.title}
           </button>
         ))}
       </div>
       {parentsOnly && (
         <button
+          type="button"
           className={`picker-row ${value === parent ? 'selected' : ''}`}
           onClick={() => onSelect(parent, path.at(-1)?.title || '根目录')}
         >
@@ -240,12 +246,16 @@ export function NodePicker({
         .filter((node) => node.id !== exclude && (!parentsOnly || PARENT_KINDS.includes(node.kind)))
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
-            <button onClick={() => onSelect(node.id, node.title)}>
-              <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} />
+            <button
+              type="button"
+              onClick={() => onSelect(node.id, node.title)}
+            >
+              <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
               <span>{node.title}</span>
             </button>
             {PARENT_KINDS.includes(node.kind) && (
               <button
+                type="button"
                 className="icon-button"
                 aria-label={`进入 ${node.title}`}
                 onClick={() => setPath((p) => [...p, { id: node.id, title: node.title }])}
@@ -257,6 +267,7 @@ export function NodePicker({
         ))}
       {listing?.nextOffset !== null && listing && (
         <button
+          type="button"
           className="text-button"
           onClick={async () => {
             try {

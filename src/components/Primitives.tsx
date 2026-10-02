@@ -1,8 +1,30 @@
-import { useEffect, useId, useRef, useState, type ReactNode } from 'react';
+import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from 'react';
 import { X, FileText, Folder, File, Image, Link, LoaderCircle, BookOpen } from 'lucide-react';
-import type { NodeKind } from '../../shared/types';
+import type { NodeKind, NoteNode } from '../../shared/types';
+import { CachedImage } from './CachedImage';
+import { fileUrl } from '../api';
 
-export function NodeIcon({ kind, size = 17 }: { kind: NodeKind | 'arxiv'; size?: number }) {
+export function NodeIcon({
+  kind,
+  size = 17,
+  node,
+}: {
+  kind: NodeKind | 'arxiv';
+  size?: number;
+  node?: Pick<NoteNode, 'icon_emoji' | 'icon_blob_id'>;
+}) {
+  if (kind === 'folder' && (node?.icon_emoji || node?.icon_blob_id))
+    return (
+      <span
+        className="node-icon custom-folder-icon"
+        style={{ '--node-icon-size': `${size}px` } as CSSProperties}
+        aria-hidden="true"
+      >
+        {node.icon_emoji || (
+          <CachedImage src={fileUrl(node.icon_blob_id!)} alt="" draggable={false} />
+        )}
+      </span>
+    );
   const Icon = {
     folder: Folder,
     markdown: FileText,

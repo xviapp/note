@@ -8,6 +8,7 @@ import {
 } from './backups';
 import { BACKUP_METADATA_LIMIT } from '../shared/backup';
 import { androidRelease } from './releases';
+import { shareSettings, saveShareSettings } from './sharing';
 import { AppError, asError, body, enforceOrigin, idValue, integer, json } from './http';
 import { publicAuth, requireSession, accountAuth, editToken, requireEdit } from './auth';
 import {
@@ -48,6 +49,9 @@ export default {
       if (accountResponse) return accountResponse;
       const method = request.method,
         path = url.pathname;
+      if (path === '/api/share/settings' && method === 'GET') return json(await shareSettings(env));
+      if (path === '/api/share/settings' && method === 'PUT')
+        return json(await saveShareSettings(env, await body(request)));
       if (path.startsWith('/api/app/android-release') && ['GET', 'HEAD'].includes(method))
         return await androidRelease(request, env);
       if (path === '/api/backups' && method === 'POST') return json(await createBackup(env));

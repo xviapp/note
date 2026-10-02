@@ -84,7 +84,23 @@ async function uploadArchive(job: string, archive: LibraryBackup) {
   }
 }
 it('round-trips the whole library, versions, paper assets, chats and translation anchors into a new tree', async () => {
-  const folder = await create({ kind: 'folder', title: '论文' });
+  const folder = await create({ kind: 'folder', title: '论文', icon: { emoji: '📚' } });
+  const iconBytes = Uint8Array.from([
+    137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1,
+  ]);
+  const icon = await uploadFile(
+    bindings,
+    new Request(`https://notes.test/api/files?name=icon.png&size=${iconBytes.length}`, {
+      method: 'POST',
+      body: iconBytes,
+    }),
+  );
+  await create({
+    kind: 'folder',
+    title: '图片目录',
+    parentId: folder.id,
+    icon: { fileId: icon.id },
+  });
   const pdf = await file('paper.pdf', '%PDF-1.4\n%%EOF');
   const pdfNode = await create({
     kind: 'pdf',
@@ -185,9 +201,16 @@ it('round-trips the whole library, versions, paper assets, chats and translation
   const restoredFolder = (
     await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${rootId}`)
   ).nodes.find((n) => n.title === '论文')!;
+  expect(restoredFolder.icon_emoji).toBe('📚');
   const children = (await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${restoredFolder.id}`))
     .nodes;
   const restoredPdf = children.find((n) => n.kind === 'pdf')!;
+  const restoredIcon = children.find((n) => n.title === '图片目录')!.icon_blob_id;
+  expect(restoredIcon).toBeTruthy();
+  expect(restoredIcon).not.toBe(icon.id);
+  expect(new Uint8Array(await (await request(`/api/files/${restoredIcon}`)).arrayBuffer())).toEqual(
+    iconBytes,
+  );
   expect(restoredPdf.file_blob_id).not.toBe(pdf.id);
   const restoredNote = (await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${restoredPdf.id}`))
     .nodes[0];

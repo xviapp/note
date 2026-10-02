@@ -35,7 +35,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.3.1-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 8，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.4.0-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 9，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -48,20 +48,20 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 ```bash
 pnpm android:apk
 pnpm run deploy
-pnpm android:publish --apk artifacts/yejian-0.3.1-android-debug.apk --notes docs/releases/0.3.1.txt --remote
+pnpm android:publish --apk artifacts/yejian-0.4.0-android-debug.apk --notes docs/releases/0.4.0.txt --remote
 ```
 
 安装包保存在 R2 的 `releases/android/` 中，通过登录接口访问，GitHub 仓库保持私有。发行文件不计入应用的笔记库容量统计，但使用同一 Cloudflare 账号的 R2 存储额度。历史安装包采用构建号与摘要寻址，不被新发布覆盖。
 
 当前调试包继续沿用已有签名，支持覆盖升级。正式签名构建使用 `pnpm android:release`，需要在部署环境中设置 `NOTE_ANDROID_KEYSTORE`（绝对路径）、`NOTE_ANDROID_STORE_PASSWORD`、`NOTE_ANDROID_KEY_ALIAS` 和 `NOTE_ANDROID_KEY_PASSWORD`；缺少配置即停止，不生成未签名的分发包。密钥及密码不进入仓库。改用另一证书时，当前测试版不能直接覆盖升级，应先完成整库备份并迁移；应用也会阻止把证书不同的版本当作普通覆盖更新。
 
-Android 注册文字、PDF、图片的 `ACTION_SEND` / `ACTION_SEND_MULTIPLE` 和 PDF、图片的 `ACTION_VIEW`。收到文件后，在后台线程读取获得临时授权的 `content://` URI，保存到应用私有暂存区。冷启动或再次分享均进入同一个导入流程；登录后选择目录并确认保存。取消会删除暂存内容，未处理内容保留最多 7 天。一次最多 10 个文件、总计 100 MiB，单文件沿用服务端的 50 MB 上限；不会请求全盘存储权限。
+Android 注册文字、PDF、图片的 `ACTION_SEND` / `ACTION_SEND_MULTIPLE` 和 PDF、图片的 `ACTION_VIEW`。收到文件后，在后台线程读取获得临时授权的 `content://` URI，保存到应用私有暂存区。冷启动或再次分享均进入同一个导入流程；登录后使用设置中的默认目录，仍可临时更改目录并确认保存。默认目录属于账号设置，跨设备共用；删除该目录或其上级后自动回到根目录。取消会删除暂存内容，未处理内容保留最多 7 天。一次最多 10 个文件、总计 100 MiB，单文件沿用服务端的 50 MB 上限；不会请求全盘存储权限。
 
 PDF 缩放时先变换现有画布，手指离开后再渲染清晰页面，并保留手指所在位置。单指滚动与长按选字继续可用；双击恢复适应宽度。缩放比例按文件保存在本机，退出登录时随私人阅读状态清理。
 
 ## 整库备份与恢复
 
-设置提供 ZIP 导出、清单预览和恢复。备份包含当前节点、回收站内容、附件、保留的历史版本、收藏、阅读位置、青藜对话及其附件、翻译与原文锚点；不包含登录密码、会话、AI 密钥和本机缓存。恢复会创建「备份恢复 日期」目录，原回收站内容进入其下的「原回收站」目录，当前资料与账号设置保留。恢复文件占用正常的笔记库容量。
+设置提供 ZIP 导出、清单预览和恢复。备份包含当前笔记、文件夹的 Emoji／图片图标、回收站内容、附件、保留的历史版本、收藏、阅读位置、青藜对话及其附件、翻译与原文锚点；不包含登录密码、会话、AI 密钥和本机缓存。恢复会创建「备份恢复 日期」目录，原回收站内容进入其下的「原回收站」目录，当前资料与账号设置保留。恢复文件占用正常的笔记库容量。
 
 服务端在一个 D1 事务中读取清单并保留相关文件引用，防止导出过程中其他操作或定时清理移除附件。ZIP 在客户端按文件生成，支持 Zip64。Android 通过 `NoteArchive` 向用户选择的文档逐块写入；桌面支持 File System Access API 的浏览器使用流式写入。其他浏览器采用内存下载，超过 256 MiB 时提示改用 Android 或桌面 Chrome；这项限制不作用于 Android 的流式导出。
 
@@ -70,6 +70,12 @@ PDF 缩放时先变换现有画布，手指离开后再渲染清晰页面，并�
 清单分块和批量插入按 UTF-8 字节数打包，每个绑定值不超过 1.5 MB；恢复事务最多 40 条语句，为认证和任务检查留出空间，适配 [D1 免费方案的单次 50 查询及单值 2 MB 限制](https://developers.cloudflare.com/d1/platform/limits/)。超过单次恢复边界时返回错误，当前资料保持完整。
 
 ## 验证
+
+0.4.0 验证记录（2026-10-02）：
+
+- Worker 79 项测试通过，新增覆盖分享默认目录的读取、修改、删除后回退、权限检查，Emoji 与图片图标的验证、并发修改、空间统计与清理，以及未命名笔记。备份往返包含两种图标，旧版无图标清单仍可恢复。
+- 电脑和手机共 14 项功能检查通过，包含默认目录记忆与临时更改、选目录不提交、图标替换／取消／恢复默认、离线重开、未命名创建和青藜悬浮入口；另 10 项针对性检查覆盖分享、移动、助手贴边／悬浮／最大化、选文和 Markdown／PDF 截图。
+- 类型检查、Web 构建、3 项离线构建检查与 Android APK 构建通过；版本为 0.4.0 / 构建 9，沿用已有安装签名。
 
 0.3.0 验证记录（2026-10-02）：
 

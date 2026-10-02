@@ -2,7 +2,14 @@
 import { env, SELF, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import type { Env } from '../worker/types';
-import type { FileInfo, NoteNode, NoteDetail, StorageInfo, VersionInfo } from '../shared/types';
+import type {
+  FileInfo,
+  NoteNode,
+  NoteDetail,
+  StorageInfo,
+  VersionInfo,
+  ShareSettings,
+} from '../shared/types';
 import { cleanup } from '../worker/recovery';
 import { discardFile, storeText, uploadFile } from '../worker/storage';
 import { editToken, requireSession } from '../worker/auth';
@@ -110,6 +117,196 @@ async function file(name = 'picture.png'): Promise<FileInfo> {
 }
 
 describe('private library behavior', () => {
+  it('creates untitled notes and folders while keeping uploaded filenames and rename validation', async () => {
+    for (const [kind, title] of [
+      ['markdown', '未命名笔记'],
+      ['text', '未命名文本'],
+      ['folder', '未命名文件夹'],
+      ['link', '未命名链接'],
+    ]) {
+      const node = await ok<NoteNode>('/api/nodes', 'POST', {
+        kind,
+        title: '  ',
+        url: 'https://example.com',
+      });
+      expect(node.title).toBe(title);
+      expect(
+        (await request(`/api/nodes/${node.id}`, 'PATCH', { revision: node.revision, title: '  ' }))
+          .status,
+      ).toBe(400);
+    }
+    expect((await ok<NoteNode>('/api/nodes', 'POST', { kind: 'markdown' })).title).toBe(
+      '未命名笔记',
+    );
+    const image = await file('original.png');
+    expect(
+      (await ok<NoteNode>('/api/nodes', 'POST', { kind: 'image', title: '', fileId: image.id }))
+        .title,
+    ).toBe('original.png');
+  });
+  it('keeps share destinations across sessions and follows moves, rename, trash and purge', async () => {
+    expect(await ok('/api/share/settings')).toEqual({ parentId: null, breadcrumbs: [] });
+    const folder = await create('folder', '收集');
+    const nested = await create('folder', '稍后阅读', { parentId: folder.id });
+    const saved = await ok<ShareSettings>('/api/share/settings', 'PUT', { parentId: nested.id });
+    expect(saved).toEqual({
+      parentId: nested.id,
+      breadcrumbs: [
+        { id: folder.id, title: folder.title },
+        { id: nested.id, title: nested.title },
+      ],
+    });
+    // A fresh request returns account state, independent of a browser's local storage.
+    expect(await ok('/api/share/settings')).toEqual(saved);
+    await ok(`/api/nodes/${nested.id}`, 'PATCH', {
+      revision: nested.revision,
+      title: '分享收件箱',
+      parentId: null,
+    });
+    expect(await ok('/api/share/settings')).toEqual({
+      parentId: nested.id,
+      breadcrumbs: [{ id: nested.id, title: '分享收件箱' }],
+    });
+    const fresh = await ok<NoteNode>(`/api/nodes/${nested.id}`);
+    await ok(`/api/nodes/${nested.id}`, 'PATCH', { revision: fresh.revision, parentId: folder.id });
+    const batch = await trash(folder);
+    expect(await ok('/api/share/settings')).toEqual({ parentId: null, breadcrumbs: [] });
+    expect((await request('/api/share/settings', 'PUT', { parentId: nested.id })).status).toBe(409);
+    await ok(`/api/trash/${batch.id}/restore`, 'POST', {});
+    expect((await ok<ShareSettings>('/api/share/settings')).parentId).toBeNull();
+    await ok('/api/share/settings', 'PUT', { parentId: nested.id });
+    // FK fallback also covers direct permanent deletion.
+    await bindings.DB.prepare('DELETE FROM nodes WHERE id=?').bind(nested.id).run();
+    expect((await ok<ShareSettings>('/api/share/settings')).parentId).toBeNull();
+    expect((await request('/api/share/settings', 'PUT', { parentId: 'missing' })).status).toBe(409);
+    expect((await request('/api/share/settings', 'PUT', {})).status).toBe(400);
+    for (const method of ['GET', 'PUT'])
+      expect(
+        (
+          await request(
+            '/api/share/settings',
+            method,
+            method === 'PUT' ? { parentId: null } : undefined,
+            { anonymous: true },
+          )
+        ).status,
+      ).toBe(401);
+    expect(
+      (
+        await request(
+          '/api/share/settings',
+          'PUT',
+          { parentId: folder.id },
+          { origin: 'https://elsewhere.test' },
+        )
+      ).status,
+    ).toBe(403);
+    await ok('/api/share/settings', 'PUT', { parentId: null });
+  });
+  it('supports compound emoji and image folder icons without unlocking and preserves referenced bytes', async () => {
+    const folder = await create('folder', '研究', { icon: { emoji: '👩🏽‍🔬' } });
+    expect(folder.icon_emoji).toBe('👩🏽‍🔬');
+    const renamed = await ok<NoteNode>(`/api/nodes/${folder.id}`, 'PATCH', {
+      title: '研究资料',
+      revision: folder.revision,
+    });
+    expect(renamed.icon_emoji).toBe('👩🏽‍🔬');
+    const image = await file();
+    const pictured = await ok<NoteNode>(
+      `/api/nodes/${folder.id}`,
+      'PATCH',
+      { revision: renamed.revision, icon: { fileId: image.id } },
+      { locked: true },
+    );
+    expect(pictured).toMatchObject({ icon_emoji: null, icon_blob_id: image.id });
+    expect((await ok<{ nodes: NoteNode[] }>('/api/nodes')).nodes[0].icon_blob_id).toBe(image.id);
+    expect(await discardFile(bindings, image.id)).toBe(false);
+    await bindings.DB.prepare('UPDATE blobs SET draft_until=0 WHERE id=?').bind(image.id).run();
+    await cleanup(bindings);
+    expect((await request(`/api/files/${image.id}`)).status).toBe(200);
+    expect(await ok<StorageInfo>('/api/storage')).toMatchObject({
+      currentBytes: image.size,
+      orphanBytes: 0,
+    });
+    const batch = await trash(pictured);
+    expect(await ok<StorageInfo>('/api/storage')).toMatchObject({
+      currentBytes: 0,
+      trashBytes: image.size,
+    });
+    await cleanup(bindings);
+    expect((await request(`/api/files/${image.id}`)).status).toBe(200);
+    await ok(`/api/trash/${batch.id}/restore`, 'POST', {});
+    const restored = await ok<NoteNode>(`/api/nodes/${folder.id}`);
+    expect(restored.icon_blob_id).toBe(image.id);
+    expect(
+      (
+        await request(`/api/nodes/${folder.id}`, 'PATCH', {
+          revision: pictured.revision,
+          icon: null,
+        })
+      ).status,
+    ).toBe(409);
+    const reset = await ok<NoteNode>(`/api/nodes/${folder.id}`, 'PATCH', {
+      revision: restored.revision,
+      icon: null,
+    });
+    expect(reset).toMatchObject({ icon_emoji: null, icon_blob_id: null });
+    expect((await request(`/api/files/${image.id}`)).status).toBe(404);
+    expect((await ok<StorageInfo>('/api/storage')).allocatedBytes).toBe(0);
+  });
+  it('rejects invalid icons and guards the ready-file transition inside the database', async () => {
+    const image = await file();
+    const text = await storeText(bindings, 'not an image');
+    for (const icon of [
+      { emoji: 'hello' },
+      { emoji: '📚📚' },
+      { emoji: '📚', fileId: image.id },
+      { fileId: text.id },
+      { fileId: 'missing' },
+    ])
+      expect(
+        (await request('/api/nodes', 'POST', { kind: 'folder', title: 'invalid', icon })).ok,
+      ).toBe(false);
+    expect(
+      (
+        await request('/api/nodes', 'POST', {
+          kind: 'markdown',
+          title: 'invalid',
+          icon: { emoji: '📚' },
+        })
+      ).status,
+    ).toBe(400);
+    const folder = await create('folder', '图标测试', { icon: { emoji: '🇨🇳' } });
+    const keycap = await ok<NoteNode>(`/api/nodes/${folder.id}`, 'PATCH', {
+      revision: folder.revision,
+      icon: { emoji: '1️⃣' },
+    });
+    expect(keycap.icon_emoji).toBe('1️⃣');
+    await bindings.DB.prepare("UPDATE blobs SET state='deleting' WHERE id=?").bind(image.id).run();
+    await expect(
+      bindings.DB.prepare('UPDATE nodes SET icon_emoji=NULL,icon_blob_id=? WHERE id=?')
+        .bind(image.id, folder.id)
+        .run(),
+    ).rejects.toThrow('FILE_UNAVAILABLE');
+    expect((await ok<NoteNode>(`/api/nodes/${folder.id}`)).icon_emoji).toBe('1️⃣');
+    const oversized = new Uint8Array(128 * 1024 + 1);
+    oversized.set(png);
+    const uploaded = await uploadFile(
+      bindings,
+      new Request(`https://notes.test/api/files?name=large.png&size=${oversized.length}`, {
+        method: 'POST',
+        body: oversized,
+      }),
+    );
+    expect(
+      (
+        await request(`/api/nodes/${folder.id}`, 'PATCH', {
+          revision: keycap.revision,
+          icon: { fileId: uploaded.id },
+        })
+      ).status,
+    ).toBe(400);
+  });
   it('protects private surfaces and requires confirmation only for file content changes', async () => {
     const node = await create(),
       asset = await file();

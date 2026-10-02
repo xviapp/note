@@ -16,6 +16,7 @@ import {
 import { api, fileUrl, formatBytes, formatDate, upload } from '../api';
 import {
   KIND_LABELS,
+  UNTITLED_NAMES,
   type AuthStatus,
   type FileInfo,
   type NodeKind,
@@ -32,6 +33,9 @@ import { ReadingControls } from './ReadingSettings';
 import { BackupSettings } from './BackupSettings';
 import { AppUpdates } from './AppUpdates';
 import { CacheSettings } from './OfflineCache';
+import { ShareSettings } from './ShareSettings';
+import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
+import { isFolderEmoji } from '../../shared/folder-icons';
 
 export type Confirm = (
   title: string,
@@ -44,12 +48,14 @@ export function NodeForm({
   node,
   parent,
   existingFile,
+  iconOnly = false,
   onClose,
   onSaved,
 }: {
   node?: NoteNode;
   parent: string | null;
   existingFile?: FileInfo;
+  iconOnly?: boolean;
   onClose: () => void;
   onSaved: (node: NoteNode) => void;
 }) {
@@ -64,17 +70,40 @@ export function NodeForm({
     [error, setError] = useState('');
   const uploaded = useRef<FileInfo | null>(existingFile || null),
     key = useRef(crypto.randomUUID());
+  const [icon, setIcon] = useState<FolderIconValue>({
+    emoji: node?.icon_emoji ?? null,
+    fileId: node?.icon_blob_id ?? null,
+  });
+  const [preparingIcon, setPreparingIcon] = useState(false);
+  const uploadedIcon = useRef<{ source: File; info: FileInfo } | null>(null);
+  const working = busy || preparingIcon;
   const close = () => {
-    if (busy) return;
+    if (working) return;
     if (uploaded.current && !existingFile)
       void api(`/api/files/${uploaded.current.id}`, 'DELETE').catch(() => {});
+    if (uploadedIcon.current)
+      void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
     onClose();
   };
   async function save(event: FormEvent) {
     event.preventDefault();
+    if (working) return;
     setBusy(true);
     setError('');
     try {
+      let iconData;
+      if (kind === 'folder') {
+        if (icon.emoji && !isFolderEmoji(icon.emoji)) throw new Error('请输入一个 Emoji。');
+        if (icon.file && uploadedIcon.current?.source !== icon.file) {
+          if (uploadedIcon.current)
+            await api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
+          uploadedIcon.current = { source: icon.file, info: await upload(icon.file) };
+        }
+        iconData = {
+          emoji: icon.emoji,
+          fileId: icon.file ? uploadedIcon.current!.info.id : icon.fileId,
+        };
+      }
       if (!node && ['pdf', 'image'].includes(kind) && !uploaded.current) {
         if (!file) throw new Error('请先选择一个文件。');
         uploaded.current = await upload(file);
@@ -84,13 +113,24 @@ export function NodeForm({
             title,
             ...(kind === 'link' && !node.arxiv_id ? { url } : {}),
             revision: node.revision,
+            ...(kind === 'folder' ? { icon: iconData } : {}),
           })
         : await api<NoteNode>(
             kind === 'arxiv' ? '/api/import/arxiv' : '/api/nodes',
             'POST',
-            { kind, title, parentId: parent, url, fileId: uploaded.current?.id, content: '' },
+            {
+              kind,
+              title,
+              parentId: parent,
+              url,
+              fileId: uploaded.current?.id,
+              content: '',
+              ...(kind === 'folder' ? { icon: iconData } : {}),
+            },
             key.current,
           );
+      if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_blob_id)
+        void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
       onSaved(result);
     } catch (e) {
       setError((e as Error).message);
@@ -100,7 +140,15 @@ export function NodeForm({
   }
   return (
     <Modal
-      title={node ? '修改节点信息' : existingFile ? '将附件添加到笔记树' : '新建节点'}
+      title={
+        iconOnly
+          ? '更换文件夹图标'
+          : node
+            ? '修改笔记信息'
+            : existingFile
+              ? '将附件添加到笔记树'
+              : '新建笔记'
+      }
       onClose={close}
     >
       <form onSubmit={save} className="form-stack">
@@ -114,7 +162,7 @@ export function NodeForm({
                   name="kind"
                   value={value}
                   checked={kind === value}
-                  disabled={busy || !!uploaded.current}
+                  disabled={working || !!uploaded.current}
                   onChange={() => setKind(value as NodeKind | 'arxiv')}
                 />
                 <NodeIcon kind={value as NodeKind | 'arxiv'} />
@@ -123,18 +171,30 @@ export function NodeForm({
             ))}
           </fieldset>
         )}
-        <label>
-          标题
-          <input
-            autoFocus
-            required={kind !== 'arxiv'}
-            placeholder={kind === 'arxiv' ? '留空使用论文标题' : undefined}
-            maxLength={200}
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            disabled={busy}
+        {!iconOnly && (
+          <label>
+            标题
+            <input
+              autoFocus
+              required={!!node}
+              placeholder={
+                kind === 'arxiv' ? '留空使用论文标题' : node ? undefined : UNTITLED_NAMES[kind]
+              }
+              maxLength={200}
+              value={title}
+              onChange={(e) => setTitle(e.target.value)}
+              disabled={working}
+            />
+          </label>
+        )}
+        {kind === 'folder' && (
+          <FolderIconPicker
+            value={icon}
+            onChange={setIcon}
+            disabled={working}
+            onBusy={setPreparingIcon}
           />
-        </label>
+        )}
         {(kind === 'link' || kind === 'arxiv') && !node?.arxiv_id && (
           <label>
             {kind === 'arxiv' ? 'arXiv 论文地址' : '网页地址'}
@@ -177,10 +237,13 @@ export function NodeForm({
           </p>
         )}
         <div className="dialog-actions">
-          <button type="button" className="button" onClick={close} disabled={busy}>
+          <button type="button" className="button" onClick={close} disabled={working}>
             取消
           </button>
-          <button className="button primary" disabled={busy}>
+          <button
+            className="button primary"
+            disabled={working || (kind === 'folder' && !!icon.emoji && !isFolderEmoji(icon.emoji))}
+          >
             {busy
               ? kind === 'arxiv'
                 ? '正在导入论文和图片…'
@@ -313,7 +376,7 @@ export function NodeList({
       {items.map((node) => (
         <div className="node-list-row" key={node.id}>
           <button className="node-list-main" onClick={() => onOpen(node)}>
-            <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} size={20} />
+            <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} size={20} />
             <span>
               <strong>{node.title}</strong>
               <small>
@@ -383,7 +446,7 @@ export function TrashView({
       !restore &&
       !(await confirm(
         '永久删除这些内容？',
-        `「${batch.title}」及其子节点，共 ${batch.node_count} 个节点将永久删除，无法恢复。`,
+        `「${batch.title}」及其下级笔记，共 ${batch.node_count} 项内容将永久删除，无法恢复。`,
         '永久删除',
         true,
       ))
@@ -410,7 +473,7 @@ export function TrashView({
     <section className="collection-page">
       <h1>回收站</h1>
       <p className="page-description">
-        保留 7 天，恢复时一并还原子节点。删除后仍占用空间，清理完成后释放。
+        保留 7 天，恢复时一并还原下级笔记。删除后仍占用空间，清理完成后释放。
       </p>
       {!items ? (
         <Spinner />
@@ -426,7 +489,7 @@ export function TrashView({
                 <div>
                   <strong>{batch.title}</strong>
                   <small>
-                    {batch.node_count} 个节点 ·{' '}
+                    {batch.node_count} 项内容 ·{' '}
                     {expired
                       ? '等待清理'
                       : `${Math.max(1, Math.ceil((batch.expires_at - Date.now()) / 86400_000))} 天后清理`}
@@ -496,6 +559,7 @@ export function Settings({
         <ReadingControls />
       </section>
       <CacheSettings />
+      <ShareSettings />
       <BackupSettings confirm={confirm} onChanged={onChanged} />
       <AiSettings confirm={confirm} />
       <section className="settings-section">

@@ -178,7 +178,7 @@ test('selection quotes open the current assistant, retain a draft, and work in m
   const other = await create({ kind: 'text', title: '另一个文件', content: '另一个文件的内容。' });
   await page.goto(`/n/${other.id}`);
   await expect(toolbar(page)).toHaveCount(0);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await expect(panel.locator('.context-quote')).toHaveCount(0);
   await expect(input).toHaveValue('');
 });

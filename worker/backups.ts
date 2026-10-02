@@ -329,6 +329,8 @@ export async function finishRestore(env: Env, jobId: string) {
     url: null,
     arxiv_id: null,
     file_blob_id: null,
+    icon_emoji: null,
+    icon_blob_id: null,
     current_version_id: null,
     revision: 1,
     trash_id: null,

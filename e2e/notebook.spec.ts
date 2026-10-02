@@ -29,7 +29,7 @@ async function login(page: Page) {
 }
 async function createNote(page: Page, title: string) {
   await page.getByRole('button', { name: '新建', exact: true }).click();
-  const form = page.getByRole('dialog', { name: '新建节点' });
+  const form = page.getByRole('dialog', { name: '新建笔记' });
   await form.getByLabel('标题', { exact: true }).fill(title);
   await form.getByRole('button', { name: '创建', exact: true }).click();
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
@@ -281,7 +281,7 @@ test('creation, rename, moving and storage settings work without unlocking file 
   const actions = page.locator('.note-actions');
   await actions.getByRole('button', { name: `管理 ${title}`, exact: true }).click();
   await actions.getByRole('button', { name: '重命名', exact: true }).click();
-  const rename = page.getByRole('dialog', { name: '修改节点信息', exact: true });
+  const rename = page.getByRole('dialog', { name: '修改笔记信息', exact: true });
   await rename.getByLabel('标题', { exact: true }).fill(`${title}已改名`);
   await rename.getByRole('button', { name: '保存信息', exact: true }).click();
   await expect(
@@ -1034,7 +1034,7 @@ test('configures reply length and saves or continues an interrupted reply withou
   });
   const fixture = await assistantFixture(page, { interruptFirst: true });
   await page.goto(`/n/${node.id}`);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   const panel = page.getByRole('complementary', { name: '青藜', exact: true });
   const prompt = panel.getByRole('textbox', { name: '发给青藜的问题' });
   await prompt.fill('详细解释。');
@@ -1065,7 +1065,7 @@ test('configures reply length and saves or continues an interrupted reply withou
   await expect(panel.locator('.context-file')).toHaveCount(1);
   await page.screenshot({ path: `test-results/assistant-continue-${info.project.name}.png` });
   await page.reload();
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await expect(panel.locator('.chat-assistant')).toHaveCount(2);
   await expect(panel.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
 });
@@ -1157,7 +1157,7 @@ test('SVG paper diagrams remain vector images and appear in screenshots and AI a
     if (request.url().includes('svg-tracker.invalid')) external.push(request.url());
   });
   await page.getByRole('button', { name: '新建', exact: true }).click();
-  const form = page.getByRole('dialog', { name: '新建节点' });
+  const form = page.getByRole('dialog', { name: '新建笔记' });
   await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
@@ -1176,7 +1176,7 @@ test('SVG paper diagrams remain vector images and appear in screenshots and AI a
   await page.screenshot({ path: `test-results/svg-zoom-${info.project.name}.png` });
   await zoom.getByRole('button', { name: '关闭', exact: true }).click();
   await diagram.evaluate((image) => image.scrollIntoView({ block: 'center', behavior: 'instant' }));
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '框选截图', exact: true }).click();
   const crop = page.getByRole('dialog', { name: '框选截图', exact: true });
   await expect(crop).toBeVisible();
@@ -1237,7 +1237,7 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
     if (request.url().includes('paper-tracker.invalid')) remoteImages.push(request.url());
   });
   await page.getByRole('button', { name: '新建', exact: true }).click();
-  const form = page.getByRole('dialog', { name: '新建节点' });
+  const form = page.getByRole('dialog', { name: '新建笔记' });
   await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
@@ -1353,7 +1353,7 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
       selection.removeAllRanges();
       selection.addRange(range);
     });
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '引用选中文字', exact: true }).click();
   await expect(page.locator('.context-quote')).toContainText('$E=mc^2$');
   await cropInBrowser(page, info.project.name === 'mobile');
@@ -1390,13 +1390,13 @@ test('long arXiv papers allow the full text or a chosen section without silent t
   );
   const chat = await assistantFixture(page);
   await page.getByRole('button', { name: '新建', exact: true }).click();
-  const form = page.getByRole('dialog', { name: '新建节点' });
+  const form = page.getByRole('dialog', { name: '新建笔记' });
   await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
     .fill('https://arxiv.org/abs/2503.01800v1');
   await form.getByRole('button', { name: '导入论文', exact: true }).click();
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '附上当前文件', exact: true }).click();
   const file = page.getByRole('dialog', { name: '附上文件', exact: true });
   const range = file.getByRole('combobox', { name: '论文范围', exact: true });
@@ -1433,7 +1433,7 @@ test('context overflow keeps the draft and attachment and allows a smaller submi
     content: '参考内容。',
   });
   await page.goto(`/n/${node.id}`);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   const panel = page.getByRole('complementary', { name: '青藜', exact: true });
   const input = panel.getByRole('textbox', { name: '发给青藜的问题', exact: true });
   await input.fill('请读取完整附件。');
@@ -1685,7 +1685,7 @@ test('file assistant quotes, crops, previews, exports and retains independent co
       getSelection()!.removeAllRanges();
       getSelection()!.addRange(range);
     });
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '引用选中文字', exact: true }).click();
   await expect(page.locator('.context-quote')).toContainText('桥面承受荷载');
   await cropInBrowser(page, info.project.name === 'mobile');
@@ -1727,7 +1727,7 @@ test('file assistant quotes, crops, previews, exports and retains independent co
     content,
   );
   await page.reload();
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await expect(panel.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
   await panel.getByRole('button', { name: '清空会话', exact: true }).click();
   const clear = page.getByRole('dialog', { name: '清空这个文件的会话？', exact: true });
@@ -1741,7 +1741,7 @@ test('file assistant quotes, crops, previews, exports and retains independent co
     saved.content,
   );
   await page.goto(`/n/${other.id}`);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await expect(page.locator('.chat-message')).toHaveCount(0);
   await expect(page.getByText('附上文件、选中文字或截图，开始提问。')).toBeVisible();
   await page.getByRole('button', { name: '关闭青藜', exact: true }).click();
@@ -1776,7 +1776,7 @@ test('chat attachments preview current notes and local text or images before sen
     if (request.url().includes('/assistant/files')) uploads.push(request.url());
   });
   await page.goto(`/n/${node.id}`);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '附上当前文件', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '附上文件', exact: true });
   await dialog.getByText('查看将发送的文字', { exact: true }).click();
@@ -1829,7 +1829,7 @@ test('chat attachments preview current notes and local text or images before sen
   await expect(page.locator('.context-file')).toHaveCount(0);
   await expectPreview(page);
   await page.reload();
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await expect(page.locator('.chat-file-card')).toHaveCount(2);
   await page.locator('.chat-file-card').first().locator('summary').click();
   await expect(page.locator('.chat-file-card').first().locator('pre')).toHaveText(content);
@@ -1865,7 +1865,7 @@ test('PDF attachments select pages, extract text and send page images with sourc
   ).json();
   const fixture = await assistantFixture(page);
   await page.goto(`/n/${node.id}`);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '附上当前文件', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '附上文件', exact: true });
   await dialog.getByLabel('页码范围', { exact: true }).fill('2-3');
@@ -1933,7 +1933,7 @@ test('PDF attachments automatically render pages without text and reject invalid
   });
   const fixture = await assistantFixture(page);
   await page.goto(`/n/${node.id}`);
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByLabel('选择聊天附件').setInputFiles({
     name: 'scan.pdf',
     mimeType: 'application/pdf',
@@ -1997,7 +1997,7 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
     getSelection()!.removeAllRanges();
     getSelection()!.addRange(range);
   });
-  await page.getByRole('button', { name: '青藜', exact: true }).click();
+  await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '引用选中文字', exact: true }).click();
   await expect(page.locator('.context-quote')).toContainText('A quiet page - 1');
   await page.getByRole('button', { name: '最大化青藜', exact: true }).click();

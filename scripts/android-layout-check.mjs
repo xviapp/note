@@ -192,7 +192,7 @@ try {
     } catch (error) {
       issues.push(error.message);
     }
-    const dialog = page.getByRole('dialog', { name: '新建节点', exact: true });
+    const dialog = page.getByRole('dialog', { name: '新建笔记', exact: true });
     for (let attempt = 1; attempt <= 3; attempt++) {
       await page.getByRole('button', { name: '新建', exact: true }).click();
       await expect(dialog).toBeVisible();
@@ -246,7 +246,7 @@ try {
       console.log({ attempt, theme: values.theme, displacement, native });
     }
     assert.deepEqual(issues, [], `交互布局异常，检查 ${output}`);
-    console.log('PASS: 新建节点、软键盘及系统栏边界检查通过', { output });
+    console.log('PASS: 新建笔记、软键盘及系统栏边界检查通过', { output });
   }
 } finally {
   releaseAuth();
