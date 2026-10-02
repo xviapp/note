@@ -7,7 +7,7 @@ import { useOffline } from '../connectivity';
 import { releasePath, validRelease, type AndroidRelease } from '../../shared/release';
 
 export function AppUpdates() {
-  const native = Capacitor.isNativePlatform();
+  const android = Capacitor.getPlatform() === 'android';
   const offline = useOffline();
   const [installed, setInstalled] = useState<{
     version: string;
@@ -19,14 +19,14 @@ export function AppUpdates() {
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   useEffect(() => {
-    if (native)
+    if (android)
       void import('../mobile')
         .then(({ device }) => device.getBuildInfo())
         .then(setInstalled)
         .catch(() => setMessage('无法读取安装版本，请重新打开应用。'));
-  }, [native]);
-  const newer = release && (!native || (installed && release.build > installed.build));
-  const compatible = !native || !release || installed?.certificate === release.certificate;
+  }, [android]);
+  const newer = android && release && installed && release.build > installed.build;
+  const compatible = !release || installed?.certificate === release.certificate;
   return (
     <section className="settings-section">
       <h2>
@@ -36,34 +36,36 @@ export function AppUpdates() {
       <div className="setting-row">
         <div>
           <strong>
-            {native ? 'Android' : '网页版'} {installed?.version || version}
+            {android ? 'Android' : '网页版'} {installed?.version || version}
           </strong>
           {installed && <p>构建 {installed.build}</p>}
         </div>
-        <button
-          className="button"
-          disabled={busy || offline || (native && !installed)}
-          onClick={async () => {
-            setBusy(true);
-            setMessage('');
-            try {
-              const result = await api<{ release: AndroidRelease | null }>(
-                '/api/app/android-release',
-              );
-              if (result.release && !validRelease(result.release))
-                throw new Error('更新信息不完整，请稍后重试。');
-              setRelease(result.release);
-              setChecked(true);
-            } catch (error) {
-              setMessage((error as Error).message);
-            } finally {
-              setBusy(false);
-            }
-          }}
-        >
-          <RefreshCw size={15} />
-          {busy ? '正在处理…' : '检查 Android 更新'}
-        </button>
+        {android && (
+          <button
+            className="button"
+            disabled={busy || offline || !installed}
+            onClick={async () => {
+              setBusy(true);
+              setMessage('');
+              try {
+                const result = await api<{ release: AndroidRelease | null }>(
+                  '/api/app/android-release',
+                );
+                if (result.release && !validRelease(result.release))
+                  throw new Error('更新信息不完整，请稍后重试。');
+                setRelease(result.release);
+                setChecked(true);
+              } catch (error) {
+                setMessage((error as Error).message);
+              } finally {
+                setBusy(false);
+              }
+            }}
+          >
+            <RefreshCw size={15} />
+            {busy ? '正在处理…' : '检查 Android 更新'}
+          </button>
+        )}
       </div>
       {checked && !release && <p className="field-hint">暂未发布安装包。</p>}
       {checked && release && !newer && <p role="status">当前已是最新版本。</p>}
@@ -82,21 +84,14 @@ export function AppUpdates() {
               setMessage('');
               try {
                 const path = releasePath(release);
-                if (native) {
-                  const { device } = await import('../mobile');
-                  const result = await device.saveFile({
-                    url: new URL(path, location.href).href,
-                    name: `页间-${release.version}.apk`,
-                    mime: 'application/vnd.android.package-archive',
-                    sha256: release.sha256,
-                  });
-                  if (!result.cancelled) setMessage('安装包已校验并保存，打开文件即可安装。');
-                } else {
-                  const anchor = document.createElement('a');
-                  anchor.href = path;
-                  anchor.download = `yejian-${release.version}.apk`;
-                  anchor.click();
-                }
+                const { device } = await import('../mobile');
+                const result = await device.saveFile({
+                  url: new URL(path, location.href).href,
+                  name: `页间-${release.version}.apk`,
+                  mime: 'application/vnd.android.package-archive',
+                  sha256: release.sha256,
+                });
+                if (!result.cancelled) setMessage('安装包已校验并保存，打开文件即可安装。');
               } catch (error) {
                 setMessage((error as Error).message);
               } finally {
