@@ -92,6 +92,12 @@ public class NoteDevicePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void finishBoot(PluginCall call) {
+        ((MainActivity) getActivity()).finishBoot();
+        call.resolve();
+    }
+
+    @PluginMethod
     public void haptic(PluginCall call) {
         // View haptics need no VIBRATE permission and follow the system setting.
         getActivity().runOnUiThread(() -> {

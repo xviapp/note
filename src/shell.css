@@ -577,7 +577,7 @@ body:has(.android-shell .phone-bottom-nav) .global-assistant-launcher {
 .menu-popup .menu-compact-only {
   display: none;
 }
-.menu-popup hr.menu-compact-only {
+.menu-popup hr {
   margin: 6px 4px;
   border: 0;
   border-top: 1px solid var(--line);

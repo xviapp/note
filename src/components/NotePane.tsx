@@ -89,7 +89,8 @@ export default function NotePane(props: Props) {
   const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
-  const [childrenOpen, setChildrenOpen] = useState(false);
+  const [childrenOpen, setChildrenOpen] = useState(false),
+    [attachmentsOpen, setAttachmentsOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false),
     [linkOpen, setLinkOpen] = useState(false);
   const question = useQuestion(),
@@ -353,6 +354,7 @@ export default function NotePane(props: Props) {
           onFavorite={() => void toggleFavorite()}
           onHistory={() => setHistoryOpen(true)}
           onChildren={() => setChildrenOpen(true)}
+          onAttachments={() => setAttachmentsOpen(true)}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
         />
@@ -557,6 +559,25 @@ export default function NotePane(props: Props) {
           onNavigate={props.onNavigate}
           onImage={showImage}
         />
+      )}
+      {attachmentsOpen && !editing && (
+        <Modal
+          title={`所有附件（${note.attachments.length}）`}
+          className="attachments-modal"
+          onClose={() => setAttachmentsOpen(false)}
+        >
+          <Attachments
+            files={note.attachments}
+            onPreview={(file) => {
+              setAttachmentsOpen(false);
+              previewFile(file);
+            }}
+            onCreate={(file) => {
+              setAttachmentsOpen(false);
+              props.onFileNode(file, id);
+            }}
+          />
+        </Modal>
       )}
       {childrenOpen && !editing && (
         <Modal

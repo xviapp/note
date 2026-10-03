@@ -486,7 +486,14 @@ test('PDF and image attachments, shared file nodes and PDF reading progress', as
     .setInputFiles({ name: 'pixel.png', mimeType: 'image/png', buffer: image });
   await expect(page.getByText('上传中…')).toHaveCount(0);
   await page.getByRole('button', { name: '保存', exact: true }).click();
-  await page.locator('.attachment-name').filter({ hasText: 'pixel.png' }).click();
+  // The ⋯ menu opens all attachments in a dialog, besides the list under the body.
+  await noteAction(page, '所有附件（1）');
+  await page
+    .getByRole('dialog', { name: '所有附件（1）' })
+    .locator('.attachment-name')
+    .filter({ hasText: 'pixel.png' })
+    .click();
+  await expect(page.getByRole('dialog', { name: '所有附件（1）' })).toHaveCount(0);
   const viewer = page.getByRole('dialog', { name: 'pixel.png' });
   await expect(viewer.locator('img')).toBeVisible();
   await viewer.getByRole('button', { name: '放大图片' }).click();

@@ -5,12 +5,15 @@ import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Handler;
+import android.os.Looper;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
 import android.webkit.WebView;
 import android.widget.Toast;
 import androidx.core.graphics.ColorUtils;
+import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 import com.getcapacitor.BridgeActivity;
@@ -19,12 +22,19 @@ import org.json.JSONObject;
 
 public class MainActivity extends BridgeActivity {
     private static final String APPEARANCE_PREFS = "note-appearance";
+    // Longest the splash waits for the UI; past this the page's own loading shows.
+    private static final long BOOT_TIMEOUT_MS = 5000;
     private ColorDrawable themeBackground;
+    private volatile boolean booting = true;
     ShareInbox shareInbox;
     private final java.util.concurrent.ExecutorService shareExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
+        // Hold the splash until the UI reports its first screen, so the mark
+        // stays put instead of giving way to the page's smaller loading logo.
+        SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> booting);
+        new Handler(Looper.getMainLooper()).postDelayed(this::finishBoot, BOOT_TIMEOUT_MS);
         registerPlugin(NoteDevicePlugin.class);
         registerPlugin(NoteArchivePlugin.class);
         super.onCreate(savedInstanceState);
@@ -131,6 +141,10 @@ public class MainActivity extends BridgeActivity {
         boolean lightBackground = ColorUtils.calculateLuminance(color) > 0.5;
         bars.setAppearanceLightStatusBars(lightBackground);
         bars.setAppearanceLightNavigationBars(lightBackground);
+    }
+
+    void finishBoot() {
+        booting = false;
     }
 
     void openExternal(Uri uri) {

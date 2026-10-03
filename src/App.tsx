@@ -107,6 +107,12 @@ export default function App() {
       document.removeEventListener('visibilitychange', focus);
     };
   }, [refresh]);
+  const booted = !!status || !!error;
+  useEffect(() => {
+    // The Android splash stays up until the first screen (or boot error) renders.
+    if (booted && import.meta.env.MODE === 'android')
+      void import('./mobile').then(({ finishBoot }) => finishBoot());
+  }, [booted]);
   if (!status)
     return (
       <div className="boot-screen">

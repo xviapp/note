@@ -9,6 +9,7 @@ export const device = registerPlugin<{
   setBackground(options: { color: string; preference: string }): Promise<void>;
   notify(options: { message: string }): Promise<void>;
   haptic(): Promise<void>;
+  finishBoot(): Promise<void>;
   saveFile(options: {
     url?: string;
     sha256?: string;
@@ -52,6 +53,10 @@ async function download(url: URL, name = '') {
       mime: blob.type.split(';')[0] || 'application/octet-stream',
     });
   }
+}
+
+export function finishBoot() {
+  if (Capacitor.isNativePlatform()) void device.finishBoot().catch(() => {});
 }
 
 export function installMobile() {

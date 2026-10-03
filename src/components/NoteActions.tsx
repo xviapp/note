@@ -21,6 +21,7 @@ export function NoteActions({
   onFavorite,
   onHistory,
   onChildren,
+  onAttachments,
   onEdit,
   onAction,
 }: {
@@ -41,10 +42,12 @@ export function NoteActions({
   onFavorite: () => void;
   onHistory: () => void;
   onChildren: () => void;
+  onAttachments: () => void;
   onEdit: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
+  const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   return (
     <div className="note-actions">
       {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
@@ -82,6 +85,22 @@ export function NoteActions({
           <History size={18} />
         </button>
       )}
+      {/* A folder lists its children on the page; other notes open them here,
+          before the outline. */}
+      {!editing && hasChildren && (
+        <button
+          className="icon-button has-badge"
+          aria-label={`下级笔记（${note.child_count}）`}
+          title="下级笔记"
+          aria-haspopup="dialog"
+          onClick={onChildren}
+        >
+          <ListTree size={18} />
+          <span className="toolbar-badge" aria-hidden="true">
+            {note.child_count}
+          </span>
+        </button>
+      )}
       {!editing && (note.kind === 'markdown' || note.arxiv_id) && toc.available && (
         <button
           ref={toc.toggleRef}
@@ -94,21 +113,6 @@ export function NoteActions({
           onClick={toc.onToggle}
         >
           <List size={18} />
-        </button>
-      )}
-      {/* A folder lists its children on the page; other notes open them here. */}
-      {!editing && hasChildren && (
-        <button
-          className="icon-button has-badge toolbar-secondary"
-          aria-label={`下级笔记（${note.child_count}）`}
-          title="下级笔记"
-          aria-haspopup="dialog"
-          onClick={onChildren}
-        >
-          <ListTree size={18} />
-          <span className="toolbar-badge" aria-hidden="true">
-            {note.child_count}
-          </span>
         </button>
       )}
       {!editing && TEXT_KINDS.includes(note.kind) && (
@@ -150,19 +154,21 @@ export function NoteActions({
               版本历史
             </button>
           )}
-          {hasChildren && (
+          {/* Attachments also list under the body; this opens them without scrolling there. */}
+          {attachments > 0 && (
             <button
-              className="menu-compact-only"
               onClick={(event) => {
                 closeMenu(event.currentTarget);
-                onChildren();
+                onAttachments();
               }}
             >
-              下级笔记（{note.child_count}）
+              所有附件（{attachments}）
             </button>
           )}
           {/* Folders have none of the items above, so no divider either. */}
-          {note.kind !== 'folder' && <hr className="menu-compact-only" />}
+          {(attachments > 0 || note.kind !== 'folder') && (
+            <hr className={attachments > 0 ? undefined : 'menu-compact-only'} />
+          )}
         </NodeMenu>
       )}
     </div>

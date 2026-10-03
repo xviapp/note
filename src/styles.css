@@ -1685,6 +1685,24 @@ button.node-list-toggle:focus-visible {
   text-align: center;
   font-variant-numeric: tabular-nums;
 }
+/* In the menu's dialog the list needs no section heading or rule. */
+.attachments-modal .attachments {
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.attachments-modal .attachments h3 {
+  display: none;
+}
+.attachments-modal .attachment-row + .attachment-row {
+  border-top: 1px solid var(--line);
+}
+.attachments-modal .attachment-name > span {
+  font-size: 13px;
+}
+.attachments-modal .attachment-name small {
+  font-size: 11px;
+}
 .attachment-thumb {
   display: block;
   flex: 0 0 auto;
