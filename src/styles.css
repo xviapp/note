@@ -900,6 +900,10 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   padding: 9px 10px;
   border-radius: 8px;
 }
+.menu-popup .menu-spinner {
+  margin-right: 6px;
+  vertical-align: -2px;
+}
 .menu-popup button:hover {
   background: var(--surface-subtle);
 }

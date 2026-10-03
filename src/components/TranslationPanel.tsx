@@ -17,7 +17,7 @@ import {
   translateText,
   type TranslationLaunch,
 } from '../translation';
-import { MarkdownView } from './MarkdownView';
+import { MarkdownView } from './LazyMarkdown';
 import { Spinner, useQuestion } from './Primitives';
 import { TranslationWindow } from './TranslationWindow';
 

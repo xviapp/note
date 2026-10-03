@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { History, Languages, List, ListTree, Pencil, Star } from 'lucide-react';
+import { FolderTree, History, Languages, List, Pencil, Star } from 'lucide-react';
 import { TEXT_KINDS, type NoteDetail, type NoteNode } from '../../shared/types';
 import { ReadingSettingsButton } from './ReadingSettings';
 import { NodeMenu, type NodeAction } from './Tree';
@@ -49,7 +49,11 @@ export function NoteActions({
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   return (
-    <div className="note-actions">
+    // A folder or plain link shows only a couple of buttons on phones; they
+    // then share the location row instead of taking one of their own.
+    <div
+      className={`note-actions${note.kind === 'folder' || (note.kind === 'link' && !note.arxiv_id) ? ' is-short' : ''}`}
+    >
       {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
         <ReadingSettingsButton beforeChange={onReadingChange} />
       )}
@@ -95,7 +99,7 @@ export function NoteActions({
           aria-haspopup="dialog"
           onClick={onChildren}
         >
-          <ListTree size={18} />
+          <FolderTree size={18} />
           <span className="toolbar-badge" aria-hidden="true">
             {note.child_count}
           </span>

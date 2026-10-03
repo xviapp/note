@@ -65,14 +65,22 @@ async function prepare(page: Page, baseURL: string) {
 
 async function selectText(page: Page, locator: Locator) {
   await locator.click();
-  await locator.evaluate((element) => {
-    const range = document.createRange();
-    range.selectNodeContents(element);
-    const selection = window.getSelection()!;
-    selection.removeAllRanges();
-    selection.addRange(range);
-  });
-  await expect(toolbar(page)).toBeVisible();
+  // Any scroll dismisses the toolbar, as it should for a reader. Right after a
+  // page or PDF loads, restoring the reading position or fitting the page can
+  // still scroll once, so select again until the layout has settled. A
+  // dismissed range stays hidden until the selection collapses, as when a
+  // reader taps elsewhere, so clear it and let that register first.
+  await expect(async () => {
+    await locator.evaluate(async (element) => {
+      const selection = window.getSelection()!;
+      selection.removeAllRanges();
+      await new Promise((resolve) => setTimeout(resolve, 50));
+      const range = document.createRange();
+      range.selectNodeContents(element);
+      selection.addRange(range);
+    });
+    await expect(toolbar(page)).toBeVisible({ timeout: 1000 });
+  }).toPass();
 }
 
 async function assertInViewport(page: Page) {

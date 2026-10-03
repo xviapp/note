@@ -388,6 +388,13 @@ button:active:not(:disabled) {
     gap: 0;
     flex-wrap: wrap;
   }
+  .note-toolbar:has(.note-actions.is-short) .note-location {
+    flex: 1 1 0;
+    min-width: 0;
+  }
+  .note-actions.is-short {
+    width: auto;
+  }
   .note-actions .button {
     font-size: 14px;
   }
@@ -560,12 +567,22 @@ body:has(.android-shell .phone-bottom-nav) .move-toast {
 body:has(.android-shell .phone-bottom-nav) .global-assistant-launcher {
   transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 56px));
 }
+/* Leave room under lists so the round Qingli launcher never covers the last
+   row's menu or a settings entry. */
+body:has(.android-shell .phone-bottom-nav) .collection-page,
+.android-shell .note-article:has(.children-section) {
+  padding-bottom: 96px;
+}
 @media (max-width: 760px) {
   body:has(.phone-bottom-nav) .move-toast {
     bottom: calc(env(safe-area-inset-bottom) + 84px);
   }
   body:has(.phone-bottom-nav) .global-assistant-launcher {
     transform: translate(-100%, calc(-100% - env(safe-area-inset-bottom) - 64px));
+  }
+  body:has(.phone-bottom-nav) .collection-page,
+  .note-article:has(.children-section) {
+    padding-bottom: 96px;
   }
 }
 

@@ -39,6 +39,7 @@ import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
 import { BootScreen } from './components/BootScreen';
+import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
 import { AuthScreen } from './components/AuthScreen';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
@@ -163,6 +164,7 @@ function Notebook({
     (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
     [],
   );
+  useEffect(preloadMarkdown, []);
   const changed = useCallback(() => setRevision((r) => r + 1), []);
   useEffect(() => {
     window.addEventListener('note:library-refresh', changed);

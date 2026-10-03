@@ -2,7 +2,8 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { api, formatDate } from '../api';
 import type { FileInfo, NoteDetail, VersionInfo } from '../../shared/types';
 import { Modal, Spinner } from './Primitives';
-import { MarkdownView, type Heading } from './MarkdownView';
+import { MarkdownView } from './LazyMarkdown';
+import type { Heading } from './MarkdownView';
 import { Attachments } from './Attachments';
 
 export function HistoryDialog({

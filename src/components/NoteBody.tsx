@@ -2,7 +2,8 @@ import { ArrowUpRight } from 'lucide-react';
 import { fileUrl } from '../api';
 import type { NoteDetail } from '../../shared/types';
 import { CachedImage } from './CachedImage';
-import { MarkdownView, type Heading } from './MarkdownView';
+import { MarkdownView } from './LazyMarkdown';
+import type { Heading } from './MarkdownView';
 import { PaperView } from './PaperView';
 
 // The readable body of a note, by kind. While editing, `content` is the draft.

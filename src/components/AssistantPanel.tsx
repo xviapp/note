@@ -44,7 +44,7 @@ import {
 } from '../chat-files';
 import { ChatFileDialog } from './ChatFileDialog';
 import { AssistantWindow, type AssistantMode } from './AssistantWindow';
-import { MarkdownView } from './MarkdownView';
+import { MarkdownView } from './LazyMarkdown';
 import { ScreenshotCrop } from './ScreenshotCrop';
 import { ActivityDots, Spinner, useQuestion } from './Primitives';
 

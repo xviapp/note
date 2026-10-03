@@ -1,5 +1,5 @@
 import { useState, useSyncExternalStore } from 'react';
-import { Download, HardDriveDownload, LoaderCircle, X } from 'lucide-react';
+import { HardDriveDownload, LoaderCircle, X } from 'lucide-react';
 import type { NoteDetail, NoteNode } from '../../shared/types';
 import { api, formatBytes } from '../api';
 import {
@@ -45,7 +45,8 @@ export function OfflineSaveButton({ node }: { node: NoteNode }) {
           }
         }}
       >
-        {busy ? <LoaderCircle size={14} className="spin" /> : <Download size={14} />}
+        {/* Other menu items have no icon; only the progress spinner shows. */}
+        {busy && <LoaderCircle size={14} className="spin menu-spinner" />}
         {busy ? '正在离线保存…' : saved?.pinned ? '取消离线保存' : '离线保存'}
       </button>
       {saved?.error && !error && (
