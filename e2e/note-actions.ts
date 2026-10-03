@@ -8,4 +8,3 @@ export async function noteAction(page: Page, name: string | RegExp) {
   if (!(await target.first().isVisible())) await actions.locator('.node-menu > summary').click();
   await target.first().click();
 }
-export const openAttachments = (page: Page) => noteAction(page, /^附件/);

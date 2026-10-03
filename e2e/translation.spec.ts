@@ -1,5 +1,5 @@
 import { expect, test, type Locator, type Page, type Route } from './fixtures';
-import { noteAction, openAttachments } from './note-actions';
+import { noteAction } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { sourceLabel, type Translation } from '../shared/translation';
 
@@ -366,7 +366,6 @@ test('PDF source locations return to pages and highlights at another zoom, inclu
     attachments: [file.id],
   });
   await page.goto(`/n/${parent.id}`);
-  await openAttachments(page);
   await page.getByRole('button', { name: /^translation.pdf / }).click();
   const dialog = page.getByRole('dialog', { name: 'translation.pdf', exact: true });
   await dialog.getByRole('spinbutton', { name: 'PDF 页码' }).fill('2');

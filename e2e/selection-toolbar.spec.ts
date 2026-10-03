@@ -1,5 +1,4 @@
 import { expect, test, type Locator, type Page } from './fixtures';
-import { openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { AI_QUOTE_LIMIT, type ChatHistory } from '../shared/assistant';
 
@@ -235,7 +234,6 @@ test('PDF text and modal attachments support selection actions, including dialog
     attachments: [file.id],
   });
   await page.goto(`/n/${parent.id}`);
-  await openAttachments(page);
   await page.getByRole('button', { name: /^selection.pdf / }).click();
   const dialog = page.getByRole('dialog', { name: 'selection.pdf' });
   await selectText(page, dialog.locator('.pdf-text-layer span').first());

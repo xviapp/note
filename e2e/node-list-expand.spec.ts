@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
+import { noteAction } from './note-actions';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
 async function login(page: Page) {
@@ -70,4 +71,42 @@ test('rows with children expand in place on the home list and show arrows only w
   await toggle.click();
   await row(list, child.title).click();
   await expect(page).toHaveURL(new RegExp(`/n/${child.id}$`));
+});
+
+test('a note opens its children from the toolbar, while a folder lists them on the page', async ({
+  page,
+}, info) => {
+  await login(page);
+  const name = info.project.name;
+  const folder = await create(page, { kind: 'folder', title: `目录 ${name}` });
+  const note = await create(page, {
+    kind: 'markdown',
+    title: `带下级的笔记 ${name}`,
+    parentId: folder.id,
+    content: '# 正文',
+  });
+  const child = await create(page, {
+    kind: 'markdown',
+    title: `子笔记 ${name}`,
+    parentId: note.id,
+  });
+  await create(page, { kind: 'markdown', title: `另一子笔记 ${name}`, parentId: note.id });
+
+  await page.goto(`/n/${note.id}`);
+  await expect(page.getByRole('heading', { name: note.title, exact: true })).toBeVisible();
+  await expect(page.locator('.children-section')).toHaveCount(0);
+  await noteAction(page, '下级笔记（2）');
+  const dialog = page.getByRole('dialog', { name: '下级笔记（2）', exact: true });
+  await expect(dialog.locator('.node-list-main')).toHaveCount(2);
+  await dialog
+    .locator('.node-list-main')
+    .filter({ has: page.getByText(child.title, { exact: true }) })
+    .click();
+  await expect(dialog).toHaveCount(0);
+  await expect(page).toHaveURL(new RegExp(`/n/${child.id}$`));
+
+  await page.goto(`/n/${folder.id}`);
+  await expect(
+    page.locator('.children-section .node-list-main').filter({ hasText: note.title }),
+  ).toBeVisible();
 });

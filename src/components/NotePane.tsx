@@ -2,7 +2,6 @@ import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useSta
 import { FileText, X } from 'lucide-react';
 import { api, ApiError, fileUrl, lockNote, unlockNote } from '../api';
 import {
-  PARENT_KINDS,
   TEXT_KINDS,
   type FileInfo,
   type NoteDetail,
@@ -90,7 +89,7 @@ export default function NotePane(props: Props) {
   const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
-  const [attachmentsOpen, setAttachmentsOpen] = useState(false);
+  const [childrenOpen, setChildrenOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false),
     [linkOpen, setLinkOpen] = useState(false);
   const question = useQuestion(),
@@ -353,7 +352,7 @@ export default function NotePane(props: Props) {
           onTranslate={() => setTranslation({})}
           onFavorite={() => void toggleFavorite()}
           onHistory={() => setHistoryOpen(true)}
-          onAttachments={() => setAttachmentsOpen(true)}
+          onChildren={() => setChildrenOpen(true)}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
         />
@@ -466,31 +465,29 @@ export default function NotePane(props: Props) {
                     onImage={showImage}
                     onHeadings={toc.onHeadings}
                   />
-                  {/* While reading, attachments open from the toolbar instead. */}
-                  {TEXT_KINDS.includes(note.kind) && editing && (
+                  {TEXT_KINDS.includes(note.kind) && (
                     <Attachments
-                      files={assets}
-                      editing
+                      files={editing ? assets : note.attachments}
+                      editing={editing}
                       onRemove={removeAsset}
                       onPreview={previewFile}
+                      onCreate={!editing ? (file) => props.onFileNode(file, id) : undefined}
                     />
                   )}
-                  {/* A folder is its list; other kinds list children below their body. */}
-                  {PARENT_KINDS.includes(note.kind) &&
-                    !editing &&
-                    (note.kind === 'folder' || !!note.child_count) && (
-                      <section
-                        className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
-                        aria-label="下级笔记"
-                      >
-                        <NodeList
-                          parent={id}
-                          refresh={props.treeRefresh}
-                          onOpen={props.onOpen}
-                          onAction={props.onAction}
-                        />
-                      </section>
-                    )}
+                  {/* A folder is its list; other notes open their children from the toolbar. */}
+                  {note.kind === 'folder' && !editing && (
+                    <section
+                      className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
+                      aria-label="下级笔记"
+                    >
+                      <NodeList
+                        parent={id}
+                        refresh={props.treeRefresh}
+                        onOpen={props.onOpen}
+                        onAction={props.onAction}
+                      />
+                    </section>
+                  )}
                 </article>
               </div>
             </>
@@ -561,22 +558,20 @@ export default function NotePane(props: Props) {
           onImage={showImage}
         />
       )}
-      {attachmentsOpen && !editing && (
+      {childrenOpen && !editing && (
         <Modal
-          title={`附件（${note.attachments.length}）`}
-          className="attachments-modal"
-          onClose={() => setAttachmentsOpen(false)}
+          title={`下级笔记（${note.child_count ?? 0}）`}
+          className="children-modal"
+          onClose={() => setChildrenOpen(false)}
         >
-          <Attachments
-            files={note.attachments}
-            onPreview={(file) => {
-              setAttachmentsOpen(false);
-              previewFile(file);
+          <NodeList
+            parent={id}
+            refresh={props.treeRefresh}
+            onOpen={(node) => {
+              setChildrenOpen(false);
+              props.onOpen(node);
             }}
-            onCreate={(file) => {
-              setAttachmentsOpen(false);
-              props.onFileNode(file, id);
-            }}
+            onAction={props.onAction}
           />
         </Modal>
       )}

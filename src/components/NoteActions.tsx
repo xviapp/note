@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { History, Languages, List, Paperclip, Pencil, Star } from 'lucide-react';
+import { History, Languages, List, ListTree, Pencil, Star } from 'lucide-react';
 import { TEXT_KINDS, type NoteDetail, type NoteNode } from '../../shared/types';
 import { ReadingSettingsButton } from './ReadingSettings';
 import { NodeMenu, type NodeAction } from './Tree';
@@ -20,7 +20,7 @@ export function NoteActions({
   onTranslate,
   onFavorite,
   onHistory,
-  onAttachments,
+  onChildren,
   onEdit,
   onAction,
 }: {
@@ -40,10 +40,11 @@ export function NoteActions({
   onTranslate: () => void;
   onFavorite: () => void;
   onHistory: () => void;
-  onAttachments: () => void;
+  onChildren: () => void;
   onEdit: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
+  const hasChildren = note.kind !== 'folder' && !!note.child_count;
   return (
     <div className="note-actions">
       {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
@@ -95,17 +96,18 @@ export function NoteActions({
           <List size={18} />
         </button>
       )}
-      {!editing && TEXT_KINDS.includes(note.kind) && note.attachments.length > 0 && (
+      {/* A folder lists its children on the page; other notes open them here. */}
+      {!editing && hasChildren && (
         <button
-          className="icon-button attachments-toggle toolbar-secondary"
-          aria-label={`附件（${note.attachments.length}）`}
-          title="附件"
+          className="icon-button has-badge toolbar-secondary"
+          aria-label={`下级笔记（${note.child_count}）`}
+          title="下级笔记"
           aria-haspopup="dialog"
-          onClick={onAttachments}
+          onClick={onChildren}
         >
-          <Paperclip size={18} />
+          <ListTree size={18} />
           <span className="toolbar-badge" aria-hidden="true">
-            {note.attachments.length}
+            {note.child_count}
           </span>
         </button>
       )}
@@ -148,15 +150,15 @@ export function NoteActions({
               版本历史
             </button>
           )}
-          {TEXT_KINDS.includes(note.kind) && note.attachments.length > 0 && (
+          {hasChildren && (
             <button
               className="menu-compact-only"
               onClick={(event) => {
                 closeMenu(event.currentTarget);
-                onAttachments();
+                onChildren();
               }}
             >
-              附件（{note.attachments.length}）
+              下级笔记（{note.child_count}）
             </button>
           )}
           {/* Folders have none of the items above, so no divider either. */}
