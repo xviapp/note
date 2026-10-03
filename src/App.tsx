@@ -38,7 +38,7 @@ import { isOffline, useOffline } from './connectivity';
 import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
-import { Brand } from './components/Brand';
+import { BootScreen } from './components/BootScreen';
 import { AppHeader, Sidebar } from './components/Sidebar';
 import { AuthScreen } from './components/AuthScreen';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
@@ -113,24 +113,7 @@ export default function App() {
     if (booted && import.meta.env.MODE === 'android')
       void import('./mobile').then(({ finishBoot }) => finishBoot());
   }, [booted]);
-  if (!status)
-    return (
-      <div className="boot-screen">
-        <Brand />
-        {error ? (
-          <>
-            <p className="inline-error" role="alert">
-              {error}
-            </p>
-            <button className="button" onClick={refresh}>
-              重新连接
-            </button>
-          </>
-        ) : (
-          <Spinner />
-        )}
-      </div>
-    );
+  if (!status) return <BootScreen error={error} onRetry={refresh} />;
   return status.authenticated ? (
     <Notebook name={status.name} onCheckSession={refresh} />
   ) : (
