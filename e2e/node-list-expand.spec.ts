@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
@@ -13,24 +13,11 @@ async function login(page: Page) {
   });
   expect(response.ok()).toBeTruthy();
 }
-// Top-level nodes this test made; trashed afterwards so later specs' new items
-// stay on the first page of the shared top-level listing.
-const created: string[] = [];
 async function create(page: Page, data: object) {
   const response = await page.request.post('/api/nodes', { headers, data });
   expect(response.ok()).toBeTruthy();
-  const node = await response.json();
-  if (!node.parent_id) created.push(node.id);
-  return node;
+  return response.json();
 }
-test.afterEach(async ({ page }) => {
-  for (const id of created.splice(0)) {
-    const preview = await page.request.get(`/api/nodes/${id}/delete-preview`);
-    if (!preview.ok()) continue;
-    const { count } = await preview.json();
-    await page.request.delete(`/api/nodes/${id}`, { headers, data: { count } });
-  }
-});
 
 test('rows with children expand in place on the home list and show arrows only when needed', async ({
   page,
@@ -46,13 +33,6 @@ test('rows with children expand in place on the home list and show arrows only w
     parentId: child.id,
   });
   const plain = await create(page, { kind: 'markdown', title: `无下级 ${name}` });
-  // Earlier specs leave many root items; show only this test's nodes at the top level.
-  await page.route('**/api/nodes?parent=', async (route) => {
-    const nodes = [];
-    for (const id of [paper.id, plain.id])
-      nodes.push(await (await page.request.get(`/api/nodes/${id}`)).json());
-    await route.fulfill({ json: { nodes, nextOffset: null } });
-  });
   await page.goto('/');
   const list = page.locator('.library-home .node-list');
   // A row's accessible name also carries its type and date; find it by title.

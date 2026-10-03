@@ -14,7 +14,7 @@ import type {
   TranslationHistory,
   SourceLocation,
 } from '../shared/translation';
-import type { FileInfo, NoteDetail, NoteNode, StorageInfo } from '../shared/types';
+import type { FileInfo, NoteNode, StorageInfo } from '../shared/types';
 import { sseData } from '../shared/sse';
 import { cleanup } from '../worker/recovery';
 import { discardFile } from '../worker/storage';

@@ -15,7 +15,8 @@ export function prepareOfflineShell(): Promise<void> {
       const finish = (error?: Error) => {
         clearTimeout(timer);
         worker?.removeEventListener('statechange', changed);
-        error ? reject(error) : resolve();
+        if (error) reject(error);
+        else resolve();
       };
       const changed = () => {
         if (worker?.state === 'activated' || registration.active) finish();

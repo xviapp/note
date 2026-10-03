@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 import type { ChatHistory, ChatMessage } from '../shared/assistant';
 

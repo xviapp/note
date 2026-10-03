@@ -216,7 +216,7 @@ export default {
           return json({ versions: await versionsList(env, id) });
         const version = action.match(/^versions\/([a-zA-Z0-9_-]+)(\/restore)?$/);
         if (version && method === 'GET' && !version[2]) {
-          const { bodyId, ...result } = await versionDetail(env, id, version[1]);
+          const { bodyId: _bodyId, ...result } = await versionDetail(env, id, version[1]);
           return json(result);
         }
         if (!action && method === 'PATCH')

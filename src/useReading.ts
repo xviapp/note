@@ -16,14 +16,14 @@ export function useReading(id: string) {
     busy: false,
     ready: false,
   });
-  const persist = () => {
+  const persist = useCallback(() => {
     if (cacheEpoch().startsWith('signed-out:')) return;
     try {
       localStorage.setItem(`reading:${id}`, JSON.stringify(state.current));
     } catch {
       /* Storage may be disabled. */
     }
-  };
+  }, [id]);
   const flush = useCallback(async () => {
     const current = state.current;
     if (!current.ready || !current.dirty || current.busy) return;
@@ -48,7 +48,7 @@ export function useReading(id: string) {
       current.busy = false;
       persist();
     }
-  }, [id]);
+  }, [id, persist]);
   useEffect(() => {
     let active = true;
     void api<ReadingState>(`/api/nodes/${id}/open`, 'POST', {})
@@ -107,7 +107,7 @@ export function useReading(id: string) {
       window.removeEventListener('note:reconnected', flush);
       void flush();
     };
-  }, [id, flush]);
+  }, [id, flush, persist]);
   const update = useCallback(
     (position: ReadingPosition) => {
       if (!state.current.ready || document.visibilityState !== 'visible') return;
@@ -116,7 +116,7 @@ export function useReading(id: string) {
       state.current.dirty = true;
       persist();
     },
-    [id],
+    [persist],
   );
   return { initial, update, flush };
 }

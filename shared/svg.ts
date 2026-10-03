@@ -40,7 +40,11 @@ const functions = names(`rgb rgba hsl hsla hwb lab lch oklab oklch color color-m
   rotate rotatex rotatey rotatez rotate3d skew skewx skewy blur brightness contrast grayscale
   hue-rotate invert saturate sepia drop-shadow`);
 const localReference = (value: string) =>
-  value.length > 1 && value[0] === '#' && !/[\u0000-\u0020\u007f]/.test(value);
+  value.length > 1 &&
+  value[0] === '#' &&
+  // Control characters are exactly what this check rejects.
+  // oxlint-disable-next-line no-control-regex
+  !/[\u0000-\u0020\u007f]/.test(value);
 const embeddedImage = (value: string) =>
   /^data:image\/(?:png|jpeg|gif|webp|avif);base64,[A-Za-z0-9+/=\s]+$/.test(value);
 const escape = (value: string) =>

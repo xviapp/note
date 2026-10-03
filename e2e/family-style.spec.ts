@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 
 const headers = { origin: 'http://127.0.0.1:8799' };

@@ -147,6 +147,8 @@ export function PdfOutline({
       });
     return () => {
       live = false;
+      // request is a generation counter, not an element; bumping it is intended.
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       request.current++;
     };
   }, [pdf]);

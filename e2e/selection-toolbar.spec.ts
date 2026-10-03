@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page } from '@playwright/test';
+import { expect, test, type Locator, type Page } from './fixtures';
 import { openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { AI_QUOTE_LIMIT, type ChatHistory } from '../shared/assistant';
@@ -23,6 +23,11 @@ async function prepare(page: Page, baseURL: string) {
     },
   );
   expect(response.ok()).toBe(true);
+  // Qingli takes a draft only once a key is configured; the provider is mocked.
+  await page.request.put('/api/ai/settings', {
+    headers,
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
   const create = async (data: object) => {
     const result = await page.request.post('/api/nodes', { headers, data });
     expect(result.ok()).toBe(true);

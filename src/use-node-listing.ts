@@ -12,6 +12,14 @@ export const ListingCacheContext = createContext<ListingCache | null>(null);
 // Opening any note reorders recent visits without a library change.
 const alwaysRevalidate = (query: string) => query === 'view=recent';
 
+// Several views can show the same folder (the sidebar and the page). The one that
+// has loaded more pages for the current revision keeps the shared entry.
+function remember(cache: ListingCache | null, query: string, entry: CachedListing) {
+  const saved = cache?.get(query);
+  if (saved && saved.refresh === entry.refresh && saved.pages > entry.pages) return;
+  cache?.set(query, entry);
+}
+
 // Refresh the pages the reader has already opened, without blanking the list.
 // A generation also prevents a late "load more" response from undoing a refresh.
 export function useNodeListing(query: string, refresh: number) {
@@ -36,8 +44,12 @@ export function useNodeListing(query: string, refresh: number) {
     if (current.current.query !== query)
       current.current = { query, listing: saved?.listing ?? null, pages: saved?.pages ?? 1 };
     if (saved && saved.refresh === refresh && !alwaysRevalidate(query)) {
+      // An interrupted fetch or "load more" no longer owns the pending flag.
+      pending.current = false;
       setState({ query, listing: saved.listing, loading: false, error: '' });
       return () => {
+        // A generation counter, not an element: bumping it voids late responses.
+        // oxlint-disable-next-line react-hooks/exhaustive-deps
         generation.current++;
       };
     }
@@ -60,7 +72,7 @@ export function useNodeListing(query: string, refresh: number) {
         } while (nextOffset !== null && loaded < pages);
         const listing = { nodes: [...nodes.values()], nextOffset };
         current.current = { query, listing, pages: loaded };
-        cache?.set(query, { listing, pages: loaded, refresh });
+        remember(cache, query, { listing, pages: loaded, refresh });
         setState({ query, listing, loading: false, error: '' });
       } catch (error) {
         if (run === generation.current)
@@ -75,6 +87,7 @@ export function useNodeListing(query: string, refresh: number) {
       }
     })();
     return () => {
+      // oxlint-disable-next-line react-hooks/exhaustive-deps
       generation.current++;
     };
   }, [query, refresh, cache]);
@@ -96,7 +109,7 @@ export function useNodeListing(query: string, refresh: number) {
       const listing = { nodes: [...nodes.values()], nextOffset: result.nextOffset };
       current.current = { query, listing, pages: previous.pages + 1 };
       const saved = cache?.get(query);
-      if (saved) cache?.set(query, { ...saved, listing, pages: current.current.pages });
+      if (saved) remember(cache, query, { ...saved, listing, pages: current.current.pages });
       setState({ query, listing, loading: false, error: '' });
     } catch (error) {
       if (run === generation.current)

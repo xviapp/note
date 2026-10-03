@@ -3,6 +3,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useMemo,
   useRef,
   useState,
   type ReactNode,
@@ -31,12 +32,15 @@ export interface TreeProps {
   // A completed move to reveal: the tree opens its folder and highlights it.
   moved?: MovedNode | null;
 }
-export type MovedNode = { id: string; parent: string | null; key: number };
+// `path` lists the destination's ancestors from the top level down, when known,
+// so a destination inside collapsed folders can still be revealed.
+export type MovedNode = { id: string; parent: string | null; key: number; path?: string[] };
 type DragView = {
   drag: TreeDrag | null;
   saving?: string;
   landed: { id: string; parent: string | null } | null;
-  start: ReturnType<typeof useTreeDrag>;
+  reveal: Set<string>;
+  start: Pick<ReturnType<typeof useTreeDrag>, 'startMouse' | 'startTouch'>;
   expandListeners: Set<(id: string) => void>;
 };
 const DragContext = createContext<DragView | null>(null);
@@ -99,37 +103,55 @@ function Branch({
     return () => onLoading(request, false);
   }, [loading, onLoading]);
   const view = useContext(DragContext);
+  // Each change is applied to the saved set rather than written from this
+  // Branch's copy, so Branches do not overwrite each other's expansions.
   const setOpen = (id: string, open: boolean) => {
-    const next = new Set(props.expansionState || expanded);
-    if (next.has(id) === open) return;
-    if (open) next.add(id);
-    else next.delete(id);
     if (props.expansionState) {
-      props.expansionState.clear();
-      for (const value of next) props.expansionState.add(value);
+      if (open) props.expansionState.add(id);
+      else props.expansionState.delete(id);
     }
     try {
-      sessionStorage.setItem('expanded-nodes', JSON.stringify([...next]));
+      const saved = new Set<string>(JSON.parse(sessionStorage.getItem('expanded-nodes') || '[]'));
+      if (open) saved.add(id);
+      else saved.delete(id);
+      sessionStorage.setItem('expanded-nodes', JSON.stringify([...saved]));
     } catch {
       /* Optional UI preference. */
     }
-    setExpanded(next);
+    setExpanded((previous) => {
+      if (previous.has(id) === open) return previous;
+      const next = new Set(previous);
+      if (open) next.add(id);
+      else next.delete(id);
+      return next;
+    });
   };
   const toggle = (id: string) => setOpen(id, !expanded.has(id));
-  // Dragging over a folder, or landing a move in it, opens the folder.
+  // Dragging over a folder opens it.
   const reveal = useRef<(id: string) => void>(() => {});
   reveal.current = (id) => {
     if (listing?.nodes.some((node) => node.id === id && PARENT_KINDS.includes(node.kind)))
       setOpen(id, true);
   };
+  const expandListeners = view?.expandListeners;
   useEffect(() => {
-    if (!view) return;
+    if (!expandListeners) return;
     const listener = (id: string) => reveal.current(id);
-    view.expandListeners.add(listener);
+    expandListeners.add(listener);
     return () => {
-      view.expandListeners.delete(listener);
+      expandListeners.delete(listener);
     };
-  }, [view]);
+  }, [expandListeners]);
+  // A completed move opens every folder on the way to its destination, one
+  // level at a time as each Branch loads.
+  const revealPath = view?.reveal;
+  useEffect(() => {
+    if (!listing || !revealPath?.size) return;
+    for (const node of listing.nodes)
+      if (revealPath.has(node.id) && PARENT_KINDS.includes(node.kind)) setOpen(node.id, true);
+    // setOpen is recreated each render; listing and the path decide when to run.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [listing, revealPath]);
   if (!listing)
     return error ? (
       <p className="inline-error small" role="status">
@@ -182,6 +204,7 @@ function Branch({
                   .join(' ')}
                 style={{ paddingLeft: 8 + Math.min(depth, 10) * 15 }}
                 data-tree-node={node.id}
+                data-tree-title={node.title}
                 data-tree-container={container ? 'true' : undefined}
                 onPointerDown={(event) => view?.start.startMouse(event, node)}
                 onTouchStart={(event) => view?.start.startTouch(event, node)}
@@ -246,45 +269,62 @@ export function Tree(props: TreeProps) {
   }, []);
   const [saving, setSaving] = useState<string>();
   const [landed, setLanded] = useState<DragView['landed']>(null);
+  const [reveal, setReveal] = useState<Set<string>>(() => new Set());
   const onDrop = props.onDrop;
   const start = useTreeDrag(root, ghost, {
     onDrop: (source, target) => {
       const parent = target === ROOT_TARGET ? null : target;
       const title = parent
-        ? root.current?.querySelector(`[data-tree-node="${CSS.escape(parent)}"] .tree-label span`)
-            ?.textContent || ''
+        ? root.current?.querySelector<HTMLElement>(`[data-tree-node="${CSS.escape(parent)}"]`)
+            ?.dataset.treeTitle || ''
         : '';
       setSaving(source.id);
       void onDrop(source.id, parent, title).finally(() => setSaving(undefined));
     },
     onExpand: expand,
   });
-  const { drag } = start;
+  const { drag, startMouse, startTouch } = start;
   const moved = props.moved;
   useEffect(() => {
     if (!moved) return;
     const { id, parent } = moved;
-    if (parent) expand(parent);
+    setReveal(new Set(parent ? [...(moved.path ?? []), parent] : []));
     setLanded({ id, parent });
     // Bring the moved row into view once its new location has loaded.
     const selector = parent
       ? `[data-tree-item="${CSS.escape(parent)}"] > ul > li > [data-tree-node="${CSS.escape(id)}"]`
       : `[role="tree"] > li > [data-tree-node="${CSS.escape(id)}"]`;
-    let frame = 0,
-      frames = 0;
+    // Nested folders load one after another, so allow a few seconds.
+    const until = Date.now() + 6000;
+    let frame = 0;
     const find = () => {
       const row = root.current?.querySelector(selector);
       if (row) row.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
-      else if (frames++ < 240) frame = requestAnimationFrame(find);
+      else if (Date.now() < until) frame = requestAnimationFrame(find);
     };
     frame = requestAnimationFrame(find);
-    const timer = setTimeout(() => setLanded(null), 2400);
+    const timer = setTimeout(() => setLanded(null), 3000);
     return () => {
       cancelAnimationFrame(frame);
       clearTimeout(timer);
+      setLanded(null);
+      setReveal(new Set());
     };
-  }, [moved, expand]);
+  }, [moved]);
   const rootAvailable = !!drag && drag.source.parent_id !== null;
+  const listeners = expandListeners.current;
+  // Branches re-render only when what they show changes.
+  const view = useMemo<DragView>(
+    () => ({
+      drag,
+      saving,
+      landed,
+      reveal,
+      start: { startMouse, startTouch },
+      expandListeners: listeners,
+    }),
+    [drag, saving, landed, reveal, startMouse, startTouch, listeners],
+  );
   const refresh = async () => {
     if (busy) return;
     setManualBusy(true);
@@ -341,9 +381,7 @@ export function Tree(props: TreeProps) {
           {error}
         </p>
       )}
-      <DragContext.Provider
-        value={{ drag, saving, landed, start, expandListeners: expandListeners.current }}
-      >
+      <DragContext.Provider value={view}>
         <Branch {...props} onLoading={onLoading} parent={null} />
       </DragContext.Provider>
       {drag &&
@@ -379,7 +417,8 @@ export function NodePicker({
   initialPath = [],
 }: {
   value: string | null;
-  onSelect: (id: string | null, title: string) => void;
+  // `ancestors` are the selected folder's parents, from the top level down.
+  onSelect: (id: string | null, title: string, ancestors: string[]) => void;
   parentsOnly?: boolean;
   exclude?: string;
   label?: string;
@@ -420,7 +459,13 @@ export function NodePicker({
         <button
           type="button"
           className={`picker-row ${value === parent ? 'selected' : ''}`}
-          onClick={() => onSelect(parent, path.at(-1)?.title || '根目录')}
+          onClick={() =>
+            onSelect(
+              parent,
+              path.at(-1)?.title || '根目录',
+              path.slice(0, -1).map((part) => part.id),
+            )
+          }
         >
           <Plus size={16} />
           <span>选择{parent ? '当前目录' : '根目录'}</span>
@@ -432,7 +477,16 @@ export function NodePicker({
         .filter((node) => node.id !== exclude && (!parentsOnly || PARENT_KINDS.includes(node.kind)))
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
-            <button type="button" onClick={() => onSelect(node.id, node.title)}>
+            <button
+              type="button"
+              onClick={() =>
+                onSelect(
+                  node.id,
+                  node.title,
+                  path.map((part) => part.id),
+                )
+              }
+            >
               <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
               <span>{node.title}</span>
             </button>

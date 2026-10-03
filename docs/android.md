@@ -35,7 +35,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.4.9-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 18，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+`artifacts/yejian-0.4.10-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 19，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 0.2.1 更新应用图标，包含普通、圆形、自适应和单色主题图标，以及启动画面和旧 WebView 提示页。应用内标识按所选主题切换，桌面图标及启动画面使用系统深浅色资源，详见[应用图标](branding.md)。
 
@@ -52,7 +52,7 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 ```bash
 pnpm android:apk
 pnpm run deploy
-pnpm android:publish --apk artifacts/yejian-0.4.9-android-debug.apk --notes docs/releases/0.4.9.txt --remote
+pnpm android:publish --apk artifacts/yejian-0.4.10-android-debug.apk --notes docs/releases/0.4.10.txt --remote
 ```
 
 安装包保存在 R2 的 `releases/android/` 中，通过登录接口访问，GitHub 仓库保持私有。发行文件不计入应用的笔记库容量统计，但使用同一 Cloudflare 账号的 R2 存储额度。历史安装包采用构建号与摘要寻址，不被新发布覆盖。
@@ -94,6 +94,13 @@ Android 使用首页树形目录和底部「笔记／收藏／设置」导航，
 清单分块和批量插入按 UTF-8 字节数打包，每个绑定值不超过 1.5 MB；恢复事务最多 40 条语句，为认证和任务检查留出空间，适配 [D1 免费方案的单次 50 查询及单值 2 MB 限制](https://developers.cloudflare.com/d1/platform/limits/)。超过单次恢复边界时返回错误，当前资料保持完整。
 
 ## 验证
+
+0.4.10 验证记录（2026-10-03）：
+
+- Worker 86 项（新增登录限流与已知设备）、前端单元 13 项（列表缓存、离线图标缓存、拖动目标）、离线构建 4 项通过；类型检查、`npm run lint`、Web 与 Android 构建通过。
+- 电脑／手机界面检查 136 项全部通过。e2e 每个用例开始前清空笔记库，原先因数据累积失败的手机「移动」对话框用例恢复通过。
+- 合并 `shell.css` 与 `styles.css` 的重复规则前后，三种主题下 7 个页面在电脑与手机共 42 张截图逐像素一致。
+- 本机离线数据库升级到版本 3，图标存储新增按保存时间的索引。
 
 0.4.9 验证记录（2026-10-03）：
 

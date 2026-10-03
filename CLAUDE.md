@@ -10,7 +10,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Commands
 
-- Single Worker test file: `npx vitest run tests/library.test.ts`; single test: add `-t '<name>'`.
+- `npm run lint` (oxlint, warnings fail). TypeScript 7 has no JS API, so typescript-eslint is not an option.
+- Single Worker test file: `npx vitest run tests/library.test.ts`; single test: add `-t '<name>'`. Client tests only: `npx vitest run --project client`.
 - Single e2e spec/project: `npx playwright test e2e/notebook.spec.ts --project=desktop`. E2E serves the built `dist/` through `scripts/e2e-server.mjs` on port 8799, so run `npm run build` after UI changes before e2e.
 - `npm run db:local` applies migrations to local D1 (`npm run dev` does this automatically).
 - `npm run theme:check` / `theme:sync` compare/regenerate family theme tokens from a sibling `../packages/theme` checkout; the build itself uses the committed CSS.
@@ -28,10 +29,10 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 **AI features.** `worker/deepseek.ts` stores the API key encrypted with a key derived from `APP_SECRET` and makes the provider calls. `worker/assistant.ts` handles per-node chat threads plus a global thread (`GLOBAL_ASSISTANT_ID = 'qingli-global'`), streamed to the client over SSE. Budgets are checked before any paid call, and paid requests are never retried automatically. `worker/translation.ts` caches results per (file, source text, target language). Tests mock DeepSeek; never hit the real API in tests.
 
-**Frontend.** `src/App.tsx` is the shell (routing via `src/navigation.ts`, theme, sidebar); feature UIs are in `src/components/`. All API calls go through `api()` in `src/api.ts`. It falls back to the IndexedDB offline cache (`src/offline-cache.ts`) for whitelisted GET reads when offline. `scripts/offline-shell.ts` is a Vite plugin that generates `/sw.js` for the web build only (Android uses bundled assets, no service worker). See `docs/offline-reading.md` for cache invariants (what may be cached, and clearing on logout/session loss).
+**Frontend.** `src/App.tsx` composes the notebook (routing via `src/navigation.ts`); the sidebar and page header are in `components/Sidebar.tsx`, and moving notes (drag, dialog, undo toast) is `src/use-move-notes.tsx` with `src/use-tree-drag.ts`. The note page is `components/NotePane.tsx`, which keeps loading and reading position and delegates editing to `src/use-note-editor.ts`, the outline to `src/use-note-toc.tsx`, and its chrome to `NoteActions`/`NoteChrome`/`NoteBody`. Base styles are in `src/styles.css`; `src/shell.css` only adds family-specific rules, so do not redefine a base selector there. All API calls go through `api()` in `src/api.ts`. It falls back to the IndexedDB offline cache (`src/offline-cache.ts`) for whitelisted GET reads when offline. `scripts/offline-shell.ts` is a Vite plugin that generates `/sw.js` for the web build only (Android uses bundled assets, no service worker). See `docs/offline-reading.md` for cache invariants (what may be cached, and clearing on logout/session loss).
 
 **Builds.** The web build goes to `dist/`. `vite build --mode android` goes to `dist-android/` and aliases PDF.js to its `legacy` build for older WebViews. The Android WebView uses origin `https://note.xvi.app` with local assets; only `/api/` goes to the network (details in `docs/android.md`).
 
-**Testing.** Worker tests run inside workerd via `@cloudflare/vitest-pool-workers` (`vitest.config.ts`) with migrations applied from `TEST_MIGRATIONS`. They call the worker via `SELF.fetch` and reset tables in `beforeEach`. Files run serially (`fileParallelism: false`).
+**Testing.** `vitest.config.ts` has two projects. `worker` runs inside workerd via `@cloudflare/vitest-pool-workers` with migrations applied from `TEST_MIGRATIONS`; tests call the worker via `SELF.fetch`, reset tables in `beforeEach`, and run serially. `client` runs `src/**/*.test.ts(x)` in happy-dom with fake-indexeddb (setup in `src/test-setup.ts`). E2E specs import `test` from `e2e/fixtures.ts`, whose auto fixture empties the library (and the Qingli key) before every test, so a spec must create the data and settings it needs.
 
 **Migrations.** These are numbered SQL files in `migrations/`. SQLite table rebuilds copy data into `migration_saved_*` tables first (see `0009_global_assistant.sql`); `tests/global-migration.test.ts` covers that pattern. `pnpm run deploy` applies production migrations before deploying.

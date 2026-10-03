@@ -1,4 +1,4 @@
-import { expect, test, type Locator } from '@playwright/test';
+import { expect, test, type Locator } from './fixtures';
 import { preparePassword } from '../shared/password';
 import { paperHtml } from '../tests/fixtures/arxiv';
 

@@ -1,4 +1,4 @@
-import { expect, test, type Locator, type Page, type Route } from '@playwright/test';
+import { expect, test, type Locator, type Page, type Route } from './fixtures';
 import { noteAction, openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { sourceLabel, type Translation } from '../shared/translation';

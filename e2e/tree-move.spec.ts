@@ -1,4 +1,4 @@
-import { expect, test, type Page } from '@playwright/test';
+import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
@@ -13,44 +13,24 @@ async function login(page: Page) {
   });
   expect(response.ok()).toBeTruthy();
 }
-// Top-level nodes this test made; trashed afterwards so later specs' new items
-// stay on the first page of the shared top-level listing.
-const created: string[] = [];
 async function create(page: Page, data: object) {
   const response = await page.request.post('/api/nodes', { headers, data });
   expect(response.ok()).toBeTruthy();
-  const node = await response.json();
-  if (!node.parent_id) created.push(node.id);
-  return node;
+  return response.json();
 }
-test.afterEach(async ({ page }) => {
-  for (const id of created.splice(0)) {
-    const preview = await page.request.get(`/api/nodes/${id}/delete-preview`);
-    if (!preview.ok()) continue;
-    const { count } = await preview.json();
-    await page.request.delete(`/api/nodes/${id}`, { headers, data: { count } });
-  }
-});
 const parentOf = async (page: Page, id: string) =>
   (await (await page.request.get(`/api/nodes/${id}`)).json()).parent_id;
 
-// Earlier specs leave many root items, often past the first page; show only this
-// test's nodes at the top level.
 async function seed(page: Page, name: string) {
-  const target = await create(page, { kind: 'folder', title: `目标 ${name}` });
+  // An icon on the target checks the move toast names the folder, not its icon.
+  const target = await create(page, {
+    kind: 'folder',
+    title: `目标 ${name}`,
+    icon: { emoji: '📚' },
+  });
   const outer = await create(page, { kind: 'folder', title: `外层 ${name}` });
   const inner = await create(page, { kind: 'folder', title: `内层 ${name}`, parentId: outer.id });
   const note = await create(page, { kind: 'markdown', title: `待移动 ${name}` });
-  const ids = new Set([target.id, outer.id, note.id]);
-  // Build the top level from these nodes' current state, so it follows each move.
-  await page.route('**/api/nodes?parent=', async (route) => {
-    const nodes = [];
-    for (const id of ids) {
-      const node = await (await page.request.get(`/api/nodes/${id}`)).json();
-      if (node.parent_id === null) nodes.push(node);
-    }
-    await route.fulfill({ json: { nodes, nextOffset: null } });
-  });
   return { target, outer, inner, note };
 }
 const center = async (page: Page, selector: string) => {
@@ -145,6 +125,29 @@ test('desktop drag shows a card, valid targets, landing and undo', async ({ page
   await page.mouse.up();
   await expect.poll(() => parentOf(page, note.id)).toBeNull();
   await expect(toast).toContainText('已移到根目录');
+
+  // Moving into a folder under a collapsed one opens the whole way down.
+  await tree.getByRole('button', { name: `收起 ${outer.title}`, exact: true }).click();
+  await expect(tree.locator(row(inner.id))).toHaveCount(0);
+  await tree
+    .locator(`[role="tree"] > li > ${row(note.id)}`)
+    .getByRole('button', { name: `管理 ${note.title}`, exact: true })
+    .click();
+  await tree.getByRole('button', { name: '移动到…', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: `移动「${note.title}」`, exact: true });
+  await dialog.getByRole('button', { name: `进入 ${outer.title}`, exact: true }).click();
+  await dialog.getByRole('button', { name: inner.title, exact: true }).click();
+  await dialog.getByRole('button', { name: '确认移动', exact: true }).click();
+  await expect.poll(() => parentOf(page, note.id)).toBe(inner.id);
+  await expect(
+    tree.getByRole('button', { name: `收起 ${outer.title}`, exact: true }),
+  ).toBeVisible();
+  await expect(tree.locator(`[data-tree-item="${inner.id}"] > ul ${row(note.id)}`)).toBeVisible();
+  // The reveal plays once; returning to the page later does not replay it.
+  await page.waitForTimeout(3800);
+  await page.goto('/favorites');
+  await page.goto('/');
+  await expect(tree.locator('.is-landed, .is-drop-done')).toHaveCount(0);
 });
 
 test('Android long press picks up a note, and a quick swipe still scrolls', async ({

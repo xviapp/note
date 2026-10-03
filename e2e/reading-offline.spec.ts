@@ -1,4 +1,4 @@
-import { test, expect, type Page } from '@playwright/test';
+import { test, expect, type Page } from './fixtures';
 import { openAttachments } from './note-actions';
 import { preparePassword } from '../shared/password';
 import { paperHtml, paperPng } from '../tests/fixtures/arxiv';
@@ -39,7 +39,7 @@ async function pin(page: Page, title: string) {
 async function cacheRecords(page: Page) {
   return page.evaluate(async () => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const open = indexedDB.open('yejian-offline', 2);
+      const open = indexedDB.open('yejian-offline', 3);
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
     });

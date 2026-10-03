@@ -62,8 +62,7 @@ describe('password authentication in workerd', () => {
       );
     try {
       expect(
-        (await send('/api/auth/setup', { token: bindings.SETUP_TOKEN, password: short }))
-          .status,
+        (await send('/api/auth/setup', { token: bindings.SETUP_TOKEN, password: short })).status,
       ).toBe(400);
       const setup = await send('/api/auth/setup', {
         token: bindings.SETUP_TOKEN,
@@ -71,15 +70,14 @@ describe('password authentication in workerd', () => {
       });
       expect(setup.status, await setup.clone().text()).toBe(200);
       const firstCookie = setup.headers.get('set-cookie')!.split(';')[0];
-      const stored = await bindings.DB.prepare(
-        'SELECT password_hash FROM site WHERE id=1',
-      ).first<{ password_hash: string }>();
+      const stored = await bindings.DB.prepare('SELECT password_hash FROM site WHERE id=1').first<{
+        password_hash: string;
+      }>();
       expect(stored!.password_hash).not.toContain(original.derived);
       const stolen = { ...original, derived: stored!.password_hash.split(':').at(-1) };
       expect((await send('/api/auth/login', { password: stolen })).status).toBe(401);
       expect(
-        (await send('/api/auth/login', { password: { ...original, iterations: 100_000 } }))
-          .status,
+        (await send('/api/auth/login', { password: { ...original, iterations: 100_000 } })).status,
       ).toBe(401);
       const login = await send('/api/auth/login', { password: original });
       expect(login.status).toBe(200);
@@ -153,9 +151,7 @@ describe('password authentication in workerd', () => {
       clientHash: true,
     });
     expect((await request('/api/auth/login', { password: proof })).status).toBe(401);
-    expect((await request('/api/auth/login', { password: 'legacy-password' })).status).toBe(
-      200,
-    );
+    expect((await request('/api/auth/login', { password: 'legacy-password' })).status).toBe(200);
     const stored = await bindings.DB.prepare(
       'SELECT password_hash,password_salt FROM site WHERE id=1',
     ).first<{ password_hash: string; password_salt: string }>();
@@ -176,9 +172,9 @@ describe('password authentication in workerd', () => {
       `PBKDF2 ${PASSWORD_ITERATIONS} iterations local wall time: ${Math.round(performance.now() - start)}ms (not remote CPU)`,
     );
     expect(hash).toHaveLength(43);
-    expect(
-      await passwordHash('another-password-for-testing', 'YWJjZGVmZ2hpamtsbW5vcA'),
-    ).not.toBe(hash);
+    expect(await passwordHash('another-password-for-testing', 'YWJjZGVmZ2hpamtsbW5vcA')).not.toBe(
+      hash,
+    );
   });
   it('initializes once, logs in and revokes all sessions', async () => {
     expect(
@@ -226,11 +222,56 @@ describe('password authentication in workerd', () => {
     expect(results.map((r) => r.status).sort()).toEqual([200, 409]);
     await bindings.DB.prepare('DELETE FROM login_attempts').run();
     for (let attempt = 0; attempt < 8; attempt++)
-      expect(
-        (await request('/api/auth/login', { password: 'wrong-password-guess' })).status,
-      ).toBe(401);
+      expect((await request('/api/auth/login', { password: 'wrong-password-guess' })).status).toBe(
+        401,
+      );
     expect(
       (await request('/api/auth/login', { password: 'a-long-password-for-testing' })).status,
+    ).toBe(429);
+  });
+  it('counts only failed sign-ins and keeps known devices clear of the site-wide limit', async () => {
+    await request('/api/auth/setup', {
+      token: bindings.SETUP_TOKEN,
+      password: 'a-long-password-for-testing',
+    });
+    // Successful sign-ins give their attempt back, so they never add up to a lockout.
+    for (let attempt = 0; attempt < 12; attempt++)
+      expect(
+        (await request('/api/auth/login', { password: 'a-long-password-for-testing' })).status,
+      ).toBe(200);
+    const login = await request('/api/auth/login', { password: 'a-long-password-for-testing' });
+    const device = login.headers
+      .getSetCookie()
+      .find((value) => value.startsWith('note_device='))!
+      .split(';')[0];
+    expect(device).toMatch(/^note_device=[\w-]+\.[\w-]+$/);
+    // Simulate guesses from many addresses filling the site-wide window.
+    await bindings.DB.prepare(
+      "INSERT OR REPLACE INTO login_attempts(key,attempts,window_start) VALUES('global',100,?)",
+    )
+      .bind(Date.now())
+      .run();
+    expect(
+      (await request('/api/auth/login', { password: 'a-long-password-for-testing' })).status,
+    ).toBe(429);
+    expect(
+      (await request('/api/auth/login', { password: 'a-long-password-for-testing' }, device))
+        .status,
+    ).toBe(200);
+    // A forged or outdated device mark gets no exemption.
+    expect(
+      (
+        await request(
+          '/api/auth/login',
+          { password: 'a-long-password-for-testing' },
+          device.replace(/\.[\w-]+$/, '.forged'),
+        )
+      ).status,
+    ).toBe(429);
+    await bindings.DB.prepare('UPDATE site SET auth_epoch=auth_epoch+1 WHERE id=1').run();
+    expect(
+      (await request('/api/auth/login', { password: 'a-long-password-for-testing' }, device))
+        .status,
     ).toBe(429);
   });
   it('requires the old password and invalidates all sessions on password change', async () => {
@@ -263,17 +304,14 @@ describe('password authentication in workerd', () => {
       ).status,
     ).toBe(200);
     for (const session of [first, second])
-      expect(
-        await (await request('/api/auth/status', undefined, session)).json(),
-      ).toMatchObject({
+      expect(await (await request('/api/auth/status', undefined, session)).json()).toMatchObject({
         authenticated: false,
       });
     expect(
       (await request('/api/auth/login', { password: 'a-long-password-for-testing' })).status,
     ).toBe(401);
     expect(
-      (await request('/api/auth/login', { password: 'a-new-long-password-for-testing' }))
-        .status,
+      (await request('/api/auth/login', { password: 'a-new-long-password-for-testing' })).status,
     ).toBe(200);
   });
   it('fails closed during a deployment reset and retains existing library data', async () => {

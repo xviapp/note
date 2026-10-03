@@ -6,7 +6,7 @@ import {
   type AssistantSettings,
 } from '../../shared/assistant';
 import { api } from '../api';
-import type { Confirm } from './Management';
+import type { Confirm } from './Primitives';
 
 export function AiSettings({ confirm }: { confirm: Confirm }) {
   const [settings, setSettings] = useState<AssistantSettings | null>(null);

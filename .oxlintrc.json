@@ -1,0 +1,35 @@
+{
+  "$schema": "./node_modules/oxlint/configuration_schema.json",
+  "plugins": ["typescript", "react", "import", "oxc"],
+  "categories": { "correctness": "error", "suspicious": "warn" },
+  "env": { "browser": true, "es2024": true },
+  "rules": {
+    "react-hooks/rules-of-hooks": "error",
+    "react-hooks/exhaustive-deps": "error",
+    "react/react-in-jsx-scope": "off",
+    "react/refs": "off",
+    "react/set-state-in-effect": "off",
+    "react/exhaustive-effect-dependencies": "off",
+    "react/immutability": "off",
+    "react/purity": "off",
+    "react/memo-dependencies": "off",
+    "import/no-unassigned-import": "off",
+    "eslint/no-underscore-dangle": "off",
+    "eslint/no-shadow": "off"
+  },
+  "overrides": [
+    {
+      "files": ["e2e/**"],
+      "rules": { "eslint/no-empty-pattern": "off", "react-hooks/rules-of-hooks": "off" }
+    }
+  ],
+  "ignorePatterns": [
+    "dist",
+    "dist-android",
+    "android",
+    "node_modules",
+    ".wrangler",
+    "test-results",
+    "artifacts"
+  ]
+}

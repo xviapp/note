@@ -122,6 +122,8 @@ export default function PdfView({
       live = false;
       void task?.destroy().catch(() => {});
     };
+    // Reopen only for another file; a refreshed cacheNote must not reload the PDF.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [fileId]);
 
   useEffect(() => {
@@ -219,6 +221,8 @@ export default function PdfView({
     programmedScroll.current = scroll.current.scrollTop;
     setScrollTop(scroll.current.scrollTop);
     syncPage(anchor.page);
+    // Re-anchor only when the layout is recomputed; width and viewport feed into it.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [layout, gap]);
 
   const measure = useCallback((number: number, aspect: number) => {

@@ -2,15 +2,11 @@ import { AssistantPanel, type AssistantHandle } from './components/AssistantPane
 import type { AssistantMode } from './components/AssistantWindow';
 import { usePullRefresh } from './use-pull-refresh';
 import { Capacitor } from '@capacitor/core';
-import { lazy, Suspense, useCallback, useEffect, useRef, useState, type FormEvent } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
-  ArrowLeft,
   BookOpen,
   Clock3,
-  FolderOpen,
   HardDriveDownload,
-  Menu,
-  Plus,
   Settings2,
   Star,
   Trash2,
@@ -27,11 +23,15 @@ import {
   type StorageInfo,
 } from '../shared/types';
 import { Spinner, useQuestion } from './components/Primitives';
-import { Tree, type MovedNode, type NodeAction } from './components/Tree';
-import { MoveDialog, NodeForm, NodeList, Settings, TrashView } from './components/Management';
+import { Tree, type NodeAction } from './components/Tree';
+import { useMoveNotes } from './use-move-notes';
+import { MoveDialog } from './components/MoveDialog';
+import { NodeForm } from './components/NodeForm';
+import { NodeList } from './components/NodeList';
+import { Settings } from './components/Settings';
+import { TrashView } from './components/TrashView';
 import NotePane from './components/NotePane';
-import { ThemeSwitcher } from './components/ThemePicker';
-import { MIN_PASSWORD_LENGTH, preparePassword } from '../shared/password';
+
 import { openLink } from './open-link';
 import { dismissReadingOverlay } from './mobile-back';
 import { isOffline, useOffline } from './connectivity';
@@ -39,13 +39,10 @@ import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
 import { Brand } from './components/Brand';
+import { AppHeader, Sidebar } from './components/Sidebar';
+import { AuthScreen } from './components/AuthScreen';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
-import {
-  settingsTitles,
-  useNotebookNavigation,
-  type SettingsSection,
-  type View,
-} from './navigation';
+import { useNotebookNavigation, type SettingsSection, type View } from './navigation';
 
 const ImageViewer = lazy(() => import('./components/ImageViewer'));
 
@@ -134,115 +131,6 @@ export default function App() {
     <AuthScreen status={status} token={setupToken} onSuccess={refresh} />
   );
 }
-function AuthScreen({
-  status,
-  token,
-  onSuccess,
-}: {
-  status: AuthStatus;
-  token: string;
-  onSuccess: () => Promise<boolean>;
-}) {
-  const setup = !status.initialized;
-  const [password, setPassword] = useState(''),
-    [repeat, setRepeat] = useState(''),
-    [error, setError] = useState(''),
-    [busy, setBusy] = useState(false),
-    [forgot, setForgot] = useState(false);
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
-    if (setup && password !== repeat) {
-      setError('两次输入的密码不一致。');
-      return;
-    }
-    setBusy(true);
-    try {
-      const current = await api<AuthStatus>('/api/auth/status');
-      await api(`/api/auth/${setup ? 'setup' : 'login'}`, 'POST', {
-        password: await preparePassword(password, setup ? undefined : current.password),
-        ...(setup ? { token } : {}),
-      });
-      setPassword('');
-      setRepeat('');
-      await onSuccess();
-    } catch (e) {
-      setError((e as Error).message);
-    } finally {
-      setBusy(false);
-    }
-  };
-  return (
-    <main className="auth-screen">
-      <div className="auth-theme">
-        <ThemeSwitcher />
-      </div>
-      <div className="auth-form-area">
-        <form onSubmit={submit} className="auth-form">
-          <Brand name={status.name} />
-          <h1>{setup ? '设置密码' : '登录'}</h1>
-          {setup && !token ? (
-            <p className="inline-error">请使用部署时生成的专属设置链接，完成第一次密码设置。</p>
-          ) : (
-            <>
-              <label>
-                {setup ? '设置密码' : '密码'}
-                <input
-                  autoFocus
-                  type="password"
-                  autoComplete={setup ? 'new-password' : 'current-password'}
-                  required
-                  minLength={setup ? MIN_PASSWORD_LENGTH : undefined}
-                  maxLength={256}
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder={setup ? `至少 ${MIN_PASSWORD_LENGTH} 个字符` : undefined}
-                  disabled={busy}
-                />
-              </label>
-              {setup && (
-                <label>
-                  确认密码
-                  <input
-                    type="password"
-                    autoComplete="new-password"
-                    minLength={MIN_PASSWORD_LENGTH}
-                    maxLength={256}
-                    required
-                    value={repeat}
-                    onChange={(e) => setRepeat(e.target.value)}
-                    disabled={busy}
-                  />
-                </label>
-              )}
-              {error && (
-                <p className="inline-error" role="alert">
-                  {error}
-                </p>
-              )}
-              <button className="button primary auth-submit" disabled={busy}>
-                {busy ? '正在验证…' : setup ? '创建笔记库' : '打开笔记库'}
-              </button>
-            </>
-          )}
-          {!setup && (
-            <button
-              type="button"
-              className="text-button forgot-button"
-              onClick={() => setForgot((value) => !value)}
-            >
-              忘记密码？
-            </button>
-          )}
-          {forgot && (
-            <p className="field-hint">在部署端重置密码，使用新的设置链接登录。笔记和文件会保留。</p>
-          )}
-        </form>
-      </div>
-    </main>
-  );
-}
-
 function Notebook({
   name,
   onCheckSession,
@@ -359,23 +247,26 @@ function Notebook({
   const openSettings = (section: SettingsSection) => {
     void navigation.go(`/settings/${section}`);
   };
+  // The system back button reads the latest page state; the listener stays put.
+  const nativeBack = useRef<(event: Event) => void>(() => {});
+  nativeBack.current = (event: Event) => {
+    if (dismissReadingOverlay()) event.preventDefault();
+    else if (mobileOpen) {
+      event.preventDefault();
+      setMobileOpen(false);
+    } else if (subpage) {
+      event.preventDefault();
+      navigation.back();
+    } else if (view !== 'tree') {
+      event.preventDefault();
+      void navigate('');
+    }
+  };
   useEffect(() => {
-    const back = (event: Event) => {
-      if (dismissReadingOverlay()) event.preventDefault();
-      else if (mobileOpen) {
-        event.preventDefault();
-        setMobileOpen(false);
-      } else if (subpage) {
-        event.preventDefault();
-        navigation.back();
-      } else if (view !== 'tree') {
-        event.preventDefault();
-        void navigate('');
-      }
-    };
+    const back = (event: Event) => nativeBack.current(event);
     window.addEventListener('note:native-back', back);
     return () => window.removeEventListener('note:native-back', back);
-  }, [view, subpage, mobileOpen, navigation.back]);
+  }, []);
   useEffect(() => {
     if (!mobileOpen) return;
     const escape = (e: KeyboardEvent) => {
@@ -445,56 +336,15 @@ function Notebook({
       report(e);
     }
   };
-  const [moved, setMoved] = useState<MovedNode | null>(null);
-  const [moveToast, setMoveToast] = useState<{
-    key: number;
-    message: string;
-    undo?: () => Promise<void>;
-  } | null>(null);
-  const relocate = async (id: string, parent: string | null) => {
-    const node = await api<NoteNode>(`/api/nodes/${id}`);
-    if (node.parent_id === parent) return null;
-    await api(`/api/nodes/${id}`, 'PATCH', { parentId: parent, revision: node.revision });
-    changed();
-    setDetailRevision((r) => r + 1);
-    return node;
-  };
-  // Every completed move reveals its new location and can be undone once.
-  const announceMove = (id: string, from: string | null, to: string | null, title: string) => {
-    const key = Date.now();
-    setMoved({ id, parent: to, key });
-    setMoveToast({
-      key,
-      message: to ? `已移到「${title || '目标文件夹'}」` : '已移到根目录',
-      undo: async () => {
-        setMoveToast(null);
-        try {
-          if (!(await relocate(id, from))) return;
-          setMoved({ id, parent: from, key: Date.now() });
-          setMoveToast({ key: Date.now(), message: '已撤销移动' });
-        } catch (e) {
-          report(e);
-        }
-      },
-    });
-  };
-  useEffect(() => {
-    if (!moveToast) return;
-    const timer = setTimeout(() => setMoveToast(null), moveToast.undo ? 6000 : 2500);
-    return () => clearTimeout(timer);
-  }, [moveToast]);
-  const drop = async (id: string, parent: string | null, title: string) => {
-    if (!id || id === parent || !(await leaveGuard.current())) return false;
-    try {
-      const node = await relocate(id, parent);
-      if (!node) return false;
-      announceMove(id, node.parent_id, parent, title);
-      return true;
-    } catch (e) {
-      report(e);
-      return false;
-    }
-  };
+  const moves = useMoveNotes({
+    canLeave: () => leaveGuard.current(),
+    onMoved: () => {
+      changed();
+      setDetailRevision((r) => r + 1);
+    },
+    onError: report,
+  });
+  const { moved, drop } = moves;
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
     setForm({ parent: loaded && PARENT_KINDS.includes(loaded.kind) ? loaded.id : null });
@@ -509,14 +359,6 @@ function Notebook({
       report(e);
     }
   };
-  const navItems = [
-    { key: 'tree' as const, label: '全部笔记', icon: FolderOpen },
-    { key: 'favorites' as const, label: '收藏', icon: Star },
-    { key: 'recent' as const, label: '最近访问', icon: Clock3 },
-    { key: 'offline' as const, label: '离线阅读', icon: HardDriveDownload },
-    { key: 'trash' as const, label: '回收站', icon: Trash2 },
-    { key: 'settings' as const, label: '设置', icon: Settings2 },
-  ];
   return (
     <div
       className={`app-shell ${android ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
@@ -536,105 +378,36 @@ function Notebook({
             aria-label="关闭笔记目录"
             onClick={() => setMobileOpen(false)}
           />
-          <aside id="notebook-sidebar" className="sidebar" aria-label="主导航">
-            {/* Kept compact so the note tree gets most of the sidebar's height. */}
-            <div className="sidebar-brand">
-              <Brand name={name} />
-              <div className="sidebar-brand-actions">
-                <ThemeSwitcher />
-                <button
-                  className="icon-button new-note-button"
-                  aria-label="新建笔记"
-                  title="新建笔记"
-                  onClick={newNode}
-                >
-                  <Plus size={19} />
-                </button>
-                <button
-                  className="icon-button close-sidebar"
-                  aria-label="关闭侧栏"
-                  onClick={() => setMobileOpen(false)}
-                >
-                  <X size={20} />
-                </button>
-              </div>
-            </div>
-            <nav className="main-nav" aria-label="页面">
-              {navItems.map((item) => (
-                <button
-                  key={item.key}
-                  className={view === item.key ? 'active' : ''}
-                  aria-label={item.label}
-                  aria-current={view === item.key ? 'page' : undefined}
-                  title={item.label}
-                  onClick={() => switchView(item.key)}
-                >
-                  <item.icon size={18} />
-                </button>
-              ))}
-            </nav>
-            <div className="sidebar-tree">
-              <Tree
-                refresh={revision}
-                onRefresh={refreshLibrary}
-                selected={selected}
-                onOpen={openNode}
-                onAction={action}
-                onDrop={drop}
-                moved={moved}
-              />
-            </div>
-          </aside>
+          <Sidebar
+            name={name}
+            view={view}
+            onNew={() => void newNode()}
+            onClose={() => setMobileOpen(false)}
+            onView={(next) => void switchView(next)}
+            tree={{
+              refresh: revision,
+              onRefresh: refreshLibrary,
+              selected,
+              onOpen: openNode,
+              onAction: action,
+              onDrop: drop,
+              moved,
+            }}
+          />
         </>
       )}
       <main className="main-area">
         {!(view === 'tree' && selected) && (
-          <header className="app-header">
-            <div className="header-location">
-              {subpage && (
-                <button
-                  className="icon-button page-back"
-                  aria-label="返回"
-                  onClick={navigation.back}
-                >
-                  <ArrowLeft size={22} />
-                </button>
-              )}
-              {!android && (
-                <button
-                  className="icon-button mobile-menu"
-                  aria-label="打开笔记目录"
-                  aria-controls="notebook-sidebar"
-                  aria-expanded={mobileOpen}
-                  onClick={openSidebar}
-                >
-                  <Menu size={21} />
-                </button>
-              )}
-              <span className="header-title">
-                {view === 'tree'
-                  ? '全部笔记'
-                  : view === 'favorites'
-                    ? '收藏'
-                    : view === 'recent'
-                      ? '最近访问'
-                      : view === 'offline'
-                        ? '离线阅读'
-                        : view === 'trash'
-                          ? '回收站'
-                          : settingsSection
-                            ? settingsTitles[settingsSection]
-                            : '设置'}
-              </span>
-            </div>
-            {/* The header carries the page title, so pages keep theirs for screen readers only. */}
-            {view === 'tree' && !selected && (
-              <button className="button compact header-new" onClick={newNode}>
-                <Plus size={16} />
-                新建
-              </button>
-            )}
-          </header>
+          <AppHeader
+            view={view}
+            section={settingsSection}
+            showBack={subpage}
+            showMenu={!android}
+            menuOpen={mobileOpen}
+            onBack={navigation.back}
+            onMenu={openSidebar}
+            onNew={view === 'tree' && !selected ? () => void newNode() : undefined}
+          />
         )}
         {offline && (
           <div className="offline-banner" role="status">
@@ -794,16 +567,7 @@ function Notebook({
             ))}
           </nav>
         )}
-        {moveToast && (
-          <div key={moveToast.key} className="move-toast" role="status">
-            <span>{moveToast.message}</span>
-            {moveToast.undo && (
-              <button className="text-button" onClick={() => void moveToast.undo?.()}>
-                撤销
-              </button>
-            )}
-          </div>
-        )}
+        {moves.toast}
       </main>
       <AssistantPanel
         global
@@ -853,8 +617,8 @@ function Notebook({
         <MoveDialog
           node={moving}
           onClose={() => setMoving(null)}
-          onSaved={(parent, title) => {
-            announceMove(moving.id, moving.parent_id, parent, title);
+          onSaved={(parent, title, ancestors) => {
+            moves.announce(moving.id, moving.parent_id, parent, title, ancestors);
             setMoving(null);
             changed();
             setDetailRevision((r) => r + 1);

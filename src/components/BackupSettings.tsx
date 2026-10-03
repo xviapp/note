@@ -3,7 +3,7 @@ import { Archive, Download, Upload } from 'lucide-react';
 import { exportLibrary, openBackup, restoreLibrary, type OpenBackup } from '../backup';
 import { api, formatBytes } from '../api';
 import { useOffline } from '../connectivity';
-import type { Confirm } from './Management';
+import type { Confirm } from './Primitives';
 
 export function BackupSettings({
   confirm,

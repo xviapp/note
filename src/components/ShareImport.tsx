@@ -61,6 +61,8 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
     return () => {
       live = false;
     };
+    // Keyed by the share's id; a new object for the same share needs no new request.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [share?.id, offline, destinationReady, retry]);
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
@@ -70,6 +72,8 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
     refresh();
     window.addEventListener('note:share', refresh);
     return () => window.removeEventListener('note:share', refresh);
+    // Keyed by the share's id, which also decides whether refresh() loads.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [share?.id]);
   const discard = async () => {
     if (busy || !share) return;

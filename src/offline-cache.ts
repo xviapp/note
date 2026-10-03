@@ -120,7 +120,7 @@ function readLimit() {
 }
 function openDatabase() {
   return (database ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('yejian-offline', 2);
+    const request = indexedDB.open('yejian-offline', 3);
     request.onupgradeneeded = (event) => {
       const db = request.result;
       if (event.oldVersion < 1) {
@@ -130,6 +130,9 @@ function openDatabase() {
         db.createObjectStore('responses', { keyPath: 'path' });
       }
       if (event.oldVersion < 2) db.createObjectStore('icons', { keyPath: 'id' });
+      // Eviction walks keys oldest first instead of reading every icon blob.
+      if (event.oldVersion < 3)
+        request.transaction!.objectStore('icons').createIndex('savedAt', 'savedAt');
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => {
@@ -265,7 +268,7 @@ export function shareFileDownload(id: string, download: Promise<Blob>) {
     })
     .catch(() => {});
 }
-export function fileBlob(id: string): Promise<Blob> {
+export function fileBlob(id: string, { cached = true } = {}): Promise<Blob> {
   // Removing an unrelated cached note must not abort the PDF currently opening.
   // Only a session reset cancels foreground file reads.
   const epoch = privateGeneration;
@@ -274,7 +277,7 @@ export function fileBlob(id: string): Promise<Blob> {
   if (pending) return pending;
   const signal = downloadController.signal;
   const result = (async () => {
-    const saved = await cachedFile(id);
+    const saved = cached ? await cachedFile(id) : null;
     if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
     if (saved) return saved;
     const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
@@ -309,10 +312,9 @@ export function iconImage(id: string): Promise<string> {
   const pending = iconRequests.get(key);
   if (pending) return pending;
   const result = (async () => {
-    const saved = await transaction('readonly', (tx) =>
-      request<CachedIcon | undefined>(tx.objectStore('icons').get(id)),
-    ).catch(() => undefined);
-    const blob = saved?.blob ?? (await fileBlob(id));
+    // One read covers both saved notes and saved icons before the network.
+    const saved = await cachedFile(id);
+    const blob = saved ?? (await fileBlob(id, { cached: false }));
     if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
     if (!saved) void rememberIcon(id, blob, cache).catch(() => {});
     const url = iconUrls.get(id) ?? URL.createObjectURL(blob);
@@ -329,11 +331,18 @@ async function rememberIcon(id: string, blob: Blob, epoch: string) {
     if (epoch !== cacheEpoch()) return;
     if (!(await request(tx.objectStore('responses').get('/api/auth/status')))) return;
     const store = tx.objectStore('icons');
-    const icons = await request<CachedIcon[]>(store.getAll());
-    for (const old of icons
-      .sort((a, b) => a.savedAt - b.savedAt)
-      .slice(0, Math.max(0, icons.length + 1 - ICON_LIMIT)))
-      store.delete(old.id);
+    let excess = (await request(store.count())) + 1 - ICON_LIMIT;
+    if (excess > 0)
+      await new Promise<void>((resolve, reject) => {
+        const cursor = store.index('savedAt').openKeyCursor();
+        cursor.onerror = () => reject(cursor.error);
+        cursor.onsuccess = () => {
+          const current = cursor.result;
+          if (!current || excess-- <= 0) return resolve();
+          store.delete(current.primaryKey);
+          current.continue();
+        };
+      });
     store.put({ id, blob, savedAt: Date.now() } satisfies CachedIcon);
   });
 }
@@ -359,8 +368,7 @@ export async function cachedResponse<T>(path: string): Promise<T | undefined> {
     'readonly',
     async (tx) =>
       (await request<CachedResponse | undefined>(tx.objectStore('responses').get(path)))?.value as
-        | T
-        | undefined,
+        T | undefined,
   ).catch(() => undefined);
 }
 export async function rememberResponse(path: string, value: unknown, epoch: string) {

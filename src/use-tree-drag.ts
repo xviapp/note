@@ -56,6 +56,24 @@ function haptic() {
       /* Optional feedback. */
     }
 }
+// Where `source` would land if released over `element`: a row id,
+// ROOT_TARGET for the top level, or undefined when it cannot go there.
+export function dropTarget(
+  element: Element | null,
+  root: Element | null,
+  source: Pick<NoteNode, 'id' | 'parent_id'>,
+): string | undefined {
+  if (!element || !root?.contains(element)) return undefined;
+  if (element.closest('[data-tree-root]'))
+    return source.parent_id === null ? undefined : ROOT_TARGET;
+  const row = element.closest<HTMLElement>('[data-tree-node]');
+  const id = row?.dataset.treeNode;
+  if (!row || !id || row.dataset.treeContainer !== 'true' || id === source.parent_id)
+    return undefined;
+  // A folder cannot move into itself or anything beneath it.
+  if (row.closest(`[data-tree-item="${CSS.escape(source.id)}"]`)) return undefined;
+  return id;
+}
 function scrollParent(element: HTMLElement | null) {
   for (let node = element?.parentElement; node; node = node.parentElement) {
     const { overflowY } = getComputedStyle(node);
@@ -94,19 +112,8 @@ export function useTreeDrag(
     if (ghost.current) ghost.current.style.transform = ghostTransform(x, y, pointer);
   };
 
-  const targetAt = (x: number, y: number, source: NoteNode): string | undefined => {
-    const element = document.elementFromPoint(x, y);
-    if (!element || !root.current?.contains(element)) return undefined;
-    if (element.closest('[data-tree-root]'))
-      return source.parent_id === null ? undefined : ROOT_TARGET;
-    const row = element.closest<HTMLElement>('[data-tree-node]');
-    const id = row?.dataset.treeNode;
-    if (!row || !id || row.dataset.treeContainer !== 'true' || id === source.parent_id)
-      return undefined;
-    // A folder cannot move into itself or anything beneath it.
-    if (row.closest(`[data-tree-item="${CSS.escape(source.id)}"]`)) return undefined;
-    return id;
-  };
+  const targetAt = (x: number, y: number, source: NoteNode) =>
+    dropTarget(document.elementFromPoint(x, y), root.current, source);
 
   const end = useCallback((commit: boolean) => {
     const current = session.current;
@@ -332,5 +339,8 @@ export function useTreeDrag(
   };
 
   useEffect(() => () => end(false), [end]);
-  return { drag, startMouse, startTouch, cancel: () => end(false) };
+  // The handlers only read refs and stable setters, so the first render's
+  // copies stay valid; a stable object keeps consumers from re-rendering.
+  const handlers = useRef({ startMouse, startTouch, cancel: () => end(false) }).current;
+  return { drag, ...handlers };
 }

@@ -175,3 +175,10 @@ export function Empty({
     </div>
   );
 }
+
+export type Confirm = (
+  title: string,
+  message: string,
+  ok?: string,
+  danger?: boolean,
+) => Promise<boolean>;

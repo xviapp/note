@@ -1,10 +1,10 @@
 :root {
   font-family: var(--font-ui);
   color: var(--ink);
-  background: var(--surface);
+  background: var(--canvas);
   font-synthesis: none;
-  font-size: 14px;
-  line-height: 1.6;
+  font-size: var(--family-type-body);
+  line-height: 1.57;
 }
 * {
   box-sizing: border-box;
@@ -28,7 +28,7 @@ button {
 }
 button:disabled {
   cursor: default;
-  opacity: 0.5;
+  opacity: var(--family-disabled);
 }
 button {
   border: 0;
@@ -67,10 +67,11 @@ select,
 textarea {
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  background: var(--surface-subtle);
+  background: var(--surface-raised);
   padding: 10px 12px;
   width: 100%;
   color: var(--ink);
+  border-color: var(--line-strong);
 }
 input::placeholder {
   color: var(--muted);
@@ -133,13 +134,13 @@ progress::-moz-progress-bar {
   align-items: center;
   justify-content: center;
   gap: 7px;
-  min-height: 37px;
-  padding: 8px 14px;
+  min-height: 44px;
+  padding: 10px 16px;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  background: var(--surface-subtle);
-  font-size: 13px;
-  font-weight: 500;
+  background: var(--surface-raised);
+  font-size: var(--family-type-body);
+  font-weight: 600;
   line-height: 1.4;
   white-space: nowrap;
 }
@@ -165,13 +166,13 @@ progress::-moz-progress-bar {
   border-color: #8c2d31;
 }
 .button.compact {
-  min-height: 32px;
+  min-height: 36px;
   padding: 6px 10px;
   font-size: 12px;
 }
 .icon-button {
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -373,7 +374,7 @@ progress::-moz-progress-bar {
   background: var(--sidebar);
   display: flex;
   flex-direction: column;
-  padding: 28px 16px 18px;
+  padding: var(--family-space-lg) var(--family-space-md) var(--family-space-sm);
   z-index: 30;
 }
 .sidebar-brand {
@@ -415,6 +416,7 @@ progress::-moz-progress-bar {
   padding: 0;
   border-radius: var(--radius-control);
   color: var(--muted);
+  min-height: 40px;
 }
 .main-nav button:hover {
   background: var(--hover);
@@ -447,8 +449,8 @@ progress::-moz-progress-bar {
   justify-content: space-between;
 }
 .tree-refresh {
-  width: 44px;
-  height: 44px;
+  width: var(--family-touch);
+  height: var(--family-touch);
   color: var(--muted);
 }
 .tree-refresh.is-loading > svg {
@@ -489,7 +491,7 @@ progress::-moz-progress-bar {
   min-width: 0;
   text-align: left;
   padding: 6px 0;
-  font-size: 12px;
+  font-size: 13px;
   color: var(--muted);
 }
 .tree-label span {
@@ -799,23 +801,26 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   min-width: 0;
   flex-direction: column;
   background: var(--surface);
-  border-radius: 24px 0 0 24px;
+  border-radius: 0;
   overflow: hidden;
+  border-left: 1px solid var(--line);
 }
 .app-header {
-  height: 68px;
+  height: auto;
   flex-shrink: 0;
   border-bottom: 1px solid var(--line);
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 0 31px;
+  padding: 8px 32px;
   gap: 12px;
+  min-height: 56px;
+  background: var(--surface);
 }
 .header-location {
   display: flex;
   align-items: center;
-  gap: 8px;
+  gap: var(--family-space-md);
 }
 .theme-switcher {
   width: 34px;
@@ -886,13 +891,13 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   border-radius: 8px;
   overflow: hidden;
   border: 1px solid #96a89855;
-  background: #fcfdfb;
+  background: #fff8ef;
 }
 .theme-swatch::before {
   content: '';
   position: absolute;
   inset: 0 72% 0 0;
-  background: #edf2ec;
+  background: #f9efe2;
 }
 .theme-swatch span {
   position: absolute;
@@ -906,10 +911,10 @@ html[data-tree-drag='blocked'] .tree-drag-card {
     0 20px #8294af40;
 }
 .theme-swatch[data-palette='dark'] {
-  background: #202824;
+  background: #242220;
 }
 .theme-swatch[data-palette='dark']::before {
-  background: #19211d;
+  background: #191817;
 }
 .theme-swatch[data-palette='starry'] {
   background: radial-gradient(circle at 89% 19%, #d1d2ed88 1px, transparent 1.5px), #20263b;
@@ -918,13 +923,13 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   background: radial-gradient(circle at 38% 32%, #d1d2ed99 1px, transparent 1.5px), #181e31;
 }
 .theme-swatch[data-palette='system'] {
-  background: linear-gradient(115deg, #fcfdfb 50%, #202824 50%);
+  background: linear-gradient(115deg, #fff8ef 50%, #242220 50%);
 }
 .header-title {
-  font-size: 12px;
-  font-weight: 500;
-  color: var(--muted);
-  letter-spacing: 0.05em;
+  font-size: var(--family-type-title);
+  font-weight: 700;
+  color: var(--ink);
+  letter-spacing: 0;
 }
 .main-content {
   flex: 1;
@@ -954,8 +959,8 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   display: none;
 }
 .collection-page {
-  max-width: 1030px;
-  padding: 55px 64px 80px;
+  max-width: 960px;
+  padding: 32px 48px 64px;
   margin: auto;
 }
 .page-description {
@@ -970,33 +975,36 @@ html[data-tree-drag='blocked'] .tree-drag-card {
 .node-list-row {
   display: flex;
   align-items: center;
-  border-radius: 12px;
+  border-radius: var(--family-radius-card);
   gap: 8px;
   padding: 4px 8px;
-  margin: 4px -8px;
+  margin: 0;
+  position: relative;
 }
 .node-list-row:hover {
   background: var(--surface-subtle);
 }
 .node-list-main {
   display: flex;
-  gap: 15px;
+  gap: 12px;
   align-items: center;
   flex: 1;
   min-width: 0;
   text-align: left;
-  padding: 15px 5px;
+  padding: 12px 4px;
+  min-height: 64px;
 }
 .node-list-main > span {
   flex: 1;
   min-width: 0;
 }
 .node-list-main > .node-icon {
-  width: 38px;
-  height: 42px;
+  width: 40px;
+  height: 40px;
   padding: 10px;
-  border-radius: 5px 11px 11px 5px;
-  background: var(--surface-subtle);
+  border-radius: var(--radius-control);
+  background: var(--selected);
+  color: var(--blue);
 }
 .node-list-main > .custom-folder-icon {
   flex: 0 0 38px;
@@ -1005,7 +1013,7 @@ html[data-tree-drag='blocked'] .tree-drag-card {
 }
 .node-list-main strong {
   font-size: 14px;
-  font-weight: 500;
+  font-weight: 600;
   display: block;
   white-space: nowrap;
   text-overflow: ellipsis;
@@ -1122,9 +1130,9 @@ button.node-list-toggle:focus-visible {
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 14px;
-  min-height: 53px;
-  padding: 9px 30px;
+  gap: 12px;
+  min-height: 56px;
+  padding: 6px 24px;
   border-bottom: 1px solid var(--line);
   flex-shrink: 0;
 }
@@ -1142,7 +1150,7 @@ button.node-list-toggle:focus-visible {
   min-width: 0;
   overflow: hidden;
   white-space: nowrap;
-  font-size: 11px;
+  font-size: 13px;
   color: var(--muted);
 }
 .breadcrumbs span {
@@ -1164,7 +1172,7 @@ button.node-list-toggle:focus-visible {
 }
 .note-actions {
   display: flex;
-  gap: 5px;
+  gap: 4px;
   align-items: center;
   flex-shrink: 0;
 }
@@ -2319,7 +2327,7 @@ button.node-list-toggle:focus-visible {
   margin-top: 5px;
 }
 .settings-page {
-  max-width: 850px;
+  max-width: 800px;
 }
 .settings-section {
   padding-top: 27px;
@@ -2396,12 +2404,12 @@ button.node-list-toggle:focus-visible {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 24px;
-  margin: 23px 0;
+  gap: 16px;
+  margin: 24px 0;
 }
 .setting-row strong {
-  font-size: 13px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
 }
 .setting-row p {
   font-size: 11px;
@@ -2436,23 +2444,12 @@ button.node-list-toggle:focus-visible {
   .note-article {
     padding: 37px 42px 70px;
   }
-  .collection-page {
-    padding: 42px;
-  }
-  .app-header {
-    padding: 0 24px;
-  }
-  .note-toolbar {
-    padding: 10px 24px;
-  }
+
   .editing-label {
     display: none;
   }
 }
 @media (max-width: 760px) {
-  :root {
-    font-size: 14px;
-  }
   .app-shell {
     height: 100dvh;
   }
@@ -2464,7 +2461,6 @@ button.node-list-toggle:focus-visible {
     max-width: 86vw;
     transform: translateX(-100%);
     transition: transform 0.18s ease;
-    padding: 25px 15px 20px;
     box-shadow: none;
     border-radius: 0 22px 22px 0;
   }
@@ -2495,22 +2491,15 @@ button.node-list-toggle:focus-visible {
   .tree-row {
     min-height: 41px;
   }
-  .tree-label {
-    font-size: 13px;
-  }
+
   .tree-row:not(:hover):not(:focus-within) .node-menu:not([open]) {
     opacity: 1;
   }
-  .main-nav button {
-    min-height: 43px;
-  }
+
   .main-area {
     width: 100%;
-    border-radius: 0;
   }
   .app-header {
-    height: 57px;
-    padding: 0 15px 0 8px;
     gap: 5px;
   }
   .theme-choices {
@@ -2519,23 +2508,16 @@ button.node-list-toggle:focus-visible {
   .auth-form-area {
     padding: 28px 24px;
   }
-  .header-title {
-    font-size: 11px;
-  }
+
   .main-content {
     width: 100%;
   }
-  .note-toolbar {
-    padding: 9px 10px;
-    min-height: 55px;
-    gap: 6px;
-  }
+
   .note-location {
     gap: 6px;
   }
   .breadcrumbs {
     flex: 1;
-    font-size: 10px;
     align-self: center;
     min-width: 0;
   }
@@ -2547,9 +2529,7 @@ button.node-list-toggle:focus-visible {
   .breadcrumbs button {
     max-width: 100%;
   }
-  .note-actions {
-    gap: 2px;
-  }
+
   .note-actions .icon-button {
     width: 30px;
     height: 32px;
@@ -2606,23 +2586,16 @@ button.node-list-toggle:focus-visible {
   .children-section {
     margin-top: 38px;
   }
-  .collection-page {
-    padding: 34px 24px 60px;
-  }
+
   .page-description {
     font-size: 12px;
     margin: 11px 0 27px;
   }
-  .node-list-main {
-    gap: 13px;
-    padding: 14px 2px;
-  }
+
   .node-list-main time {
     font-size: 9px;
   }
-  .node-list-main strong {
-    font-size: 13px;
-  }
+
   .node-list-main small {
     font-size: 10px;
   }
@@ -2803,16 +2776,12 @@ button.node-list-toggle:focus-visible {
     font-size: 11px;
     padding: 6px 10px;
   }
-  .setting-row {
-    gap: 15px;
-  }
+
   .setting-row .button {
     font-size: 11px;
     padding: 7px 10px;
   }
-  .setting-row strong {
-    font-size: 12px;
-  }
+
   .empty-state {
     min-height: 270px;
     padding: 40px 10px;

@@ -1,5 +1,7 @@
-import { memo, useEffect, useRef, type ReactNode } from 'react';
-import ReactMarkdown from 'react-markdown';
+// Renderers are created once per safeImages value in useMemo below.
+// oxlint-disable react/no-unstable-nested-components
+import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
@@ -46,32 +48,91 @@ export const MarkdownView = memo(function MarkdownView({
       })),
     );
   }, [content, onHeadings]);
-  const heading =
-    (level: number) =>
-    ({
-      node,
-      children,
-    }: {
-      node?: { position?: { start: { offset?: number } } };
-      children?: ReactNode;
-    }) => {
-      const id = safeImages ? undefined : `heading-${node?.position?.start.offset ?? 0}`,
-        props = { id, children };
-      switch (level) {
-        case 1:
-          return <h1 {...props} />;
-        case 2:
-          return <h2 {...props} />;
-        case 3:
-          return <h3 {...props} />;
-        case 4:
-          return <h4 {...props} />;
-        case 5:
-          return <h5 {...props} />;
-        default:
-          return <h6 {...props} />;
-      }
+  // Renderers keep a stable identity, so a re-render does not remount images or
+  // links; the latest callbacks are read when they run.
+  const callbacks = useRef({ onNavigate, onImage });
+  callbacks.current = { onNavigate, onImage };
+  const components = useMemo<Components>(() => {
+    const heading =
+      (level: number) =>
+      ({
+        node,
+        children,
+      }: {
+        node?: { position?: { start: { offset?: number } } };
+        children?: ReactNode;
+      }) => {
+        const id = safeImages ? undefined : `heading-${node?.position?.start.offset ?? 0}`,
+          props = { id, children };
+        switch (level) {
+          case 1:
+            return <h1 {...props} />;
+          case 2:
+            return <h2 {...props} />;
+          case 3:
+            return <h3 {...props} />;
+          case 4:
+            return <h4 {...props} />;
+          case 5:
+            return <h5 {...props} />;
+          default:
+            return <h6 {...props} />;
+        }
+      };
+    const onNavigate = (id: string) => callbacks.current.onNavigate(id),
+      onImage = (src: string, alt: string) => callbacks.current.onImage(src, alt);
+    return {
+      h1: heading(1),
+      h2: heading(2),
+      h3: heading(3),
+      h4: heading(4),
+      h5: heading(5),
+      h6: heading(6),
+      a: ({ href, children }) => {
+        const internal = href?.match(/^\/n\/([a-zA-Z0-9_-]+)$/);
+        return (
+          <a
+            href={href}
+            {...(internal
+              ? {
+                  onClick: (event: React.MouseEvent) => {
+                    event.preventDefault();
+                    onNavigate(internal[1]);
+                  },
+                }
+              : { target: '_blank', rel: 'noopener noreferrer' })}
+          >
+            {children}
+          </a>
+        );
+      },
+      img: ({ src, alt }) =>
+        typeof src === 'string' ? (
+          safeImages ? (
+            <a href={src} target="_blank" rel="noopener noreferrer">
+              {alt || '查看图片链接'}
+            </a>
+          ) : (
+            <CachedImage
+              src={src}
+              alt={alt ?? ''}
+              loading="lazy"
+              decoding="async"
+              tabIndex={0}
+              role="button"
+              onClick={() => onImage(src, alt ?? '图片')}
+              onKeyDown={(event) => {
+                if (event.key === 'Enter' || event.key === ' ') {
+                  event.preventDefault();
+                  onImage(src, alt ?? '图片');
+                }
+              }}
+            />
+          )
+        ) : null,
+      input: (props) => <input {...props} disabled />,
     };
+  }, [safeImages]);
   return (
     <div ref={ref} className="markdown-body">
       <ReactMarkdown
@@ -82,57 +143,7 @@ export const MarkdownView = memo(function MarkdownView({
           [rehypeKatex, mathOptions],
         ]}
         skipHtml
-        components={{
-          h1: heading(1),
-          h2: heading(2),
-          h3: heading(3),
-          h4: heading(4),
-          h5: heading(5),
-          h6: heading(6),
-          a: ({ href, children }) => {
-            const internal = href?.match(/^\/n\/([a-zA-Z0-9_-]+)$/);
-            return (
-              <a
-                href={href}
-                {...(internal
-                  ? {
-                      onClick: (event: React.MouseEvent) => {
-                        event.preventDefault();
-                        onNavigate(internal[1]);
-                      },
-                    }
-                  : { target: '_blank', rel: 'noopener noreferrer' })}
-              >
-                {children}
-              </a>
-            );
-          },
-          img: ({ src, alt }) =>
-            typeof src === 'string' ? (
-              safeImages ? (
-                <a href={src} target="_blank" rel="noopener noreferrer">
-                  {alt || '查看图片链接'}
-                </a>
-              ) : (
-                <CachedImage
-                  src={src}
-                  alt={alt ?? ''}
-                  loading="lazy"
-                  decoding="async"
-                  tabIndex={0}
-                  role="button"
-                  onClick={() => onImage(src, alt ?? '图片')}
-                  onKeyDown={(event) => {
-                    if (event.key === 'Enter' || event.key === ' ') {
-                      event.preventDefault();
-                      onImage(src, alt ?? '图片');
-                    }
-                  }}
-                />
-              )
-            ) : null,
-          input: (props) => <input {...props} disabled />,
-        }}
+        components={components}
       >
         {content}
       </ReactMarkdown>

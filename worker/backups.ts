@@ -255,7 +255,7 @@ export async function uploadRestoreFile(
       .first();
     if (!finished) throw new AppError(409, '恢复任务已结束，请重新开始。');
     return { ok: true };
-  } catch (error) {
+  } catch {
     transfer.abort();
     await Promise.allSettled(transfers);
     await env.DB.prepare('UPDATE backup_files SET blob_id=NULL WHERE job_id=? AND source_id=?')

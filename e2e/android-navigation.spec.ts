@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test';
+import { expect, test } from './fixtures';
 import { preparePassword } from '../shared/password';
 
 test('Android home tree replaces the sidebar and restores nested pages after reading', async ({

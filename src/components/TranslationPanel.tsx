@@ -143,6 +143,8 @@ export function TranslationPanel(props: {
     if (launch.source) void run(launch.source, preferredLanguage(), launch.location || null);
     else void loadHistory();
     return () => operation.current?.abort();
+    // Start one translation per launch; run and loadHistory change every render.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [nodeId, launch]);
 
   return (

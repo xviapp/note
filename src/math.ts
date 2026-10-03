@@ -1,6 +1,6 @@
 import type { Element, Root, RootContent } from 'hast';
 import type { VFile } from 'vfile';
-import katex, { type KatexOptions } from 'katex';
+import { renderToString, type KatexOptions } from 'katex';
 
 export const mathOptions: KatexOptions = {
   trust: false,
@@ -18,11 +18,11 @@ function compatibleDelimiters(value: string, displayMode: boolean): string {
   if (candidate === value) return value;
   const options = { ...mathOptions, displayMode, throwOnError: true };
   try {
-    katex.renderToString(value, options);
+    renderToString(value, options);
     return value;
   } catch {
     try {
-      katex.renderToString(candidate, options);
+      renderToString(candidate, options);
       return candidate;
     } catch {
       // Preserve the original source when the narrow repair cannot render it.
