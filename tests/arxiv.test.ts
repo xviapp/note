@@ -320,6 +320,90 @@ describe('arXiv paper import', () => {
     );
   });
 
+  it('imports papers with more images than one request may fetch over signed continuations', async () => {
+    const figures = (count: number) =>
+      Array.from(
+        { length: count },
+        (_, index) => `<img src="2503.01800v1/many-${index}.png">`,
+      ).join('');
+    const fetch = provider(paperHtml.replace('</article>', `${figures(59)}</article>`));
+    const key = crypto.randomUUID();
+    const first = await request(
+      '/api/import/arxiv',
+      'POST',
+      { url: 'https://arxiv.org/html/2503.01800v1' },
+      { key },
+    );
+    expect(first.status).toBe(202);
+    const progress = await first.json<{ continuation: string; done: number; total: number }>();
+    expect(progress.total).toBe(60);
+    expect(progress.done).toBeGreaterThan(30);
+    expect(progress.done).toBeLessThan(60);
+    // Workers Free allows 50 outside fetches in one request.
+    expect(fetch.mock.calls.length).toBeLessThanOrEqual(50);
+    expect((await ok('/api/nodes')).nodes).toHaveLength(0);
+
+    // A tampered progress is refused without fetching.
+    const [data, signature] = progress.continuation.split('.');
+    const forged = `${data.slice(0, -4)}AAAA.${signature}`;
+    fetch.mockClear();
+    expect(
+      (await request('/api/import/arxiv/continue', 'POST', { continuation: forged })).status,
+    ).toBe(410);
+    expect(fetch).not.toHaveBeenCalled();
+
+    // A failed step uploads nothing that lingers, and the same progress retries.
+    fetch.mockImplementationOnce(async () => new Response('busy', { status: 429 }));
+    const before = (await ok<StorageInfo>('/api/storage')).allocatedBytes;
+    expect(
+      (
+        await request('/api/import/arxiv/continue', 'POST', {
+          continuation: progress.continuation,
+        })
+      ).status,
+    ).toBe(502);
+    expect((await ok<StorageInfo>('/api/storage')).allocatedBytes).toBe(before);
+
+    let result = await ok('/api/import/arxiv/continue', 'POST', {
+      continuation: progress.continuation,
+    });
+    expect(result.continuation).toBeUndefined();
+    const detail = await ok<NoteDetail>(`/api/nodes/${result.id}`);
+    const sources = [...detail.content.matchAll(/<img[^>]*src="([^"]+)"/g)].map(
+      (match) => match[1],
+    );
+    expect(detail.attachments).toHaveLength(60);
+    expect(new Set(sources)).toEqual(
+      new Set(detail.attachments.map((file) => `/api/files/${file.id}`)),
+    );
+    expect(detail.content).not.toContain('-image-');
+    // Replaying the last step returns the same note instead of a second copy.
+    result = await ok('/api/import/arxiv/continue', 'POST', {
+      continuation: progress.continuation,
+    });
+    expect(result.id).toBe(detail.id);
+    expect((await ok('/api/nodes')).nodes).toHaveLength(1);
+    // The interim article copy is removed; only the note's own blobs remain.
+    const blobs = await bindings.DB.prepare(
+      "SELECT COUNT(*) AS n FROM blobs WHERE name='paper.html'",
+    ).first<{ n: number }>();
+    expect(blobs!.n).toBe(1);
+  });
+
+  it('refuses papers with more than 200 different images before downloading them', async () => {
+    const extra = Array.from(
+      { length: 201 },
+      (_, index) => `<img src="2503.01800v1/too-many-${index}.png">`,
+    ).join('');
+    const fetch = provider(paperHtml.replace('</article>', `${extra}</article>`));
+    const response = await request('/api/import/arxiv', 'POST', {
+      url: 'https://arxiv.org/html/2503.01800v1',
+    });
+    expect(response.status).toBe(413);
+    expect((await response.json<{ error: string }>()).error).toContain('200');
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
   it('cleans up already imported images when a later image fails or the body exceeds quota', async () => {
     const fetch = provider(
       paperHtml.replace('</article>', '<img src="2503.01800v1/broken.png"></article>'),

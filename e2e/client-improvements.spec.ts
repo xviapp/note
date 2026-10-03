@@ -524,3 +524,48 @@ test('exports a checked ZIP and restores it alongside existing notes', async ({ 
   });
   await expect(page.getByRole('button', { name: '恢复到新目录', exact: true })).toHaveCount(0);
 });
+
+test('an arXiv paper with many images keeps importing over continuations and resumes after a failed step', async ({
+  page,
+}, info) => {
+  await login(page);
+  const title = `多图论文 ${info.project.name}`;
+  // The real import needs arxiv.org; the created note stands in for its result.
+  const created = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: { kind: 'link', title, url: 'https://arxiv.org/html/2503.01800v1' },
+    })
+  ).json();
+  const continuations: string[] = [];
+  let failNext = true;
+  await page.route('**/api/import/arxiv', (route) =>
+    route.fulfill({ status: 202, json: { continuation: 'step-1', done: 42, total: 90 } }),
+  );
+  await page.route('**/api/import/arxiv/continue', async (route) => {
+    const { continuation } = route.request().postDataJSON();
+    continuations.push(continuation);
+    if (continuation === 'step-1')
+      return route.fulfill({ status: 202, json: { continuation: 'step-2', done: 84, total: 90 } });
+    if (failNext) {
+      failNext = false;
+      return route.fulfill({ status: 502, json: { error: 'arXiv 暂时限制了访问，请稍后重试。' } });
+    }
+    return route.fulfill({ status: 201, json: created });
+  });
+  await page.goto('/');
+  await expect(page.locator('.app-shell')).toBeVisible();
+  await page.getByRole('button', { name: '新建', exact: true }).click();
+  const form = page.getByRole('dialog', { name: '新建笔记', exact: true });
+  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await form
+    .getByLabel('arXiv 论文地址', { exact: true })
+    .fill('https://arxiv.org/html/2503.01800v1');
+  await form.getByRole('button', { name: '导入论文', exact: true }).click();
+  await expect(form.getByRole('alert')).toContainText('arXiv 暂时限制了访问');
+  // Retrying resumes from the last step instead of starting the import over.
+  await form.getByRole('button', { name: '导入论文', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  expect(continuations).toEqual(['step-1', 'step-2', 'step-2']);
+  await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
+});

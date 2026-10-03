@@ -31,7 +31,7 @@ import { aiSettings, saveAiSettings, testAiSettings } from './deepseek';
 import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
-import { importArxiv } from './arxiv';
+import { continueArxiv, importArxiv } from './arxiv';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
 
 export default {
@@ -107,11 +107,20 @@ export default {
       if (path === '/api/nodes' && method === 'POST') {
         return json(await createNode(env, await body(request), operationKey(request)), 201);
       }
-      if (path === '/api/import/arxiv' && method === 'POST')
-        return json(
-          await importArxiv(env, await body(request), operationKey(request), request.signal),
-          201,
+      if (path === '/api/import/arxiv' && method === 'POST') {
+        const result = await importArxiv(
+          env,
+          session,
+          await body(request),
+          operationKey(request),
+          request.signal,
         );
+        return json(result, 'continuation' in result ? 202 : 201);
+      }
+      if (path === '/api/import/arxiv/continue' && method === 'POST') {
+        const result = await continueArxiv(env, session, await body(request), request.signal);
+        return json(result, 'continuation' in result ? 202 : 201);
+      }
       if (path === '/api/files' && method === 'POST') {
         const f = await uploadFile(env, request);
         return json({ id: f.id, name: f.name, mime: f.mime, size: f.size }, 201);

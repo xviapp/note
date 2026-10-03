@@ -12,6 +12,7 @@ import { useReading } from '../useReading';
 import { openLink } from '../open-link';
 import { Empty, Modal, Spinner, useQuestion } from './Primitives';
 import { Attachments } from './Attachments';
+import { useMarkdownReady } from './LazyMarkdown';
 import { HistoryDialog } from './HistoryDialog';
 import { EditToolbar, NoteHeading, NoteLocation, SaveErrorBar } from './NoteChrome';
 import { NoteBody } from './NoteBody';
@@ -298,7 +299,8 @@ export default function NotePane(props: Props) {
       onNavigate={props.onNavigate}
     />
   );
-  if (loadError || !note)
+  const markdownReady = useMarkdownReady(note?.kind === 'markdown');
+  if (loadError || !note || !markdownReady)
     return (
       <div className="note-pane">
         <div className="note-toolbar">{navigation}</div>

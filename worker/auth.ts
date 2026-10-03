@@ -351,13 +351,23 @@ async function signingKey(env: Env): Promise<CryptoKey> {
     ['sign', 'verify'],
   );
 }
-export async function editToken(env: Env, session: Session, nodeId: string): Promise<string> {
+// A signed, session-bound value the client hands back later, such as an edit
+// confirmation or a paper import's progress. Returns null if it is invalid,
+// expired, or was issued to another session or scope.
+export async function sealValue(
+  env: Env,
+  session: Session,
+  scope: string,
+  expires: number,
+  value?: unknown,
+): Promise<string> {
   const data = base64(
     encoder.encode(
       JSON.stringify({
         session: session.token_hash,
-        scope: `note:${nodeId}`,
-        expires: Math.min(session.expires_at, Date.now() + 8 * 3600_000),
+        scope,
+        expires: Math.min(session.expires_at, expires),
+        value,
       }),
     ),
   );
@@ -366,15 +376,12 @@ export async function editToken(env: Env, session: Session, nodeId: string): Pro
   );
   return `${data}.${signature}`;
 }
-export async function requireEdit(
-  request: Request,
+export async function openValue(
   env: Env,
   session: Session,
-  nodeId: string,
-): Promise<void> {
-  const token = request.headers.get('x-note-edit');
-  if (!token || token.length > 2048)
-    throw new AppError(403, '请先确认进入编辑模式。', 'EDIT_LOCKED');
+  scope: string,
+  token: string,
+): Promise<{ value: unknown } | null> {
   try {
     const [data, signature] = token.split('.');
     if (
@@ -386,15 +393,31 @@ export async function requireEdit(
         encoder.encode(data),
       ))
     )
-      throw new Error();
-    const value = JSON.parse(new TextDecoder().decode(fromBase64(data)));
+      return null;
+    const sealed = JSON.parse(new TextDecoder().decode(fromBase64(data)));
     if (
-      value.session !== session.token_hash ||
-      value.scope !== `note:${nodeId}` ||
-      value.expires <= Date.now()
+      sealed.session !== session.token_hash ||
+      sealed.scope !== scope ||
+      !(sealed.expires > Date.now())
     )
-      throw new Error();
+      return null;
+    return { value: sealed.value };
   } catch {
-    throw new AppError(403, '编辑确认已失效，请重新确认；当前编辑内容会保留。', 'EDIT_LOCKED');
+    return null;
   }
+}
+export function editToken(env: Env, session: Session, nodeId: string): Promise<string> {
+  return sealValue(env, session, `note:${nodeId}`, Date.now() + 8 * 3600_000);
+}
+export async function requireEdit(
+  request: Request,
+  env: Env,
+  session: Session,
+  nodeId: string,
+): Promise<void> {
+  const token = request.headers.get('x-note-edit');
+  if (!token || token.length > 2048)
+    throw new AppError(403, '请先确认进入编辑模式。', 'EDIT_LOCKED');
+  if (!(await openValue(env, session, `note:${nodeId}`, token)))
+    throw new AppError(403, '编辑确认已失效，请重新确认；当前编辑内容会保留。', 'EDIT_LOCKED');
 }

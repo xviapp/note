@@ -43,6 +43,13 @@ export interface FileInfo {
   mime: string;
   size: number;
 }
+// A paper with many images imports over several requests. Until the note is
+// created, the server answers with signed progress for the next request.
+export interface ArxivImportProgress {
+  continuation: string;
+  done: number;
+  total: number;
+}
 export interface ShareSettings {
   parentId: string | null;
   breadcrumbs: { id: string; title: string }[];

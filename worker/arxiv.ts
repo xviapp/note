@@ -1,12 +1,40 @@
-import type { Env } from './types';
+import type { ArxivImportProgress } from '../shared/types';
+import type { Env, Session } from './types';
 import { AppError, asError, idValue, textValue } from './http';
 import { createNode, getNode, priorOperation } from './library';
-import { discardFile, storeSvg, uploadFile } from './storage';
+import { discardFile, getBlob, storePaper, storeSvg, uploadFile } from './storage';
+import { openValue, sealValue } from './auth';
 
 const HTML_LIMIT = 8 * 1_048_576;
 const IMAGE_LIMIT = 10 * 1_048_576;
-const TOTAL_IMAGE_LIMIT = 50_000_000;
-const IMAGE_COUNT_LIMIT = 24;
+const TOTAL_IMAGE_LIMIT = 100_000_000;
+const IMAGE_COUNT_LIMIT = 200;
+// Workers Free allows 50 outside fetches per request, and a source may take up
+// to four (three redirects). A request stops downloading while one more
+// worst-case image still fits, and the client continues with the rest.
+const FETCH_BUDGET = 46;
+const FETCHES_PER_SOURCE = 4;
+// Well inside the one-day window that keeps unreferenced uploads.
+const CONTINUE_MS = 6 * 3600_000;
+const CONTINUE_SCOPE = 'import-arxiv';
+
+type Budget = { used: number };
+// What an unfinished import carries between requests, signed for this session.
+interface Progress {
+  key: string;
+  parentId: string | null;
+  title: string;
+  url: string;
+  // A pending paper.html blob: the article with a token in place of each image.
+  html: string;
+  pending: [url: string, token: string][];
+  done: [token: string, blob: string][];
+  assets: string[];
+  bytes: number;
+  count: number;
+  expires: number;
+}
+export type ImportResult = Awaited<ReturnType<typeof createNode>> | ArxivImportProgress;
 const ID = /^(?:\d{4}\.\d{4,5}|[a-z][a-z.-]*\/\d{7})(?:v[1-9]\d*)?$/;
 
 export function arxivUrl(input: unknown): URL {
@@ -55,9 +83,11 @@ async function fetchSource(
   url: URL,
   signal: AbortSignal,
   accept: (url: URL) => URL,
+  budget: Budget,
 ): Promise<{ response: Response; url: URL }> {
-  for (let redirects = 0; redirects <= 3; redirects++) {
+  for (let redirects = 0; redirects < FETCHES_PER_SOURCE; redirects++) {
     signal.throwIfAborted();
+    budget.used++;
     const response = await fetch(url, {
       redirect: 'manual',
       signal,
@@ -128,29 +158,104 @@ function titleText(value: string): string {
     .trim()
     .slice(0, 200);
 }
+// Downloads images in order until this request's fetch budget runs out.
+async function fetchImages(
+  env: Env,
+  progress: Pick<Progress, 'pending' | 'done' | 'assets' | 'bytes'>,
+  paper: URL,
+  signal: AbortSignal,
+  budget: Budget,
+  stored: string[],
+) {
+  while (progress.pending.length && budget.used + FETCHES_PER_SOURCE <= FETCH_BUDGET) {
+    const [url, token] = progress.pending[0];
+    const image = await fetchSource(
+      new URL(url),
+      signal,
+      (target) => imageUrl(target.href, paper),
+      budget,
+    );
+    const bytes = await bounded(image.response, IMAGE_LIMIT);
+    progress.bytes += bytes.byteLength;
+    if (progress.bytes > TOTAL_IMAGE_LIMIT)
+      throw new AppError(413, '论文图片合计超过 100 MB，无法导入。');
+    const name = image.url.pathname.split('/').at(-1)!.slice(0, 180);
+    const blob = await uploadFile(
+      env,
+      new Request(
+        `https://local/upload?name=${encodeURIComponent(name)}&size=${bytes.byteLength}`,
+        {
+          method: 'POST',
+          body: bytes,
+          headers: {
+            'content-type':
+              image.response.headers.get('content-type') || 'application/octet-stream',
+          },
+        },
+      ),
+    );
+    stored.push(blob.id);
+    if (!/^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(blob.mime))
+      throw new AppError(400, '论文含有无法识别的图片，本次未创建笔记。');
+    progress.assets.push(blob.id);
+    progress.done.push([token, blob.id]);
+    progress.pending.shift();
+  }
+}
+function createPaper(
+  env: Env,
+  progress: Pick<Progress, 'key' | 'parentId' | 'title' | 'url' | 'done' | 'assets'>,
+  html: string,
+) {
+  for (const [token, blob] of progress.done) html = html.replaceAll(token, `/api/files/${blob}`);
+  const paper = new URL(progress.url);
+  return createNode(
+    env,
+    { kind: 'link', title: progress.title, parentId: progress.parentId, url: paper.href },
+    progress.key,
+    { arxivId: paper.pathname.slice('/html/'.length), html, assets: progress.assets },
+  );
+}
+function importFailure(error: unknown, signal: AbortSignal): Error {
+  if (error instanceof AppError) return error;
+  const known = asError(error);
+  if (known.code !== 'INTERNAL_ERROR') return known;
+  return new AppError(
+    502,
+    signal.aborted ? '导入已取消或超时，请稍后重试。' : '论文导入未完成，请稍后重试。',
+  );
+}
 export async function importArxiv(
   env: Env,
+  session: Session,
   data: Record<string, unknown>,
   key: string,
   requestSignal: AbortSignal,
-) {
+): Promise<ImportResult> {
   const requested = arxivUrl(data.url);
   const parent = data.parentId == null ? null : idValue(data.parentId);
   if (parent) await getNode(env, parent);
   const previous = await priorOperation(env, key, 'import-arxiv');
   if (previous) return previous;
   const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(90_000)]);
-  const stored: string[] = [];
+  const stored: string[] = [],
+    budget: Budget = { used: 0 };
+  let continuing = false;
   try {
-    const fetched = await fetchSource(requested, signal, (url) => {
-      const next = arxivUrl(url.href);
-      if (
-        next.pathname.replace(/v\d+$/, '') !== requested.pathname.replace(/v\d+$/, '') ||
-        (/v\d+$/.test(requested.pathname) && next.pathname !== requested.pathname)
-      )
-        throw new AppError(400, 'arXiv 跳转到了另一篇论文。');
-      return next;
-    });
+    const fetched = await fetchSource(
+      requested,
+      signal,
+      (url) => {
+        const next = arxivUrl(url.href);
+        if (
+          next.pathname.replace(/v\d+$/, '') !== requested.pathname.replace(/v\d+$/, '') ||
+          (/v\d+$/.test(requested.pathname) && next.pathname !== requested.pathname)
+        )
+          throw new AppError(400, 'arXiv 跳转到了另一篇论文。');
+        return next;
+      },
+      budget,
+    );
     if (!fetched.response.headers.get('content-type')?.toLowerCase().includes('text/html')) {
       await fetched.response.body?.cancel();
       throw new AppError(400, '这个版本没有可导入的论文 HTML。');
@@ -227,7 +332,7 @@ export async function importArxiv(
             const url = imageUrl(src, paper).href;
             if (!images.has(url)) images.set(url, `${marker}-image-${images.size}-end`);
             if (images.size > IMAGE_COUNT_LIMIT)
-              throw new AppError(413, '每篇论文最多导入 24 张不同图片。');
+              throw new AppError(413, '每篇论文最多导入 200 张不同图片。');
             element.setAttribute('src', images.get(url)!);
             element.removeAttribute('srcset');
           } catch (error) {
@@ -273,7 +378,7 @@ export async function importArxiv(
       const end = html.indexOf(svg.end, start + svg.start.length);
       if (end < 0) throw new AppError(400, '论文内嵌 SVG 不完整，无法导入。');
       if (++inlineCount + images.size > IMAGE_COUNT_LIMIT)
-        throw new AppError(413, '每篇论文最多导入 24 张不同图片。');
+        throw new AppError(413, '每篇论文最多导入 200 张不同图片。');
       const bytes = new TextEncoder().encode(html.slice(start + svg.start.length, end));
       total += bytes.byteLength;
       const file = await storeSvg(env, bytes, `figure-${inlineCount}.svg`);
@@ -299,57 +404,83 @@ export async function importArxiv(
         })
         .transform(new Response(html, { headers: { 'content-type': 'text/html' } }))
         .text();
-    for (const [url, token] of images) {
-      const image = await fetchSource(new URL(url), signal, (target) =>
-        imageUrl(target.href, paper),
-      );
-      const bytes = await bounded(image.response, IMAGE_LIMIT);
-      total += bytes.byteLength;
-      if (total > TOTAL_IMAGE_LIMIT) throw new AppError(413, '论文图片合计超过 50 MB，无法导入。');
-      const name = image.url.pathname.split('/').at(-1)!.slice(0, 180);
-      const blob = await uploadFile(
-        env,
-        new Request(
-          `https://local/upload?name=${encodeURIComponent(name)}&size=${bytes.byteLength}`,
-          {
-            method: 'POST',
-            body: bytes,
-            headers: {
-              'content-type':
-                image.response.headers.get('content-type') || 'application/octet-stream',
-            },
-          },
-        ),
-      );
-      stored.push(blob.id);
-      if (!/^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(blob.mime))
-        throw new AppError(400, '论文含有无法识别的图片，本次未创建笔记。');
-      html = html.replaceAll(token, `/api/files/${blob.id}`);
-    }
-    signal.throwIfAborted();
-    const arxivId = paper.pathname.slice('/html/'.length);
-    return await createNode(
-      env,
-      {
-        kind: 'link',
-        title: textValue(data.title ?? '', '标题', 200, true).trim() || titleText(title),
-        parentId: parent,
-        url: paper.href,
-      },
+    const progress: Progress = {
       key,
-      { arxivId, html, assets: stored },
-    );
+      parentId: parent,
+      title: textValue(data.title ?? '', '标题', 200, true).trim() || titleText(title),
+      url: paper.href,
+      html: '',
+      pending: [...images],
+      done: [],
+      assets: [...stored],
+      bytes: total,
+      count: images.size,
+      expires: Date.now() + CONTINUE_MS,
+    };
+    await fetchImages(env, progress, paper, signal, budget, stored);
+    signal.throwIfAborted();
+    if (!progress.pending.length) return await createPaper(env, progress, html);
+    // The rest of the images come in further requests. Keep the article and
+    // this request's uploads; the signed progress lets the client continue.
+    const saved = await storePaper(env, html);
+    stored.push(saved.id);
+    progress.html = saved.id;
+    const result = await continuation(env, session, progress);
+    continuing = true;
+    return result;
   } catch (error) {
-    if (error instanceof AppError) throw error;
-    const known = asError(error);
-    if (known.code !== 'INTERNAL_ERROR') throw known;
-    throw new AppError(
-      502,
-      signal.aborted ? '导入已取消或超时，请稍后重试。' : '论文导入未完成，请稍后重试。',
-    );
+    throw importFailure(error, signal);
   } finally {
     // Referenced assets are protected by the existing storage predicates;
     // failed imports and losing idempotent requests leave no orphan uploads.
-    for (const id of stored) await discardFile(env, id).catch(() => {});
+    if (!continuing) for (const id of stored) await discardFile(env, id).catch(() => {});
+  }
+}
+async function continuation(
+  env: Env,
+  session: Session,
+  progress: Progress,
+): Promise<ArxivImportProgress> {
+  return {
+    continuation: await sealValue(env, session, CONTINUE_SCOPE, progress.expires, progress),
+    done: progress.done.length,
+    total: progress.count,
+  };
+}
+export async function continueArxiv(
+  env: Env,
+  session: Session,
+  data: Record<string, unknown>,
+  requestSignal: AbortSignal,
+): Promise<ImportResult> {
+  const token = textValue(data.continuation, '导入进度', 1_048_576);
+  const opened = await openValue(env, session, CONTINUE_SCOPE, token);
+  if (!opened) throw new AppError(410, '论文导入已过期，请重新导入。');
+  const progress = opened.value as Progress;
+  const previous = await priorOperation(env, progress.key, 'import-arxiv');
+  if (previous) return previous;
+  const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(90_000)]);
+  // Uploads from this request only. Earlier ones belong to the progress the
+  // client still holds, so a failed request can be retried with it.
+  const stored: string[] = [];
+  let continuing = false;
+  try {
+    await fetchImages(env, progress, new URL(progress.url), signal, { used: 0 }, stored);
+    signal.throwIfAborted();
+    if (progress.pending.length) {
+      const result = await continuation(env, session, progress);
+      continuing = true;
+      return result;
+    }
+    const saved = await getBlob(env, progress.html);
+    const object = await env.FILES.get(saved.object_key);
+    if (!object) throw new AppError(410, '论文导入已过期，请重新导入。');
+    const node = await createPaper(env, progress, await object.text());
+    await discardFile(env, progress.html).catch(() => {});
+    return node;
+  } catch (error) {
+    throw importFailure(error, signal);
+  } finally {
+    if (!continuing) for (const id of stored) await discardFile(env, id).catch(() => {});
   }
 }

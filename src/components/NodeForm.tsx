@@ -1,8 +1,9 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { api, upload } from '../api';
+import { api, ApiError, upload } from '../api';
 import {
   KIND_LABELS,
   UNTITLED_NAMES,
+  type ArxivImportProgress,
   type FileInfo,
   type NodeKind,
   type NoteNode,
@@ -37,6 +38,9 @@ export function NodeForm({
     [error, setError] = useState('');
   const uploaded = useRef<FileInfo | null>(existingFile || null),
     key = useRef(crypto.randomUUID());
+  // An unfinished paper import resumes from here after a failed step.
+  const continued = useRef<string | null>(null),
+    [progress, setProgress] = useState<ArxivImportProgress | null>(null);
   const [icon, setIcon] = useState<FolderIconValue>({
     emoji: node?.icon_emoji ?? null,
     fileId: node?.icon_blob_id ?? null,
@@ -52,6 +56,34 @@ export function NodeForm({
       void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
     onClose();
   };
+  // Papers with many images import over several requests; the server returns
+  // signed progress until the note is created.
+  async function importPaper() {
+    if (!continued.current) setProgress(null);
+    let result = continued.current
+      ? null
+      : await api<NoteNode | ArxivImportProgress>(
+          '/api/import/arxiv',
+          'POST',
+          { title, parentId: parent, url },
+          key.current,
+        );
+    for (;;) {
+      if (result && !('continuation' in result)) return result;
+      if (result) {
+        continued.current = result.continuation;
+        setProgress(result);
+      }
+      try {
+        result = await api<NoteNode | ArxivImportProgress>('/api/import/arxiv/continue', 'POST', {
+          continuation: continued.current,
+        });
+      } catch (e) {
+        if (e instanceof ApiError && e.status === 410) continued.current = null;
+        throw e;
+      }
+    }
+  }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (working) return;
@@ -82,20 +114,22 @@ export function NodeForm({
             revision: node.revision,
             ...(kind === 'folder' ? { icon: iconData } : {}),
           })
-        : await api<NoteNode>(
-            kind === 'arxiv' ? '/api/import/arxiv' : '/api/nodes',
-            'POST',
-            {
-              kind,
-              title,
-              parentId: parent,
-              url,
-              fileId: uploaded.current?.id,
-              content: '',
-              ...(kind === 'folder' ? { icon: iconData } : {}),
-            },
-            key.current,
-          );
+        : kind === 'arxiv'
+          ? await importPaper()
+          : await api<NoteNode>(
+              '/api/nodes',
+              'POST',
+              {
+                kind,
+                title,
+                parentId: parent,
+                url,
+                fileId: uploaded.current?.id,
+                content: '',
+                ...(kind === 'folder' ? { icon: iconData } : {}),
+              },
+              key.current,
+            );
       if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_blob_id)
         void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
       onSaved(result);
@@ -149,7 +183,10 @@ export function NodeForm({
               }
               maxLength={200}
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                continued.current = null;
+              }}
               disabled={working}
             />
           </label>
@@ -169,7 +206,10 @@ export function NodeForm({
               type="url"
               required
               value={url}
-              onChange={(e) => setUrl(e.target.value)}
+              onChange={(e) => {
+                setUrl(e.target.value);
+                continued.current = null;
+              }}
               placeholder={
                 kind === 'arxiv' ? 'https://arxiv.org/html/2503.01800v1' : 'https://example.com'
               }
@@ -213,7 +253,9 @@ export function NodeForm({
           >
             {busy
               ? kind === 'arxiv'
-                ? '正在导入论文和图片…'
+                ? progress
+                  ? `正在下载论文图片 ${progress.done}/${progress.total}…`
+                  : '正在导入论文和图片…'
                 : '正在保存…'
               : node
                 ? '保存信息'
