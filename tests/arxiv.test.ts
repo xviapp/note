@@ -230,7 +230,7 @@ describe('arXiv paper import', () => {
     const svg = await response.text();
     expect(svg).toContain('fill:url(#blue)');
     expect(svg).toContain('href="#point"');
-    expect(svg).not.toMatch(/svg-tracker|script|onload|DOCTYPE|foreignObject/);
+    expect(svg).not.toMatch(/svg-tracker|script|onload|onerror|DOCTYPE|<img/);
     expect(file.size).toBe(new TextEncoder().encode(svg).length);
     expect(
       (await request(`/api/files/${file.id}`, 'GET', undefined, { anonymous: true })).status,
@@ -265,6 +265,21 @@ describe('arXiv paper import', () => {
     expect(svg).toContain('fill:url(#blue)');
     expect(svg.match(/<svg/g)).toHaveLength(2);
     expect(svg).not.toContain('body');
+  });
+
+  it('imports inline SVG text boxes whose HTML text is not well-formed XML', async () => {
+    // LaTeXML boxes draw a frame and put the text in foreignObject as HTML.
+    const box = `<svg class="ltx_picture" viewBox="0 0 200 60" width="200" height="60"><g transform="translate(0,60) matrix(1 0 0 -1 0 0)"><path d="M0 0H200V60H0Z" fill="#f2f2f2"/><g transform="matrix(1 0 0 -1 10 50)"><foreignObject width="180" height="40" transform="matrix(1 0 0 -1 0 16.6)" overflow="visible"><span class="ltx_inline-block">Judge&nbsp;both answers.<br class="ltx_break">Verdict: [[A<math alttext="\\gg"><semantics><mo>≫</mo><annotation encoding="application/x-tex">\\gg</annotation></semantics></math>B]]</span></foreignObject></g></g></svg>`;
+    provider(paperHtml.replace('</article>', `<figure>${box}</figure></article>`));
+    const node = await ok('/api/import/arxiv', 'POST', {
+      url: 'https://arxiv.org/html/2503.01800v1',
+    });
+    const detail = await ok<NoteDetail>(`/api/nodes/${node.id}`);
+    const file = detail.attachments.find((file) => file.mime === 'image/svg+xml')!;
+    const svg = await (await request(`/api/files/${file.id}`)).text();
+    expect(svg).toContain('<foreignObject');
+    expect(svg).toContain('Judge\u00a0both answers.<br></br>Verdict: [[A≫B]]');
+    expect(svg).toContain('<path d="M0 0H200V60H0Z"');
   });
 
   it('rolls back malformed SVG imports and sanitizes SVG uploads before they can be viewed', async () => {

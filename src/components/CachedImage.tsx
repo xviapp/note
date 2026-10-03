@@ -1,5 +1,6 @@
 import { useEffect, useState, type ComponentProps } from 'react';
 import { fileBlob, iconImage, loadedIcon } from '../offline-cache';
+import { imageUrl } from '../image-url';
 
 export function internalFileId(src: string) {
   try {
@@ -17,17 +18,18 @@ export function useFileImage(src: string) {
   useEffect(() => {
     if (!id) return;
     let active = true;
-    let url: string | undefined;
+    let revoke = () => {};
     void fileBlob(id)
-      .then((blob) => {
-        if (!active) return;
-        url = URL.createObjectURL(blob);
-        setResolved({ source: src, url });
+      .then(imageUrl)
+      .then((image) => {
+        if (!active) return image.revoke();
+        revoke = image.revoke;
+        setResolved({ source: src, url: image.url });
       })
       .catch(() => {});
     return () => {
       active = false;
-      if (url) URL.revokeObjectURL(url);
+      revoke();
     };
   }, [src, id]);
   return id ? (resolved?.source === src ? resolved.url : undefined) : src;

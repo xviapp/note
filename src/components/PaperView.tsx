@@ -4,6 +4,7 @@ import type { Heading } from './MarkdownView';
 import { paperFragment, paperText } from '../paper';
 import '../paper.css';
 import { fileBlob } from '../offline-cache';
+import { imageUrl } from '../image-url';
 import { internalFileId } from './CachedImage';
 
 export const PaperView = memo(function PaperView({
@@ -72,7 +73,7 @@ export const PaperView = memo(function PaperView({
     ref.current?.replaceChildren(prepared.fragment.cloneNode(true));
     onHeadings(prepared.headings);
     let active = true;
-    const urls: string[] = [];
+    const revokes: (() => void)[] = [];
     for (const image of ref.current?.querySelectorAll('img') ?? []) {
       const source = image.getAttribute('src') || '';
       const id = internalFileId(source);
@@ -80,17 +81,17 @@ export const PaperView = memo(function PaperView({
       image.removeAttribute('src');
       image.dataset.fileSource = source;
       void fileBlob(id)
-        .then((blob) => {
-          if (!active) return;
-          const url = URL.createObjectURL(blob);
-          urls.push(url);
+        .then(imageUrl)
+        .then(({ url, revoke }) => {
+          if (!active) return revoke();
+          revokes.push(revoke);
           image.src = url;
         })
         .catch(() => {});
     }
     return () => {
       active = false;
-      urls.forEach((url) => URL.revokeObjectURL(url));
+      revokes.forEach((revoke) => revoke());
     };
   }, [prepared, onHeadings]);
   const imageAction = (target: EventTarget | null) => {

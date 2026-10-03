@@ -9,6 +9,7 @@ import {
 import type { FileInfo, NoteDetail } from '../shared/types';
 import { fileUrl, parse } from './api';
 import { paperParts } from './paper';
+import { svgDataUrl } from './image-url';
 
 export type AttachmentSource =
   | { type: 'note'; note: NoteDetail }
@@ -94,18 +95,16 @@ export async function prepareBasicFile(
   if (meta.kind === 'image') {
     const blob = await sourceBlob(source, signal);
     let bitmap: ImageBitmap | HTMLImageElement;
-    let svgUrl: string | undefined;
     if (blob.type.split(';')[0] === 'image/svg+xml' || /\.svg$/i.test(meta.name)) {
-      const { sanitizeSvg, SVG_LIMIT, SVG_MIME } = await import('../shared/svg');
+      const { sanitizeSvg, SVG_LIMIT } = await import('../shared/svg');
       if (blob.size > SVG_LIMIT) throw new Error('SVG 图片最多 10 MiB。');
       const clean = sanitizeSvg(new Uint8Array(await blob.arrayBuffer()));
-      svgUrl = URL.createObjectURL(new Blob([clean], { type: SVG_MIME }));
       const image = new Image();
-      image.src = svgUrl;
+      // A data: URL keeps the canvas readable when the SVG has foreignObject.
+      image.src = svgDataUrl(clean);
       try {
         await image.decode();
       } catch {
-        URL.revokeObjectURL(svgUrl);
         throw new Error('SVG 图片无法绘制，请检查文件内容。');
       }
       bitmap = image;
@@ -124,7 +123,6 @@ export async function prepareBasicFile(
       canvas.width = canvas.height = 0;
     } finally {
       if (bitmap instanceof ImageBitmap) bitmap.close();
-      if (svgUrl) URL.revokeObjectURL(svgUrl);
     }
   } else {
     if (source.type === 'note')

@@ -9,10 +9,12 @@ export const SVG_LIMIT = 10 * 1_048_576;
 const NS = 'http://www.w3.org/2000/svg';
 const XLINK = 'http://www.w3.org/1999/xlink';
 const XML = 'http://www.w3.org/XML/1998/namespace';
+const XHTML = 'http://www.w3.org/1999/xhtml';
+const MATHML = 'http://www.w3.org/1998/Math/MathML';
 const names = (value: string) => new Set(value.split(/\s+/));
 const elements = names(`svg g defs symbol use path rect circle ellipse line polyline polygon
   text tspan textPath title desc style clipPath mask linearGradient radialGradient stop pattern
-  marker image switch a filter feBlend feColorMatrix feComponentTransfer feComposite
+  marker image switch a foreignObject filter feBlend feColorMatrix feComponentTransfer feComposite
   feConvolveMatrix feDiffuseLighting feDisplacementMap feDistantLight feDropShadow feFlood
   feFuncA feFuncB feFuncG feFuncR feGaussianBlur feImage feMerge feMergeNode feMorphology
   feOffset fePointLight feSpecularLighting feSpotLight feTile feTurbulence`);
@@ -34,7 +36,19 @@ const properties = names(`fill fill-opacity fill-rule stroke stroke-width stroke
   text-anchor text-decoration text-rendering letter-spacing word-spacing direction unicode-bidi
   dominant-baseline alignment-baseline baseline-shift writing-mode white-space line-height
   display visibility overflow shape-rendering image-rendering transform transform-origin
-  transform-box width height`);
+  transform-box width height text-align vertical-align text-indent text-transform margin
+  margin-top margin-right margin-bottom margin-left padding padding-top padding-right
+  padding-bottom padding-left min-width max-width min-height max-height box-sizing
+  background-color border border-top border-right border-bottom border-left border-color
+  border-style border-width border-radius border-collapse list-style-type`);
+// Text that papers (e.g. LaTeXML boxes) place in foreignObject: formatting only.
+const htmlElements = names(`div span p br b i u s em strong sub sup small big code pre kbd
+  samp var tt ul ol li dl dt dd table caption thead tbody tfoot tr td th blockquote hr`);
+const structuredMath = names(`mfrac msqrt mroot msub msup msubsup munder mover munderover
+  mmultiscripts mtable mtr mtd menclose`);
+// Other HTML is unwrapped to its text, except elements whose text is not prose.
+const droppedHtml = names(`script style template noscript textarea select option title
+  iframe object embed svg`);
 const functions = names(`rgb rgba hsl hsla hwb lab lch oklab oklch color color-mix calc min max
   clamp matrix matrix3d translate translatex translatey translate3d scale scalex scaley scale3d
   rotate rotatex rotatey rotatez rotate3d skew skewx skewy blur brightness contrast grayscale
@@ -104,13 +118,28 @@ function presentation(value: string): string | null {
 }
 
 /** A static SVG document, serialized from parsed XML rather than patched strings.
- * No scripts, animation, foreign HTML, external resources, DTDs or processing
- * instructions survive. CSS keeps only presentation properties and local URLs.
+ * No scripts, animation, external resources, DTDs or processing instructions
+ * survive. foreignObject keeps only formatted text, with math as its TeX source.
+ * CSS keeps only presentation properties and local URLs.
  */
 export function sanitizeSvg(bytes: Uint8Array): string {
   if (bytes.byteLength > SVG_LIMIT) throw new Error('SVG 图片最多 10 MiB。');
   const output: string[] = [];
-  const stack: { tag: string; drop: boolean; text: string[] }[] = [];
+  const stack: {
+    tag: string;
+    drop: boolean;
+    text: string[];
+    // Inside foreignObject; `xhtml` once an XHTML element has been written.
+    html?: boolean;
+    unwrap?: boolean;
+    xhtml?: boolean;
+    // Math in foreignObject is written as text when it is flat, else as TeX.
+    math?: { alt: string; text: string[]; structured: boolean };
+  }[] = [];
+  const mathOf = () => {
+    for (let index = stack.length - 1; index >= 0; index--)
+      if (stack[index].math) return stack[index].math;
+  };
   let count = 0;
   try {
     const encoding =
@@ -126,6 +155,31 @@ export function sanitizeSvg(bytes: Uint8Array): string {
       if (root && (node.local !== 'svg' || (node.uri && node.uri !== NS))) throw new Error();
       if (++count > 100_000 || stack.length >= 64) throw new Error();
       const parent = stack.at(-1);
+      const math = parent?.drop && mathOf();
+      if (math && structuredMath.has(node.local)) math.structured = true;
+      if (parent && !parent.drop && (parent.tag === 'foreignObject' || parent.html)) {
+        const xhtml = !!parent.html && !!parent.xhtml;
+        const local = node.local;
+        if (node.uri === MATHML || local === 'math') {
+          const alt = Object.values(node.attributes).find((a) => a.local === 'alttext');
+          stack.push({
+            tag: local,
+            drop: true,
+            text: [],
+            math: { alt: alt?.value || '', text: [], structured: false },
+          });
+        } else if (droppedHtml.has(local) || (node.uri && ![XHTML, NS].includes(node.uri)))
+          stack.push({ tag: local, drop: true, text: [] });
+        else if (htmlElements.has(local)) {
+          const style = Object.values(node.attributes).find((a) => a.local === 'style' && !a.uri);
+          const css = style ? cleanCss(style.value) : '';
+          output.push(
+            `<${local}${xhtml ? '' : ` xmlns="${XHTML}"`}${css ? ` style="${escape(css)}"` : ''}>`,
+          );
+          stack.push({ tag: local, drop: false, text: [], html: true, xhtml: true });
+        } else stack.push({ tag: local, drop: false, text: [], html: true, unwrap: true, xhtml });
+        return;
+      }
       const drop =
         !!parent?.drop ||
         parent?.tag === 'style' ||
@@ -182,6 +236,8 @@ export function sanitizeSvg(bytes: Uint8Array): string {
     });
     const text = (value: string) => {
       const parent = stack.at(-1);
+      // MathML may carry its TeX source as an annotation; that is not its text.
+      if (parent?.drop && !parent.tag.startsWith('annotation')) mathOf()?.text.push(value);
       if (!parent || parent.drop) return;
       if (parent.tag === 'style') parent.text.push(value);
       else output.push(escape(value));
@@ -190,7 +246,11 @@ export function sanitizeSvg(bytes: Uint8Array): string {
     parser.on('cdata', text);
     parser.on('closetag', () => {
       const node = stack.pop()!;
-      if (node.drop) return;
+      if (node.math) {
+        const flat = node.math.text.join('').replace(/\s+/g, ' ').trim();
+        output.push(escape(node.math.structured || !flat ? node.math.alt : flat));
+      }
+      if (node.drop || node.unwrap) return;
       if (node.tag === 'style') {
         const css = cleanCss(node.text.join(''), true);
         if (css) output.push(`<style>${escape(css)}</style>`);

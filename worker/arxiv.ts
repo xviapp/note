@@ -4,6 +4,7 @@ import { AppError, asError, idValue, textValue } from './http';
 import { createNode, getNode, priorOperation } from './library';
 import { discardFile, getBlob, storePaper, storeSvg, uploadFile } from './storage';
 import { openValue, sealValue } from './auth';
+import { htmlSvgToXml } from './html-svg';
 
 const HTML_LIMIT = 8 * 1_048_576;
 const IMAGE_LIMIT = 10 * 1_048_576;
@@ -379,7 +380,10 @@ export async function importArxiv(
       if (end < 0) throw new AppError(400, '论文内嵌 SVG 不完整，无法导入。');
       if (++inlineCount + images.size > IMAGE_COUNT_LIMIT)
         throw new AppError(413, '每篇论文最多导入 200 张不同图片。');
-      const bytes = new TextEncoder().encode(html.slice(start + svg.start.length, end));
+      // The page serializes inline SVG by HTML rules; the sanitizer reads XML.
+      const bytes = new TextEncoder().encode(
+        htmlSvgToXml(html.slice(start + svg.start.length, end)),
+      );
       total += bytes.byteLength;
       const file = await storeSvg(env, bytes, `figure-${inlineCount}.svg`);
       stored.push(file.id);
