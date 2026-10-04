@@ -48,14 +48,6 @@ export function Sidebar({
       <div className="sidebar-brand">
         <Brand name={name} />
         <div className="sidebar-brand-actions">
-          <button
-            className="icon-button"
-            aria-label="搜索笔记"
-            title="搜索笔记（Ctrl+K）"
-            onClick={onSearch}
-          >
-            <Search size={18} />
-          </button>
           <ThemeSwitcher />
           <button
             className="icon-button new-note-button"
@@ -70,6 +62,12 @@ export function Sidebar({
           </button>
         </div>
       </div>
+      {/* Search reads as a field of its own row, leaving the brand row two icons. */}
+      <button className="sidebar-search" aria-label="搜索笔记" onClick={onSearch}>
+        <Search size={16} aria-hidden="true" />
+        <span>搜索笔记</span>
+        <kbd aria-hidden="true">Ctrl K</kbd>
+      </button>
       <nav className="main-nav" aria-label="页面">
         {navItems.map((item) => (
           <button

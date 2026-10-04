@@ -508,6 +508,37 @@ progress::-moz-progress-bar {
 .sidebar .new-note-button {
   color: var(--blue);
 }
+.sidebar-search {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 36px;
+  margin-bottom: 10px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--muted);
+  font-size: 13px;
+  text-align: left;
+}
+.sidebar-search:hover {
+  border-color: var(--line-strong);
+  color: var(--ink);
+}
+.sidebar-search > span {
+  flex: 1;
+}
+.sidebar-search kbd {
+  padding: 1px 6px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--muted);
+}
 
 .main-nav {
   display: flex;
@@ -2679,6 +2710,10 @@ button.node-list-toggle:focus-visible {
   .sidebar-brand {
     padding-bottom: 23px;
     align-items: center;
+  }
+  /* Phones have no keyboard shortcut to show. */
+  .sidebar-search kbd {
+    display: none;
   }
   .tree-row {
     min-height: 41px;
