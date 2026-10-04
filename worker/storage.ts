@@ -14,7 +14,8 @@ export const LIBRARY_UNREFERENCED = `NOT EXISTS(SELECT 1 FROM versions v WHERE v
  AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.icon_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=blobs.id OR m.image_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=blobs.id)`;
+ AND NOT EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=blobs.id)
+ AND NOT EXISTS(SELECT 1 FROM paper_translations p WHERE p.body_blob_id=blobs.id)`;
 export const UNREFERENCED = `${LIBRARY_UNREFERENCED}
  AND NOT EXISTS(SELECT 1 FROM backup_files f WHERE f.blob_id=blobs.id)`;
 
@@ -300,8 +301,8 @@ export async function discardFile(env: Env, id: string): Promise<boolean> {
 }
 export async function storageInfo(env: Env): Promise<StorageInfo> {
   const siteQuery = env.DB.prepare('SELECT quota_bytes,allocated_bytes FROM site WHERE id=1');
-  const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t JOIN nodes n ON n.id=t.node_id WHERE n.trash_id IS NULL AND t.body_blob_id=b.id))`;
-  const aiReferenced = `(EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=b.id OR m.image_blob_id=b.id) OR EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=b.id))`;
+  const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t JOIN nodes n ON n.id=t.node_id WHERE n.trash_id IS NULL AND t.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM paper_translations p JOIN nodes n ON n.id=p.node_id WHERE n.trash_id IS NULL AND p.body_blob_id=b.id))`;
+  const aiReferenced = `(EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=b.id OR m.image_blob_id=b.id) OR EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM paper_translations p WHERE p.body_blob_id=b.id))`;
   const sumsQuery = env.DB.prepare(
     `SELECT
     COALESCE(SUM(CASE WHEN state='pending' THEN size ELSE 0 END),0) reserved,

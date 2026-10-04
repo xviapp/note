@@ -151,14 +151,15 @@ export async function testAiSettings(
 export interface ProviderMessage {
   role: 'system' | 'user' | 'assistant';
   content:
-    | string
-    | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
+    string | ({ type: 'text'; text: string } | { type: 'image_url'; image_url: { url: string } })[];
 }
 export async function* deepseekReply(
   key: string,
   messages: ProviderMessage[],
   signal: AbortSignal,
   maxTokens: number,
+  // Ask for a JSON object reply (the prompt must describe its shape).
+  json = false,
 ): AsyncGenerator<string> {
   const response = await providerFetch('/chat/completions', key, signal, {
     model: AI_MODEL,
@@ -166,6 +167,7 @@ export async function* deepseekReply(
     stream: true,
     max_tokens: maxTokens,
     thinking: { type: 'disabled' },
+    ...(json ? { response_format: { type: 'json_object' } } : {}),
   });
   if (!response.body) throw new AppError(502, 'DeepSeek 没有返回回复。');
   let ended = false,

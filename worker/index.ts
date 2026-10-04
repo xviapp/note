@@ -34,6 +34,7 @@ import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import { continueArxiv, importArxiv } from './arxiv';
 import { searchNodes } from './search';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
+import { getPaperTranslation, translatePaperBlocks } from './paper-translation';
 
 export default {
   async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
@@ -151,6 +152,10 @@ export default {
         const id = note[1],
           action = note[2] || '';
         if (!action && method === 'GET') return json(await noteDetail(env, id));
+        if (action === 'paper-translation' && method === 'GET')
+          return json(await getPaperTranslation(env, id, url));
+        if (action === 'paper-translation' && method === 'POST')
+          return json(await translatePaperBlocks(env, request, id, await body(request)));
         if (action === 'translations' && method === 'GET')
           return json(
             await translationHistory(

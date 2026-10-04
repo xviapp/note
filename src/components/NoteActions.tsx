@@ -1,5 +1,5 @@
 import type { RefObject } from 'react';
-import { FolderTree, History, Languages, List, Pencil, Star } from 'lucide-react';
+import { Columns2, FolderTree, History, Languages, List, Pencil, Star } from 'lucide-react';
 import { TEXT_KINDS, type NoteDetail, type NoteNode } from '../../shared/types';
 import { ReadingSettingsButton } from './ReadingSettings';
 import { NodeMenu, type NodeAction } from './Tree';
@@ -22,6 +22,7 @@ export function NoteActions({
   onHistory,
   onChildren,
   onAttachments,
+  onCompare,
   onEdit,
   onAction,
 }: {
@@ -43,6 +44,8 @@ export function NoteActions({
   onHistory: () => void;
   onChildren: () => void;
   onAttachments: () => void;
+  // Whole-paper translation and side-by-side reading (arXiv papers only).
+  onCompare: () => void;
   onEdit: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
@@ -103,6 +106,17 @@ export function NoteActions({
           <span className="toolbar-badge" aria-hidden="true">
             {note.child_count}
           </span>
+        </button>
+      )}
+      {!editing && note.arxiv_id && (
+        <button
+          className="icon-button"
+          aria-label="对照阅读"
+          title="全文翻译与对照阅读"
+          disabled={offline}
+          onClick={onCompare}
+        >
+          <Columns2 size={18} />
         </button>
       )}
       {!editing && (note.kind === 'markdown' || note.arxiv_id) && toc.available && (

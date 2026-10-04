@@ -1,0 +1,302 @@
+import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { Languages, RotateCcw, X } from 'lucide-react';
+import type { NoteDetail } from '../../shared/types';
+import {
+  isTranslationLanguage,
+  TRANSLATION_LANGUAGES,
+  type TranslationLanguage,
+} from '../../shared/translation';
+import type { PaperBlockSource } from '../../shared/paper-translation';
+import { applyTranslation, blockHash, paperBlocks, type PaperBlock } from '../paper-blocks';
+import { usePaperTranslation } from '../use-paper-translation';
+import { hydratePaperImages, preparePaper } from './PaperView';
+import '../paper.css';
+
+const LANGUAGE_KEY = 'paper-translation-language';
+type Anchor = { index: number; ratio: number; offset: number };
+type Block = PaperBlock & { hash: string };
+
+// Where the reader is in a pane: the first paragraph reaching the top edge,
+// and how far into it. Pairing by paragraph keeps both sides on the same text
+// even though a translation is shorter or longer than its source.
+function anchorOf(pane: HTMLElement): Anchor | null {
+  const top = pane.getBoundingClientRect().top;
+  for (const element of pane.querySelectorAll<HTMLElement>('[data-block]')) {
+    const box = element.getBoundingClientRect();
+    if (box.bottom <= top + 1) continue;
+    return {
+      index: Number(element.dataset.block),
+      ratio: box.top >= top ? 0 : (top - box.top) / Math.max(1, box.height),
+      offset: Math.max(0, box.top - top),
+    };
+  }
+  return null;
+}
+// Scrolls a pane so the same paragraph sits at the same place; true if it moved.
+function align(pane: HTMLElement, anchor: Anchor) {
+  const element = pane.querySelector<HTMLElement>(`[data-block="${anchor.index}"]`);
+  if (!element) return false;
+  const box = element.getBoundingClientRect(),
+    top = pane.getBoundingClientRect().top;
+  const before = pane.scrollTop;
+  pane.scrollTop += box.top + anchor.ratio * box.height - anchor.offset - top;
+  return pane.scrollTop !== before;
+}
+
+// Full-screen comparison of a paper and its saved translation: source on the
+// left, translation on the right, scrolled together paragraph by paragraph.
+// Phones show one side at a time and keep the place when switching.
+export default function CompareView({ note, onClose }: { note: NoteDetail; onClose: () => void }) {
+  const dialog = useRef<HTMLDialogElement>(null);
+  const panes = { source: useRef<HTMLDivElement>(null), translation: useRef<HTMLDivElement>(null) };
+  const [language, setLanguage] = useState<TranslationLanguage>(() => {
+    try {
+      const saved = localStorage.getItem(LANGUAGE_KEY);
+      return isTranslationLanguage(saved) ? saved : 'zh-CN';
+    } catch {
+      return 'zh-CN';
+    }
+  });
+  const [side, setSide] = useState<'source' | 'translation'>('translation');
+  const [sources, setSources] = useState<PaperBlockSource[] | null>(null);
+  const [active, setActive] = useState<{ index: number; top: number } | null>(null);
+  const blocks = useRef<Block[]>([]);
+  const prepared = useMemo(
+    () => preparePaper(note),
+    // Only these fields of the note shape the article.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [note.id, note.content, note.url, note.attachments],
+  );
+  const translation = usePaperTranslation(note.id, language, sources);
+
+  useEffect(() => {
+    const element = dialog.current;
+    if (element && !element.open) element.showModal();
+    return () => element?.close();
+  }, []);
+  // Both sides are clones of the same article, so their paragraphs pair up by order.
+  useEffect(() => {
+    const source = panes.source.current?.firstElementChild,
+      target = panes.translation.current?.firstElementChild;
+    if (!source || !target) return;
+    source.replaceChildren(prepared.fragment.cloneNode(true));
+    target.replaceChildren(prepared.fragment.cloneNode(true));
+    const left = paperBlocks(source),
+      right = paperBlocks(target);
+    left.forEach((block, index) =>
+      (block.element as HTMLElement).setAttribute('data-block', String(index)),
+    );
+    right.forEach((block, index) => {
+      block.element.setAttribute('data-block', String(index));
+      block.element.classList.add('is-pending');
+    });
+    let live = true;
+    void Promise.all(right.map((block) => blockHash(block.text))).then((hashes) => {
+      if (!live) return;
+      blocks.current = right.map((block, index) => ({ ...block, hash: hashes[index] }));
+      setSources(blocks.current.map(({ hash, text }) => ({ hash, text })));
+    });
+    const releaseSource = hydratePaperImages(source),
+      releaseTarget = hydratePaperImages(target);
+    return () => {
+      live = false;
+      releaseSource();
+      releaseTarget();
+    };
+    // The panes' refs are stable; the article is what changes.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [prepared]);
+  // Saved translations replace the paragraphs they belong to; the rest wait.
+  useEffect(() => {
+    if (!sources) return;
+    for (const block of blocks.current) {
+      const text = translation.blocks[block.hash];
+      const element = block.element as HTMLElement;
+      if (text && element.dataset.applied !== text) {
+        applyTranslation(block, text);
+        element.dataset.applied = text;
+        element.classList.remove('is-pending');
+      }
+    }
+  }, [translation.blocks, sources]);
+
+  // Scrolling either side brings the other along. A side moved by code
+  // ignores its own next scroll event so the two never pull at each other.
+  useEffect(() => {
+    const source = panes.source.current,
+      target = panes.translation.current;
+    if (!source || !target) return;
+    let ignore: HTMLElement | null = null,
+      frame = 0;
+    const follow = (from: HTMLElement, to: HTMLElement) => () => {
+      if (ignore === from) {
+        ignore = null;
+        return;
+      }
+      cancelAnimationFrame(frame);
+      frame = requestAnimationFrame(() => {
+        // A hidden side (one at a time on phones) catches up when shown.
+        if (!to.offsetParent) return;
+        const anchor = anchorOf(from);
+        if (anchor && align(to, anchor)) ignore = to;
+      });
+      setActive(null);
+    };
+    const fromSource = follow(source, target),
+      fromTarget = follow(target, source);
+    source.addEventListener('scroll', fromSource, { passive: true });
+    target.addEventListener('scroll', fromTarget, { passive: true });
+    return () => {
+      cancelAnimationFrame(frame);
+      source.removeEventListener('scroll', fromSource);
+      target.removeEventListener('scroll', fromTarget);
+    };
+    // The panes' refs are stable.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  const switchSide = (next: 'source' | 'translation') => {
+    if (next === side) return;
+    const from = panes[side].current,
+      anchor = from && anchorOf(from);
+    setSide(next);
+    requestAnimationFrame(() => {
+      const to = panes[next].current;
+      if (to && anchor) align(to, anchor);
+    });
+  };
+  const chooseLanguage = (value: string) => {
+    if (!isTranslationLanguage(value)) return;
+    setLanguage(value);
+    try {
+      localStorage.setItem(LANGUAGE_KEY, value);
+    } catch {
+      /* Storage can be unavailable; the choice still applies now. */
+    }
+  };
+  // In-article links move within their own side.
+  const followLink = (event: MouseEvent<HTMLDivElement>) => {
+    const anchor = (event.target as Element).closest('a');
+    const href = anchor?.getAttribute('href');
+    if (!href?.startsWith('#')) return;
+    event.preventDefault();
+    event.currentTarget
+      .querySelector(`#${CSS.escape(href.slice(1))}`)
+      ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  };
+
+  const total = sources ? new Set(sources.map((block) => block.hash)).size : 0;
+  const done = sources
+    ? new Set(sources.filter((block) => block.hash in translation.blocks).map((b) => b.hash)).size
+    : 0;
+  const characters = sources?.reduce((sum, block) => sum + block.text.length, 0) ?? 0;
+  const running = translation.state === 'running';
+  const activeBlock = active ? blocks.current[active.index] : null;
+  return (
+    <dialog
+      ref={dialog}
+      className={`compare-view show-${side}`}
+      aria-label={`对照阅读：${note.title}`}
+      onCancel={(event) => {
+        event.preventDefault();
+        if (running) translation.stop();
+        onClose();
+      }}
+    >
+      <header className="compare-header">
+        <h2>对照阅读</h2>
+        <div className="compare-sides" role="group" aria-label="显示">
+          <button
+            className={side === 'source' ? 'active' : ''}
+            onClick={() => switchSide('source')}
+          >
+            原文
+          </button>
+          <button
+            className={side === 'translation' ? 'active' : ''}
+            onClick={() => switchSide('translation')}
+          >
+            译文
+          </button>
+        </div>
+        <div className="compare-tools">
+          <label className="compare-language">
+            <span className="sr-only">译为</span>
+            <select
+              aria-label="译为"
+              value={language}
+              disabled={running}
+              onChange={(event) => chooseLanguage(event.target.value)}
+            >
+              {Object.entries(TRANSLATION_LANGUAGES).map(([code, label]) => (
+                <option key={code} value={code}>
+                  {label}
+                </option>
+              ))}
+            </select>
+          </label>
+          <span className="compare-progress" role="status">
+            {translation.state === 'loading' || !sources
+              ? '正在读取…'
+              : done === total
+                ? `已全部翻译 · ${total} 段`
+                : `已翻译 ${done}/${total} 段${done ? '' : ` · 约 ${Math.ceil(characters / 1000)} 千字符`}`}
+          </span>
+          {running ? (
+            <button className="button compact" onClick={translation.stop}>
+              停止
+            </button>
+          ) : (
+            sources &&
+            translation.state !== 'loading' &&
+            done < total && (
+              <button className="button compact primary" onClick={() => void translation.start()}>
+                <Languages size={15} />
+                {done ? '继续翻译' : '翻译全文'}
+              </button>
+            )
+          )}
+        </div>
+        <button className="icon-button compare-close" aria-label="关闭对照阅读" onClick={onClose}>
+          <X size={20} />
+        </button>
+      </header>
+      {translation.error && (
+        <p className="compare-error" role="alert">
+          {translation.error}
+        </p>
+      )}
+      <div className="compare-body">
+        <div ref={panes.source} className="compare-pane is-source" role="region" aria-label="原文">
+          <div className="paper-body" onClick={followLink} />
+        </div>
+        <div
+          ref={panes.translation}
+          className="compare-pane is-translation"
+          role="region"
+          aria-label="译文"
+          onClick={(event) => {
+            const element = (event.target as Element).closest<HTMLElement>('[data-block]');
+            if (element?.dataset.applied)
+              setActive({ index: Number(element.dataset.block), top: element.offsetTop });
+          }}
+        >
+          <div className="paper-body" onClick={followLink} />
+          {activeBlock && !running && (
+            <button
+              className="button compact compare-redo"
+              style={{ top: active!.top }}
+              onClick={(event) => {
+                event.stopPropagation();
+                setActive(null);
+                void translation.retranslate({ hash: activeBlock.hash, text: activeBlock.text });
+              }}
+            >
+              <RotateCcw size={14} />
+              重译这一段
+            </button>
+          )}
+        </div>
+      </div>
+    </dialog>
+  );
+}

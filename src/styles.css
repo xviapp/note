@@ -3048,3 +3048,131 @@ button.node-list-toggle:focus-visible {
 .backup-preview {
   margin-top: 16px;
 }
+
+/* Comparison reading: the paper and its translation side by side, full screen. */
+.compare-view {
+  position: fixed;
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  color: var(--ink);
+  background: var(--surface);
+  overflow: hidden;
+}
+.compare-view[open] {
+  display: flex;
+  flex-direction: column;
+}
+.compare-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+  padding: max(8px, env(safe-area-inset-top)) 16px 8px;
+  border-bottom: 1px solid var(--line);
+}
+.compare-header h2 {
+  font-size: 15px;
+  margin-right: auto;
+}
+.compare-tools {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.compare-language select {
+  width: auto;
+  padding: 6px 10px;
+}
+.compare-progress {
+  color: var(--muted);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+}
+.compare-sides {
+  display: none;
+}
+.compare-error {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--danger);
+  background: var(--danger-bg);
+  font-size: 13px;
+}
+.compare-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.compare-pane {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 24px clamp(16px, 3vw, 40px) 40vh;
+}
+.compare-pane.is-source {
+  border-right: 1px solid var(--line);
+}
+.compare-pane .paper-body {
+  max-width: 760px;
+  margin: 0 auto;
+}
+.compare-pane .is-pending {
+  color: var(--muted);
+  opacity: 0.55;
+}
+.compare-redo {
+  position: absolute;
+  right: clamp(16px, 3vw, 40px);
+  z-index: 1;
+  transform: translateY(-110%);
+  box-shadow: var(--shadow-popover);
+}
+@media (max-width: 760px) {
+  .compare-header h2 {
+    display: none;
+  }
+  .compare-sides {
+    display: inline-flex;
+    margin-right: auto;
+    padding: 2px;
+    border: 1px solid var(--line);
+    border-radius: var(--radius-control);
+  }
+  .compare-sides button {
+    min-height: 36px;
+    padding: 0 14px;
+    border-radius: calc(var(--radius-control) - 2px);
+    color: var(--muted);
+  }
+  .compare-sides button.active {
+    background: var(--selected);
+    color: var(--ink);
+  }
+  .compare-view.show-source .is-translation,
+  .compare-view.show-translation .is-source {
+    display: none;
+  }
+  .compare-pane.is-source {
+    border: 0;
+  }
+  /* Phones: the side switch and close on top, translation controls below. */
+  .compare-close {
+    order: 1;
+  }
+  .compare-tools {
+    order: 2;
+    flex-basis: 100%;
+  }
+  .compare-progress {
+    flex: 1;
+    min-width: 0;
+  }
+}

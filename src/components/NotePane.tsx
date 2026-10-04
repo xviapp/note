@@ -35,6 +35,7 @@ import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
 
 const Editor = lazy(() => import('./Editor'));
+const CompareView = lazy(() => import('./CompareView'));
 const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
 
@@ -96,7 +97,8 @@ export default function NotePane(props: Props) {
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
   const [childrenOpen, setChildrenOpen] = useState(false),
-    [attachmentsOpen, setAttachmentsOpen] = useState(false);
+    [attachmentsOpen, setAttachmentsOpen] = useState(false),
+    [compareOpen, setCompareOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false),
     [linkOpen, setLinkOpen] = useState(false);
   const question = useQuestion(),
@@ -395,6 +397,7 @@ export default function NotePane(props: Props) {
           onHistory={() => setHistoryOpen(true)}
           onChildren={() => setChildrenOpen(true)}
           onAttachments={() => setAttachmentsOpen(true)}
+          onCompare={() => setCompareOpen(true)}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
         />
@@ -601,6 +604,11 @@ export default function NotePane(props: Props) {
           onNavigate={props.onNavigate}
           onImage={showImage}
         />
+      )}
+      {compareOpen && note.arxiv_id && (
+        <Suspense fallback={null}>
+          <CompareView note={note} onClose={() => setCompareOpen(false)} />
+        </Suspense>
       )}
       {attachmentsOpen && !editing && (
         <Modal
