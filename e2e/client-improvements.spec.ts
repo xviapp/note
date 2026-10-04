@@ -272,13 +272,16 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await expect(page.locator('.document-kind .custom-folder-icon')).toHaveCount(0);
   await expect(page.locator('.document-kind .kind-folder')).toBeVisible();
 });
-test('untitled notes open in preview and Qingli uses the floating entry', async ({ page }) => {
+test('untitled notes open for writing and Qingli uses the floating entry', async ({ page }) => {
   await login(page);
   await page.goto('/');
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记', exact: true });
   await expect(form.getByLabel('标题', { exact: true })).toHaveValue('');
   await form.getByRole('button', { name: '创建', exact: true }).click();
+  // The empty note opens in the editor without the edit confirmation.
+  await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toBeFocused();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByRole('heading', { name: '未命名笔记', exact: true })).toBeVisible();
   expect(
     (
@@ -302,6 +305,8 @@ test('untitled notes open in preview and Qingli uses the floating entry', async 
   await form.getByRole('radio', { name: '纯文本', exact: true }).check();
   await form.getByLabel('标题', { exact: true }).fill('   ');
   await form.getByRole('button', { name: '创建', exact: true }).click();
+  await expect(page.getByRole('textbox', { name: '纯文本正文' })).toBeFocused();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect(page.getByRole('heading', { name: '未命名文本', exact: true })).toBeVisible();
   const detail = await (
     await page.request.get(new URL(page.url()).pathname.replace('/n/', '/api/nodes/'))

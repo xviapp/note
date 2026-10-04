@@ -16,6 +16,7 @@ import {
 import { api, lockEdits } from './api';
 import {
   PARENT_KINDS,
+  TEXT_KINDS,
   type AuthStatus,
   type FileInfo,
   type NoteDetail,
@@ -25,6 +26,7 @@ import {
 import { Spinner, useQuestion } from './components/Primitives';
 import { Tree, type NodeAction } from './components/Tree';
 import { useMoveNotes } from './use-move-notes';
+import { useToast } from './use-toast';
 import { MoveDialog } from './components/MoveDialog';
 import { NodeForm } from './components/NodeForm';
 import { NodeList } from './components/NodeList';
@@ -41,6 +43,7 @@ import { ShareImport } from './components/ShareImport';
 import { BootScreen } from './components/BootScreen';
 import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
+import { SearchDialog } from './components/SearchDialog';
 import { AuthScreen } from './components/AuthScreen';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
 import { useNotebookNavigation, type SettingsSection, type View } from './navigation';
@@ -138,6 +141,9 @@ function Notebook({
   const offline = useOffline();
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
     [mobileOpen, setMobileOpen] = useState(false);
+  // A note just created from the form, opened for writing on arrival.
+  const [freshNote, setFreshNote] = useState<string | null>(null);
+  const clearFreshNote = useCallback(() => setFreshNote(null), []);
   const [revision, setRevision] = useState(0),
     [detailRevision, setDetailRevision] = useState(0),
     [storage, setStorage] = useState<StorageInfo | null>(null),
@@ -160,6 +166,7 @@ function Notebook({
     setLoaded(null);
     setGlobalSelection('');
   }, [navigation.key]);
+  const toast = useToast();
   const report = useCallback(
     (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
     [],
@@ -291,6 +298,40 @@ function Notebook({
       document.removeEventListener('keydown', escape, true);
     };
   }, []);
+  // Computer shortcuts: Ctrl+K or / searches, N creates a note, E edits the open one.
+  const [searchOpen, setSearchOpen] = useState(false);
+  const shortcuts = useRef({ newNode: () => {} });
+  useEffect(() => {
+    const typing = (target: EventTarget | null) =>
+      target instanceof HTMLElement &&
+      (target.isContentEditable || !!target.closest('input, textarea, select, .cm-editor'));
+    const key = (event: KeyboardEvent) => {
+      if (event.defaultPrevented || event.isComposing) return;
+      const letter = event.key.toLowerCase();
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && letter === 'k') {
+        event.preventDefault();
+        setSearchOpen(true);
+        return;
+      }
+      if (
+        event.ctrlKey ||
+        event.metaKey ||
+        event.altKey ||
+        typing(event.target) ||
+        document.querySelector('dialog[open]')
+      )
+        return;
+      if (event.key === '/') {
+        event.preventDefault();
+        setSearchOpen(true);
+      } else if (letter === 'n') {
+        event.preventDefault();
+        shortcuts.current.newNode();
+      } else if (letter === 'e') window.dispatchEvent(new Event('note:edit-shortcut'));
+    };
+    window.addEventListener('keydown', key);
+    return () => window.removeEventListener('keydown', key);
+  }, []);
   const action = async (kind: NodeAction, node: NoteNode) => {
     document.querySelectorAll<HTMLDetailsElement>('details.node-menu[open]').forEach((element) => {
       element.open = false;
@@ -309,19 +350,34 @@ function Notebook({
         const preview = await api<{ count: number; title: string }>(
           `/api/nodes/${node.id}/delete-preview`,
         );
+        // A single note goes straight to the trash with 撤销; a branch asks first.
         if (
+          preview.count > 1 &&
           !(await question.confirm(
             '移到回收站？',
-            `「${preview.title}」${preview.count > 1 ? `及其下级笔记，共 ${preview.count} 项内容` : ''}将保留 7 天，到期后清理。`,
+            `「${preview.title}」及其下级笔记，共 ${preview.count} 项内容将保留 7 天，到期后清理。`,
             '移到回收站',
             true,
           ))
         )
           return;
-        await api(`/api/nodes/${node.id}`, 'DELETE', { count: preview.count });
-        if (selected === node.id || loaded?.breadcrumbs.some((part) => part.id === node.id))
-          setRoute(null);
+        const batch = await api<{ id: string }>(`/api/nodes/${node.id}`, 'DELETE', {
+          count: preview.count,
+        });
+        const wasOpen =
+          selected === node.id || !!loaded?.breadcrumbs.some((part) => part.id === node.id);
+        if (wasOpen) setRoute(null);
         changed();
+        toast.show(`「${preview.title}」已移到回收站`, async () => {
+          try {
+            await api(`/api/trash/${batch.id}/restore`, 'POST', {});
+            changed();
+            if (wasOpen) setRoute(selected);
+            toast.show('已恢复');
+          } catch (e) {
+            report(e);
+          }
+        });
       }
     } catch (e) {
       report(e);
@@ -334,12 +390,14 @@ function Notebook({
       setDetailRevision((r) => r + 1);
     },
     onError: report,
+    toast: toast.show,
   });
   const { moved, drop } = moves;
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
     setForm({ parent: loaded && PARENT_KINDS.includes(loaded.kind) ? loaded.id : null });
   };
+  shortcuts.current.newNode = () => void newNode();
   const logout = async (all = false) => {
     if (!(await leaveGuard.current())) return;
     try {
@@ -357,7 +415,7 @@ function Notebook({
       <ShareImport
         onImported={(nodes) => {
           changed();
-          setNotice(`已保存 ${nodes.length} 项内容。`);
+          toast.show(`已保存 ${nodes.length} 项内容`);
           const first = nodes.find((node) => node.kind !== 'link');
           if (first) void navigate(first.id);
         }}
@@ -373,6 +431,7 @@ function Notebook({
             name={name}
             view={view}
             onNew={() => void newNode()}
+            onSearch={() => setSearchOpen(true)}
             onClose={() => setMobileOpen(false)}
             onView={(next) => void switchView(next)}
             tree={{
@@ -398,6 +457,7 @@ function Notebook({
             onBack={navigation.back}
             onMenu={openSidebar}
             onNew={view === 'tree' && !selected ? () => void newNode() : undefined}
+            onSearch={() => setSearchOpen(true)}
           />
         )}
         {offline && (
@@ -475,6 +535,8 @@ function Notebook({
                   onError={report}
                   onTrash={() => switchView('trash')}
                   onSettings={() => openSettings('ai')}
+                  autoEdit={freshNote === selected}
+                  onAutoEdit={clearFreshNote}
                 />
               ) : (
                 <section className="collection-page library-home">
@@ -558,7 +620,7 @@ function Notebook({
             ))}
           </nav>
         )}
-        {moves.toast}
+        {toast.element}
       </main>
       <AssistantPanel
         global
@@ -597,13 +659,24 @@ function Notebook({
           iconOnly={form.iconOnly}
           onClose={() => setForm(null)}
           onSaved={(node) => {
+            const created = !form.node && !form.file;
             setForm(null);
             changed();
+            if (created && TEXT_KINDS.includes(node.kind)) setFreshNote(node.id);
             if (selected === node.id) setDetailRevision((r) => r + 1);
             else if (!form.iconOnly) setRoute(node.id);
           }}
         />
       )}{' '}
+      {searchOpen && (
+        <SearchDialog
+          onOpen={(node) => {
+            setMobileOpen(false);
+            openNode(node);
+          }}
+          onClose={() => setSearchOpen(false)}
+        />
+      )}
       {moving && (
         <MoveDialog
           node={moving}

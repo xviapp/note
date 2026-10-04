@@ -587,9 +587,13 @@ body:has(.android-shell .phone-bottom-nav) .collection-page,
 }
 
 /* Header action, e.g. New on the home page. */
-.app-header .header-new {
+.app-header .header-search {
   flex-shrink: 0;
   margin-left: auto;
+}
+.app-header .header-new {
+  flex-shrink: 0;
+  margin-left: 6px;
 }
 .menu-popup .menu-compact-only {
   display: none;

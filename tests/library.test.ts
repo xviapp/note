@@ -117,6 +117,31 @@ async function file(name = 'picture.png'): Promise<FileInfo> {
 }
 
 describe('private library behavior', () => {
+  it('searches titles by every word, with ancestor paths, skipping trash and escaping wildcards', async () => {
+    const folder = await create('folder', '读书');
+    const book = await create('markdown', 'Deep Learning 笔记', { parentId: folder.id });
+    const chapter = await create('markdown', '第 3 章 learning rate', { parentId: book.id });
+    await create('markdown', '100% 完成');
+    const gone = await create('markdown', 'Deep learning 草稿');
+    await trash(gone);
+    const search = (q: string) =>
+      ok<{ results: (NoteNode & { path: string[] })[] }>(`/api/search?q=${encodeURIComponent(q)}`);
+    const learning = await search('LEARNING');
+    expect(learning.results.map((node) => node.id).sort()).toEqual([book.id, chapter.id].sort());
+    expect(learning.results.find((node) => node.id === chapter.id)!.path).toEqual([
+      '读书',
+      'Deep Learning 笔记',
+    ]);
+    expect(learning.results.find((node) => node.id === book.id)!.path).toEqual(['读书']);
+    expect((await search('deep 笔记')).results.map((node) => node.id)).toEqual([book.id]);
+    expect((await search('%')).results.map((node) => node.title)).toEqual(['100% 完成']);
+    expect((await search('_')).results).toEqual([]);
+    expect((await search('  ')).results).toEqual([]);
+    expect((await request('/api/search?q=x', 'GET', undefined, { anonymous: true })).status).toBe(
+      401,
+    );
+  });
+
   it('creates untitled notes and folders while keeping uploaded filenames and rename validation', async () => {
     for (const [kind, title] of [
       ['markdown', '未命名笔记'],

@@ -49,10 +49,10 @@ export function NoteActions({
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   return (
-    // A folder or plain link shows only a couple of buttons on phones; they
+    // A folder, a plain link or an open editor leaves only a couple of buttons; they
     // then share the location row instead of taking one of their own.
     <div
-      className={`note-actions${note.kind === 'folder' || (note.kind === 'link' && !note.arxiv_id) ? ' is-short' : ''}`}
+      className={`note-actions${editing || note.kind === 'folder' || (note.kind === 'link' && !note.arxiv_id) ? ' is-short' : ''}`}
     >
       {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
         <ReadingSettingsButton beforeChange={onReadingChange} />

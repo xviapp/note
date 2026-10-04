@@ -1,5 +1,6 @@
 import type { AuthStatus, FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import { FOLDER_ICON_MAX_BYTES } from '../shared/folder-icons';
+import { DRAFT_PREFIX } from './note-drafts';
 
 // Private content lives in IndexedDB, never the public service-worker cache.
 // A document and all its files are committed as one snapshot. An interrupted
@@ -593,7 +594,12 @@ export async function clearPrivateCache() {
   }).catch(() => {});
   try {
     for (const key of Object.keys(localStorage))
-      if (key.startsWith('reading:') || key.startsWith('pdf-view:')) localStorage.removeItem(key);
+      if (
+        key.startsWith('reading:') ||
+        key.startsWith('pdf-view:') ||
+        key.startsWith(DRAFT_PREFIX)
+      )
+        localStorage.removeItem(key);
     sessionStorage.removeItem('expanded-nodes');
   } catch {
     /* Storage can be unavailable. */

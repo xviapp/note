@@ -5,6 +5,7 @@ import {
   HardDriveDownload,
   Menu,
   Plus,
+  Search,
   Settings2,
   Star,
   Trash2,
@@ -29,6 +30,7 @@ export function Sidebar({
   name,
   view,
   onNew,
+  onSearch,
   onClose,
   onView,
   tree,
@@ -36,6 +38,7 @@ export function Sidebar({
   name: string;
   view: View;
   onNew: () => void;
+  onSearch: () => void;
   onClose: () => void;
   onView: (view: View) => void;
   tree: TreeProps;
@@ -45,6 +48,14 @@ export function Sidebar({
       <div className="sidebar-brand">
         <Brand name={name} />
         <div className="sidebar-brand-actions">
+          <button
+            className="icon-button"
+            aria-label="搜索笔记"
+            title="搜索笔记（Ctrl+K）"
+            onClick={onSearch}
+          >
+            <Search size={18} />
+          </button>
           <ThemeSwitcher />
           <button
             className="icon-button new-note-button"
@@ -99,6 +110,7 @@ export function AppHeader({
   onBack,
   onMenu,
   onNew,
+  onSearch,
 }: {
   view: View;
   section: SettingsSection | null;
@@ -108,6 +120,7 @@ export function AppHeader({
   onBack: () => void;
   onMenu: () => void;
   onNew?: () => void;
+  onSearch: () => void;
 }) {
   return (
     <header className="app-header">
@@ -132,6 +145,14 @@ export function AppHeader({
           {view === 'settings' ? (section ? settingsTitles[section] : '设置') : titles[view]}
         </span>
       </div>
+      <button
+        className="icon-button header-search"
+        aria-label="搜索笔记"
+        title="搜索笔记（Ctrl+K）"
+        onClick={onSearch}
+      >
+        <Search size={19} />
+      </button>
       {onNew && (
         <button className="button compact header-new" onClick={onNew}>
           <Plus size={16} />

@@ -32,6 +32,7 @@ import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import { continueArxiv, importArxiv } from './arxiv';
+import { searchNodes } from './search';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
 
 export default {
@@ -104,6 +105,7 @@ export default {
         return json(await cleanup(env));
       }
       if (path === '/api/nodes' && method === 'GET') return json(await listNodes(env, url));
+      if (path === '/api/search' && method === 'GET') return json(await searchNodes(env, url));
       if (path === '/api/nodes' && method === 'POST') {
         return json(await createNode(env, await body(request), operationKey(request)), 201);
       }

@@ -5,7 +5,7 @@ import { AppError, idValue, integer, textValue } from './http';
 import { discardFile, getBlob, readText, storePaper, storeText } from './storage';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
 
-const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL) child_count,
+export const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite`;
 export async function getNode(env: Env, id: string, includeTrash = false): Promise<NoteNode> {
   const node = await env.DB.prepare(`SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.id=?`)

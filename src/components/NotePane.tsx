@@ -12,6 +12,7 @@ import { useReading } from '../useReading';
 import { openLink } from '../open-link';
 import { Empty, Modal, Spinner, useQuestion } from './Primitives';
 import { Attachments } from './Attachments';
+import type { EditorHandle } from './Editor';
 import { useMarkdownReady } from './LazyMarkdown';
 import { HistoryDialog } from './HistoryDialog';
 import { EditToolbar, NoteHeading, NoteLocation, SaveErrorBar } from './NoteChrome';
@@ -78,6 +79,9 @@ interface Props {
   onError: (error: unknown) => void;
   onTrash: () => void;
   onSettings: () => void;
+  // A note just created empty opens for writing without the confirmation.
+  autoEdit?: boolean;
+  onAutoEdit?: () => void;
 }
 
 export default function NotePane(props: Props) {
@@ -86,7 +90,8 @@ export default function NotePane(props: Props) {
   const readingPreferences = useReadingPreferences();
   const [note, setNote] = useState<NoteDetail | null>(null),
     noteRef = useRef<NoteDetail | null>(null);
-  const [loadError, setLoadError] = useState<ApiError | Error | null>(null);
+  const [loadError, setLoadError] = useState<ApiError | Error | null>(null),
+    [retry, setRetry] = useState(0);
   const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
@@ -116,6 +121,7 @@ export default function NotePane(props: Props) {
   const assistantActions = useRef<AssistantHandle>(null);
   const [translation, setTranslation] = useState<TranslationLaunch | null>(null);
   const [pdfLocation, setPdfLocation] = useState<PdfSourceLocation | null>(null);
+  const editorHandle = useRef<EditorHandle | null>(null);
   const {
     editing,
     content,
@@ -131,8 +137,10 @@ export default function NotePane(props: Props) {
     save,
     leave,
     start: startEdit,
+    offerDraft,
     reconfirm,
     addFiles,
+    insert,
     removeAsset,
   } = useNoteEditor({
     id,
@@ -144,7 +152,36 @@ export default function NotePane(props: Props) {
     onStart: () => setTranslation(null),
     onChanged: props.onChanged,
     onError: props.onError,
+    editorRef: editorHandle,
   });
+  // Once per opened note, offer a draft that was never saved.
+  const draftChecked = useRef(false);
+  const loadedId = note?.id;
+  useEffect(() => {
+    if (!loadedId || draftChecked.current || !TEXT_KINDS.includes(noteRef.current!.kind)) return;
+    draftChecked.current = true;
+    void offerDraft();
+    // offerDraft reads the latest note through noteRef; run once it has loaded.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [loadedId]);
+  // The E shortcut, sent by the notebook when no field has focus.
+  const editShortcut = useRef(() => {});
+  editShortcut.current = () => {
+    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline) void startEdit();
+  };
+  useEffect(() => {
+    const edit = () => editShortcut.current();
+    window.addEventListener('note:edit-shortcut', edit);
+    return () => window.removeEventListener('note:edit-shortcut', edit);
+  }, []);
+  const { autoEdit, onAutoEdit } = props;
+  useEffect(() => {
+    if (!autoEdit || !note || editing || !TEXT_KINDS.includes(note.kind) || note.content) return;
+    onAutoEdit?.();
+    void startEdit(false);
+    // startEdit is recreated each render; this runs once the new note has loaded.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [autoEdit, note, editing, onAutoEdit]);
   useEffect(() => {
     clearSourceHighlight();
     return clearSourceHighlight;
@@ -194,7 +231,7 @@ export default function NotePane(props: Props) {
     };
     // Reload only for a new note or refresh; applyDetail is recreated each render.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, props.refresh, editing]);
+  }, [id, props.refresh, editing, retry]);
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
   const noteId = note?.id;
   const restorePosition = useCallback(() => {
@@ -318,7 +355,8 @@ export default function NotePane(props: Props) {
                   前往回收站
                 </button>
               ) : (
-                <button className="button" onClick={() => window.location.reload()}>
+                // Fetch just this note again; the tree and loaded lists stay as they are.
+                <button className="button" onClick={() => setRetry((count) => count + 1)}>
                   重新加载
                 </button>
               )
@@ -398,8 +436,10 @@ export default function NotePane(props: Props) {
                   value={content}
                   onChange={setContent}
                   onSave={() => {
-                    void save();
+                    void save(false);
                   }}
+                  onFiles={(files) => void addFiles(files)}
+                  handleRef={editorHandle}
                   kind={note.kind as 'markdown' | 'text'}
                 />
               </Suspense>
@@ -658,7 +698,7 @@ export default function NotePane(props: Props) {
       )}
       {linkOpen && (
         <LinkDialog
-          onInsert={(target) => setContent((previous) => `${previous}\n${markdownLink(target)}\n`)}
+          onInsert={(target) => insert(markdownLink(target))}
           onClose={() => setLinkOpen(false)}
         />
       )}

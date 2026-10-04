@@ -2,6 +2,8 @@ import { useEffect, useRef, useState, type RefObject } from 'react';
 import { api, fileUrl, lockNote, unlockNote, upload } from './api';
 import type { FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import type { useQuestion } from './components/Primitives';
+import { readDraft, removeDraft, writeDraft } from './note-drafts';
+import type { EditorHandle } from './components/Editor';
 
 // Editing a note's body and attachments: a draft, a confirmed start, a save that
 // is safe to retry, and a guard that asks before unsaved changes are left.
@@ -15,6 +17,7 @@ export function useNoteEditor({
   onStart,
   onChanged,
   onError,
+  editorRef,
 }: {
   id: string;
   note: NoteDetail | null;
@@ -25,6 +28,8 @@ export function useNoteEditor({
   onStart: () => void;
   onChanged: () => void;
   onError: (error: unknown) => void;
+  // The open editor, which owns the text while editing (see Editor).
+  editorRef: RefObject<EditorHandle | null>;
 }) {
   const [editing, setEditing] = useState(false),
     [content, setContent] = useState(''),
@@ -57,6 +62,26 @@ export function useNoteEditor({
     window.addEventListener('beforeunload', warn);
     return () => window.removeEventListener('beforeunload', warn);
   }, [editing, dirty]);
+  // Keep unsaved edits on this device shortly after each change.
+  const baseRevision = useRef(0);
+  useEffect(() => {
+    if (!editing) return;
+    if (!dirty) {
+      removeDraft(id);
+      return;
+    }
+    const timer = setTimeout(
+      () =>
+        writeDraft(id, {
+          content,
+          attachments: assets,
+          revision: baseRevision.current,
+          savedAt: Date.now(),
+        }),
+      600,
+    );
+    return () => clearTimeout(timer);
+  }, [id, editing, dirty, content, assets]);
 
   const abandonUploads = () => {
     for (const fileId of draftUploads.current)
@@ -68,7 +93,12 @@ export function useNoteEditor({
     lockNote(id);
     setSaveError('');
   };
-  const save = async (): Promise<boolean> => {
+  const insert = (text: string) => {
+    if (editorRef.current) editorRef.current.insert(text);
+    else setContent((previous) => `${previous}\n\n${text}\n`);
+  };
+  // The shortcut saves and keeps editing; the toolbar's 保存 also finishes.
+  const save = async (finish = true): Promise<boolean> => {
     if (!noteRef.current || busy || uploading) return false;
     setBusy(true);
     setSaveError('');
@@ -87,12 +117,16 @@ export function useNoteEditor({
       const detail = await api<NoteDetail>(`/api/nodes/${id}`);
       noteRef.current = detail;
       setNote(detail);
-      reset(detail);
+      // When editing continues, the saved note is only the new baseline: the
+      // reader may have typed more while the save was in flight.
+      if (finish) reset(detail);
       for (const fileId of draftUploads.current)
         if (!detail.attachments.some((file) => file.id === fileId))
           void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
       draftUploads.current.clear();
-      exitEdit();
+      removeDraft(id);
+      baseRevision.current = detail.revision;
+      if (finish) exitEdit();
       onChanged();
       return true;
     } catch (error) {
@@ -115,6 +149,7 @@ export function useNoteEditor({
       if (answer !== 'discard') return false;
     }
     abandonUploads();
+    removeDraft(id);
     reset(noteRef.current);
     exitEdit();
     return true;
@@ -123,11 +158,13 @@ export function useNoteEditor({
     setLeaveGuard(leave);
     return () => setLeaveGuard(async () => true);
   });
-  const start = async () => {
+  // A new, empty note opens for writing without asking.
+  const start = async (confirm = true) => {
     if (
+      confirm &&
       !(await question.confirm(
         '编辑这篇笔记？',
-        '确认后可以修改正文和附件。手动保存后回到只读预览。',
+        '确认后可以修改正文和附件。按 Ctrl+S 保存后继续编辑，点「保存」后回到只读预览。',
         '开始编辑',
       ))
     )
@@ -135,6 +172,44 @@ export function useNoteEditor({
     try {
       await unlockNote(id);
       onStart();
+      baseRevision.current = noteRef.current?.revision ?? 0;
+      setEditing(true);
+      setTab('source');
+      setSaveError('');
+    } catch (e) {
+      onError(e);
+    }
+  };
+  // Offers a draft left by a closed tab or a reclaimed app when the note opens.
+  const offerDraft = async () => {
+    const draft = readDraft(id),
+      current = noteRef.current;
+    if (!draft || !current || editing) return;
+    if (
+      draft.content === current.content &&
+      sortedIds(draft.attachments) === sortedIds(current.attachments)
+    ) {
+      removeDraft(id);
+      return;
+    }
+    const changed = draft.revision !== current.revision;
+    const answer = await question.ask(
+      '恢复未保存的草稿？',
+      `${new Date(draft.savedAt).toLocaleString('zh-CN', { dateStyle: 'short', timeStyle: 'short' })} 编辑这篇笔记时有内容没有保存。${changed ? '这篇笔记之后又被修改过，恢复并保存会替换之后的修改；之前的内容仍可在版本历史中找回。' : ''}`,
+      [
+        { value: 'discard', label: '丢弃草稿', danger: true },
+        { value: 'later', label: '暂不处理' },
+        { value: 'restore', label: '恢复草稿' },
+      ],
+    );
+    if (answer === 'discard') removeDraft(id);
+    if (answer !== 'restore') return;
+    try {
+      await unlockNote(id);
+      onStart();
+      baseRevision.current = current.revision;
+      setContent(draft.content);
+      setAssets(draft.attachments);
       setEditing(true);
       setTab('source');
       setSaveError('');
@@ -160,10 +235,7 @@ export function useNoteEditor({
         draftUploads.current.add(file.id);
         setAssets((previous) => [...previous, file]);
         if (note?.kind === 'markdown' && file.mime.startsWith('image/'))
-          setContent(
-            (previous) =>
-              `${previous}\n\n![${file.name.replace(/[[\]\\]/g, '')}](${fileUrl(file.id)})\n`,
-          );
+          insert(`![${file.name.replace(/[[\]\\]/g, '')}](${fileUrl(file.id)})`);
       }
     } catch (e) {
       setSaveError((e as Error).message);
@@ -174,10 +246,11 @@ export function useNoteEditor({
   // Removing an attachment also removes its inline images from Markdown.
   const removeAsset = (fileId: string) => {
     setAssets((previous) => previous.filter((file) => file.id !== fileId));
-    if (note?.kind === 'markdown')
-      setContent((previous) =>
-        previous.replace(new RegExp(`!\\[[^\\]]*\\]\\(/api/files/${fileId}\\)`, 'g'), ''),
-      );
+    if (note?.kind !== 'markdown') return;
+    const drop = (text: string) =>
+      text.replace(new RegExp(`!\\[[^\\]]*\\]\\(/api/files/${fileId}\\)`, 'g'), '');
+    if (editorRef.current) editorRef.current.transform(drop);
+    else setContent(drop);
   };
   return {
     editing,
@@ -194,8 +267,10 @@ export function useNoteEditor({
     save,
     leave,
     start,
+    offerDraft,
     reconfirm,
     addFiles,
+    insert,
     removeAsset,
   };
 }

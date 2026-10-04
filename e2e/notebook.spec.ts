@@ -35,6 +35,11 @@ async function createNote(page: Page, title: string) {
   const form = page.getByRole('dialog', { name: '新建笔记' });
   await form.getByLabel('标题', { exact: true }).fill(title);
   await form.getByRole('button', { name: '创建', exact: true }).click();
+  // A new, empty note opens for writing (phones then show only the source);
+  // these tests start from the preview.
+  await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toBeFocused();
+  await page.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(page.locator('.cm-editor')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 }
 async function edit(page: Page) {
@@ -152,10 +157,8 @@ test('default preview, per-file edit confirmation, save/history, favorites, tras
     .locator('.note-actions')
     .getByRole('button', { name: '移到回收站', exact: true })
     .click();
-  await page
-    .getByRole('dialog', { name: '移到回收站？' })
-    .getByRole('button', { name: '移到回收站', exact: true })
-    .click();
+  // A single note needs no confirmation; the toast offers 撤销 instead.
+  await expect(page.getByRole('status').filter({ hasText: '已移到回收站' })).toBeVisible();
   await nav(page, '回收站');
   await page
     .locator('.trash-row')
@@ -295,6 +298,9 @@ test('creation, rename, moving and storage settings work without unlocking file 
   });
   const title = `自由整理 · ${info.project.name}`;
   await createNote(page, title);
+  // Only opening the new, empty note for writing unlocks it; nothing below may.
+  expect(unlocks).toHaveLength(1);
+  unlocks.length = 0;
   const id = page.url().split('/').at(-1)!;
   const { node: destination } = await assistantSeed(page, {
     kind: 'folder',
@@ -844,10 +850,18 @@ test('themes persist, follow the system and preserve the current note and unsave
   await edit(page);
   const source = page.getByRole('textbox', { name: 'Markdown 源码' });
   await source.fill(`${content}\n\n未保存的主题测试草稿`);
+  // The editor takes the app's own surface and ink in every palette.
+  const editorMatches = () =>
+    page.evaluate(() => {
+      const editor = getComputedStyle(document.querySelector('.cm-editor')!);
+      const pane = getComputedStyle(document.querySelector('.source-pane')!);
+      const body = getComputedStyle(document.body);
+      return editor.backgroundColor === pane.backgroundColor && editor.color === body.color;
+    });
   await selectTheme(page, 'dark');
-  await expect(page.locator('.source-pane .cm-theme-dark')).toBeVisible();
+  await expect.poll(editorMatches).toBe(true);
   await selectTheme(page, 'light');
-  await expect(page.locator('.source-pane .cm-theme-light')).toBeVisible();
+  await expect.poll(editorMatches).toBe(true);
   await expect(source).toContainText('未保存的主题测试草稿');
   await selectTheme(page, 'starry');
   await expect(source).toContainText('未保存的主题测试草稿');

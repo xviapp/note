@@ -1932,6 +1932,86 @@ button.node-list-toggle:focus-visible {
   font-weight: 400;
   line-height: 1.8;
 }
+/* Search: a field over a scrolling list of title matches. */
+.search-modal {
+  width: 560px;
+  display: flex;
+  flex-direction: column;
+}
+.search-modal[open] {
+  display: flex;
+}
+.search-modal .search-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.search-modal .search-field:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+/* Matches the global field selector so its border, padding and focus give way. */
+.search-modal .search-field input:not([type='checkbox']):not([type='radio']):not([type='file']) {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 11px 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+  color: var(--ink);
+  font-size: 15px;
+}
+.search-caption {
+  margin: 12px 2px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.search-results {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  min-height: 0;
+  overflow: auto;
+  max-height: min(420px, calc(100dvh - 240px));
+}
+.search-results li {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 9px 10px;
+  border-radius: var(--radius-control);
+  cursor: pointer;
+}
+.search-results li.active {
+  background: var(--selected);
+}
+.search-result-text {
+  display: grid;
+  min-width: 0;
+}
+.search-result-text strong,
+.search-result-text small {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-result-text strong {
+  font-weight: 500;
+  font-size: 14px;
+}
+.search-result-text small {
+  color: var(--muted);
+  font-size: 12px;
+}
 .kind-choices {
   display: grid;
   grid-template-columns: 1fr 1fr;
@@ -2782,6 +2862,10 @@ button.node-list-toggle:focus-visible {
   .source-pane {
     width: 100%;
     border: 0;
+  }
+  /* Line numbers and fold markers leave too little width for prose on phones. */
+  .source-pane .cm-gutters {
+    display: none;
   }
   .edit-tab-source .note-scroll {
     display: none;

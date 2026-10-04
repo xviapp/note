@@ -50,6 +50,11 @@ export interface ArxivImportProgress {
   done: number;
   total: number;
 }
+// A title match, with the titles of its ancestors from the root down.
+export interface SearchResult extends NoteNode {
+  path: string[];
+}
+export const SEARCH_LIMIT = 30;
 export interface ShareSettings {
   parentId: string | null;
   breadcrumbs: { id: string; title: string }[];
