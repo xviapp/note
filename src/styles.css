@@ -1385,6 +1385,8 @@ button.node-list-toggle:focus-visible {
   outline: none !important;
 }
 .note-article {
+  /* Holds the margin marks of notes (see .annotation-markers). */
+  position: relative;
   max-width: 890px;
   padding: 41px 60px 90px;
   margin: 0 auto;

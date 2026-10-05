@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { FileDown, Pencil } from 'lucide-react';
+import { FileDown, Pencil, X } from 'lucide-react';
 import {
   ANNOTATION_COLORS,
   ANNOTATION_NOTE_CHARS,
@@ -122,25 +122,28 @@ export function AnnotationEditor({
   );
 }
 
-// Every highlight of the file in reading order, filtered by colour; one
-// opens its place.
-export function AnnotationList({
-  list,
-  missing,
-  offline,
-  onLocate,
-  onEdit,
-  onExport,
-  onClose,
-}: {
+type ListProps = {
   list: Annotation[];
   missing: Set<string>;
   offline: boolean;
+  // The one last opened, marked in the side panel.
+  current?: string;
   onLocate: (annotation: Annotation) => void;
   onEdit: (annotation: Annotation) => void;
   onExport: () => Promise<string>;
-  onClose: () => void;
-}) {
+};
+
+// Every highlight of the file in reading order, filtered by colour; one
+// opens its place.
+function AnnotationItems({
+  list,
+  missing,
+  offline,
+  current,
+  onLocate,
+  onEdit,
+  onExport,
+}: ListProps) {
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null),
     [busy, setBusy] = useState(false),
     [filter, setFilter] = useState<AnnotationColor | 'all'>('all');
@@ -149,7 +152,7 @@ export function AnnotationList({
     .filter((item) => filter === 'all' || colorOf(item) === filter)
     .sort(annotationOrder);
   return (
-    <Modal title={`批注（${list.length}）`} className="annotation-list-modal" onClose={onClose}>
+    <>
       <div className="annotation-list-tools">
         {used.length > 1 && (
           <div className="annotation-filter" role="group" aria-label="按颜色筛选">
@@ -199,15 +202,21 @@ export function AnnotationList({
       {shown.length ? (
         <ul className="annotation-items">
           {shown.map((item) => (
-            <li key={item.id} className={missing.has(item.id) ? 'is-missing' : undefined}>
+            <li
+              key={item.id}
+              className={
+                [missing.has(item.id) && 'is-missing', current === item.id && 'is-current']
+                  .filter(Boolean)
+                  .join(' ') || undefined
+              }
+            >
               <button
                 className="annotation-item"
                 disabled={missing.has(item.id)}
+                aria-current={current === item.id ? 'location' : undefined}
                 onClick={() => onLocate(item)}
               >
-                <span className={`annotation-item-quote color-${colorOf(item)}`}>
-                  {item.quote}
-                </span>
+                <span className={`annotation-item-quote color-${colorOf(item)}`}>{item.quote}</span>
                 {item.note && <span className="annotation-item-note">{item.note}</span>}
                 {missing.has(item.id) && (
                   <span className="annotation-item-missing">原文已修改，无法定位</span>
@@ -227,6 +236,44 @@ export function AnnotationList({
       ) : (
         <p className="annotation-empty">选中正文中的文字，点「高亮」或「批注」即可添加。</p>
       )}
+    </>
+  );
+}
+
+// On phones and narrow windows: a dialog that closes when one is opened.
+export function AnnotationList({ onClose, ...props }: ListProps & { onClose: () => void }) {
+  return (
+    <Modal
+      title={`批注（${props.list.length}）`}
+      className="annotation-list-modal"
+      onClose={onClose}
+    >
+      <AnnotationItems {...props} />
     </Modal>
+  );
+}
+
+// On wide screens: a panel beside the text that stays open while reading.
+export function AnnotationPanel({ onClose, ...props }: ListProps & { onClose: () => void }) {
+  return (
+    <aside
+      className="annotation-panel"
+      aria-label={`批注（${props.list.length}）`}
+      onKeyDown={(event) => {
+        if (event.key === 'Escape' && !event.defaultPrevented) {
+          event.preventDefault();
+          event.stopPropagation();
+          onClose();
+        }
+      }}
+    >
+      <div className="toc-heading">
+        <span>批注（{props.list.length}）</span>
+        <button className="icon-button" aria-label="关闭批注面板" onClick={onClose}>
+          <X size={16} />
+        </button>
+      </div>
+      <AnnotationItems {...props} />
+    </aside>
   );
 }

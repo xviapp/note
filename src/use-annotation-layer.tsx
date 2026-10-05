@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { ANNOTATION_QUOTE_CHARS } from '../shared/annotations';
+import { MessageSquareText } from 'lucide-react';
+import { ANNOTATION_QUOTE_CHARS, colorOf, type AnnotationColor } from '../shared/annotations';
 import type { SourceLocation } from '../shared/translation';
 import {
   annotationAt,
@@ -12,6 +13,8 @@ import {
 } from './annotations';
 import { AnnotationEditor, type AnnotationDraft } from './components/AnnotationDialogs';
 
+type AnnotationMarker = { top: number; ids: string[]; color: AnnotationColor };
+
 // Highlights and notes over one rendered text: painting, opening one by
 // clicking it, adding one from the selection toolbar, and its editor.
 export function useAnnotationLayer({
@@ -22,6 +25,7 @@ export function useAnnotationLayer({
   offline,
   paintKey,
   outside = '这里的文字不能批注，请选择正文内容。',
+  markerHost,
   onAsk,
 }: {
   store: AnnotationStore;
@@ -35,11 +39,16 @@ export function useAnnotationLayer({
   paintKey?: unknown;
   // Shown for a selection outside the text, e.g. the translated side.
   outside?: string;
+  // The positioned element that holds the margin marks of notes.
+  markerHost?: () => HTMLElement | null;
   onAsk: (text: string) => string | undefined;
 }) {
   const [draft, setDraft] = useState<AnnotationDraft | null>(null);
   const ranges = useRef(new Map<string, Range>());
   const [missingKey, setMissingKey] = useState('');
+  const [markers, setMarkers] = useState<AnnotationMarker[]>([]);
+  const findHost = useRef(markerHost);
+  findHost.current = markerHost;
   const list = store.list;
   const findRoot = useRef(root);
   findRoot.current = root;
@@ -49,12 +58,34 @@ export function useAnnotationLayer({
     if (!element || !active || !list.length) {
       clearAnnotationHighlights(owner);
       setMissingKey('');
+      setMarkers([]);
       return;
     }
     let timer = 0;
+    // One mark per line beside the text, for the notes found in it.
+    const measure = () => {
+      const host = findHost.current?.();
+      if (!host) return;
+      // A scrolling host (a comparison pane) carries its marks along.
+      const top = host.getBoundingClientRect().top - host.scrollTop;
+      const next: AnnotationMarker[] = [];
+      for (const item of list) {
+        const range = ranges.current.get(item.id);
+        const rect = item.note
+          ? Array.from(range?.getClientRects() ?? []).find((r) => r.width > 0 && r.height > 0)
+          : undefined;
+        if (!rect) continue;
+        const y = Math.round(rect.top - top + rect.height / 2);
+        const near = next.find((marker) => Math.abs(marker.top - y) < 14);
+        if (near) near.ids.push(item.id);
+        else next.push({ top: y, ids: [item.id], color: colorOf(item) });
+      }
+      setMarkers((current) => (JSON.stringify(current) === JSON.stringify(next) ? current : next));
+    };
     const paint = () => {
       const found = paintAnnotations(owner, element, list);
       ranges.current = found;
+      measure();
       setMissingKey(
         list
           .filter((item) => item.location.kind === 'text' && !found.has(item.id))
@@ -69,8 +100,12 @@ export function useAnnotationLayer({
       timer = window.setTimeout(paint, 150);
     });
     observer.observe(element, { childList: true, subtree: true, characterData: true });
+    // Reflow (fonts, width, reading settings) moves the lines but not the text.
+    const resized = new ResizeObserver(() => measure());
+    resized.observe(element);
     return () => {
       observer.disconnect();
+      resized.disconnect();
       window.clearTimeout(timer);
       clearAnnotationHighlights(owner);
     };
@@ -135,5 +170,28 @@ export function useAnnotationLayer({
         onClose={() => setDraft(null)}
       />
     ) : null;
-  return { annotate, onClick, open, editor, missingText, setDraft };
+  const marks = markers.length ? (
+    <div className="annotation-markers" aria-label="批注标记">
+      {markers.map((marker) => (
+        <button
+          key={`${marker.top}-${marker.ids[0]}`}
+          type="button"
+          className={`annotation-marker color-${marker.color}`}
+          style={{ top: marker.top }}
+          aria-label={
+            marker.ids.length > 1 ? `打开批注（本行 ${marker.ids.length} 条）` : '打开批注'
+          }
+          title={list.find((item) => item.id === marker.ids[0])?.note}
+          onClick={(event) => {
+            event.stopPropagation();
+            open(marker.ids[0]);
+          }}
+        >
+          <MessageSquareText size={13} aria-hidden="true" />
+          {marker.ids.length > 1 && <span>{marker.ids.length}</span>}
+        </button>
+      ))}
+    </div>
+  ) : null;
+  return { annotate, onClick, open, editor, marks, missingText, setDraft };
 }

@@ -5,6 +5,9 @@ import { paperHtml } from '../tests/fixtures/arxiv';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
 const toolbar = (page: Page) => page.getByRole('toolbar', { name: '选中文字操作' });
+// A side panel on wide windows, a dialog on phones.
+const annotationList = (page: Page, name: string) =>
+  page.getByRole('dialog', { name }).or(page.getByRole('complementary', { name }));
 async function login(page: Page) {
   const status = await (await page.request.get('/api/auth/status')).json();
   const response = await page.request.post(`/api/auth/${status.initialized ? 'login' : 'setup'}`, {
@@ -76,7 +79,7 @@ test('highlights and notes are saved, reopened, listed in order and exported', a
 
   // The list follows the text, and exports as a child note.
   await noteAction(page, '批注（2）');
-  const list = page.getByRole('dialog', { name: '批注（2）' });
+  const list = annotationList(page, '批注（2）');
   await expect(list.locator('.annotation-item-quote')).toHaveText([
     '第一段需要记住。',
     '第二段值得批注。',
@@ -173,7 +176,7 @@ test('PDF selections are highlighted on their page and open their note', async (
   await pageInput.fill('1');
   await pageInput.press('Enter');
   await noteAction(page, '批注（1）');
-  const list = page.getByRole('dialog', { name: '批注（1）' });
+  const list = annotationList(page, '批注（1）');
   await list.getByRole('button', { name: '导出为子笔记' }).click();
   await expect(list.getByText(/（1 条）/)).toBeVisible();
   await list.locator('.annotation-item').click();
@@ -228,7 +231,7 @@ test('colours: picked in the note, remembered for highlights, filtered in the li
   await expect.poll(() => highlights(page, 'annotation-pink')).toBe(1);
 
   await noteAction(page, '批注（2）');
-  const list = page.getByRole('dialog', { name: '批注（2）' });
+  const list = annotationList(page, '批注（2）');
   await expect(list.locator('.annotation-item')).toHaveCount(2);
   await list.getByRole('button', { name: '只看粉色' }).click();
   await expect(list.locator('.annotation-item-quote')).toHaveText(['第二段文字。']);
@@ -347,7 +350,7 @@ test('the comparison view shows and adds notes on the source side', async ({ pag
   await expect.poll(() => highlights(page, 'annotation-yellow-note')).toBe(2);
   await view.getByRole('button', { name: '关闭对照阅读' }).click();
   await noteAction(page, '批注（2）');
-  await expect(page.getByRole('dialog', { name: '批注（2）' })).toContainText('对照时写的');
+  await expect(annotationList(page, '批注（2）')).toContainText('对照时写的');
 });
 
 test('each side of the split view has its own notes', async ({ page }, info) => {
@@ -389,4 +392,51 @@ test('each side of the split view has its own notes', async ({ page }, info) => 
   await expect.poll(() => highlights(page, 'annotation-yellow')).toBe(3);
   const leftNotes = await (await page.request.get(`/api/nodes/${left.id}/annotations`)).json();
   expect(leftNotes.annotations).toHaveLength(1);
+});
+
+test('notes are marked in the margin; the list stays open beside the text on wide screens', async ({
+  page,
+}, info) => {
+  await login(page);
+  const filler = Array.from({ length: 30 }, (_, i) => `铺垫段落 ${i + 1}。`).join('\n\n');
+  const content = `开头有想法的一句。\n\n${filler}\n\n结尾有想法的一句。`;
+  const note = await create(page, {
+    kind: 'markdown',
+    title: `边注 · ${info.project.name}`,
+    content,
+  });
+  const plain = content.replace(/\n\n/g, '');
+  for (const [id, quote, text] of [
+    ['m1', '开头有想法的一句。', '开头的想法'],
+    ['m2', '结尾有想法的一句。', '结尾的想法'],
+  ])
+    await page.request.put(`/api/nodes/${note.id}/annotations/${id}`, {
+      headers,
+      data: { quote, note: text, location: textLocation(quote, plain.indexOf(quote)) },
+    });
+  await page.goto(`/n/${note.id}`);
+  const markers = page.locator('.annotation-marker');
+  await expect(markers).toHaveCount(2);
+  // A mark sits on the line of its quote and opens its note.
+  const first = page.locator('.read-content p').first();
+  const [line, mark] = [(await first.boundingBox())!, (await markers.first().boundingBox())!];
+  expect(Math.abs(line.y + line.height / 2 - (mark.y + mark.height / 2))).toBeLessThan(6);
+  await markers.first().click();
+  const editor = page.getByRole('dialog', { name: '批注', exact: true });
+  await expect(editor.getByLabel('批注内容')).toHaveValue('开头的想法');
+  await editor.getByRole('button', { name: '关闭' }).click();
+
+  await noteAction(page, '批注（2）');
+  const list = annotationList(page, '批注（2）');
+  await list.getByRole('button', { name: /结尾有想法的一句/ }).click();
+  await expect(page.locator('.read-content p').last()).toBeInViewport();
+  if (info.project.name === 'desktop') {
+    // Still open, the item just opened marked; the next one is one click away.
+    await expect(list).toBeVisible();
+    await expect(list.locator('[aria-current="location"]')).toContainText('结尾有想法');
+    await list.getByRole('button', { name: /开头有想法的一句/ }).click();
+    await expect(first).toBeInViewport();
+    await page.getByRole('button', { name: '关闭批注面板' }).click();
+    await expect(list).toBeHidden();
+  } else await expect(list).toBeHidden();
 });

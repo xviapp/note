@@ -320,3 +320,70 @@
     height: 36px;
   }
 }
+/* Margin marks beside lines with a note, in the article's right padding. */
+.annotation-markers {
+  position: absolute;
+  top: 0;
+  right: 14px;
+  width: 26px;
+  height: 0;
+  user-select: none;
+  -webkit-user-select: none;
+}
+.compare-pane .annotation-markers {
+  right: 2px;
+}
+.annotation-marker {
+  position: absolute;
+  right: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 3px;
+  border-radius: 11px;
+  background: color-mix(in srgb, var(--annotation) 22%, var(--surface));
+  color: color-mix(in srgb, var(--annotation) 75%, var(--ink));
+  font-size: 11px;
+  line-height: 1;
+  transform: translateY(-50%);
+}
+.annotation-marker:hover {
+  background: color-mix(in srgb, var(--annotation) 40%, var(--surface));
+}
+@media (max-width: 760px) {
+  /* Inside the 20px padding, clear of the screen edge. */
+  .annotation-markers {
+    right: 1px;
+  }
+  .annotation-marker {
+    min-width: 18px;
+    height: 18px;
+    padding: 0 2px;
+  }
+  .annotation-marker svg {
+    width: 11px;
+    height: 11px;
+  }
+}
+/* The list beside the text on wide windows, like the outline. */
+.annotation-panel {
+  width: 300px;
+  flex-shrink: 0;
+  padding: 41px 16px 24px 12px;
+  border-left: 1px solid var(--line);
+  overflow: auto;
+  scrollbar-width: thin;
+}
+.annotation-panel .toc-heading {
+  padding-left: 0;
+}
+.annotation-panel .annotation-list-tools {
+  justify-content: flex-start;
+}
+.annotation-items li.is-current {
+  background: var(--selected);
+  border-radius: var(--radius-control);
+}

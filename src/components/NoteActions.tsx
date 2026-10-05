@@ -36,6 +36,7 @@ export function NoteActions({
   compareProgress,
   onSplit,
   annotationCount,
+  annotationsOpen,
   onAnnotations,
   onEdit,
   onAction,
@@ -66,6 +67,8 @@ export function NoteActions({
   onSplit: () => void;
   // Highlights and notes on this file; the button shows once there is one.
   annotationCount: number;
+  // The side panel is showing (wide windows).
+  annotationsOpen: boolean;
   onAnnotations: () => void;
   onEdit: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
@@ -135,7 +138,7 @@ export function NoteActions({
           className="icon-button has-badge toolbar-secondary"
           aria-label={`批注（${annotationCount}）`}
           title="高亮与批注"
-          aria-haspopup="dialog"
+          aria-expanded={annotationsOpen}
           onClick={onAnnotations}
         >
           <MessageSquareQuote size={18} />

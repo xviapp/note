@@ -118,6 +118,7 @@ export default function CompareView({
     offline,
     paintKey: built,
     outside: '请在原文一侧选择文字批注。',
+    markerHost: () => panes.source.current,
     onAsk: onQuote,
   });
   // Both sides are clones of the same article, so their paragraphs pair up by order.
@@ -498,6 +499,7 @@ export default function CompareView({
             data-version-id={note.current_version_id}
             onClick={followLink}
           />
+          {layer.marks}
         </div>
         <div
           ref={panes.translation}

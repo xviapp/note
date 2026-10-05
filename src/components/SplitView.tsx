@@ -220,6 +220,7 @@ function SplitPane({
     active: annotatable,
     offline,
     paintKey: note?.id,
+    markerHost: () => scroll.current?.querySelector<HTMLElement>('.note-article') ?? null,
     onAsk: onQuote,
   });
   useEffect(() => {
@@ -296,6 +297,7 @@ function SplitPane({
                 onImage={onImage}
                 onHeadings={setHeadings}
               />
+              {layer.marks}
             </article>
           </div>
         )}

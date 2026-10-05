@@ -44,7 +44,7 @@ import { clearSourceHighlight, locateTextSource } from '../source-location';
 import { exportAnnotations, takeRequestedAnnotation, useAnnotations } from '../annotations';
 import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
-import { AnnotationList } from './AnnotationDialogs';
+import { AnnotationList, AnnotationPanel } from './AnnotationDialogs';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
 
@@ -369,7 +369,8 @@ export default function NotePane(props: Props) {
   const annotatable =
     !!note && (TEXT_KINDS.includes(note.kind) || !!note.arxiv_id || note.kind === 'pdf');
   const annotations = useAnnotations(id, annotatable);
-  const [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const [annotationsOpen, setAnnotationsOpen] = useState(false),
+    [currentAnnotation, setCurrentAnnotation] = useState('');
   const annotationList = annotations.list;
   const layer = useAnnotationLayer({
     store: annotations,
@@ -378,6 +379,7 @@ export default function NotePane(props: Props) {
     active: !editing,
     offline,
     paintKey: `${note?.id}:${note?.current_version_id}:${markdownReady}`,
+    markerHost: () => scroll.current?.querySelector<HTMLElement>('.note-article') ?? null,
     onAsk: (text) => addQuote(text),
   });
   // Text that changed is found while painting; a PDF only goes missing with its file.
@@ -447,6 +449,34 @@ export default function NotePane(props: Props) {
         )}
       </div>
     );
+  // Wide windows keep the list open beside the text; narrow ones use a dialog.
+  const annotationPanel = annotationsOpen && !editing && !toc.compact;
+  const annotationListProps = {
+    list: annotationList,
+    missing: missingAnnotations,
+    offline,
+    current: currentAnnotation,
+    onLocate: (item: Annotation) => {
+      setCurrentAnnotation(item.id);
+      if (!annotationPanel) setAnnotationsOpen(false);
+      // Wait for a dialog to close so focus and scrolling land in the text.
+      requestAnimationFrame(() => {
+        const failed = locateAnnotation(item);
+        if (failed) props.onNotice?.(failed);
+      });
+    },
+    onEdit: (item: Annotation) => {
+      if (!annotationPanel) setAnnotationsOpen(false);
+      layer.setDraft({ ...item, saved: true });
+    },
+    onExport: async () => {
+      const result = await exportAnnotations(id, note.title, annotationList);
+      props.onChanged();
+      setRetry((count) => count + 1);
+      return `${result.updated ? '已更新' : '已保存为'}子笔记「${result.title}」（${result.count} 条）`;
+    },
+    onClose: () => setAnnotationsOpen(false),
+  };
   return (
     <div className={`note-pane ${editing ? 'is-editing' : ''}`}>
       <div className="note-toolbar">
@@ -481,7 +511,8 @@ export default function NotePane(props: Props) {
           }
           onSplit={() => setSplitOpen(true)}
           annotationCount={annotatable ? annotationList.length : 0}
-          onAnnotations={() => setAnnotationsOpen(true)}
+          annotationsOpen={annotationPanel}
+          onAnnotations={() => setAnnotationsOpen((open) => !(open && !toc.compact))}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
         />
@@ -599,6 +630,7 @@ export default function NotePane(props: Props) {
                     onImage={showImage}
                     onHeadings={toc.onHeadings}
                   />
+                  {!editing && layer.marks}
                   {TEXT_KINDS.includes(note.kind) && (
                     <Attachments
                       files={editing ? assets : note.attachments}
@@ -630,7 +662,8 @@ export default function NotePane(props: Props) {
             (note.kind === 'markdown' || note.arxiv_id) &&
             toc.headings.length > 0 &&
             !toc.compact &&
-            toc.sideOpen && (
+            toc.sideOpen &&
+            !annotationPanel && (
               <aside
                 className="desktop-toc"
                 aria-label="标题目录面板"
@@ -651,6 +684,7 @@ export default function NotePane(props: Props) {
                 {toc.nav}
               </aside>
             )}
+          {annotationPanel && <AnnotationPanel {...annotationListProps} />}
         </div>
         {note.kind !== 'folder' && (
           <AssistantPanel
@@ -686,32 +720,7 @@ export default function NotePane(props: Props) {
         />
       )}
       {layer.editor}
-      {annotationsOpen && !editing && (
-        <AnnotationList
-          list={annotationList}
-          missing={missingAnnotations}
-          offline={offline}
-          onLocate={(item) => {
-            setAnnotationsOpen(false);
-            // Wait for the dialog to close so focus and scrolling land in the text.
-            requestAnimationFrame(() => {
-              const failed = locateAnnotation(item);
-              if (failed) props.onNotice?.(failed);
-            });
-          }}
-          onEdit={(item) => {
-            setAnnotationsOpen(false);
-            layer.setDraft({ ...item, saved: true });
-          }}
-          onExport={async () => {
-            const result = await exportAnnotations(id, note.title, annotationList);
-            props.onChanged();
-            setRetry((count) => count + 1);
-            return `${result.updated ? '已更新' : '已保存为'}子笔记「${result.title}」（${result.count} 条）`;
-          }}
-          onClose={() => setAnnotationsOpen(false)}
-        />
-      )}
+      {annotationsOpen && !editing && toc.compact && <AnnotationList {...annotationListProps} />}
       {!editing && translation && (
         <TranslationPanel
           nodeId={id}
