@@ -3104,6 +3104,13 @@ button.node-list-toggle:focus-visible {
   background: var(--danger-bg);
   font-size: 13px;
 }
+.compare-notice {
+  margin: 0;
+  padding: 8px 16px;
+  color: var(--muted);
+  background: var(--surface-subtle);
+  font-size: 13px;
+}
 .compare-body {
   display: flex;
   flex: 1;
@@ -3163,16 +3170,50 @@ button.node-list-toggle:focus-visible {
   .compare-pane.is-source {
     border: 0;
   }
-  /* Phones: the side switch and close on top, translation controls below. */
+  /* Phones: side switch, glossary and close on top; language and translate
+     buttons below; progress on a line of its own. */
+  .compare-glossary,
   .compare-close {
     order: 1;
   }
   .compare-tools {
     order: 2;
     flex-basis: 100%;
+    flex-wrap: wrap;
+    gap: 8px;
   }
   .compare-progress {
-    flex: 1;
-    min-width: 0;
+    order: 3;
+    flex-basis: 100%;
   }
+  .compare-long {
+    display: none;
+  }
+}
+.glossary-modal {
+  width: 560px;
+}
+.glossary-note {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}
+.glossary-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0 0 12px;
+  padding: 0;
+  list-style: none;
+  max-height: min(420px, calc(100dvh - 280px));
+  overflow: auto;
+}
+.glossary-rows li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 8px;
+}
+.glossary-rows li > span {
+  color: var(--muted);
 }

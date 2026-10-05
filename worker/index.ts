@@ -34,7 +34,12 @@ import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import { continueArxiv, importArxiv } from './arxiv';
 import { searchNodes } from './search';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
-import { getPaperTranslation, translatePaperBlocks } from './paper-translation';
+import {
+  extractGlossary,
+  getPaperTranslation,
+  saveGlossary,
+  translatePaperBlocks,
+} from './paper-translation';
 
 export default {
   async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
@@ -156,6 +161,10 @@ export default {
           return json(await getPaperTranslation(env, id, url));
         if (action === 'paper-translation' && method === 'POST')
           return json(await translatePaperBlocks(env, request, id, await body(request)));
+        if (action === 'paper-translation/glossary' && method === 'POST')
+          return json(await extractGlossary(env, request, id, await body(request)));
+        if (action === 'paper-translation/glossary' && method === 'PUT')
+          return json(await saveGlossary(env, id, await body(request)));
         if (action === 'translations' && method === 'GET')
           return json(
             await translationHistory(

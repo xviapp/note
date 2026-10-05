@@ -177,6 +177,66 @@ describe('whole-paper translation', () => {
     expect((await request(`${path(node)}?language=zh-CN`, 'GET')).status).toBe(200);
   });
 
+  it('draws up a glossary once, uses its matching terms per batch, and saves edits', async () => {
+    const node = await paper();
+    const prompts: string[] = [];
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      const body = JSON.parse(String(init!.body));
+      prompts.push(body.messages[0].content);
+      const user = body.messages.at(-1).content as string;
+      const content = user.startsWith('{')
+        ? JSON.stringify({
+            translations: (JSON.parse(user).segments as string[]).map((t) => `译：${t}`),
+          })
+        : JSON.stringify({
+            terms: [
+              { source: 'attention', target: '注意力' },
+              { source: 'Attention', target: '重复' },
+              { source: 'transformer', target: 'Transformer' },
+              { source: '', target: '空' },
+            ],
+          });
+      const data = `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`;
+      return new Response(data, { headers: { 'content-type': 'text/event-stream' } });
+    });
+    const glossary = `${path(node)}/glossary`;
+    const drawn = await ok<PaperTranslation>(glossary, 'POST', {
+      language: 'zh-CN',
+      text: 'Attention Paper\nWe study attention in the transformer.',
+    });
+    // Duplicates (ignoring case) and empty entries are dropped.
+    expect(drawn.glossary).toEqual([
+      { source: 'attention', target: '注意力' },
+      { source: 'transformer', target: 'Transformer' },
+    ]);
+    await ok(glossary, 'POST', { language: 'zh-CN', text: 'Again' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    await ok(path(node), 'POST', {
+      language: 'zh-CN',
+      blocks: [await block('Attention helps.')],
+    });
+    expect(prompts.at(-1)).toContain('attention → 注意力');
+    expect(prompts.at(-1)).not.toContain('transformer →');
+    // An edited glossary replaces the drawn one and validates its entries.
+    const edited = await ok<PaperTranslation>(glossary, 'PUT', {
+      language: 'zh-CN',
+      terms: [{ source: 'attention', target: '关注机制' }],
+    });
+    expect(edited.glossary).toEqual([{ source: 'attention', target: '关注机制' }]);
+    expect(
+      (
+        await request(glossary, 'PUT', {
+          language: 'zh-CN',
+          terms: [{ source: 'x'.repeat(81), target: 'y' }],
+        })
+      ).status,
+    ).toBe(400);
+    const read = await ok<PaperTranslation>(`${path(node)}?language=zh-CN`);
+    expect(read.glossary).toEqual(edited.glossary);
+    expect(Object.keys(read.blocks)).toHaveLength(1);
+    expect((await ok<PaperTranslation>(`${path(node)}?language=ja`)).glossary).toBeNull();
+  });
+
   it('goes with its paper: trash keeps it, purge and cleanup free it', async () => {
     const node = await paper();
     provider(zh);

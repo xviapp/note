@@ -1,16 +1,17 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { Languages, RotateCcw, X } from 'lucide-react';
+import { BookOpenText, Languages, RotateCcw, X } from 'lucide-react';
 import type { NoteDetail } from '../../shared/types';
 import {
   isTranslationLanguage,
   TRANSLATION_LANGUAGES,
   type TranslationLanguage,
 } from '../../shared/translation';
-import type { PaperBlockSource } from '../../shared/paper-translation';
+import { GLOSSARY_SOURCE_CHARS, type PaperBlockSource } from '../../shared/paper-translation';
 import { applyTranslation, blockHash, paperBlocks, type PaperBlock } from '../paper-blocks';
 import { usePaperTranslation } from '../use-paper-translation';
 import { hydratePaperImages, preparePaper } from './PaperView';
 import '../paper.css';
+import { GlossaryDialog } from './GlossaryDialog';
 
 const LANGUAGE_KEY = 'paper-translation-language';
 type Anchor = { index: number; ratio: number; offset: number };
@@ -59,7 +60,10 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
   });
   const [side, setSide] = useState<'source' | 'translation'>('translation');
   const [sources, setSources] = useState<PaperBlockSource[] | null>(null);
-  const [active, setActive] = useState<{ index: number; top: number } | null>(null);
+  const [active, setActive] = useState<{ index: number; top: number } | null>(null),
+    [glossaryOpen, setGlossaryOpen] = useState(false),
+    // Bumped by scrolling, so the current section is recomputed.
+    [, setScrolled] = useState(0);
   const blocks = useRef<Block[]>([]);
   const prepared = useMemo(
     () => preparePaper(note),
@@ -141,6 +145,7 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
         if (anchor && align(to, anchor)) ignore = to;
       });
       setActive(null);
+      setScrolled((count) => count + 1);
     };
     const fromSource = follow(source, target),
       fromTarget = follow(target, source);
@@ -191,6 +196,30 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
   const characters = sources?.reduce((sum, block) => sum + block.text.length, 0) ?? 0;
   const running = translation.state === 'running';
   const activeBlock = active ? blocks.current[active.index] : null;
+  // The glossary is drawn from the title, abstract and headings.
+  const glossaryText = () =>
+    [
+      note.title,
+      ...blocks.current
+        .filter(
+          (block) =>
+            block.element.matches('h1,h2,h3,h4,h5,h6') || block.element.closest('.ltx_abstract'),
+        )
+        .map((block) => block.text),
+    ]
+      .join('\n')
+      .slice(0, GLOSSARY_SOURCE_CHARS);
+  // The section the reader is in: the innermost one around the top paragraph.
+  const section = (() => {
+    const pane = panes[side].current;
+    const anchor = pane && sources ? anchorOf(pane) : null;
+    const element = anchor ? blocks.current[anchor.index]?.element : null;
+    const container = element?.closest('section, .ltx_abstract');
+    if (!container) return [];
+    return blocks.current.filter((block) => container.contains(block.element));
+  })();
+  const sectionPending = section.filter((block) => !(block.hash in translation.blocks)).length;
+  const sourceOf = (block: Block) => ({ hash: block.hash, text: block.text });
   return (
     <dialog
       ref={dialog}
@@ -249,13 +278,38 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
             sources &&
             translation.state !== 'loading' &&
             done < total && (
-              <button className="button compact primary" onClick={() => void translation.start()}>
-                <Languages size={15} />
-                {done ? '继续翻译' : '翻译全文'}
-              </button>
+              <>
+                {sectionPending > 0 && sectionPending < total - done && (
+                  <button
+                    className="button compact"
+                    aria-label={`只翻译本节（${sectionPending} 段）`}
+                    onClick={() =>
+                      void translation.run(section.map(sourceOf), { glossaryText: glossaryText() })
+                    }
+                  >
+                    <span className="compare-long">只翻译</span>本节（{sectionPending} 段）
+                  </button>
+                )}
+                <button
+                  className="button compact primary"
+                  onClick={() => void translation.run(sources, { glossaryText: glossaryText() })}
+                >
+                  <Languages size={15} />
+                  {done ? '继续翻译' : '翻译全文'}
+                </button>
+              </>
             )
           )}
         </div>
+        <button
+          className="icon-button compare-glossary"
+          aria-label="术语表"
+          title="术语表"
+          disabled={translation.state === 'loading'}
+          onClick={() => setGlossaryOpen(true)}
+        >
+          <BookOpenText size={18} />
+        </button>
         <button className="icon-button compare-close" aria-label="关闭对照阅读" onClick={onClose}>
           <X size={20} />
         </button>
@@ -264,6 +318,29 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
         <p className="compare-error" role="alert">
           {translation.error}
         </p>
+      )}
+      {translation.notice && <p className="compare-notice">{translation.notice}</p>}
+      {glossaryOpen && (
+        <GlossaryDialog
+          glossary={translation.glossary}
+          busy={running}
+          onSave={translation.saveGlossary}
+          // Translated paragraphs that use a changed term, to translate again.
+          affected={(changed) =>
+            blocks.current
+              .filter(
+                (block) =>
+                  block.hash in translation.blocks &&
+                  changed.some((term) => block.text.toLowerCase().includes(term.toLowerCase())),
+              )
+              .map(sourceOf)
+          }
+          onRetranslate={(list) => {
+            setGlossaryOpen(false);
+            void translation.run(list, { refresh: true });
+          }}
+          onClose={() => setGlossaryOpen(false)}
+        />
       )}
       <div className="compare-body">
         <div ref={panes.source} className="compare-pane is-source" role="region" aria-label="原文">
@@ -288,7 +365,7 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
               onClick={(event) => {
                 event.stopPropagation();
                 setActive(null);
-                void translation.retranslate({ hash: activeBlock.hash, text: activeBlock.text });
+                void translation.run([sourceOf(activeBlock)], { refresh: true });
               }}
             >
               <RotateCcw size={14} />

@@ -32,47 +32,68 @@ const topBlock = (pane: Locator) =>
     return Number(block?.dataset.block);
   });
 
-test('a paper translates paragraph by paragraph and both sides scroll together', async ({
-  page,
-}, info) => {
-  await login(page);
+// The Worker suite covers saving and the model call; here the server is
+// modelled: each paragraph becomes "译文：<source>", and a drawn-up glossary
+// maps "method" to "方法".
+async function modelServer(page: Page, id: string) {
+  const saved: Record<string, string> = {};
+  const batches: { hash: string; text: string }[][] = [];
+  const refreshed: boolean[] = [];
+  const glossaryTexts: string[] = [];
+  let glossary: { source: string; target: string }[] | null = null;
+  const reply = (blocks: Record<string, string>) => ({
+    language: 'zh-CN',
+    blocks,
+    glossary,
+    updatedAt: Date.now(),
+  });
+  await page.route(`**/api/nodes/${id}/paper-translation**`, async (route) => {
+    const request = route.request(),
+      url = new URL(request.url());
+    if (request.method() === 'GET') return route.fulfill({ json: reply(saved) });
+    const body = request.postDataJSON();
+    if (url.pathname.endsWith('/glossary')) {
+      if (request.method() === 'POST') {
+        glossaryTexts.push(body.text);
+        glossary ??= [{ source: 'method', target: '方法' }];
+      } else glossary = body.terms;
+      return route.fulfill({ json: reply({}) });
+    }
+    batches.push(body.blocks);
+    refreshed.push(!!body.refresh);
+    for (const block of body.blocks)
+      saved[block.hash] = `译文${body.refresh ? '（新）' : ''}：${block.text}`;
+    await route.fulfill({
+      json: reply(
+        Object.fromEntries(body.blocks.map((b: { hash: string }) => [b.hash, saved[b.hash]])),
+      ),
+    });
+  });
+  return { saved, batches, refreshed, glossaryTexts };
+}
+async function openPaper(page: Page, title: string, html: string) {
   const paper = await (
     await page.request.post('/api/nodes', {
       headers,
-      data: {
-        kind: 'link',
-        title: `对照论文 · ${info.project.name}`,
-        url: 'https://arxiv.org/html/2503.01800v1',
-      },
+      data: { kind: 'link', title, url: 'https://arxiv.org/html/2503.01800v1' },
     })
   ).json();
   await page.route(`**/api/nodes/${paper.id}`, async (route) => {
     if (route.request().method() !== 'GET') return route.fallback();
     const detail = await (await route.fetch()).json();
     await route.fulfill({
-      json: { ...detail, arxiv_id: '2503.01800v1', content, attachments: [] },
+      json: { ...detail, arxiv_id: '2503.01800v1', content: html, attachments: [] },
     });
   });
-  // The Worker suite covers saving and the model call; here the server is modelled.
-  const saved: Record<string, string> = {};
-  const batches: { hash: string; text: string }[][] = [];
-  await page.route(`**/api/nodes/${paper.id}/paper-translation**`, async (route) => {
-    const request = route.request();
-    if (request.method() === 'GET')
-      return route.fulfill({ json: { language: 'zh-CN', blocks: saved, updatedAt: null } });
-    const body = request.postDataJSON();
-    batches.push(body.blocks);
-    for (const block of body.blocks) saved[block.hash] = `译文：${block.text}`;
-    await route.fulfill({
-      json: {
-        language: body.language,
-        blocks: Object.fromEntries(
-          body.blocks.map((b: { hash: string }) => [b.hash, saved[b.hash]]),
-        ),
-        updatedAt: Date.now(),
-      },
-    });
-  });
+  return paper;
+}
+
+test('a paper translates paragraph by paragraph and both sides scroll together', async ({
+  page,
+}, info) => {
+  await login(page);
+  const paper = await openPaper(page, `对照论文 · ${info.project.name}`, content);
+  const { batches } = await modelServer(page, paper.id);
   await page.goto(`/n/${paper.id}`);
   await page
     .locator('.note-actions')
@@ -122,4 +143,60 @@ test('a paper translates paragraph by paragraph and both sides scroll together',
   expect(batches.at(-1)!.map((block) => block.text)).toEqual([sent.text]);
   await page.keyboard.press('Escape');
   await expect(view).toHaveCount(0);
+});
+
+// Four sections of five paragraphs; two paragraphs of section 3 use "method".
+const sectioned = `<article class="ltx_document"><h1 class="ltx_title ltx_title_document">Sections</h1>${Array.from(
+  { length: 4 },
+  (_, s) =>
+    `<section class="ltx_section" id="S${s + 1}"><h2 class="ltx_title ltx_title_section">Part ${s + 1} heading</h2>${Array.from(
+      { length: 4 },
+      (_, p) =>
+        `<div class="ltx_para"><p class="ltx_p">Section ${s + 1} paragraph ${p + 1} ${s === 2 && p < 2 ? 'describes the method' : 'reports results'} ${'with careful words '.repeat(6)}.</p></div>`,
+    ).join('')}</section>`,
+).join('')}</article>`;
+
+test('only the current section can be translated, and glossary edits redo only affected paragraphs', async ({
+  page,
+}, info) => {
+  await login(page);
+  const paper = await openPaper(page, `分节论文 · ${info.project.name}`, sectioned);
+  const { batches, refreshed, glossaryTexts } = await modelServer(page, paper.id);
+  await page.goto(`/n/${paper.id}`);
+  await page
+    .locator('.note-actions')
+    .getByRole('button', { name: '对照阅读', exact: true })
+    .click();
+  const view = page.getByRole('dialog', { name: `对照阅读：${paper.title}` });
+  const target = view.getByRole('region', { name: '译文' });
+  await expect(view.getByRole('status')).toContainText('已翻译 0/20');
+  await target.evaluate((pane) => {
+    const heading = Array.from(pane.querySelectorAll('h2')).find((h) =>
+      h.textContent?.includes('Part 3'),
+    )!;
+    pane.scrollTop += heading.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+  });
+  await view.getByRole('button', { name: '只翻译本节（5 段）' }).click();
+  await expect(view.getByRole('status')).toContainText('已翻译 5/20');
+  expect(batches.flat().every((block) => /^(Part 3 heading|Section 3 )/.test(block.text))).toBe(
+    true,
+  );
+  // The glossary was drawn from the title and headings first, once.
+  expect(glossaryTexts).toHaveLength(1);
+  expect(glossaryTexts[0]).toContain('Part 4 heading');
+
+  await view.getByRole('button', { name: '术语表', exact: true }).click();
+  const dialog = page.getByRole('dialog', { name: '术语表', exact: true });
+  await expect(dialog.getByRole('textbox', { name: '术语 1' })).toHaveValue('method');
+  await dialog.getByRole('textbox', { name: '译名 1' }).fill('途径');
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  const prompt = page.getByRole('dialog', { name: '术语表已保存' });
+  await expect(prompt).toContainText('2 段');
+  await prompt.getByRole('button', { name: '重新翻译 2 段' }).click();
+  await expect.poll(() => refreshed.at(-1)).toBe(true);
+  expect(batches.at(-1)!.map((block) => block.text.slice(0, 31))).toEqual([
+    'Section 3 paragraph 1 describes',
+    'Section 3 paragraph 2 describes',
+  ]);
+  await expect(target.getByText(/^译文（新）：Section 3 paragraph 1/)).toBeVisible();
 });
