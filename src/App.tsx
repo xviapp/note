@@ -45,8 +45,11 @@ import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
 import { SearchDialog } from './components/SearchDialog';
 import { AuthScreen } from './components/AuthScreen';
+import { translationWindowId } from './screen-link';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
 import { useNotebookNavigation, type SettingsSection, type View } from './navigation';
+// The translation window for a second screen loads only what it shows.
+const TranslationScreen = lazy(() => import('./components/TranslationScreen'));
 
 const ImageViewer = lazy(() => import('./components/ImageViewer'));
 
@@ -118,6 +121,13 @@ export default function App() {
       void import('./mobile').then(({ finishBoot }) => finishBoot());
   }, [booted]);
   if (!status) return <BootScreen error={error} onRetry={refresh} />;
+  const translationWindow = translationWindowId();
+  if (status.authenticated && translationWindow)
+    return (
+      <Suspense fallback={<BootScreen error="" onRetry={refresh} />}>
+        <TranslationScreen id={translationWindow} />
+      </Suspense>
+    );
   return status.authenticated ? (
     <Notebook name={status.name} onCheckSession={refresh} />
   ) : (

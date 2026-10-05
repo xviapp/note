@@ -1,5 +1,14 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { BookOpenText, FilePlus2, Languages, List, RotateCcw, X } from 'lucide-react';
+import {
+  BookOpenText,
+  FilePlus2,
+  Languages,
+  List,
+  Maximize,
+  MonitorUp,
+  RotateCcw,
+  X,
+} from 'lucide-react';
 import type { NoteDetail } from '../../shared/types';
 import { isTranslationLanguage, TRANSLATION_LANGUAGES } from '../../shared/translation';
 import { applyTranslation, paperBlocks, type PaperBlock } from '../paper-blocks';
@@ -13,6 +22,13 @@ import { TranslationPanel } from './TranslationPanel';
 import { useAssistantHost } from '../assistant-host';
 import type { AnnotationStore } from '../annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
+import {
+  canOpenTranslationWindow,
+  linkChannel,
+  moveHint,
+  openTranslationWindow,
+  type LinkMessage,
+} from '../screen-link';
 
 const ImageViewer = lazy(() => import('./ImageViewer'));
 const TOC_KEY = 'paper-compare-toc',
@@ -48,6 +64,17 @@ function align(pane: HTMLElement, anchor: Anchor) {
   return pane.scrollTop !== before;
 }
 
+// Briefly marks a paragraph, so the eye finds its counterpart.
+function flash(pane: HTMLElement | null, index: number) {
+  const element = pane?.querySelector<HTMLElement>(`[data-block="${index}"]`);
+  if (!element) return;
+  element.classList.remove('is-flash');
+  // Restart the animation when the same paragraph is clicked again.
+  void element.offsetWidth;
+  element.classList.add('is-flash');
+  window.setTimeout(() => element.classList.remove('is-flash'), 1300);
+}
+
 // Full-screen comparison of a paper and its saved translation: source on the
 // left, translation on the right, scrolled together paragraph by paragraph.
 // Phones show one side at a time and keep the place when switching.
@@ -59,6 +86,7 @@ export default function CompareView({
   onChanged,
   annotations,
   offline,
+  only,
 }: {
   note: NoteDetail;
   // Translation state lives on the note page, so a run outlasts this view.
@@ -70,6 +98,8 @@ export default function CompareView({
   // The paper's highlights and notes, shared with its page.
   annotations: AnnotationStore;
   offline: boolean;
+  // The translation window on a second screen shows only its side.
+  only?: 'translation';
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const panes = { source: useRef<HTMLDivElement>(null), translation: useRef<HTMLDivElement>(null) };
@@ -78,6 +108,21 @@ export default function CompareView({
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [selectionTranslation, setSelectionTranslation] = useState<TranslationLaunch | null>(null);
   const [side, setSide] = useState<'source' | 'translation'>('translation');
+  // The other window of a pair is open: the translation window, seen from the
+  // reading window, or the reading window, seen from the translation window.
+  const [linked, setLinked] = useState(false),
+    [linkNotice, setLinkNotice] = useState('');
+  // One side per window while linked; the reading window keeps the source.
+  const single: 'source' | 'translation' | null = only ?? (linked ? 'source' : null);
+  const singleRef = useRef<'source' | 'translation' | null>(single);
+  singleRef.current = single;
+  const remote = useRef<{ post: ((message: LinkMessage) => void) | null; ignore: boolean }>({
+    post: null,
+    ignore: false,
+  });
+  // The pane being read: one side of a pair, the shown side on phones, or the source.
+  const readingPane = () =>
+    single ? panes[single].current : narrow() ? panes[side].current : panes.source.current;
   // The outline is remembered on computers; phones open it as an overlay.
   const narrow = () => matchMedia('(max-width: 760px)').matches;
   const [tocOpen, setTocOpen] = useState(() => {
@@ -187,7 +232,7 @@ export default function CompareView({
     } catch {
       /* Storage can be unavailable; start at the top. */
     }
-    const pane = narrow() ? panes[side].current : panes.source.current;
+    const pane = readingPane();
     if (index > 0 && pane) align(pane, { index, ratio: 0, offset: 0 });
     // Runs once the paragraphs are known.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
@@ -204,7 +249,7 @@ export default function CompareView({
   };
   // Jumps the side being read; the other follows by paragraph.
   const jumpTo = (id: string) => {
-    const pane = narrow() ? panes[side].current : panes.source.current;
+    const pane = readingPane();
     const element = pane?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
     if (pane && element)
       pane.scrollTop += element.getBoundingClientRect().top - pane.getBoundingClientRect().top;
@@ -235,6 +280,12 @@ export default function CompareView({
           } catch {
             /* Storage can be unavailable; the place is just not kept. */
           }
+        // The other window follows the side shown here.
+        const link = remote.current;
+        if (anchor && link.post && singleRef.current && panes[singleRef.current].current === from) {
+          if (link.ignore) link.ignore = false;
+          else link.post({ type: 'scroll', anchor });
+        }
         // A hidden side (one at a time on phones) catches up when shown.
         if (!to.offsetParent) return;
         if (anchor && align(to, anchor)) ignore = to;
@@ -264,6 +315,98 @@ export default function CompareView({
       if (to && anchor) align(to, anchor);
     });
   };
+  useEffect(() => {
+    if (single) setSide(single);
+  }, [single]);
+
+  // The pair of windows talk over a channel named after the paper.
+  const latest = useRef({
+    language,
+    blocks: translation.blocks,
+    merge: translation.merge,
+    session,
+  });
+  latest.current = { language, blocks: translation.blocks, merge: translation.merge, session };
+  const send = useRef<((message: LinkMessage) => void) | null>(null);
+  useEffect(() => {
+    if (typeof BroadcastChannel === 'undefined') return;
+    const channel = linkChannel(note.id);
+    const post = (message: LinkMessage) => channel.postMessage(message);
+    const link = remote.current;
+    send.current = post;
+    const shown = () => (singleRef.current ? panes[singleRef.current].current : null);
+    channel.onmessage = (event: MessageEvent<LinkMessage>) => {
+      const message = event.data;
+      if (message.type === 'hello' && !only) {
+        remote.current.post = post;
+        setLinked(true);
+        const { language, blocks } = latest.current;
+        post({ type: 'blocks', language, blocks });
+        const anchor = panes.source.current && anchorOf(panes.source.current);
+        if (anchor) post({ type: 'scroll', anchor });
+      } else if (message.type === 'bye') {
+        if (message.from === (only ? 'reader' : 'translation')) {
+          remote.current.post = null;
+          setLinked(false);
+        }
+      } else if (message.type === 'blocks' && only) {
+        remote.current.post = post;
+        setLinked(true);
+        const current = latest.current;
+        // Another language loads its own saved paragraphs.
+        if (message.language !== current.language && isTranslationLanguage(message.language))
+          current.session.setLanguage(message.language);
+        else current.merge(message.blocks);
+      } else if (message.type === 'scroll') {
+        const pane = shown();
+        if (pane && align(pane, message.anchor)) remote.current.ignore = true;
+      } else if (message.type === 'flash') flash(shown(), message.index);
+      else if (message.type === 'close' && only) window.close();
+    };
+    const bye = () => post({ type: 'bye', from: only ? 'translation' : 'reader' });
+    window.addEventListener('pagehide', bye);
+    return () => {
+      bye();
+      window.removeEventListener('pagehide', bye);
+      channel.close();
+      send.current = null;
+      link.post = null;
+    };
+    // The panes' refs are stable; the rest is read through refs.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [note.id, only]);
+  // The translation window asks for the state once its paragraphs are laid out.
+  const ready = built > 0 && !!sources;
+  useEffect(() => {
+    if (only && ready) send.current?.({ type: 'hello' });
+  }, [only, ready]);
+  // Newly saved paragraphs reach the translation window as they arrive.
+  useEffect(() => {
+    if (!only && linked)
+      remote.current.post?.({ type: 'blocks', language, blocks: translation.blocks });
+  }, [only, linked, language, translation.blocks]);
+  // A paragraph clicked on one side flashes on the other.
+  const pairFlash = (event: MouseEvent<HTMLDivElement>, from: 'source' | 'translation') => {
+    if (!window.getSelection()?.isCollapsed) return;
+    const target = event.target as Element;
+    if (target.closest('a, button, img')) return;
+    const index = Number(target.closest<HTMLElement>('[data-block]')?.dataset.block);
+    if (!Number.isInteger(index)) return;
+    if (single) remote.current.post?.({ type: 'flash', index });
+    else if (!narrow()) flash(panes[from === 'source' ? 'translation' : 'source'].current, index);
+  };
+  const openWindow = async () => {
+    setLinkNotice('');
+    const result = await openTranslationWindow(note.id);
+    if (!result.opened) setLinkNotice('浏览器拦截了新窗口，请允许本站打开弹出窗口后重试。');
+    else
+      setLinkNotice(result.placed ? '译文已放到另一块屏幕。' : `译文已在新窗口打开。${moveHint()}`);
+  };
+  const toggleFullscreen = () => {
+    if (document.fullscreenElement) void document.exitFullscreen();
+    else void document.documentElement.requestFullscreen?.().catch(() => {});
+  };
+
   const chooseLanguage = (value: string) => {
     if (isTranslationLanguage(value)) session.setLanguage(value);
   };
@@ -316,8 +459,8 @@ export default function CompareView({
   return (
     <dialog
       ref={dialog}
-      className={`compare-view show-${side}`}
-      aria-label={`对照阅读：${note.title}`}
+      className={`compare-view show-${side}${single ? ` only-${single}` : ''}`}
+      aria-label={only ? `译文：${note.title}` : `对照阅读：${note.title}`}
       onCancel={(event) => {
         event.preventDefault();
         // Escape in a dialog opened inside this view (an enlarged image, the
@@ -326,7 +469,7 @@ export default function CompareView({
       }}
     >
       <header className="compare-header">
-        <h2>对照阅读</h2>
+        <h2>{only ? '译文' : '对照阅读'}</h2>
         <div className="compare-sides" role="group" aria-label="显示">
           <button
             className={side === 'source' ? 'active' : ''}
@@ -341,66 +484,106 @@ export default function CompareView({
             译文
           </button>
         </div>
-        <div className="compare-tools">
-          <label className="compare-language">
-            <span className="sr-only">译为</span>
-            <select
-              aria-label="译为"
-              value={language}
-              disabled={running}
-              onChange={(event) => chooseLanguage(event.target.value)}
-            >
-              {Object.entries(TRANSLATION_LANGUAGES).map(([code, label]) => (
-                <option key={code} value={code}>
-                  {label}
-                </option>
-              ))}
-            </select>
-          </label>
-          <span className="compare-progress" role="status">
-            {translation.state === 'loading' || !sources
-              ? '正在读取…'
-              : done === total
-                ? `已全部翻译 · ${total} 段`
-                : `已翻译 ${done}/${total} 段${done ? '' : ` · 约 ${Math.ceil(characters / 1000)} 千字符`}`}
+        {only ? (
+          <span className="compare-progress compare-link-status" role="status">
+            {linked
+              ? `与原文窗口联动 · ${TRANSLATION_LANGUAGES[language]}`
+              : '原文窗口未连接，可单独阅读译文'}
           </span>
-          <label className="compare-auto" title="全文翻译完成后自动保存为子笔记">
-            <input
-              type="checkbox"
-              checked={session.autoExport}
-              onChange={(event) => session.setAutoExport(event.target.checked)}
-            />
-            翻完存为子笔记
-          </label>
-          {running ? (
-            <button className="button compact" onClick={translation.stop}>
-              停止
+        ) : (
+          <div className="compare-tools">
+            <label className="compare-language">
+              <span className="sr-only">译为</span>
+              <select
+                aria-label="译为"
+                value={language}
+                disabled={running}
+                onChange={(event) => chooseLanguage(event.target.value)}
+              >
+                {Object.entries(TRANSLATION_LANGUAGES).map(([code, label]) => (
+                  <option key={code} value={code}>
+                    {label}
+                  </option>
+                ))}
+              </select>
+            </label>
+            <span className="compare-progress" role="status">
+              {translation.state === 'loading' || !sources
+                ? '正在读取…'
+                : done === total
+                  ? `已全部翻译 · ${total} 段`
+                  : `已翻译 ${done}/${total} 段${done ? '' : ` · 约 ${Math.ceil(characters / 1000)} 千字符`}`}
+            </span>
+            <label className="compare-auto" title="全文翻译完成后自动保存为子笔记">
+              <input
+                type="checkbox"
+                checked={session.autoExport}
+                onChange={(event) => session.setAutoExport(event.target.checked)}
+              />
+              翻完存为子笔记
+            </label>
+            {running ? (
+              <button className="button compact" onClick={translation.stop}>
+                停止
+              </button>
+            ) : (
+              sources &&
+              translation.state !== 'loading' &&
+              done < total && (
+                <>
+                  {sectionPending > 0 && sectionPending < total - done && (
+                    <button
+                      className="button compact"
+                      aria-label={`只翻译本节（${sectionPending} 段）`}
+                      onClick={() => session.runList(section.map(sourceOf))}
+                    >
+                      {/* One span, so the button's flex gap does not split the words. */}
+                      <span>
+                        <span className="compare-long">只翻译</span>本节（{sectionPending} 段）
+                      </span>
+                    </button>
+                  )}
+                  <button className="button compact primary" onClick={session.runAll}>
+                    <Languages size={15} />
+                    {done ? '继续翻译' : '翻译全文'}
+                  </button>
+                </>
+              )
+            )}
+          </div>
+        )}
+        {!only &&
+          canOpenTranslationWindow() &&
+          (linked ? (
+            <button
+              className="button compact compare-screen"
+              onClick={() => {
+                remote.current.post?.({ type: 'close' });
+                setLinkNotice('');
+              }}
+            >
+              收回译文
             </button>
           ) : (
-            sources &&
-            translation.state !== 'loading' &&
-            done < total && (
-              <>
-                {sectionPending > 0 && sectionPending < total - done && (
-                  <button
-                    className="button compact"
-                    aria-label={`只翻译本节（${sectionPending} 段）`}
-                    onClick={() => session.runList(section.map(sourceOf))}
-                  >
-                    {/* One span, so the button's flex gap does not split the words. */}
-                    <span>
-                      <span className="compare-long">只翻译</span>本节（{sectionPending} 段）
-                    </span>
-                  </button>
-                )}
-                <button className="button compact primary" onClick={session.runAll}>
-                  <Languages size={15} />
-                  {done ? '继续翻译' : '翻译全文'}
-                </button>
-              </>
-            )
-          )}
-        </div>
+            <button
+              className="icon-button compare-screen"
+              aria-label="译文放到另一屏"
+              title="在新窗口打开译文，放到另一块屏幕，两边同步滚动"
+              onClick={() => void openWindow()}
+            >
+              <MonitorUp size={18} />
+            </button>
+          ))}
+        {only && (
+          <button
+            className="icon-button"
+            aria-label="全屏"
+            title="全屏（F11）"
+            onClick={toggleFullscreen}
+          >
+            <Maximize size={18} />
+          </button>
+        )}
         <button
           className="icon-button toc-toggle compare-outline"
           aria-label="目录"
@@ -412,25 +595,33 @@ export default function CompareView({
         >
           <List size={18} />
         </button>
+        {!only && (
+          <>
+            <button
+              className="icon-button compare-export"
+              aria-label="保存为子笔记"
+              title="把译文保存为这篇论文的子笔记"
+              disabled={!done || running || exported?.state === 'saving'}
+              onClick={() => void session.exportNote()}
+            >
+              <FilePlus2 size={18} />
+            </button>
+            <button
+              className="icon-button compare-glossary"
+              aria-label="术语表"
+              title="术语表"
+              disabled={translation.state === 'loading'}
+              onClick={() => setGlossaryOpen(true)}
+            >
+              <BookOpenText size={18} />
+            </button>
+          </>
+        )}
         <button
-          className="icon-button compare-export"
-          aria-label="保存为子笔记"
-          title="把译文保存为这篇论文的子笔记"
-          disabled={!done || running || exported?.state === 'saving'}
-          onClick={() => void session.exportNote()}
+          className="icon-button compare-close"
+          aria-label={only ? '关闭译文窗口' : '关闭对照阅读'}
+          onClick={onClose}
         >
-          <FilePlus2 size={18} />
-        </button>
-        <button
-          className="icon-button compare-glossary"
-          aria-label="术语表"
-          title="术语表"
-          disabled={translation.state === 'loading'}
-          onClick={() => setGlossaryOpen(true)}
-        >
-          <BookOpenText size={18} />
-        </button>
-        <button className="icon-button compare-close" aria-label="关闭对照阅读" onClick={onClose}>
           <X size={20} />
         </button>
       </header>
@@ -440,6 +631,13 @@ export default function CompareView({
         </p>
       )}
       {translation.notice && <p className="compare-notice">{translation.notice}</p>}
+      {!only && (linkNotice || linked) && (
+        <p className="compare-notice" role="status">
+          {linked
+            ? '译文在另一个窗口中，两边按段落同步滚动；点一段，另一边对应的段落会闪一下。'
+            : linkNotice}
+        </p>
+      )}
       {exported && (
         <p
           className={exported.state === 'error' ? 'compare-error' : 'compare-notice'}
@@ -491,7 +689,10 @@ export default function CompareView({
           className="compare-pane is-source"
           role="region"
           aria-label="原文"
-          onClick={layer.onClick}
+          onClick={(event) => {
+            layer.onClick(event);
+            pairFlash(event, 'source');
+          }}
         >
           {/* Saved locations refer to the paper's text, as on its page. */}
           <div
@@ -507,6 +708,7 @@ export default function CompareView({
           role="region"
           aria-label="译文"
           onClick={(event) => {
+            pairFlash(event, 'translation');
             const element = (event.target as Element).closest<HTMLElement>('[data-block]');
             // Measured from the pane: a paragraph inside a content-visibility
             // block has that block, not the pane, as its offsetParent.

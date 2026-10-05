@@ -353,3 +353,71 @@ test('Qingli opens inside the comparison view, with selected text quoted', async
     await expect(page.getByRole('complementary', { name: '青藜', exact: true })).toBeVisible();
   }
 });
+
+test('the translation opens in a window of its own and scrolls with the source', async ({
+  page,
+  context,
+}, info) => {
+  test.skip(info.project.name === 'mobile', 'Phones show one side at a time instead.');
+  await login(page);
+  const paper = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: {
+        kind: 'link',
+        title: `双屏论文 · ${info.project.name}`,
+        url: 'https://arxiv.org/html/2503.01800v1',
+      },
+    })
+  ).json();
+  // Routed for every window of the context, the new one included.
+  await context.route(`**/api/nodes/${paper.id}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.fallback();
+    const detail = await (await route.fetch()).json();
+    await route.fulfill({
+      json: { ...detail, arxiv_id: '2503.01800v1', content, attachments: [] },
+    });
+  });
+  await context.route(`**/api/nodes/${paper.id}/paper-translation**`, (route) =>
+    route.fulfill({ json: { language: 'zh-CN', blocks: {}, glossary: null, updatedAt: null } }),
+  );
+  await page.goto(`/n/${paper.id}`);
+  await page
+    .locator('.note-actions')
+    .getByRole('button', { name: '对照阅读', exact: true })
+    .click();
+  const view = page.getByRole('dialog', { name: `对照阅读：${paper.title}` });
+  const [popup] = await Promise.all([
+    context.waitForEvent('page'),
+    view.getByRole('button', { name: '译文放到另一屏' }).click(),
+  ]);
+  const other = popup.getByRole('dialog', { name: `译文：${paper.title}` });
+  await expect(other).toBeVisible();
+  await expect(other.getByRole('status')).toContainText('与原文窗口联动');
+  await expect(view.getByText('译文在另一个窗口中')).toBeVisible();
+  const source = view.getByRole('region', { name: '原文' }),
+    target = other.getByRole('region', { name: '译文' });
+  await expect(view.getByRole('region', { name: '译文' })).toBeHidden();
+  await expect(other.getByRole('region', { name: '原文' })).toBeHidden();
+
+  // Either window leads; the other keeps the same paragraph at the top.
+  await source.evaluate((pane) => {
+    pane.querySelector('[data-block="30"]')!.scrollIntoView({ block: 'start' });
+  });
+  await expect.poll(() => topBlock(target)).toBe(30);
+  await target.evaluate((pane) => {
+    pane.querySelector('[data-block="12"]')!.scrollIntoView({ block: 'start' });
+  });
+  await expect.poll(() => topBlock(source)).toBe(12);
+
+  // A paragraph clicked here flashes there.
+  await source.locator('[data-block="13"]').click();
+  await expect(target.locator('[data-block="13"]')).toHaveClass(/is-flash/);
+
+  // Taking the translation back closes its window and shows both sides again.
+  await Promise.all([
+    popup.waitForEvent('close'),
+    view.getByRole('button', { name: '收回译文' }).click(),
+  ]);
+  await expect(view.getByRole('region', { name: '译文' })).toBeVisible();
+});

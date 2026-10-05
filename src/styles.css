@@ -3545,3 +3545,35 @@ button.node-list-toggle:focus-visible {
   content-visibility: auto;
   contain-intrinsic-size: auto 120px;
 }
+/* A pair of windows on two screens: each shows one side of the comparison. */
+.compare-view.only-source .is-translation,
+.compare-view.only-translation .is-source {
+  display: none;
+}
+.compare-view.only-source .compare-pane.is-source {
+  border-right: 0;
+}
+.compare-link-status {
+  margin-right: auto;
+}
+/* The counterpart of a clicked paragraph, briefly. */
+.compare-pane .is-flash {
+  animation: compare-flash 1.2s ease-out;
+}
+@keyframes compare-flash {
+  0%,
+  35% {
+    background: color-mix(in srgb, var(--favorite) 30%, transparent);
+    box-shadow: 0 0 0 6px color-mix(in srgb, var(--favorite) 30%, transparent);
+  }
+  100% {
+    background: transparent;
+    box-shadow: 0 0 0 6px transparent;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .compare-pane .is-flash {
+    animation-duration: 0.01s;
+    outline: 2px solid var(--favorite);
+  }
+}

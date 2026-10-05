@@ -173,5 +173,11 @@ export function usePaperTranslation(
     },
     [path, language],
   );
-  return { blocks, glossary, state, error, notice, run, stop, saveGlossary, sources };
+  // Paragraphs another window saved, e.g. the reading window feeding the
+  // translation window on a second screen.
+  const merge = useCallback((saved: Record<string, string>) => {
+    known.current = { ...known.current, ...saved };
+    setBlocks(known.current);
+  }, []);
+  return { blocks, glossary, state, error, notice, run, stop, saveGlossary, sources, merge };
 }
