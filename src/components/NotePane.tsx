@@ -47,7 +47,7 @@ import {
   clearAnnotationHighlights,
   exportAnnotations,
   paintAnnotations,
-  sameText,
+  sameLocation,
   useAnnotations,
 } from '../annotations';
 import { ANNOTATION_QUOTE_CHARS } from '../../shared/annotations';
@@ -373,17 +373,28 @@ export default function NotePane(props: Props) {
   const markdownReady = useMarkdownReady(note?.kind === 'markdown');
 
   // Highlights and notes on the rendered text (Markdown, plain text, papers).
-  const annotatable = !!note && (TEXT_KINDS.includes(note.kind) || !!note.arxiv_id);
+  const annotatable =
+    !!note && (TEXT_KINDS.includes(note.kind) || !!note.arxiv_id || note.kind === 'pdf');
   const annotations = useAnnotations(id, annotatable);
   const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft | null>(null),
     [annotationsOpen, setAnnotationsOpen] = useState(false);
   const annotationRanges = useRef(new Map<string, Range>());
   const [missingKey, setMissingKey] = useState('');
-  const missingAnnotations = useMemo(
-    () => new Set(missingKey.split(',').filter(Boolean)),
-    [missingKey],
-  );
   const annotationList = annotations.list;
+  // Text that changed is found while painting; a PDF only goes missing with its file.
+  const missingAnnotations = useMemo(() => {
+    const files = new Set([note?.file?.id, ...(note?.attachments ?? []).map((file) => file.id)]);
+    return new Set([
+      ...missingKey.split(',').filter(Boolean),
+      ...annotationList
+        .filter((item) => item.location.kind === 'pdf' && !files.has(item.location.fileId))
+        .map((item) => item.id),
+    ]);
+  }, [missingKey, annotationList, note?.file, note?.attachments]);
+  const openAnnotation = (annotationId: string) => {
+    const item = annotationList.find((annotation) => annotation.id === annotationId);
+    if (item) setAnnotationDraft({ ...item, saved: true });
+  };
   useEffect(() => {
     const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
     annotationRanges.current = new Map();
@@ -421,13 +432,10 @@ export default function NotePane(props: Props) {
     withNote: boolean,
   ) => {
     if (offline) return '离线时不能添加批注。';
-    if (location?.kind === 'pdf') return 'PDF 暂不支持批注，后续版本加入。';
     if (!location) return '这里的文字不能批注，请选择正文内容。';
     if (quote.length > ANNOTATION_QUOTE_CHARS)
       return `每条批注最多选择 ${ANNOTATION_QUOTE_CHARS.toLocaleString()} 个字符，请缩小范围。`;
-    const existing = annotationList.find(
-      (item) => item.location.kind === 'text' && sameText(item.location, location),
-    );
+    const existing = annotationList.find((item) => sameLocation(item.location, location));
     if (existing) {
       setAnnotationDraft({ ...existing, saved: true });
       return;
@@ -577,6 +585,8 @@ export default function NotePane(props: Props) {
                   initialPosition={reading.initial}
                   onPosition={reading.update}
                   sourceLocation={pdfLocation}
+                  annotations={annotationList}
+                  onAnnotation={openAnnotation}
                 />
               </Suspense>
             ) : (
@@ -741,7 +751,11 @@ export default function NotePane(props: Props) {
           offline={offline}
           onLocate={(item) => {
             setAnnotationsOpen(false);
-            if (item.location.kind !== 'text') return;
+            if (item.location.kind === 'pdf') {
+              const failed = locateSource(item.location);
+              if (failed) props.onNotice?.(failed);
+              return;
+            }
             const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
             if (!root) return;
             touched.current = restored.current = true;
@@ -859,6 +873,8 @@ export default function NotePane(props: Props) {
               fileId={pdf.id}
               selectionOwner={id}
               sourceLocation={pdfLocation}
+              annotations={annotationList}
+              onAnnotation={openAnnotation}
             />
           </Suspense>
         </Modal>

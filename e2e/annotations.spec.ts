@@ -100,3 +100,82 @@ test('highlights and notes are saved, reopened, listed in order and exported', a
     .annotations;
   expect(remaining.map((item: { note: string }) => item.note)).toEqual(['这是我的想法']);
 });
+
+// Three pages with one line of text each, as in translation.spec.ts.
+function pdfFixture() {
+  const objects = [
+    '<< /Type /Catalog /Pages 2 0 R >>',
+    '<< /Type /Pages /Kids [4 0 R 6 0 R 8 0 R] /Count 3 >>',
+    '<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>',
+  ];
+  for (let page = 1; page <= 3; page++) {
+    const stream = `BT /F1 18 Tf 40 250 Td (Marked PDF page ${page}) Tj ET`;
+    objects.push(
+      `<< /Type /Page /Parent 2 0 R /MediaBox [0 0 400 500] /Resources << /Font << /F1 3 0 R >> >> /Contents ${3 + page * 2} 0 R >>`,
+      `<< /Length ${stream.length} >>\nstream\n${stream}\nendstream`,
+    );
+  }
+  let pdf = '%PDF-1.4\n';
+  const offsets = objects.map((object, index) => {
+    const offset = pdf.length;
+    pdf += `${index + 1} 0 obj\n${object}\nendobj\n`;
+    return offset;
+  });
+  const xref = pdf.length;
+  pdf += `xref\n0 ${objects.length + 1}\n0000000000 65535 f \n${offsets.map((offset) => `${String(offset).padStart(10, '0')} 00000 n \n`).join('')}trailer\n<< /Size ${objects.length + 1} /Root 1 0 R >>\nstartxref\n${xref}\n%%EOF`;
+  return pdf;
+}
+
+test('PDF selections are highlighted on their page and open their note', async ({ page }) => {
+  await login(page);
+  const pdf = pdfFixture();
+  const file = await (
+    await page.request.post(`/api/files?name=marked.pdf&size=${pdf.length}`, {
+      headers,
+      data: Buffer.from(pdf),
+    })
+  ).json();
+  const node = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: { kind: 'pdf', title: 'PDF 批注', fileId: file.id },
+    })
+  ).json();
+  await page.goto(`/n/${node.id}`);
+  const pageInput = page.getByRole('spinbutton', { name: 'PDF 页码' });
+  await pageInput.fill('2');
+  await pageInput.press('Enter');
+  await selectText(
+    page,
+    page.locator('.pdf-text-layer span').filter({ hasText: 'Marked PDF page 2' }),
+  );
+  await toolbar(page).getByRole('button', { name: '批注' }).click();
+  const editor = page.getByRole('dialog', { name: '添加批注' });
+  await editor.getByLabel('批注内容').fill('第二页的要点');
+  await editor.getByRole('button', { name: '保存' }).click();
+  await expect(editor).toBeHidden();
+
+  await page.reload();
+  await pageInput.fill('2');
+  await pageInput.press('Enter');
+  const mark = page.locator('.pdf-page[data-page="2"] .pdf-annotation.has-note').first();
+  await expect(mark).toBeInViewport();
+  const box = (await mark.boundingBox())!;
+  await page.mouse.click(box.x + box.width / 2, box.y + box.height / 2);
+  const saved = page.getByRole('dialog', { name: '批注', exact: true });
+  await expect(saved.getByLabel('批注内容')).toHaveValue('第二页的要点');
+  await saved.getByRole('button', { name: '关闭' }).click();
+
+  // From the list, the PDF returns to the page; the export names it.
+  await pageInput.fill('1');
+  await pageInput.press('Enter');
+  await noteAction(page, '批注（1）');
+  const list = page.getByRole('dialog', { name: '批注（1）' });
+  await list.getByRole('button', { name: '导出为子笔记' }).click();
+  await expect(list.getByText(/（1 条）/)).toBeVisible();
+  await list.locator('.annotation-item').click();
+  await expect(pageInput).toHaveValue('2');
+  const children = (await (await page.request.get(`/api/nodes?parent=${node.id}`)).json()).nodes;
+  const child = await (await page.request.get(`/api/nodes/${children[0].id}`)).json();
+  expect(child.content).toContain('第 2 页\n\n> Marked PDF page 2\n\n第二页的要点');
+});

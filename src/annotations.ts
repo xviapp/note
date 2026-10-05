@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { api } from './api';
 import type { Annotation, AnnotationList } from '../shared/annotations';
-import type { TextSourceLocation } from '../shared/translation';
+import type { SourceLocation } from '../shared/translation';
 import { saveChildNote } from './child-note';
 import { textSourceRange } from './source-location';
 
@@ -69,8 +69,14 @@ export const annotationOrder = (a: Annotation, b: Annotation) => {
   return x[0] - y[0] || x[1] - y[1] || x[2] - y[2] || a.createdAt - b.createdAt;
 };
 
-export const sameText = (a: TextSourceLocation, b: TextSourceLocation) =>
-  a.start === b.start && a.end === b.end && a.exact === b.exact;
+// The same selection again, which opens its annotation instead of adding one.
+export const sameLocation = (a: SourceLocation, b: SourceLocation) =>
+  a.kind === 'text' && b.kind === 'text'
+    ? a.start === b.start && a.end === b.end && a.exact === b.exact
+    : a.kind === 'pdf' &&
+      b.kind === 'pdf' &&
+      a.fileId === b.fileId &&
+      JSON.stringify(a.rects) === JSON.stringify(b.rects);
 
 const HIGHLIGHT = 'annotation',
   NOTED = 'annotation-note';

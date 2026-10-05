@@ -174,3 +174,15 @@
     padding: 8px 7px;
   }
 }
+/* The same marks on PDF pages. Pages stay white in every theme, so the
+   colours are fixed; clicks pass through to the selectable text layer. */
+.pdf-annotation {
+  position: absolute;
+  z-index: 2;
+  background: #f5c2426b;
+  mix-blend-mode: multiply;
+  pointer-events: none;
+}
+.pdf-annotation.has-note {
+  box-shadow: inset 0 -2px 0 #a8740d;
+}

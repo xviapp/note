@@ -11,6 +11,7 @@ export function PdfPage({
   top,
   onMeasure,
   highlights,
+  marks,
 }: {
   document: PDFDocumentProxy;
   number: number;
@@ -19,6 +20,8 @@ export function PdfPage({
   top: number;
   onMeasure: (number: number, aspect: number) => void;
   highlights?: PdfSourceRect[];
+  // Saved highlights on this page; ones with a note are underlined.
+  marks?: { id: string; noted: boolean; rects: PdfSourceRect[] }[];
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const textContainer = useRef<HTMLDivElement>(null);
@@ -111,6 +114,21 @@ export function PdfPage({
     >
       <canvas ref={canvas} aria-label={`PDF 第 ${number} 页`} />
       <div ref={textContainer} className="pdf-text-layer" />
+      {marks?.flatMap((mark) =>
+        mark.rects.map((rect, index) => (
+          <div
+            key={`${mark.id}-${index}`}
+            className={`pdf-annotation${mark.noted ? ' has-note' : ''}`}
+            aria-hidden="true"
+            style={{
+              left: `${rect.x * 100}%`,
+              top: `${rect.y * 100}%`,
+              width: `${rect.width * 100}%`,
+              height: `${rect.height * 100}%`,
+            }}
+          />
+        )),
+      )}
       {highlights?.map((rect, index) => (
         <div
           key={index}

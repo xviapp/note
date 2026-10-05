@@ -1,4 +1,13 @@
-import { useCallback, useEffect, useId, useLayoutEffect, useMemo, useRef, useState } from 'react';
+import {
+  useCallback,
+  useEffect,
+  useId,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import type { PDFDocumentProxy } from 'pdfjs-dist';
 import { boundZoom, savedPdfZoom, usePdfGestures, type ZoomPoint } from '../pdf-gestures';
 import { openPdf } from '../pdf-document';
@@ -7,7 +16,8 @@ import { fileUrl } from '../api';
 import type { NoteDetail, ReadingPosition } from '../../shared/types';
 import { Spinner } from './Primitives';
 import { PdfPage } from './PdfPage';
-import type { PdfSourceLocation } from '../../shared/translation';
+import type { PdfSourceLocation, PdfSourceRect } from '../../shared/translation';
+import type { Annotation } from '../../shared/annotations';
 import { PdfOutline } from './PdfOutline';
 import { cacheEpoch, cachedFile, rememberNote, shareFileDownload } from '../offline-cache';
 
@@ -34,6 +44,8 @@ export default function PdfView({
   selectionOwner,
   sourceLocation,
   cacheNote,
+  annotations,
+  onAnnotation,
 }: {
   fileId: string;
   initialPosition?: ReadingPosition;
@@ -41,6 +53,9 @@ export default function PdfView({
   selectionOwner?: string;
   sourceLocation?: PdfSourceLocation | null;
   cacheNote?: NoteDetail;
+  // Highlights and notes of the file this PDF belongs to; a click on one opens it.
+  annotations?: Annotation[];
+  onAnnotation?: (id: string) => void;
 }) {
   const [document, setDocument] = useState<{
     pdf: PDFDocumentProxy;
@@ -303,6 +318,48 @@ export default function PdfView({
     if (Number(pageInput) !== page) move(Number(pageInput));
     else setPageInput(String(page));
   };
+  const marks = useMemo(() => {
+    const pages = new Map<number, { id: string; noted: boolean; rects: PdfSourceRect[] }[]>();
+    for (const item of annotations ?? []) {
+      if (item.location.kind !== 'pdf' || item.location.fileId !== fileId) continue;
+      for (const rect of item.location.rects) {
+        const list = pages.get(rect.page) ?? [];
+        let mark = list.find((entry) => entry.id === item.id);
+        if (!mark) {
+          mark = { id: item.id, noted: !!item.note, rects: [] };
+          list.push(mark);
+          pages.set(rect.page, list);
+        }
+        mark.rects.push(rect);
+      }
+    }
+    return pages;
+  }, [annotations, fileId]);
+  // The text layer covers the page, so hits are found from the click point.
+  const openMark = (event: ReactMouseEvent) => {
+    if (!onAnnotation || !marks.size || !window.getSelection()?.isCollapsed) return;
+    const element = (event.target as Element).closest<HTMLElement>('.pdf-page');
+    const list = marks.get(Number(element?.dataset.page));
+    if (!element || !list) return;
+    const bounds = element.getBoundingClientRect();
+    const x = (event.clientX - bounds.left) / bounds.width,
+      y = (event.clientY - bounds.top) / bounds.height;
+    let found = '',
+      area = Infinity;
+    for (const mark of list)
+      for (const rect of mark.rects)
+        if (
+          x >= rect.x &&
+          x <= rect.x + rect.width &&
+          y >= rect.y &&
+          y <= rect.y + rect.height &&
+          rect.width * rect.height < area
+        ) {
+          found = mark.id;
+          area = rect.width * rect.height;
+        }
+    if (found) onAnnotation(found);
+  };
   // Only keep the visible pages and one viewport on either side in memory.
   const start = layout ? pageAt(layout.boxes, Math.max(0, scrollTop - viewport.height)) : 0;
   const end = layout ? pageAt(layout.boxes, scrollTop + 2 * viewport.height) : 0;
@@ -432,6 +489,7 @@ export default function PdfView({
           ) : (
             <div
               className="pdf-pages"
+              onClick={openMark}
               style={{ height: layout.height, width: Math.max(viewport.width, width + gap * 2) }}
             >
               {layout.boxes.slice(start, end + 1).map((box, offset) => (
@@ -443,6 +501,7 @@ export default function PdfView({
                   height={box.height}
                   top={box.top}
                   onMeasure={measure}
+                  marks={marks.get(start + offset + 1)}
                   highlights={
                     sourceLocation?.fileId === fileId
                       ? sourceLocation.rects.filter((rect) => rect.page === start + offset + 1)
