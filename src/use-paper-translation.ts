@@ -10,6 +10,9 @@ import {
 import type { TranslationLanguage } from '../shared/translation';
 
 export type PaperTranslationState = 'loading' | 'idle' | 'running' | 'error';
+// Batches in flight at once: roughly a third of the time of one at a time,
+// while staying well below the provider's rate limits.
+const CONCURRENT_BATCHES = 3;
 
 // Saved paragraph translations of one paper, and runs that translate them a
 // batch at a time. Each batch is saved on the server as it finishes, so
@@ -20,6 +23,8 @@ export function usePaperTranslation(
   nodeId: string,
   language: TranslationLanguage,
   sources: PaperBlockSource[] | null,
+  // Only papers have a translation to load.
+  enabled = true,
 ) {
   const [blocks, setBlocks] = useState<Record<string, string>>({}),
     [glossary, setGlossary] = useState<PaperTerm[] | null>(null),
@@ -34,6 +39,10 @@ export function usePaperTranslation(
   useEffect(() => {
     let live = true;
     stopped.current = true;
+    if (!enabled) {
+      setState('idle');
+      return;
+    }
     setState('loading');
     setError('');
     setNotice('');
@@ -55,7 +64,7 @@ export function usePaperTranslation(
       live = false;
       stopped.current = true;
     };
-  }, [path, language]);
+  }, [path, language, enabled]);
   const send = useCallback(
     async (batch: PaperBlockSource[], refresh: boolean) => {
       const saved = await api<PaperTranslation>(path, 'POST', {
@@ -98,30 +107,47 @@ export function usePaperTranslation(
         }
         // Repeated paragraphs share one translation.
         const seen = new Set<string>();
-        let queue = list.filter(
+        const queue = list.filter(
           (block) =>
             (options.refresh || !(block.hash in known.current)) &&
             !seen.has(block.hash) &&
             seen.add(block.hash),
         );
-        while (queue.length && !stopped.current) {
-          const batch: PaperBlockSource[] = [];
-          let size = 0;
-          for (const block of queue) {
-            if (
-              batch.length &&
-              (size + block.text.length > PAPER_BATCH_CHARS || batch.length >= PAPER_BATCH_BLOCKS)
-            )
-              break;
-            batch.push(block);
-            size += block.text.length;
+        const batches: PaperBlockSource[][] = [];
+        let batch: PaperBlockSource[] = [],
+          size = 0;
+        for (const block of queue) {
+          if (
+            batch.length &&
+            (size + block.text.length > PAPER_BATCH_CHARS || batch.length >= PAPER_BATCH_BLOCKS)
+          ) {
+            batches.push(batch);
+            batch = [];
+            size = 0;
           }
-          await send(batch, !!options.refresh);
-          // Never pay for the same batch twice in a loop.
-          if (batch.some((block) => !(block.hash in known.current)))
-            throw new Error('部分段落没有保存译文，已暂停，请稍后继续。');
-          queue = queue.slice(batch.length);
+          batch.push(block);
+          size += block.text.length;
         }
+        if (batch.length) batches.push(batch);
+        // A few batches run at once; the server merges their saves. The first
+        // failure stops the rest from starting, and nothing is retried.
+        let next = 0,
+          failure: unknown = null;
+        const worker = async () => {
+          while (next < batches.length && !stopped.current && !failure) {
+            const current = batches[next++];
+            try {
+              await send(current, !!options.refresh);
+              // Never pay for the same batch twice in a loop.
+              if (current.some((block) => !(block.hash in known.current)))
+                throw new Error('部分段落没有保存译文，已暂停，请稍后继续。');
+            } catch (e) {
+              failure ??= e;
+            }
+          }
+        };
+        await Promise.all(Array.from({ length: CONCURRENT_BATCHES }, worker));
+        if (failure) throw failure;
         setState('idle');
       } catch (e) {
         setError((e as Error).message);

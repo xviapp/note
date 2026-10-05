@@ -23,7 +23,7 @@ import {
   type NoteNode,
   type StorageInfo,
 } from '../shared/types';
-import { Spinner, useQuestion } from './components/Primitives';
+import { Modal, Spinner, useQuestion } from './components/Primitives';
 import { Tree, type NodeAction } from './components/Tree';
 import { useMoveNotes } from './use-move-notes';
 import { useToast } from './use-toast';
@@ -299,7 +299,8 @@ function Notebook({
     };
   }, []);
   // Computer shortcuts: Ctrl+K or / searches, N creates a note, E edits the open one.
-  const [searchOpen, setSearchOpen] = useState(false);
+  const [searchOpen, setSearchOpen] = useState(false),
+    [shortcutsOpen, setShortcutsOpen] = useState(false);
   const shortcuts = useRef({ newNode: () => {} });
   useEffect(() => {
     const typing = (target: EventTarget | null) =>
@@ -324,6 +325,9 @@ function Notebook({
       if (event.key === '/') {
         event.preventDefault();
         setSearchOpen(true);
+      } else if (event.key === '?') {
+        event.preventDefault();
+        setShortcutsOpen(true);
       } else if (letter === 'n') {
         event.preventDefault();
         shortcuts.current.newNode();
@@ -535,6 +539,7 @@ function Notebook({
                   onError={report}
                   onTrash={() => switchView('trash')}
                   onSettings={() => openSettings('ai')}
+                  onNotice={toast.show}
                   autoEdit={freshNote === selected}
                   onAutoEdit={clearFreshNote}
                 />
@@ -668,6 +673,28 @@ function Notebook({
           }}
         />
       )}{' '}
+      {shortcutsOpen && (
+        <Modal title="快捷键" onClose={() => setShortcutsOpen(false)}>
+          <dl className="shortcut-list">
+            {[
+              ['Ctrl K 或 /', '按标题搜索笔记'],
+              ['N', '新建笔记'],
+              ['E', '编辑当前笔记'],
+              ['Ctrl S', '编辑时保存并继续编辑'],
+              ['Esc', '关闭弹窗、菜单或全屏视图'],
+              ['?', '显示这份列表'],
+            ].map(([keys, action]) => (
+              <div key={keys}>
+                <dt>
+                  <kbd>{keys}</kbd>
+                </dt>
+                <dd>{action}</dd>
+              </div>
+            ))}
+          </dl>
+          <p className="shortcut-note">在输入框或编辑器里打字时，单键快捷键不会触发。</p>
+        </Modal>
+      )}
       {searchOpen && (
         <SearchDialog
           onOpen={(node) => {

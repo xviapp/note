@@ -1,22 +1,20 @@
-import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
 import { BookOpenText, FilePlus2, Languages, List, RotateCcw, X } from 'lucide-react';
-import type { NoteDetail, NoteNode } from '../../shared/types';
-import {
-  isTranslationLanguage,
-  TRANSLATION_LANGUAGES,
-  type TranslationLanguage,
-} from '../../shared/translation';
-import { GLOSSARY_SOURCE_CHARS, type PaperBlockSource } from '../../shared/paper-translation';
-import { applyTranslation, blockHash, paperBlocks, type PaperBlock } from '../paper-blocks';
-import { usePaperTranslation } from '../use-paper-translation';
-import { paperMarkdown } from '../paper-markdown';
-import { api, lockNote, unlockNote } from '../api';
+import type { NoteDetail } from '../../shared/types';
+import { isTranslationLanguage, TRANSLATION_LANGUAGES } from '../../shared/translation';
+import { applyTranslation, paperBlocks, type PaperBlock } from '../paper-blocks';
+import type { PaperSession } from '../use-paper-session';
+import type { TranslationLaunch } from '../translation';
 import { hydratePaperImages, preparePaper } from './PaperView';
 import '../paper.css';
 import { GlossaryDialog } from './GlossaryDialog';
+import { SelectionToolbar } from './SelectionToolbar';
+import { TranslationPanel } from './TranslationPanel';
 
-const LANGUAGE_KEY = 'paper-translation-language',
-  TOC_KEY = 'paper-compare-toc';
+const ImageViewer = lazy(() => import('./ImageViewer'));
+const TOC_KEY = 'paper-compare-toc',
+  // The paragraph last read, per paper, to reopen the view there.
+  POSITION_KEY = (id: string) => `paper-compare-position:${id}`;
 type Anchor = { index: number; ratio: number; offset: number };
 type Block = PaperBlock & { hash: string };
 
@@ -52,24 +50,25 @@ function align(pane: HTMLElement, anchor: Anchor) {
 // Phones show one side at a time and keep the place when switching.
 export default function CompareView({
   note,
+  session,
   onClose,
-  onExported,
+  onQuote,
+  onChanged,
 }: {
   note: NoteDetail;
+  // Translation state lives on the note page, so a run outlasts this view.
+  session: PaperSession;
   onClose: () => void;
-  // A child note was created or updated with the translation.
-  onExported?: () => void;
+  // Selected text for Qingli; the note page closes this view to show it.
+  onQuote: (text: string) => string | undefined;
+  onChanged: () => void;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const panes = { source: useRef<HTMLDivElement>(null), translation: useRef<HTMLDivElement>(null) };
-  const [language, setLanguage] = useState<TranslationLanguage>(() => {
-    try {
-      const saved = localStorage.getItem(LANGUAGE_KEY);
-      return isTranslationLanguage(saved) ? saved : 'zh-CN';
-    } catch {
-      return 'zh-CN';
-    }
-  });
+  const { language, sources, translation, total, done, running, exported } = session;
+  const owner = `compare-${note.id}`;
+  const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
+    [selectionTranslation, setSelectionTranslation] = useState<TranslationLaunch | null>(null);
   const [side, setSide] = useState<'source' | 'translation'>('translation');
   // The outline is remembered on computers; phones open it as an overlay.
   const narrow = () => matchMedia('(max-width: 760px)').matches;
@@ -81,62 +80,20 @@ export default function CompareView({
     }
   });
   const [headingLabels, setHeadingLabels] = useState<Record<string, string>>({});
-  const [sources, setSources] = useState<PaperBlockSource[] | null>(null);
   const [active, setActive] = useState<{ index: number; top: number } | null>(null),
     [glossaryOpen, setGlossaryOpen] = useState(false),
     // Bumped by scrolling, so the current section is recomputed.
     [, setScrolled] = useState(0);
-  const blocks = useRef<Block[]>([]);
+  const blocks = useRef<Block[]>([]),
+    rightBlocks = useRef<PaperBlock[]>([]);
+  // Bumped when the panes are rebuilt, so translations are applied again.
+  const [built, setBuilt] = useState(0);
   const prepared = useMemo(
     () => preparePaper(note),
     // Only these fields of the note shape the article.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
     [note.id, note.content, note.url, note.attachments],
   );
-  const translation = usePaperTranslation(note.id, language, sources);
-  const [exported, setExported] = useState<{
-    state: 'saving' | 'done' | 'error';
-    text: string;
-  } | null>(null);
-  // Saves the translated article as a Markdown child note of the paper, one
-  // per language: a later save updates it as a new version.
-  const exportNote = async () => {
-    const body = panes.translation.current?.querySelector('.paper-body');
-    if (!body) return;
-    const title = `${note.title}（${TRANSLATION_LANGUAGES[language]}译文）`;
-    const content = `> 译自《${note.title}》：${note.url ?? ''}\n\n${paperMarkdown(body)}`;
-    setExported({ state: 'saving', text: '正在保存为子笔记…' });
-    try {
-      const { nodes } = await api<{ nodes: NoteNode[] }>(`/api/nodes?parent=${note.id}`);
-      const existing = nodes.find((child) => child.kind === 'markdown' && child.title === title);
-      if (existing) {
-        await unlockNote(existing.id);
-        const detail = await api<NoteDetail>(`/api/nodes/${existing.id}`);
-        await api(`/api/nodes/${existing.id}/content`, 'PUT', {
-          revision: detail.revision,
-          content,
-          attachments: [],
-        });
-        lockNote(existing.id);
-      } else
-        await api('/api/nodes', 'POST', {
-          kind: 'markdown',
-          title,
-          parentId: note.id,
-          content,
-        });
-      setExported({
-        state: 'done',
-        text: `${existing ? '已更新' : '已保存为'}子笔记「${title}」，旧内容可在版本历史中找回。`,
-      });
-      onExported?.();
-    } catch (e) {
-      setExported({ state: 'error', text: `未保存为子笔记：${(e as Error).message}` });
-    }
-  };
-  // A full translation run saves the child note once it has translated everything.
-  const autoExport = useRef(false);
-
   useEffect(() => {
     const element = dialog.current;
     if (element && !element.open) element.showModal();
@@ -158,16 +115,11 @@ export default function CompareView({
       block.element.setAttribute('data-block', String(index));
       block.element.classList.add('is-pending');
     });
-    let live = true;
-    void Promise.all(right.map((block) => blockHash(block.text))).then((hashes) => {
-      if (!live) return;
-      blocks.current = right.map((block, index) => ({ ...block, hash: hashes[index] }));
-      setSources(blocks.current.map(({ hash, text }) => ({ hash, text })));
-    });
+    rightBlocks.current = right;
+    setBuilt((count) => count + 1);
     const releaseSource = hydratePaperImages(source),
       releaseTarget = hydratePaperImages(target);
     return () => {
-      live = false;
       releaseSource();
       releaseTarget();
     };
@@ -175,8 +127,13 @@ export default function CompareView({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [prepared]);
   // Saved translations replace the paragraphs they belong to; the rest wait.
+  // The note page lists the same paragraphs in the same order.
   useEffect(() => {
-    if (!sources) return;
+    if (!sources || sources.length !== rightBlocks.current.length) return;
+    blocks.current = rightBlocks.current.map((block, index) => ({
+      ...block,
+      hash: sources[index].hash,
+    }));
     for (const block of blocks.current) {
       const text = translation.blocks[block.hash];
       const element = block.element as HTMLElement;
@@ -196,7 +153,23 @@ export default function CompareView({
     setHeadingLabels(labels);
     // The panes' refs are stable.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [translation.blocks, sources, prepared]);
+  }, [translation.blocks, sources, prepared, built]);
+  // Reopens where the reader left off, and remembers it while reading.
+  const restored = useRef(false);
+  useEffect(() => {
+    if (restored.current || !blocks.current.length) return;
+    restored.current = true;
+    let index = 0;
+    try {
+      index = Number(localStorage.getItem(POSITION_KEY(note.id))) || 0;
+    } catch {
+      /* Storage can be unavailable; start at the top. */
+    }
+    const pane = narrow() ? panes[side].current : panes.source.current;
+    if (index > 0 && pane) align(pane, { index, ratio: 0, offset: 0 });
+    // Runs once the paragraphs are known.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [built, sources]);
   const toggleToc = () => {
     const next = !tocOpen;
     setTocOpen(next);
@@ -233,9 +206,15 @@ export default function CompareView({
       }
       cancelAnimationFrame(frame);
       frame = requestAnimationFrame(() => {
+        const anchor = anchorOf(from);
+        if (anchor && restored.current)
+          try {
+            localStorage.setItem(POSITION_KEY(note.id), String(anchor.index));
+          } catch {
+            /* Storage can be unavailable; the place is just not kept. */
+          }
         // A hidden side (one at a time on phones) catches up when shown.
         if (!to.offsetParent) return;
-        const anchor = anchorOf(from);
         if (anchor && align(to, anchor)) ignore = to;
       });
       setActive(null);
@@ -264,16 +243,16 @@ export default function CompareView({
     });
   };
   const chooseLanguage = (value: string) => {
-    if (!isTranslationLanguage(value)) return;
-    setLanguage(value);
-    try {
-      localStorage.setItem(LANGUAGE_KEY, value);
-    } catch {
-      /* Storage can be unavailable; the choice still applies now. */
-    }
+    if (isTranslationLanguage(value)) session.setLanguage(value);
   };
-  // In-article links move within their own side.
+  // In-article links move within their own side; images open enlarged.
   const followLink = (event: MouseEvent<HTMLDivElement>) => {
+    const target = event.target as Element;
+    if (target instanceof HTMLImageElement) {
+      event.preventDefault();
+      setImage({ src: target.dataset.fileSource || target.src, alt: target.alt || '论文插图' });
+      return;
+    }
     const anchor = (event.target as Element).closest('a');
     const href = anchor?.getAttribute('href');
     if (!href?.startsWith('#')) return;
@@ -283,36 +262,8 @@ export default function CompareView({
       ?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
 
-  const total = sources ? new Set(sources.map((block) => block.hash)).size : 0;
-  const done = sources
-    ? new Set(sources.filter((block) => block.hash in translation.blocks).map((b) => b.hash)).size
-    : 0;
   const characters = sources?.reduce((sum, block) => sum + block.text.length, 0) ?? 0;
-  const running = translation.state === 'running';
-  useEffect(() => {
-    if (!autoExport.current || running) return;
-    if (translation.state === 'error') autoExport.current = false;
-    else if (translation.state === 'idle' && total > 0 && done === total) {
-      autoExport.current = false;
-      void exportNote();
-    }
-    // exportNote reads the current pane; this reacts to a run finishing.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [running, translation.state, done, total]);
   const activeBlock = active ? blocks.current[active.index] : null;
-  // The glossary is drawn from the title, abstract and headings.
-  const glossaryText = () =>
-    [
-      note.title,
-      ...blocks.current
-        .filter(
-          (block) =>
-            block.element.matches('h1,h2,h3,h4,h5,h6') || block.element.closest('.ltx_abstract'),
-        )
-        .map((block) => block.text),
-    ]
-      .join('\n')
-      .slice(0, GLOSSARY_SOURCE_CHARS);
   // The section the reader is in: the innermost one around the top paragraph.
   const section = (() => {
     const pane = panes[side].current;
@@ -347,8 +298,9 @@ export default function CompareView({
       aria-label={`对照阅读：${note.title}`}
       onCancel={(event) => {
         event.preventDefault();
-        if (running) translation.stop();
-        onClose();
+        // Escape in a dialog opened inside this view (an enlarged image, the
+        // glossary) reaches this handler too; only this view's own closes it.
+        if (event.target === event.currentTarget) onClose();
       }}
     >
       <header className="compare-header">
@@ -390,6 +342,14 @@ export default function CompareView({
                 ? `已全部翻译 · ${total} 段`
                 : `已翻译 ${done}/${total} 段${done ? '' : ` · 约 ${Math.ceil(characters / 1000)} 千字符`}`}
           </span>
+          <label className="compare-auto" title="全文翻译完成后自动保存为子笔记">
+            <input
+              type="checkbox"
+              checked={session.autoExport}
+              onChange={(event) => session.setAutoExport(event.target.checked)}
+            />
+            翻完存为子笔记
+          </label>
           {running ? (
             <button className="button compact" onClick={translation.stop}>
               停止
@@ -403,9 +363,7 @@ export default function CompareView({
                   <button
                     className="button compact"
                     aria-label={`只翻译本节（${sectionPending} 段）`}
-                    onClick={() =>
-                      void translation.run(section.map(sourceOf), { glossaryText: glossaryText() })
-                    }
+                    onClick={() => session.runList(section.map(sourceOf))}
                   >
                     {/* One span, so the button's flex gap does not split the words. */}
                     <span>
@@ -413,13 +371,7 @@ export default function CompareView({
                     </span>
                   </button>
                 )}
-                <button
-                  className="button compact primary"
-                  onClick={() => {
-                    autoExport.current = true;
-                    void translation.run(sources, { glossaryText: glossaryText() });
-                  }}
-                >
+                <button className="button compact primary" onClick={session.runAll}>
                   <Languages size={15} />
                   {done ? '继续翻译' : '翻译全文'}
                 </button>
@@ -443,7 +395,7 @@ export default function CompareView({
           aria-label="保存为子笔记"
           title="把译文保存为这篇论文的子笔记"
           disabled={!done || running || exported?.state === 'saving'}
-          onClick={() => void exportNote()}
+          onClick={() => void session.exportNote()}
         >
           <FilePlus2 size={18} />
         </button>
@@ -491,12 +443,12 @@ export default function CompareView({
           }
           onRetranslate={(list) => {
             setGlossaryOpen(false);
-            void translation.run(list, { refresh: true });
+            session.runList(list, true);
           }}
           onClose={() => setGlossaryOpen(false)}
         />
       )}
-      <div className="compare-body">
+      <div className="compare-body" data-selection-owner={owner}>
         {tocOpen && (
           <nav id="compare-outline" className="toc compare-toc" aria-label="目录">
             {prepared.headings.map((heading) => (
@@ -534,7 +486,7 @@ export default function CompareView({
               onClick={(event) => {
                 event.stopPropagation();
                 setActive(null);
-                void translation.run([sourceOf(activeBlock)], { refresh: true });
+                session.runList([sourceOf(activeBlock)], true);
               }}
             >
               <RotateCcw size={14} />
@@ -543,6 +495,29 @@ export default function CompareView({
           )}
         </div>
       </div>
+      <SelectionToolbar
+        owner={owner}
+        onSelection={() => {}}
+        onQuote={onQuote}
+        onTranslate={setSelectionTranslation}
+      />
+      {selectionTranslation && (
+        <TranslationPanel
+          nodeId={note.id}
+          launch={selectionTranslation}
+          onClose={() => setSelectionTranslation(null)}
+          onChanged={onChanged}
+          onQuote={onQuote}
+          onLocate={() => '对照阅读中无法定位原文，请在论文页面查看。'}
+          onNavigate={() => {}}
+          onImage={(src, alt) => setImage({ src, alt })}
+        />
+      )}
+      {image && (
+        <Suspense fallback={null}>
+          <ImageViewer {...image} onClose={() => setImage(null)} />
+        </Suspense>
+      )}
     </dialog>
   );
 }

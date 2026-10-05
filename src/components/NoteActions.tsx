@@ -24,6 +24,7 @@ export function NoteActions({
   onChildren,
   onAttachments,
   onCompare,
+  compareProgress,
   onSplit,
   onEdit,
   onAction,
@@ -48,6 +49,8 @@ export function NoteActions({
   onAttachments: () => void;
   // Whole-paper translation and side-by-side reading (arXiv papers only).
   onCompare: () => void;
+  // Shown on the button while a whole-paper translation runs, e.g. "42%".
+  compareProgress?: string;
   // Two notes side by side, full screen.
   onSplit: () => void;
   onEdit: () => void;
@@ -115,13 +118,18 @@ export function NoteActions({
       )}
       {!editing && note.arxiv_id && (
         <button
-          className="icon-button"
+          className={`icon-button${compareProgress ? ' has-badge' : ''}`}
           aria-label="对照阅读"
-          title="全文翻译与对照阅读"
+          title={compareProgress ? `正在翻译全文 ${compareProgress}` : '全文翻译与对照阅读'}
           disabled={offline}
           onClick={onCompare}
         >
           <Columns2 size={18} />
+          {compareProgress && (
+            <span className="toolbar-badge toolbar-progress" aria-hidden="true">
+              {compareProgress}
+            </span>
+          )}
         </button>
       )}
       {!editing && (note.kind === 'markdown' || note.arxiv_id) && toc.available && (

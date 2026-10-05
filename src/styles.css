@@ -3085,6 +3085,21 @@ button.node-list-toggle:focus-visible {
   align-items: center;
   gap: 10px;
 }
+.compare-auto {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  white-space: nowrap;
+}
+/* A percentage is wider than a count. */
+.toolbar-progress {
+  min-width: 26px;
+  font-size: 9px;
+}
 .compare-language select {
   width: auto;
   padding: 6px 10px;
@@ -3307,6 +3322,14 @@ button.node-list-toggle:focus-visible {
   place-items: center;
   padding: 16px;
 }
+.split-image-zoom {
+  display: block;
+  max-width: 100%;
+  cursor: zoom-in;
+}
+.split-header h2 {
+  margin-right: auto;
+}
 .split-image img {
   max-width: 100%;
   height: auto;
@@ -3323,6 +3346,10 @@ button.node-list-toggle:focus-visible {
   }
   .split-pane + .split-pane {
     border-left: 0;
+  }
+  /* One side at a time: nothing to keep in step. */
+  .split-sync {
+    display: none;
   }
   .split-view .compare-sides button {
     max-width: 34vw;
@@ -3424,4 +3451,43 @@ button.node-list-toggle:focus-visible {
 }
 .split-picker-result:hover {
   background: var(--surface-subtle);
+}
+
+/* The keyboard shortcut list (press ?). */
+.shortcut-list {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+}
+.shortcut-list div {
+  display: grid;
+  grid-template-columns: 120px 1fr;
+  align-items: center;
+  gap: 12px;
+}
+.shortcut-list dt,
+.shortcut-list dd {
+  margin: 0;
+}
+.shortcut-list kbd {
+  padding: 2px 8px;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: var(--surface-subtle);
+  font-family: inherit;
+  font-size: 12px;
+  white-space: nowrap;
+}
+.shortcut-note {
+  margin: 16px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.translation-history-status {
+  margin: 0 0 8px;
+  padding: 8px 10px;
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
 }

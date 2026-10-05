@@ -35,7 +35,7 @@ const topBlock = (pane: Locator) =>
 // The Worker suite covers saving and the model call; here the server is
 // modelled: each paragraph becomes "译文：<source>", and a drawn-up glossary
 // maps "method" to "方法".
-async function modelServer(page: Page, id: string) {
+async function modelServer(page: Page, id: string, delay = 0) {
   const saved: Record<string, string> = {};
   const batches: { hash: string; text: string }[][] = [];
   const refreshed: boolean[] = [];
@@ -61,6 +61,7 @@ async function modelServer(page: Page, id: string) {
     }
     batches.push(body.blocks);
     refreshed.push(!!body.refresh);
+    if (delay) await new Promise((resolve) => setTimeout(resolve, delay));
     for (const block of body.blocks)
       saved[block.hash] = `译文${body.refresh ? '（新）' : ''}：${block.text}`;
     await route.fulfill({
@@ -236,4 +237,62 @@ test('only the current section can be translated, and glossary edits redo only a
       'location',
     );
   } else await expect(outline).toHaveCount(0);
+});
+
+test('a translation keeps running after the view closes, and the view reopens where it was', async ({
+  page,
+}, info) => {
+  await login(page);
+  const paper = await openPaper(page, `后台翻译 · ${info.project.name}`, content);
+  const { saved } = await modelServer(page, paper.id, 1500);
+  await page.goto(`/n/${paper.id}`);
+  const compare = page
+    .locator('.note-actions')
+    .getByRole('button', { name: '对照阅读', exact: true });
+  await compare.click();
+  const view = page.getByRole('dialog', { name: `对照阅读：${paper.title}` });
+  // Without the switch, finishing does not add a child note.
+  await view.getByRole('checkbox', { name: '翻完存为子笔记' }).uncheck();
+  // Escape in the glossary closes only the glossary.
+  await view.getByRole('button', { name: '术语表', exact: true }).click();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: '术语表', exact: true })).toHaveCount(0);
+  await expect(view).toBeVisible();
+
+  // Close at once, with the first batches still in flight (each takes 1.5 s).
+  await view.getByRole('button', { name: '翻译全文' }).click();
+  await view.getByRole('button', { name: '关闭对照阅读' }).click();
+  await expect(view).toHaveCount(0);
+  // Progress shows on the toolbar, and a notice says when it is done.
+  await expect(compare.locator('.toolbar-progress')).toHaveText(/%$/);
+  await expect(page.getByRole('status').filter({ hasText: '全文翻译完成' })).toBeVisible();
+  await expect(compare.locator('.toolbar-progress')).toHaveCount(0);
+  expect(Object.keys(saved).length).toBeGreaterThan(0);
+  expect((await (await page.request.get(`/api/nodes?parent=${paper.id}`)).json()).nodes).toEqual(
+    [],
+  );
+
+  // Reopening returns to the paragraph last read.
+  await compare.click();
+  await expect(view.locator('.compare-progress')).toContainText('已全部翻译');
+  const pane = view.getByRole('region', { name: info.project.name === 'mobile' ? '译文' : '原文' });
+  await pane.evaluate((element) => {
+    const block = element.querySelector<HTMLElement>('[data-block="20"]')!;
+    element.scrollTop += block.getBoundingClientRect().top - element.getBoundingClientRect().top;
+  });
+  await page.waitForTimeout(300);
+  await page.keyboard.press('Escape');
+  await expect(view).toHaveCount(0);
+  await compare.click();
+  await expect
+    .poll(() =>
+      pane.evaluate((element) => {
+        const top = element.getBoundingClientRect().top + 1;
+        const block = Array.from(element.querySelectorAll<HTMLElement>('[data-block]')).find(
+          (item) => item.getBoundingClientRect().bottom > top,
+        );
+        return Number(block?.dataset.block);
+      }),
+    )
+    .toBe(20);
 });

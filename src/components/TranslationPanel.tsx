@@ -1,5 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { ArrowLeft, Copy, History, Locate, RotateCw, Square, Trash2 } from 'lucide-react';
+import {
+  ArrowLeft,
+  Copy,
+  FilePlus2,
+  History,
+  Locate,
+  RotateCw,
+  Square,
+  Trash2,
+} from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 import {
   TRANSLATION_LANGUAGES,
@@ -19,6 +28,7 @@ import {
 } from '../translation';
 import { MarkdownView } from './LazyMarkdown';
 import { Spinner, useQuestion } from './Primitives';
+import { exportTranslations } from '../translation-export';
 import { TranslationWindow } from './TranslationWindow';
 
 export function TranslationPanel(props: {
@@ -43,6 +53,20 @@ export function TranslationPanel(props: {
   const [error, setError] = useState(''),
     [status, setStatus] = useState('');
   const [history, setHistory] = useState(false);
+  const exportRecords = async () => {
+    setError('');
+    setStatus('正在导出翻译记录…');
+    try {
+      const result = await exportTranslations(nodeId);
+      setStatus(
+        `${result.updated ? '已更新' : '已保存为'}子笔记「${result.title}」（${result.count} 条）`,
+      );
+      callbacks.current.onChanged();
+    } catch (e) {
+      setStatus('');
+      setError((e as Error).message);
+    }
+  };
   const [expanded, setExpanded] = useState(!launch.source);
   const [records, setRecords] = useState<TranslationSummary[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(null);
@@ -178,6 +202,15 @@ export function TranslationPanel(props: {
               <span className="toolbar-spacer" />
               <button
                 className="icon-button"
+                aria-label="导出翻译记录为子笔记"
+                title="把全部翻译记录按原文顺序保存为子笔记"
+                disabled={!!busy || !records.length}
+                onClick={() => void exportRecords()}
+              >
+                <FilePlus2 size={16} />
+              </button>
+              <button
+                className="icon-button"
                 aria-label="刷新翻译记录"
                 disabled={!!busy}
                 onClick={() => void loadHistory()}
@@ -221,6 +254,11 @@ export function TranslationPanel(props: {
       )}
       {history ? (
         <div className="translation-history" aria-label="本文件的翻译记录">
+          {status && (
+            <p className="translation-history-status" role="status">
+              {status}
+            </p>
+          )}
           {!records.length && !busy && !error && (
             <p className="translation-empty">还没有翻译记录</p>
           )}

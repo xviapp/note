@@ -63,7 +63,12 @@ export function Sidebar({
         </div>
       </div>
       {/* Search reads as a field of its own row, leaving the brand row two icons. */}
-      <button className="sidebar-search" aria-label="搜索笔记" onClick={onSearch}>
+      <button
+        className="sidebar-search"
+        aria-label="搜索笔记"
+        title="搜索笔记（按 ? 查看全部快捷键）"
+        onClick={onSearch}
+      >
         <Search size={16} aria-hidden="true" />
         <span>搜索笔记</span>
         <kbd aria-hidden="true">Ctrl K</kbd>

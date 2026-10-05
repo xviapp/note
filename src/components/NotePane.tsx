@@ -14,6 +14,7 @@ import { Empty, Modal, Spinner, useQuestion } from './Primitives';
 import { Attachments } from './Attachments';
 import type { EditorHandle } from './Editor';
 import { useMarkdownReady } from './LazyMarkdown';
+import { usePaperSession } from '../use-paper-session';
 import { HistoryDialog } from './HistoryDialog';
 import { EditToolbar, NoteHeading, NoteLocation, SaveErrorBar } from './NoteChrome';
 import { NoteBody } from './NoteBody';
@@ -81,6 +82,8 @@ interface Props {
   onError: (error: unknown) => void;
   onTrash: () => void;
   onSettings: () => void;
+  // A short notice, e.g. a background translation that finished.
+  onNotice?: (message: string) => void;
   // A note just created empty opens for writing without the confirmation.
   autoEdit?: boolean;
   onAutoEdit?: () => void;
@@ -340,6 +343,13 @@ export default function NotePane(props: Props) {
       onNavigate={props.onNavigate}
     />
   );
+  const paperSession = usePaperSession(note, {
+    onFinished: (message) => props.onNotice?.(message),
+    onExported: () => {
+      props.onChanged();
+      setRetry((count) => count + 1);
+    },
+  });
   const markdownReady = useMarkdownReady(note?.kind === 'markdown');
   if (loadError || !note || !markdownReady)
     return (
@@ -400,6 +410,11 @@ export default function NotePane(props: Props) {
           onChildren={() => setChildrenOpen(true)}
           onAttachments={() => setAttachmentsOpen(true)}
           onCompare={() => setCompareOpen(true)}
+          compareProgress={
+            paperSession.running && paperSession.total
+              ? `${Math.floor((paperSession.done / paperSession.total) * 100)}%`
+              : undefined
+          }
           onSplit={() => setSplitOpen(true)}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
@@ -617,10 +632,14 @@ export default function NotePane(props: Props) {
         <Suspense fallback={null}>
           <CompareView
             note={note}
+            session={paperSession}
             onClose={() => setCompareOpen(false)}
-            onExported={() => {
-              props.onChanged();
-              setRetry((count) => count + 1);
+            onChanged={props.onChanged}
+            onQuote={(text) => {
+              // Qingli lives on the note page, under the full-screen view.
+              const error = addQuote(text);
+              if (!error) setCompareOpen(false);
+              return error;
             }}
           />
         </Suspense>

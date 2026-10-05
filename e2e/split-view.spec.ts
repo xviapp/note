@@ -86,3 +86,89 @@ test('two notes open side by side, each with its own scroll and outline', async 
   await page.keyboard.press('Escape');
   await expect(view).toHaveCount(0);
 });
+
+test('split panes follow note links, enlarge images, remember the pairing and can scroll together', async ({
+  page,
+}, info) => {
+  await login(page);
+  const name = info.project.name;
+  const target = await create(page, {
+    kind: 'markdown',
+    title: `链接目标 ${name}`,
+    content: long('目标'),
+  });
+  const left = await create(page, {
+    kind: 'markdown',
+    title: `带链接 ${name}`,
+    content: `[打开目标](/n/${target.id})\n\n${long('左边')}`,
+  });
+  const png = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==',
+    'base64',
+  );
+  const upload = await page.request.post(`/api/files?name=dot.png&size=${png.length}`, {
+    headers,
+    data: png,
+  });
+  const image = await create(page, {
+    kind: 'image',
+    title: `一张图 ${name}`,
+    fileId: (await upload.json()).id,
+  });
+  const open = async () => {
+    await page.goto(`/n/${left.id}`);
+    const menu = page.locator('.note-actions .node-menu');
+    await menu.getByRole('button', { name: `管理 ${left.title}`, exact: true }).click();
+    await menu.getByRole('button', { name: '分屏查看', exact: true }).click();
+    return page.getByRole('dialog', { name: '分屏查看' });
+  };
+  let view = await open();
+  const picker = view.getByRole('region', { name: '未选择文件' });
+  await picker.locator('.node-list-main').filter({ hasText: image.title }).click();
+  // The image enlarges in the viewer.
+  await view.getByRole('button', { name: `放大图片：${image.title}` }).click();
+  await expect(page.getByRole('dialog', { name: image.title })).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(page.getByRole('dialog', { name: image.title })).toHaveCount(0);
+
+  // A link inside a note opens the linked note in that same pane.
+  if (name === 'mobile') await view.getByRole('button', { name: `左：${left.title}` }).click();
+  await view
+    .getByRole('region', { name: left.title })
+    .getByRole('link', { name: '打开目标' })
+    .click();
+  await expect(
+    view.getByRole('region', { name: target.title }).getByRole('heading', { name: '目标 第 1 节' }),
+  ).toBeVisible();
+  await page.keyboard.press('Escape');
+  await expect(view).toHaveCount(0);
+
+  // Reopening pairs the note with the file shown beside it last time.
+  view = await open();
+  await expect(view.getByRole('region', { name: image.title })).toHaveCount(1);
+  await expect(view.getByRole('region', { name: '未选择文件' })).toHaveCount(0);
+
+  if (name === 'desktop') {
+    // Synced scrolling moves the other side by the same proportion.
+    await view
+      .getByRole('region', { name: image.title })
+      .getByRole('button', { name: '换一份' })
+      .click();
+    await view.locator('.split-picker .node-list-main').filter({ hasText: target.title }).click();
+    await view.getByRole('checkbox', { name: '同步滚动' }).check();
+    const panes = view.locator('.split-scroll');
+    await panes.first().evaluate((element) => {
+      element.scrollTop = (element.scrollHeight - element.clientHeight) / 2;
+    });
+    await expect
+      .poll(() =>
+        panes.nth(1).evaluate((e) => e.scrollTop / Math.max(1, e.scrollHeight - e.clientHeight)),
+      )
+      .toBeCloseTo(0.5, 1);
+    await page.keyboard.press('Escape');
+    // The ? key lists the shortcuts.
+    await page.locator('.read-content').click();
+    await page.keyboard.press('?');
+    await expect(page.getByRole('dialog', { name: '快捷键' })).toContainText('Ctrl K 或 /');
+  }
+});
