@@ -9,7 +9,8 @@ import { useNodeListing } from '../use-node-listing';
 type NodeListProps = {
   refresh: number;
   onOpen: (node: NoteNode) => void;
-  onAction: (action: NodeAction, node: NoteNode) => void;
+  // Without it the rows have no ⋯ menu, e.g. when picking a file.
+  onAction?: (action: NodeAction, node: NoteNode) => void;
 };
 export function NodeList({
   view,
@@ -115,7 +116,7 @@ function NodeRows({
                   <time>{formatDate(node.updated_at)}</time>
                 )}
               </button>
-              <NodeMenu node={node} onAction={props.onAction} />
+              {props.onAction && <NodeMenu node={node} onAction={props.onAction} />}
             </div>
             {expanded && <NodeChildren {...props} parent={node.id} depth={depth + 1} />}
           </div>

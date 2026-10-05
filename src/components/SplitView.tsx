@@ -1,21 +1,145 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { ArrowLeftRight, List, X } from 'lucide-react';
+import { ArrowLeftRight, ChevronRight, List, Search, X } from 'lucide-react';
 import { api, fileUrl } from '../api';
-import type { NoteDetail, NoteNode } from '../../shared/types';
+import type { NoteDetail, NoteNode, SearchResult } from '../../shared/types';
 import { splittable } from '../split';
 import type { Heading } from './MarkdownView';
 import { NoteBody } from './NoteBody';
+import { NodeList } from './NodeList';
 import { CachedImage } from './CachedImage';
-import { Spinner } from './Primitives';
-import { SearchDialog } from './SearchDialog';
+import { NodeIcon, Spinner } from './Primitives';
 
 const PdfView = lazy(() => import('./PdfView'));
 
 const narrow = () => matchMedia('(max-width: 760px)').matches;
 
+// Choosing a file inside the pane: the library's folders to step through, or a
+// title search. Only files the split can show are picked; folders open.
+function FilePicker({
+  onPick,
+  onCancel,
+}: {
+  onPick: (node: NoteNode) => void;
+  onCancel?: () => void;
+}) {
+  const [path, setPath] = useState<{ id: string; title: string }[]>([]),
+    [query, setQuery] = useState(''),
+    [results, setResults] = useState<SearchResult[] | null>(null),
+    [message, setMessage] = useState('');
+  useEffect(() => {
+    const term = query.trim();
+    if (!term) {
+      setResults(null);
+      return;
+    }
+    let live = true;
+    const timer = setTimeout(() => {
+      api<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term)}`)
+        .then((data) => {
+          if (live)
+            setResults(data.results.filter((node) => node.kind === 'folder' || splittable(node)));
+        })
+        .catch((e) => live && setMessage((e as Error).message));
+    }, 180);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
+  }, [query]);
+  const open = (node: NoteNode) => {
+    setMessage('');
+    if (node.kind === 'folder') {
+      setQuery('');
+      setPath((current) => [...current, { id: node.id, title: node.title }]);
+    } else if (splittable(node)) onPick(node);
+    else setMessage('网页链接无法分屏查看，请选择笔记、论文、PDF 或图片。');
+  };
+  const parent = path.at(-1)?.id ?? null;
+  return (
+    <div className="split-picker">
+      <div className="split-picker-bar">
+        <nav className="split-picker-path" aria-label="当前位置">
+          <button onClick={() => setPath([])} disabled={!path.length}>
+            全部笔记
+          </button>
+          {path.map((part, index) => (
+            <span key={part.id}>
+              <ChevronRight size={13} aria-hidden="true" />
+              <button
+                onClick={() => setPath((current) => current.slice(0, index + 1))}
+                disabled={index === path.length - 1}
+              >
+                {part.title}
+              </button>
+            </span>
+          ))}
+        </nav>
+        {onCancel && (
+          <button className="button compact" onClick={onCancel}>
+            取消
+          </button>
+        )}
+      </div>
+      <label className="search-field split-picker-search">
+        <Search size={16} aria-hidden="true" />
+        <input
+          type="text"
+          aria-label="按标题查找文件"
+          placeholder="按标题查找"
+          autoComplete="off"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+      </label>
+      {message && (
+        <p className="inline-error" role="alert">
+          {message}
+        </p>
+      )}
+      <div className="split-picker-list">
+        {results ? (
+          results.length ? (
+            <ul className="search-results">
+              {results.map((node) => (
+                <li key={node.id}>
+                  <button className="split-picker-result" onClick={() => open(node)}>
+                    <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} node={node} />
+                    <span className="search-result-text">
+                      <strong>{node.title}</strong>
+                      {node.path.length > 0 && <small>{node.path.join(' / ')}</small>}
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="search-caption">没有标题匹配的文件</p>
+          )
+        ) : (
+          <div className="node-list">
+            <NodeList key={parent ?? 'root'} parent={parent} refresh={0} onOpen={open} />
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // One side of the split: its own scroll position and outline. A PDF keeps the
-// reader's own toolbar, outline included.
-function SplitPane({ note, onReplace }: { note: NoteDetail | null; onReplace: () => void }) {
+// reader's own toolbar, outline included. While choosing, the pane lists files.
+function SplitPane({
+  note,
+  picking,
+  onReplace,
+  onPick,
+  onCancelPick,
+}: {
+  note: NoteDetail | null;
+  picking: boolean;
+  onReplace: () => void;
+  onPick: (node: NoteNode) => void;
+  onCancelPick: () => void;
+}) {
   const scroll = useRef<HTMLDivElement>(null);
   const [headings, setHeadings] = useState<Heading[]>([]),
     [tocOpen, setTocOpen] = useState(false);
@@ -30,8 +154,10 @@ function SplitPane({ note, onReplace }: { note: NoteDetail | null; onReplace: ()
   return (
     <section className="split-pane" aria-label={note ? note.title : '未选择文件'}>
       <header className="split-pane-header">
-        <strong title={note?.title}>{note?.title ?? '选择一份文件'}</strong>
-        {!pdf && headings.length > 0 && (
+        <strong title={note?.title}>
+          {picking ? '选择一份文件' : (note?.title ?? '选择一份文件')}
+        </strong>
+        {!picking && !pdf && headings.length > 0 && (
           <button
             className="icon-button toc-toggle"
             aria-label={`${note?.title ?? ''}的目录`}
@@ -42,13 +168,15 @@ function SplitPane({ note, onReplace }: { note: NoteDetail | null; onReplace: ()
             <List size={18} />
           </button>
         )}
-        <button className="button compact" onClick={onReplace}>
-          <ArrowLeftRight size={15} />
-          {note ? '换一份' : '选择文件'}
-        </button>
+        {!picking && note && (
+          <button className="button compact" onClick={onReplace}>
+            <ArrowLeftRight size={15} />
+            换一份
+          </button>
+        )}
       </header>
       <div className="split-pane-body">
-        {tocOpen && (
+        {tocOpen && !picking && (
           <nav className="toc split-toc" aria-label={`${note?.title ?? ''}的目录`}>
             {headings.map((heading) => (
               <button
@@ -61,12 +189,8 @@ function SplitPane({ note, onReplace }: { note: NoteDetail | null; onReplace: ()
             ))}
           </nav>
         )}
-        {!note ? (
-          <div className="split-empty">
-            <button className="button primary" onClick={onReplace}>
-              选择要并排查看的文件
-            </button>
-          </div>
+        {picking || !note ? (
+          <FilePicker onPick={onPick} onCancel={note ? onCancelPick : undefined} />
         ) : pdf ? (
           <Suspense fallback={<Spinner label="正在打开 PDF…" />}>
             <PdfView key={note.file!.id} fileId={note.file!.id} cacheNote={note} />
@@ -101,15 +225,14 @@ function SplitPane({ note, onReplace }: { note: NoteDetail | null; onReplace: ()
 export default function SplitView({ first, onClose }: { first: NoteDetail; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [notes, setNotes] = useState<[NoteDetail | null, NoteDetail | null]>([first, null]),
-    [picking, setPicking] = useState<0 | 1 | null>(null),
-    [side, setSide] = useState<0 | 1>(0),
+    // The empty right side starts out listing files to choose from.
+    [picking, setPicking] = useState<0 | 1 | null>(1),
+    // Phones start on the right: the left is the note already open.
+    [side, setSide] = useState<0 | 1>(1),
     [error, setError] = useState('');
   useEffect(() => {
     const element = dialog.current;
     if (element && !element.open) element.showModal();
-    // The picker opens only now: a modal shown earlier would sit beneath this
-    // one, out of sight and out of reach.
-    setPicking(1);
     return () => element?.close();
   }, []);
   const choose = async (index: 0 | 1, node: NoteNode) => {
@@ -166,18 +289,13 @@ export default function SplitView({ first, onClose }: { first: NoteDetail; onClo
             // A new file starts a fresh pane: its own outline and scroll position.
             key={`${index}-${note?.id ?? ''}`}
             note={note}
+            picking={picking === index}
             onReplace={() => setPicking(index as 0 | 1)}
+            onPick={(node) => void choose(index as 0 | 1, node)}
+            onCancelPick={() => setPicking(null)}
           />
         ))}
       </div>
-      {picking !== null && (
-        <SearchDialog
-          title={picking ? '选择右侧文件' : '选择左侧文件'}
-          accept={splittable}
-          onOpen={(node) => void choose(picking, node)}
-          onClose={() => setPicking(null)}
-        />
-      )}
     </dialog>
   );
 }

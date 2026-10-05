@@ -9,14 +9,9 @@ import { Modal, NodeIcon } from './Primitives';
 export function SearchDialog({
   onOpen,
   onClose,
-  title = '搜索笔记',
-  accept,
 }: {
   onOpen: (node: NoteNode) => void;
   onClose: () => void;
-  title?: string;
-  // Only these results are listed, e.g. files a split view can show.
-  accept?: (node: NoteNode) => boolean;
 }) {
   const [query, setQuery] = useState(''),
     [results, setResults] = useState<SearchResult[]>([]),
@@ -24,9 +19,6 @@ export function SearchDialog({
     [state, setState] = useState<'loading' | 'ready' | 'error'>('loading'),
     [error, setError] = useState('');
   const list = useId();
-  // Read at fetch time, so a new filter function each render refetches nothing.
-  const filter = useRef(accept);
-  filter.current = accept;
   const listRef = useRef<HTMLUListElement>(null),
     field = useRef<HTMLInputElement>(null);
   // Enter pressed while a search is pending opens its first result on arrival.
@@ -54,15 +46,14 @@ export function SearchDialog({
         request
           .then((found) => {
             if (!live) return;
-            const shown = filter.current ? found.filter(filter.current) : found;
-            if (pendingEnter.current && shown[0]) {
+            if (pendingEnter.current && found[0]) {
               pendingEnter.current = false;
               handlers.current.onClose();
-              handlers.current.onOpen(shown[0]);
+              handlers.current.onOpen(found[0]);
               return;
             }
             pendingEnter.current = false;
-            setResults(shown);
+            setResults(found);
             setActive(0);
             setState('ready');
           })
@@ -90,7 +81,7 @@ export function SearchDialog({
   };
   const optionId = (index: number) => `${list}-${index}`;
   return (
-    <Modal title={title} className="search-modal" onClose={onClose}>
+    <Modal title="搜索笔记" className="search-modal" onClose={onClose}>
       <label className="search-field">
         <Search size={17} aria-hidden="true" />
         <input

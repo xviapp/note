@@ -3341,3 +3341,86 @@ button.node-list-toggle:focus-visible {
     box-shadow: var(--shadow-popover);
   }
 }
+/* Choosing a file inside a split pane. */
+.split-picker {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+  gap: 10px;
+  padding: 12px 16px;
+  overflow: hidden;
+}
+.split-picker-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.split-picker-path {
+  display: flex;
+  flex: 1;
+  flex-wrap: wrap;
+  align-items: center;
+  min-width: 0;
+  gap: 2px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.split-picker-path span {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+.split-picker-path button {
+  padding: 4px 6px;
+  border-radius: 6px;
+  color: var(--blue);
+}
+.split-picker-path button:disabled {
+  color: var(--ink);
+  font-weight: 500;
+}
+.split-picker .search-field {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  padding: 0 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface-raised);
+  color: var(--muted);
+}
+.split-picker .search-field:focus-within {
+  border-color: var(--focus);
+  box-shadow: 0 0 0 3px var(--focus-ring);
+}
+.split-picker .search-field input:not([type='checkbox']):not([type='radio']):not([type='file']) {
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+  padding: 9px 0;
+  border: 0;
+  border-radius: 0;
+  outline: 0;
+  box-shadow: none;
+  background: transparent;
+}
+.split-picker-list {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.split-picker-result {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 100%;
+  padding: 9px 10px;
+  border-radius: var(--radius-control);
+  text-align: left;
+}
+.split-picker-result:hover {
+  background: var(--surface-subtle);
+}

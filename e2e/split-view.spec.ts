@@ -34,30 +34,24 @@ test('two notes open side by side, each with its own scroll and outline', async 
     title: `左边笔记 ${name}`,
     content: long('左边'),
   });
+  const folder = await create(page, { kind: 'folder', title: `资料夹 ${name}` });
   const right = await create(page, {
     kind: 'markdown',
     title: `右边资料 ${name}`,
+    parentId: folder.id,
     content: long('右边'),
   });
-  // A folder with a matching title cannot be shown in a split, so it is not offered.
-  await create(page, { kind: 'folder', title: `右边资料夹 ${name}` });
   await page.goto(`/n/${left.id}`);
   const menu = page.locator('.note-actions .node-menu');
   await menu.getByRole('button', { name: `管理 ${left.title}`, exact: true }).click();
   await menu.getByRole('button', { name: '分屏查看', exact: true }).click();
   const view = page.getByRole('dialog', { name: '分屏查看' });
-  const picker = page.getByRole('dialog', { name: '选择右侧文件' });
-  await picker.getByRole('combobox', { name: '搜索笔记标题' }).fill(`右边 ${name}`);
-  await expect(picker.getByRole('option')).toHaveCount(1);
-  await expect(picker.getByRole('option')).toContainText(right.title);
-  // The picker sits above the split view, so the mouse reaches it.
-  await picker.getByRole('button', { name: '关闭' }).click();
-  await expect(picker).toHaveCount(0);
-  // Phones show one side at a time; the empty right side has its own button.
-  if (name === 'mobile') await view.getByRole('button', { name: '右', exact: true }).click();
-  await view.getByRole('button', { name: '选择文件', exact: true }).click();
-  await picker.getByRole('combobox', { name: '搜索笔记标题' }).fill(`右边 ${name}`);
-  await picker.getByRole('option').filter({ hasText: right.title }).click();
+  // The empty side lists the library: step into a folder, then pick the file.
+  const picker = view.getByRole('region', { name: '未选择文件' });
+  const row = (title: string) => picker.locator('.node-list-main').filter({ hasText: title });
+  await row(folder.title).click();
+  await expect(picker.getByRole('navigation', { name: '当前位置' })).toContainText(folder.title);
+  await row(right.title).click();
   await expect(picker).toHaveCount(0);
 
   const leftPane = view.getByRole('region', { name: left.title });
@@ -82,10 +76,13 @@ test('two notes open side by side, each with its own scroll and outline', async 
   if (name === 'desktop') expect(await scrollTop(rightPane)).toBe(0);
   else await expect(leftPane.getByRole('navigation')).toHaveCount(0);
 
-  // Either side can be swapped for another file.
+  // Either side can be swapped: the pane lists files again, with a title filter.
   await leftPane.getByRole('button', { name: '换一份' }).click();
-  await expect(page.getByRole('dialog', { name: '选择左侧文件' })).toBeVisible();
-  await page.keyboard.press('Escape');
+  await leftPane.getByRole('textbox', { name: '按标题查找文件' }).fill(`右边 ${name}`);
+  await leftPane.getByRole('button', { name: new RegExp(right.title) }).click();
+  if (name === 'desktop')
+    await expect(view.getByRole('region', { name: right.title })).toHaveCount(2);
+  else await expect(view.getByRole('button', { name: `左：${right.title}` })).toBeVisible();
   await page.keyboard.press('Escape');
   await expect(view).toHaveCount(0);
 });
