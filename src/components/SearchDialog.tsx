@@ -9,9 +9,14 @@ import { Modal, NodeIcon } from './Primitives';
 export function SearchDialog({
   onOpen,
   onClose,
+  title = '搜索笔记',
+  accept,
 }: {
   onOpen: (node: NoteNode) => void;
   onClose: () => void;
+  title?: string;
+  // Only these results are listed, e.g. files a split view can show.
+  accept?: (node: NoteNode) => boolean;
 }) {
   const [query, setQuery] = useState(''),
     [results, setResults] = useState<SearchResult[]>([]),
@@ -19,8 +24,15 @@ export function SearchDialog({
     [state, setState] = useState<'loading' | 'ready' | 'error'>('loading'),
     [error, setError] = useState('');
   const list = useId();
+  // Read at fetch time, so a new filter function each render refetches nothing.
+  const filter = useRef(accept);
+  filter.current = accept;
   const listRef = useRef<HTMLUListElement>(null),
     field = useRef<HTMLInputElement>(null);
+  // Enter pressed while a search is pending opens its first result on arrival.
+  const pendingEnter = useRef(false);
+  const handlers = useRef({ onOpen, onClose });
+  handlers.current = { onOpen, onClose };
   // Opening the dialog focuses its first button; move to the field after that.
   useEffect(() => {
     const frame = requestAnimationFrame(() => field.current?.focus());
@@ -42,7 +54,15 @@ export function SearchDialog({
         request
           .then((found) => {
             if (!live) return;
-            setResults(found);
+            const shown = filter.current ? found.filter(filter.current) : found;
+            if (pendingEnter.current && shown[0]) {
+              pendingEnter.current = false;
+              handlers.current.onClose();
+              handlers.current.onOpen(shown[0]);
+              return;
+            }
+            pendingEnter.current = false;
+            setResults(shown);
             setActive(0);
             setState('ready');
           })
@@ -70,7 +90,7 @@ export function SearchDialog({
   };
   const optionId = (index: number) => `${list}-${index}`;
   return (
-    <Modal title="搜索笔记" className="search-modal" onClose={onClose}>
+    <Modal title={title} className="search-modal" onClose={onClose}>
       <label className="search-field">
         <Search size={17} aria-hidden="true" />
         <input
@@ -86,7 +106,10 @@ export function SearchDialog({
           placeholder="输入标题中的文字，多个词用空格分开"
           value={query}
           maxLength={200}
-          onChange={(event) => setQuery(event.target.value)}
+          onChange={(event) => {
+            pendingEnter.current = false;
+            setQuery(event.target.value);
+          }}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) return;
             if (event.key === 'ArrowDown' || event.key === 'ArrowUp') {
@@ -94,9 +117,11 @@ export function SearchDialog({
               if (!results.length) return;
               const step = event.key === 'ArrowDown' ? 1 : -1;
               setActive((index) => (index + step + results.length) % results.length);
-            } else if (event.key === 'Enter' && results[active]) {
+            } else if (event.key === 'Enter') {
               event.preventDefault();
-              open(results[active]);
+              // While a search is pending the list is from the previous query.
+              if (state === 'loading') pendingEnter.current = true;
+              else if (results[active]) open(results[active]);
             }
           }}
         />

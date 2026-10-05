@@ -36,6 +36,7 @@ import { useOffline } from '../connectivity';
 
 const Editor = lazy(() => import('./Editor'));
 const CompareView = lazy(() => import('./CompareView'));
+const SplitView = lazy(() => import('./SplitView'));
 const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
 
@@ -98,7 +99,8 @@ export default function NotePane(props: Props) {
     [pdf, setPdf] = useState<FileInfo | null>(null);
   const [childrenOpen, setChildrenOpen] = useState(false),
     [attachmentsOpen, setAttachmentsOpen] = useState(false),
-    [compareOpen, setCompareOpen] = useState(false);
+    [compareOpen, setCompareOpen] = useState(false),
+    [splitOpen, setSplitOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false),
     [linkOpen, setLinkOpen] = useState(false);
   const question = useQuestion(),
@@ -398,6 +400,7 @@ export default function NotePane(props: Props) {
           onChildren={() => setChildrenOpen(true)}
           onAttachments={() => setAttachmentsOpen(true)}
           onCompare={() => setCompareOpen(true)}
+          onSplit={() => setSplitOpen(true)}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
         />
@@ -604,6 +607,11 @@ export default function NotePane(props: Props) {
           onNavigate={props.onNavigate}
           onImage={showImage}
         />
+      )}
+      {splitOpen && !editing && (
+        <Suspense fallback={null}>
+          <SplitView first={note} onClose={() => setSplitOpen(false)} />
+        </Suspense>
       )}
       {compareOpen && note.arxiv_id && (
         <Suspense fallback={null}>

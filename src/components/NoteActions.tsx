@@ -3,6 +3,7 @@ import { Columns2, FolderTree, History, Languages, List, Pencil, Star } from 'lu
 import { TEXT_KINDS, type NoteDetail, type NoteNode } from '../../shared/types';
 import { ReadingSettingsButton } from './ReadingSettings';
 import { NodeMenu, type NodeAction } from './Tree';
+import { splittable } from '../split';
 
 const closeMenu = (element: Element) => {
   const menu = element.closest('details');
@@ -23,6 +24,7 @@ export function NoteActions({
   onChildren,
   onAttachments,
   onCompare,
+  onSplit,
   onEdit,
   onAction,
 }: {
@@ -46,11 +48,14 @@ export function NoteActions({
   onAttachments: () => void;
   // Whole-paper translation and side-by-side reading (arXiv papers only).
   onCompare: () => void;
+  // Two notes side by side, full screen.
+  onSplit: () => void;
   onEdit: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
+  const canSplit = splittable(note);
   return (
     // A folder, a plain link or an open editor leaves only a couple of buttons; they
     // then share the location row instead of taking one of their own.
@@ -183,9 +188,19 @@ export function NoteActions({
               所有附件（{attachments}）
             </button>
           )}
+          {canSplit && (
+            <button
+              onClick={(event) => {
+                closeMenu(event.currentTarget);
+                onSplit();
+              }}
+            >
+              分屏查看
+            </button>
+          )}
           {/* Folders have none of the items above, so no divider either. */}
-          {(attachments > 0 || note.kind !== 'folder') && (
-            <hr className={attachments > 0 ? undefined : 'menu-compact-only'} />
+          {(attachments > 0 || canSplit || note.kind !== 'folder') && (
+            <hr className={attachments > 0 || canSplit ? undefined : 'menu-compact-only'} />
           )}
         </NodeMenu>
       )}

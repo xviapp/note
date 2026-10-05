@@ -154,6 +154,11 @@ test('search jumps to a note by title words and shows where it lives', async ({ 
     await expect(dialog).toBeVisible();
     await field.fill('没有这样的标题');
     await expect(dialog.getByText('没有标题匹配的笔记')).toBeVisible();
+    // Enter pressed before the results arrive opens the new first result,
+    // not the one listed for the previous query.
+    await field.fill(`另一篇 ${info.project.name}`);
+    await field.press('Enter');
+    await expect(page.getByRole('heading', { name: `另一篇 ${info.project.name}` })).toBeVisible();
   }
 });
 

@@ -3241,3 +3241,103 @@ button.node-list-toggle:focus-visible {
 .glossary-rows li > span {
   color: var(--muted);
 }
+
+/* Split view: two notes side by side, each with its own scroll and outline. */
+.split-body {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.split-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-width: 0;
+}
+.split-pane + .split-pane {
+  border-left: 1px solid var(--line);
+}
+.split-pane-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 50px;
+  padding: 6px 12px;
+  border-bottom: 1px solid var(--line);
+}
+.split-pane-header strong {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  font-weight: 500;
+}
+.split-pane-body {
+  position: relative;
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.split-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+.split-scroll .note-article {
+  padding: 24px clamp(16px, 3vw, 40px) 40vh;
+}
+.split-title {
+  margin-bottom: 20px;
+  font-size: 22px;
+}
+.split-toc {
+  flex: 0 0 200px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 12px 6px 24px 10px;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
+.split-image {
+  display: grid;
+  place-items: center;
+  padding: 16px;
+}
+.split-image img {
+  max-width: 100%;
+  height: auto;
+}
+.split-empty {
+  display: grid;
+  flex: 1;
+  place-items: center;
+}
+@media (max-width: 760px) {
+  .split-view.show-0 .split-pane:nth-child(2),
+  .split-view.show-1 .split-pane:nth-child(1) {
+    display: none;
+  }
+  .split-pane + .split-pane {
+    border-left: 0;
+  }
+  .split-view .compare-sides button {
+    max-width: 34vw;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+  .split-toc {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 2;
+    max-height: 70%;
+    padding: 12px 16px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-popover);
+  }
+}
