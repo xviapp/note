@@ -1,11 +1,11 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Languages } from 'lucide-react';
+import { Copy, Highlighter, Languages, MessageSquareQuote } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 import { paperText } from '../paper';
 import { captureSourceLocation } from '../source-location';
 import type { TranslationLaunch } from '../translation';
-import { TRANSLATION_LIMIT } from '../../shared/translation';
+import { TRANSLATION_LIMIT, type SourceLocation } from '../../shared/translation';
 import '../selection.css';
 
 interface SelectedText {
@@ -91,21 +91,28 @@ export function SelectionToolbar({
   onSelection,
   onQuote,
   onTranslate,
+  onAnnotate,
 }: {
   owner: string;
   onSelection: (text: string) => void;
   onQuote: (text: string) => string | undefined;
   onTranslate: (launch: TranslationLaunch) => void;
+  // Highlights the selection, opening a note for it when `withNote` is set.
+  // Returns an error to show, or a promise of one while it saves.
+  onAnnotate?: (
+    selection: { quote: string; location: SourceLocation | null },
+    withNote: boolean,
+  ) => string | undefined | Promise<string | undefined>;
 }) {
   const [selected, setSelected] = useState<SelectedText | null>(null);
   const [status, setStatus] = useState('');
   const [position, setPosition] = useState({ left: 0, top: 0, arrow: 0, side: 'above' });
   const toolbar = useRef<HTMLDivElement>(null);
   const active = useRef(selected);
-  const callbacks = useRef({ onSelection, onQuote, onTranslate });
+  const callbacks = useRef({ onSelection, onQuote, onTranslate, onAnnotate });
   const dismiss = useRef(() => {});
   active.current = selected;
-  callbacks.current = { onSelection, onQuote, onTranslate };
+  callbacks.current = { onSelection, onQuote, onTranslate, onAnnotate };
 
   useEffect(() => {
     let timer = 0,
@@ -303,6 +310,29 @@ export function SelectionToolbar({
           <Languages size={16} />
           翻译
         </button>
+        {onAnnotate &&
+          ([false, true] as const).map((withNote) => (
+            <button
+              key={String(withNote)}
+              type="button"
+              onClick={async () => {
+                const error = await callbacks.current.onAnnotate?.(
+                  { quote: selected.text, location: captureSourceLocation(selected.range) },
+                  withNote,
+                );
+                if (active.current !== selected) return;
+                if (error) {
+                  setStatus(error);
+                  return;
+                }
+                dismiss.current();
+                window.getSelection()?.removeAllRanges();
+              }}
+            >
+              {withNote ? <MessageSquareQuote size={16} /> : <Highlighter size={16} />}
+              {withNote ? '批注' : '高亮'}
+            </button>
+          ))}
       </div>
       {status && (
         <p className="selection-status" role="status">

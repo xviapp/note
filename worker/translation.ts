@@ -36,7 +36,7 @@ async function translationNode(env: Env, id: string) {
   return node;
 }
 
-async function sourceLocation(
+export async function sourceLocation(
   env: Env,
   nodeId: string,
   input: unknown,

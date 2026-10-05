@@ -51,6 +51,7 @@ export const backupColumns = {
     'updated_at',
   ],
   paper_translations: ['node_id', 'target_language', 'body_blob_id', 'updated_at'],
+  annotations: ['node_id', 'body_blob_id', 'updated_at'],
   trash_batches: [
     'id',
     'root_id',
@@ -133,6 +134,9 @@ export function validateBackup(input: unknown): LibraryBackup {
     // Older v1 archives predate whole-paper translations.
     if (table === 'paper_translations' && data.tables.paper_translations === undefined)
       data.tables.paper_translations = [];
+    // Or highlights and notes.
+    if (table === 'annotations' && data.tables.annotations === undefined)
+      data.tables.annotations = [];
     const rows = data.tables[table as BackupTable];
     if (!Array.isArray(rows)) invalid(`缺少 ${table}。`);
     for (const row of rows) {
@@ -219,6 +223,7 @@ export function validateBackup(input: unknown): LibraryBackup {
     'assistant_messages',
     'translations',
     'paper_translations',
+    'annotations',
   ] as const)
     for (const row of data.tables[table]) {
       const global =
@@ -255,6 +260,7 @@ export function validateBackup(input: unknown): LibraryBackup {
   }
   for (const row of data.tables.translations) hasFile(row.body_blob_id, true);
   for (const row of data.tables.paper_translations) hasFile(row.body_blob_id);
+  for (const row of data.tables.annotations) hasFile(row.body_blob_id);
   for (const row of data.tables.reading_states) {
     try {
       if (

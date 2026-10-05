@@ -359,7 +359,10 @@ export async function cachedNote(id: string): Promise<NoteDetail | undefined> {
   }).catch(() => undefined);
 }
 export const cacheablePath = (path: string) =>
-  path === '/api/auth/status' || path === '/api/storage' || /^\/api\/nodes(?:\?.*)?$/.test(path);
+  path === '/api/auth/status' ||
+  path === '/api/storage' ||
+  /^\/api\/nodes(?:\?.*)?$/.test(path) ||
+  /^\/api\/nodes\/[\w-]+\/annotations$/.test(path);
 
 export async function cachedResponse<T>(path: string): Promise<T | undefined> {
   const id = path.match(/^\/api\/nodes\/([\w-]+)$/)?.[1];

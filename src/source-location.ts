@@ -127,22 +127,25 @@ export function clearSourceHighlight() {
   CSS.highlights?.delete('translation-source');
 }
 
-/** Returns an error instead of silently moving to an ambiguous or missing occurrence. */
-export function locateTextSource(
+/**
+ * The range a saved quote covers now, or an error instead of silently moving
+ * to an ambiguous or missing occurrence. Pass `text` when locating many.
+ */
+export function textSourceRange(
   root: HTMLElement,
   location: TextSourceLocation,
-): string | undefined {
+  text = root.textContent || '',
+): Range | string {
   const offset = matchedOffset(
-    root.textContent || '',
+    text,
     location,
     !!location.versionId && root.dataset.versionId === location.versionId,
   );
-  if (offset === null) return '原文已修改或删除，无法准确定位。仍可在翻译记录中查看保存的原文。';
+  if (offset === null) return '原文已修改或删除，无法准确定位。';
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const range = document.createRange();
   let position = 0,
-    started = false,
-    completed = false;
+    started = false;
   for (let node = walker.nextNode(); node; node = walker.nextNode()) {
     const length = node.textContent?.length || 0;
     if (!started && position + length > offset) {
@@ -151,12 +154,31 @@ export function locateTextSource(
     }
     if (started && position + length >= offset + location.exact.length) {
       range.setEnd(node, offset + location.exact.length - position);
-      completed = true;
-      break;
+      return range;
     }
     position += length;
   }
-  if (!completed) return '原文暂时无法定位，请等待正文加载完成后重试。';
+  return '原文暂时无法定位，请等待正文加载完成后重试。';
+}
+
+/** Scrolls a range into the reading area, a little below its top edge. */
+export function revealRange(root: HTMLElement, range: Range) {
+  const rect = Array.from(range.getClientRects()).find((r) => r.width > 0 && r.height > 0);
+  const area = root.closest<HTMLElement>('.note-scroll');
+  if (rect && area) {
+    area.scrollTop += rect.top - area.getBoundingClientRect().top - 48;
+    area.focus({ preventScroll: true });
+  }
+}
+
+/** Returns an error instead of silently moving to an ambiguous or missing occurrence. */
+export function locateTextSource(
+  root: HTMLElement,
+  location: TextSourceLocation,
+): string | undefined {
+  const range = textSourceRange(root, location);
+  if (typeof range === 'string')
+    return range.startsWith('原文已修改') ? `${range}仍可在翻译记录中查看保存的原文。` : range;
   clearSourceHighlight();
   if (typeof Highlight !== 'undefined' && CSS.highlights)
     CSS.highlights.set('translation-source', new Highlight(range));
@@ -165,10 +187,5 @@ export function locateTextSource(
     selection?.removeAllRanges();
     selection?.addRange(range);
   }
-  const rect = Array.from(range.getClientRects()).find((r) => r.width > 0 && r.height > 0);
-  const area = root.closest<HTMLElement>('.note-scroll');
-  if (rect && area) {
-    area.scrollTop += rect.top - area.getBoundingClientRect().top - 48;
-    area.focus({ preventScroll: true });
-  }
+  revealRange(root, range);
 }

@@ -1,4 +1,14 @@
-import { lazy, Suspense, useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import {
+  lazy,
+  Suspense,
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type MouseEvent as ReactMouseEvent,
+} from 'react';
 import { FileText, X } from 'lucide-react';
 import { api, ApiError, fileUrl, lockNote, unlockNote } from '../api';
 import {
@@ -32,6 +42,16 @@ import { TranslationPanel } from './TranslationPanel';
 import type { TranslationLaunch } from '../translation';
 import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
 import { clearSourceHighlight, locateTextSource } from '../source-location';
+import {
+  annotationAt,
+  clearAnnotationHighlights,
+  exportAnnotations,
+  paintAnnotations,
+  sameText,
+  useAnnotations,
+} from '../annotations';
+import { ANNOTATION_QUOTE_CHARS } from '../../shared/annotations';
+import { AnnotationEditor, AnnotationList, type AnnotationDraft } from './AnnotationDialogs';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
 
@@ -351,6 +371,85 @@ export default function NotePane(props: Props) {
     },
   });
   const markdownReady = useMarkdownReady(note?.kind === 'markdown');
+
+  // Highlights and notes on the rendered text (Markdown, plain text, papers).
+  const annotatable = !!note && (TEXT_KINDS.includes(note.kind) || !!note.arxiv_id);
+  const annotations = useAnnotations(id, annotatable);
+  const [annotationDraft, setAnnotationDraft] = useState<AnnotationDraft | null>(null),
+    [annotationsOpen, setAnnotationsOpen] = useState(false);
+  const annotationRanges = useRef(new Map<string, Range>());
+  const [missingKey, setMissingKey] = useState('');
+  const missingAnnotations = useMemo(
+    () => new Set(missingKey.split(',').filter(Boolean)),
+    [missingKey],
+  );
+  const annotationList = annotations.list;
+  useEffect(() => {
+    const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
+    annotationRanges.current = new Map();
+    if (!root || editing || !annotationList.length) {
+      clearAnnotationHighlights();
+      setMissingKey('');
+      return;
+    }
+    let timer = 0;
+    const paint = () => {
+      const ranges = paintAnnotations(root, annotationList);
+      annotationRanges.current = ranges;
+      setMissingKey(
+        annotationList
+          .filter((item) => item.location.kind === 'text' && !ranges.has(item.id))
+          .map((item) => item.id)
+          .join(','),
+      );
+    };
+    paint();
+    // Formulas, paper figures and lazy Markdown render after the first paint.
+    const observer = new MutationObserver(() => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(paint, 150);
+    });
+    observer.observe(root, { childList: true, subtree: true, characterData: true });
+    return () => {
+      observer.disconnect();
+      window.clearTimeout(timer);
+      clearAnnotationHighlights();
+    };
+  }, [annotationList, editing, note?.id, note?.content, markdownReady]);
+  const annotate = async (
+    { quote, location }: { quote: string; location: SourceLocation | null },
+    withNote: boolean,
+  ) => {
+    if (offline) return '离线时不能添加批注。';
+    if (location?.kind === 'pdf') return 'PDF 暂不支持批注，后续版本加入。';
+    if (!location) return '这里的文字不能批注，请选择正文内容。';
+    if (quote.length > ANNOTATION_QUOTE_CHARS)
+      return `每条批注最多选择 ${ANNOTATION_QUOTE_CHARS.toLocaleString()} 个字符，请缩小范围。`;
+    const existing = annotationList.find(
+      (item) => item.location.kind === 'text' && sameText(item.location, location),
+    );
+    if (existing) {
+      setAnnotationDraft({ ...existing, saved: true });
+      return;
+    }
+    const draft = { id: crypto.randomUUID(), quote, note: '', location, saved: false };
+    if (withNote) {
+      setAnnotationDraft(draft);
+      return;
+    }
+    try {
+      await annotations.save(draft);
+    } catch (e) {
+      return `未能高亮：${(e as Error).message}`;
+    }
+  };
+  const openAnnotationAt = (event: ReactMouseEvent) => {
+    if (editing || !annotationRanges.current.size || !window.getSelection()?.isCollapsed) return;
+    if ((event.target as Element).closest('a, button, input, textarea, img, summary')) return;
+    const hit = annotationAt(annotationRanges.current, event.clientX, event.clientY);
+    const item = hit && annotationList.find((annotation) => annotation.id === hit);
+    if (item) setAnnotationDraft({ ...item, saved: true });
+  };
   if (loadError || !note || !markdownReady)
     return (
       <div className="note-pane">
@@ -416,6 +515,8 @@ export default function NotePane(props: Props) {
               : undefined
           }
           onSplit={() => setSplitOpen(true)}
+          annotationCount={annotatable ? annotationList.length : 0}
+          onAnnotations={() => setAnnotationsOpen(true)}
           onEdit={() => void startEdit()}
           onAction={props.onAction}
         />
@@ -515,6 +616,7 @@ export default function NotePane(props: Props) {
                 onLoadCapture={() => {
                   if (!touched.current) restorePosition();
                 }}
+                onClick={openAnnotationAt}
               >
                 <article className="note-article">
                   <NoteHeading
@@ -612,6 +714,54 @@ export default function NotePane(props: Props) {
           onSelection={setSelection}
           onQuote={addQuote}
           onTranslate={setTranslation}
+          onAnnotate={annotatable ? annotate : undefined}
+        />
+      )}
+      {annotationDraft && !editing && (
+        <AnnotationEditor
+          key={annotationDraft.id}
+          draft={annotationDraft}
+          offline={offline}
+          onSave={(text) => annotations.save({ ...annotationDraft, note: text })}
+          onDelete={() => annotations.remove(annotationDraft.id)}
+          onAsk={(text) =>
+            addQuote(
+              text.trim()
+                ? `${annotationDraft.quote}\n\n（我的批注：${text.trim()}）`
+                : annotationDraft.quote,
+            )
+          }
+          onClose={() => setAnnotationDraft(null)}
+        />
+      )}
+      {annotationsOpen && !editing && (
+        <AnnotationList
+          list={annotationList}
+          missing={missingAnnotations}
+          offline={offline}
+          onLocate={(item) => {
+            setAnnotationsOpen(false);
+            if (item.location.kind !== 'text') return;
+            const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
+            if (!root) return;
+            touched.current = restored.current = true;
+            // Wait for the dialog to close so focus and scrolling land in the text.
+            requestAnimationFrame(() => {
+              const location = item.location;
+              if (location.kind === 'text') locateTextSource(root, location);
+            });
+          }}
+          onEdit={(item) => {
+            setAnnotationsOpen(false);
+            setAnnotationDraft({ ...item, saved: true });
+          }}
+          onExport={async () => {
+            const result = await exportAnnotations(id, note.title, annotationList);
+            props.onChanged();
+            setRetry((count) => count + 1);
+            return `${result.updated ? '已更新' : '已保存为'}子笔记「${result.title}」（${result.count} 条）`;
+          }}
+          onClose={() => setAnnotationsOpen(false)}
         />
       )}
       {!editing && translation && (

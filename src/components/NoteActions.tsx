@@ -1,5 +1,14 @@
 import type { RefObject } from 'react';
-import { Columns2, FolderTree, History, Languages, List, Pencil, Star } from 'lucide-react';
+import {
+  Columns2,
+  FolderTree,
+  History,
+  Languages,
+  List,
+  MessageSquareQuote,
+  Pencil,
+  Star,
+} from 'lucide-react';
 import { TEXT_KINDS, type NoteDetail, type NoteNode } from '../../shared/types';
 import { ReadingSettingsButton } from './ReadingSettings';
 import { NodeMenu, type NodeAction } from './Tree';
@@ -26,6 +35,8 @@ export function NoteActions({
   onCompare,
   compareProgress,
   onSplit,
+  annotationCount,
+  onAnnotations,
   onEdit,
   onAction,
 }: {
@@ -53,6 +64,9 @@ export function NoteActions({
   compareProgress?: string;
   // Two notes side by side, full screen.
   onSplit: () => void;
+  // Highlights and notes on this file; the button shows once there is one.
+  annotationCount: number;
+  onAnnotations: () => void;
   onEdit: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
@@ -113,6 +127,20 @@ export function NoteActions({
           <FolderTree size={18} />
           <span className="toolbar-badge" aria-hidden="true">
             {note.child_count}
+          </span>
+        </button>
+      )}
+      {!editing && annotationCount > 0 && (
+        <button
+          className="icon-button has-badge toolbar-secondary"
+          aria-label={`批注（${annotationCount}）`}
+          title="高亮与批注"
+          aria-haspopup="dialog"
+          onClick={onAnnotations}
+        >
+          <MessageSquareQuote size={18} />
+          <span className="toolbar-badge" aria-hidden="true">
+            {annotationCount}
           </span>
         </button>
       )}
@@ -183,6 +211,17 @@ export function NoteActions({
               }}
             >
               版本历史
+            </button>
+          )}
+          {annotationCount > 0 && (
+            <button
+              className="menu-compact-only"
+              onClick={(event) => {
+                closeMenu(event.currentTarget);
+                onAnnotations();
+              }}
+            >
+              批注（{annotationCount}）
             </button>
           )}
           {/* Attachments also list under the body; this opens them without scrolling there. */}

@@ -40,6 +40,7 @@ import {
   saveGlossary,
   translatePaperBlocks,
 } from './paper-translation';
+import { deleteAnnotation, listAnnotations, putAnnotation } from './annotations';
 
 export default {
   async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
@@ -165,6 +166,13 @@ export default {
           return json(await extractGlossary(env, request, id, await body(request)));
         if (action === 'paper-translation/glossary' && method === 'PUT')
           return json(await saveGlossary(env, id, await body(request)));
+        if (action === 'annotations' && method === 'GET')
+          return json(await listAnnotations(env, id));
+        const annotation = action.match(/^annotations\/([a-zA-Z0-9_-]+)$/);
+        if (annotation && method === 'PUT')
+          return json(await putAnnotation(env, id, annotation[1], await body(request)));
+        if (annotation && method === 'DELETE')
+          return json(await deleteAnnotation(env, id, annotation[1]));
         if (action === 'translations' && method === 'GET')
           return json(
             await translationHistory(

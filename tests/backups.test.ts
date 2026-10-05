@@ -4,6 +4,7 @@ import { env, SELF, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, beforeEach, expect, it } from 'vitest';
 import type { Env } from '../worker/types';
 import type { NoteDetail, NoteNode } from '../shared/types';
+import type { AnnotationList } from '../shared/annotations';
 import type { LibraryBackup } from '../shared/backup';
 import { createNode } from '../worker/library';
 import { readText, storeChatBody, storeText, uploadFile } from '../worker/storage';
@@ -162,8 +163,15 @@ it('round-trips the whole library, versions, paper assets, chats and translation
       },
     }),
   );
+  const notes = await storeText(
+    bindings,
+    JSON.stringify({ annotations: [{ id: 'a1', quote: '新版', note: '记得复习' }] }),
+  );
   const messageId = crypto.randomUUID();
   await bindings.DB.batch([
+    bindings.DB.prepare(
+      'INSERT INTO annotations(node_id,body_blob_id,updated_at) VALUES(?,?,1)',
+    ).bind(note.id, notes.id),
     bindings.DB.prepare('INSERT INTO assistant_threads(node_id) VALUES(?)').bind(pdfNode.id),
     bindings.DB.prepare(
       "INSERT INTO assistant_messages(id,node_id,request_id,role,status,body_blob_id,created_at) VALUES(?,?,?,'user','completed',?,1)",
@@ -219,6 +227,9 @@ it('round-trips the whole library, versions, paper assets, chats and translation
   const detail = await ok<NoteDetail>(`/api/nodes/${restoredNote.id}`);
   expect(detail.content).toBe(`新版 [PDF](/api/files/${restoredPdf.file_blob_id})`);
   expect(detail.favorite).toBe(1);
+  expect(
+    (await ok<AnnotationList>(`/api/nodes/${detail.id}/annotations`)).annotations[0].note,
+  ).toBe('记得复习');
   expect(
     (await ok<{ versions: unknown[] }>(`/api/nodes/${detail.id}/versions`)).versions,
   ).toHaveLength(2);
