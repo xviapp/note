@@ -615,7 +615,14 @@ export default function NotePane(props: Props) {
       )}
       {compareOpen && note.arxiv_id && (
         <Suspense fallback={null}>
-          <CompareView note={note} onClose={() => setCompareOpen(false)} />
+          <CompareView
+            note={note}
+            onClose={() => setCompareOpen(false)}
+            onExported={() => {
+              props.onChanged();
+              setRetry((count) => count + 1);
+            }}
+          />
         </Suspense>
       )}
       {attachmentsOpen && !editing && (

@@ -3181,6 +3181,7 @@ button.node-list-toggle:focus-visible {
   /* Phones: side switch, glossary and close on top; language and translate
      buttons below; progress on a line of its own. */
   .compare-outline,
+  .compare-export,
   .compare-glossary,
   .compare-close {
     order: 1;

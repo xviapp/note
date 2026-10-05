@@ -101,10 +101,25 @@ test('a paper translates paragraph by paragraph and both sides scroll together',
     .click();
   const view = page.getByRole('dialog', { name: `对照阅读：${paper.title}` });
   await expect(view).toBeVisible();
-  const progress = view.getByRole('status');
+  const progress = view.locator('.compare-progress');
   await expect(progress).toContainText('已翻译 0/');
   await view.getByRole('button', { name: '翻译全文' }).click();
   await expect(progress).toContainText('已全部翻译');
+  // A full run saves the translation as a Markdown child note of the paper.
+  await expect(view.getByText(/已保存为子笔记/)).toBeVisible();
+  const children = (await (await page.request.get(`/api/nodes?parent=${paper.id}`)).json()).nodes;
+  expect(children.map((child: { title: string }) => child.title)).toEqual([
+    `${paper.title}（简体中文译文）`,
+  ]);
+  const child = await (await page.request.get(`/api/nodes/${children[0].id}`)).json();
+  expect(child.content).toContain('译文：Paragraph 3 explains');
+  expect(child.content).toMatch(/with \$x_2\$\./);
+  // Saving again updates that note as a new version instead of adding another.
+  await view.getByRole('button', { name: '保存为子笔记' }).click();
+  await expect(view.getByText(/已更新子笔记/)).toBeVisible();
+  expect(
+    (await (await page.request.get(`/api/nodes?parent=${paper.id}`)).json()).nodes,
+  ).toHaveLength(1);
   // Paragraphs were sent in several batches, with formulas held back as ⟦n⟧.
   expect(batches.length).toBeGreaterThan(1);
   const sent = batches.flat().find((block) => block.text.startsWith('Paragraph 3 '))!;
@@ -169,7 +184,7 @@ test('only the current section can be translated, and glossary edits redo only a
     .click();
   const view = page.getByRole('dialog', { name: `对照阅读：${paper.title}` });
   const target = view.getByRole('region', { name: '译文' });
-  await expect(view.getByRole('status')).toContainText('已翻译 0/20');
+  await expect(view.locator('.compare-progress')).toContainText('已翻译 0/20');
   await target.evaluate((pane) => {
     const heading = Array.from(pane.querySelectorAll('h2')).find((h) =>
       h.textContent?.includes('Part 3'),
@@ -177,7 +192,7 @@ test('only the current section can be translated, and glossary edits redo only a
     pane.scrollTop += heading.getBoundingClientRect().top - pane.getBoundingClientRect().top;
   });
   await view.getByRole('button', { name: '只翻译本节（5 段）' }).click();
-  await expect(view.getByRole('status')).toContainText('已翻译 5/20');
+  await expect(view.locator('.compare-progress')).toContainText('已翻译 5/20');
   expect(batches.flat().every((block) => /^(Part 3 heading|Section 3 )/.test(block.text))).toBe(
     true,
   );

@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { BookOpenText, Languages, List, RotateCcw, X } from 'lucide-react';
-import type { NoteDetail } from '../../shared/types';
+import { BookOpenText, FilePlus2, Languages, List, RotateCcw, X } from 'lucide-react';
+import type { NoteDetail, NoteNode } from '../../shared/types';
 import {
   isTranslationLanguage,
   TRANSLATION_LANGUAGES,
@@ -9,6 +9,8 @@ import {
 import { GLOSSARY_SOURCE_CHARS, type PaperBlockSource } from '../../shared/paper-translation';
 import { applyTranslation, blockHash, paperBlocks, type PaperBlock } from '../paper-blocks';
 import { usePaperTranslation } from '../use-paper-translation';
+import { paperMarkdown } from '../paper-markdown';
+import { api, lockNote, unlockNote } from '../api';
 import { hydratePaperImages, preparePaper } from './PaperView';
 import '../paper.css';
 import { GlossaryDialog } from './GlossaryDialog';
@@ -48,7 +50,16 @@ function align(pane: HTMLElement, anchor: Anchor) {
 // Full-screen comparison of a paper and its saved translation: source on the
 // left, translation on the right, scrolled together paragraph by paragraph.
 // Phones show one side at a time and keep the place when switching.
-export default function CompareView({ note, onClose }: { note: NoteDetail; onClose: () => void }) {
+export default function CompareView({
+  note,
+  onClose,
+  onExported,
+}: {
+  note: NoteDetail;
+  onClose: () => void;
+  // A child note was created or updated with the translation.
+  onExported?: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const panes = { source: useRef<HTMLDivElement>(null), translation: useRef<HTMLDivElement>(null) };
   const [language, setLanguage] = useState<TranslationLanguage>(() => {
@@ -83,6 +94,48 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
     [note.id, note.content, note.url, note.attachments],
   );
   const translation = usePaperTranslation(note.id, language, sources);
+  const [exported, setExported] = useState<{
+    state: 'saving' | 'done' | 'error';
+    text: string;
+  } | null>(null);
+  // Saves the translated article as a Markdown child note of the paper, one
+  // per language: a later save updates it as a new version.
+  const exportNote = async () => {
+    const body = panes.translation.current?.querySelector('.paper-body');
+    if (!body) return;
+    const title = `${note.title}（${TRANSLATION_LANGUAGES[language]}译文）`;
+    const content = `> 译自《${note.title}》：${note.url ?? ''}\n\n${paperMarkdown(body)}`;
+    setExported({ state: 'saving', text: '正在保存为子笔记…' });
+    try {
+      const { nodes } = await api<{ nodes: NoteNode[] }>(`/api/nodes?parent=${note.id}`);
+      const existing = nodes.find((child) => child.kind === 'markdown' && child.title === title);
+      if (existing) {
+        await unlockNote(existing.id);
+        const detail = await api<NoteDetail>(`/api/nodes/${existing.id}`);
+        await api(`/api/nodes/${existing.id}/content`, 'PUT', {
+          revision: detail.revision,
+          content,
+          attachments: [],
+        });
+        lockNote(existing.id);
+      } else
+        await api('/api/nodes', 'POST', {
+          kind: 'markdown',
+          title,
+          parentId: note.id,
+          content,
+        });
+      setExported({
+        state: 'done',
+        text: `${existing ? '已更新' : '已保存为'}子笔记「${title}」，旧内容可在版本历史中找回。`,
+      });
+      onExported?.();
+    } catch (e) {
+      setExported({ state: 'error', text: `未保存为子笔记：${(e as Error).message}` });
+    }
+  };
+  // A full translation run saves the child note once it has translated everything.
+  const autoExport = useRef(false);
 
   useEffect(() => {
     const element = dialog.current;
@@ -236,6 +289,16 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
     : 0;
   const characters = sources?.reduce((sum, block) => sum + block.text.length, 0) ?? 0;
   const running = translation.state === 'running';
+  useEffect(() => {
+    if (!autoExport.current || running) return;
+    if (translation.state === 'error') autoExport.current = false;
+    else if (translation.state === 'idle' && total > 0 && done === total) {
+      autoExport.current = false;
+      void exportNote();
+    }
+    // exportNote reads the current pane; this reacts to a run finishing.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [running, translation.state, done, total]);
   const activeBlock = active ? blocks.current[active.index] : null;
   // The glossary is drawn from the title, abstract and headings.
   const glossaryText = () =>
@@ -352,7 +415,10 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
                 )}
                 <button
                   className="button compact primary"
-                  onClick={() => void translation.run(sources, { glossaryText: glossaryText() })}
+                  onClick={() => {
+                    autoExport.current = true;
+                    void translation.run(sources, { glossaryText: glossaryText() });
+                  }}
                 >
                   <Languages size={15} />
                   {done ? '继续翻译' : '翻译全文'}
@@ -373,6 +439,15 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
           <List size={18} />
         </button>
         <button
+          className="icon-button compare-export"
+          aria-label="保存为子笔记"
+          title="把译文保存为这篇论文的子笔记"
+          disabled={!done || running || exported?.state === 'saving'}
+          onClick={() => void exportNote()}
+        >
+          <FilePlus2 size={18} />
+        </button>
+        <button
           className="icon-button compare-glossary"
           aria-label="术语表"
           title="术语表"
@@ -391,6 +466,14 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
         </p>
       )}
       {translation.notice && <p className="compare-notice">{translation.notice}</p>}
+      {exported && (
+        <p
+          className={exported.state === 'error' ? 'compare-error' : 'compare-notice'}
+          role={exported.state === 'error' ? 'alert' : 'status'}
+        >
+          {exported.text}
+        </p>
+      )}
       {glossaryOpen && (
         <GlossaryDialog
           glossary={translation.glossary}
