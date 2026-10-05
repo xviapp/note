@@ -1,35 +1,24 @@
 # Repository Guidelines
 
-## Project Structure & Module Organization
-
-- `src/`: React/TypeScript UI shared by Web and Capacitor Android; components in `src/components/`.
-- `worker/`: Cloudflare API; `shared/`: common types and helpers.
-- `migrations/`: numbered D1 SQL migrations. D1 stores metadata; private R2 stores bodies and files.
-- `android/`: native shell; `scripts/`: development, packaging, and release tooling.
-- `tests/`: Worker tests and fixtures; `e2e/`: browser tests.
-- `assets/`: artwork sources; `public/`: served assets. For icon changes, follow [docs/branding.md](docs/branding.md).
+For icon or artwork changes, follow [docs/branding.md](docs/branding.md).
 
 ## Build, Test, and Development Commands
 
 Use Node.js 22.12+ and install dependencies with `npm ci`. Package scripts also support pnpm.
 
 - `npm run dev`: initialize local secrets and migrations, then start Vite and Wrangler.
-- `npm run check`: type-check frontend, backend, shared code, and tests.
-- `npm run lint`: lint with oxlint; warnings fail. Explain any `oxlint-disable` comment.
-- `npm run build`: generate resources and build the website into `dist/`.
-- `npm test`: run Vitest Worker integration tests.
-- `npm run test:e2e`: run desktop/mobile Playwright tests; build first.
-- `npm run test:build` / `npm run test:android-cli`: check offline packaging / Android CLI behavior.
-- `npm run android:apk`: build an APK; requires JDK 21 and Android SDK 36.
+- `npm run lint` fails on warnings. Explain any `oxlint-disable` comment.
+- `npm run test:e2e` serves the built site; build first.
+- `npm run android:apk` requires JDK 21 and Android SDK 36.
 - `pnpm run deploy`: build, migrate production D1, and deploy. Keep `run`; bare `pnpm deploy` invokes a different command.
 
 ## Coding Style & Naming Conventions
 
-Use strict TypeScript, two-space indentation, semicolons, and single-quoted strings. Follow `.prettierrc.json`: trailing commas and 100-column wrapping. Components use PascalCase filenames; utilities generally use kebab-case. Match existing hook naming. Put shared API contracts in `shared/`. Run `npm run lint` (oxlint, including React hook rules); TypeScript 7 has no JS API, so typescript-eslint cannot be used.
+Match existing hook naming. TypeScript 7 has no JS API, so typescript-eslint cannot be used; lint is oxlint (including React hook rules).
 
 ## Testing Guidelines
 
-Name Worker tests `tests/*.test.ts`, client logic tests `src/**/*.test.ts(x)`, and browser scenarios `e2e/*.spec.ts`. Vitest runs two projects: `worker` (workerd with local D1/R2) and `client` (happy-dom with fake-indexeddb); mock DeepSeek responses. Playwright runs desktop and mobile projects, resetting only `.wrangler/e2e/state`; specs import `test` from `e2e/fixtures.ts`, which empties the library before each test. Preserve `.wrangler/state` development data. No coverage threshold is configured; cover changed behavior and relevant failure paths. Verify visual changes across light, dark, and starry themes.
+Mock DeepSeek responses. Preserve `.wrangler/state` development data (Playwright resets only `.wrangler/e2e/state`). No coverage threshold is configured; cover changed behavior and relevant failure paths. Verify visual changes across light, dark, and starry themes.
 
 ## Commit & Pull Request Guidelines
 
