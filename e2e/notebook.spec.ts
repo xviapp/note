@@ -560,7 +560,15 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   await page.screenshot({ path: `test-results/pdf-continuous-${info.project.name}.png` });
   await page.mouse.wheel(0, areaHeight / 2 + 70);
   await expect(pageNumber).toHaveValue('2');
-  expect((await viewer.locator('.pdf-toolbar').boundingBox())!.y).toBe(toolbarTop);
+  const pdfToolbar = viewer.locator('.pdf-toolbar');
+  if (info.project.name === 'mobile') {
+    // On phones scrolling down slides both toolbars away; a little scroll up returns them.
+    await expect(pdfToolbar).not.toBeInViewport();
+    await expect(page.locator('.note-toolbar')).not.toBeInViewport();
+    await page.mouse.wheel(0, -40);
+    await expect.poll(async () => (await pdfToolbar.boundingBox())!.y).toBe(toolbarTop);
+    await expect(pageNumber).toHaveValue('2');
+  } else expect((await pdfToolbar.boundingBox())!.y).toBe(toolbarTop);
   expect(await viewer.locator('canvas').count()).toBeLessThan(12);
 
   // Jump beyond the rendered pages, including a landscape sheet, then record
@@ -578,6 +586,14 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
   const stored = () =>
     page.evaluate((key) => JSON.parse(localStorage.getItem(key) || '{}').position, `reading:${id}`);
   await expect.poll(async () => (await stored())?.pageRatio || 0).toBeGreaterThan(0.3);
+  if (info.project.name === 'mobile') {
+    // Bring the toolbars back without moving the page: down, then up as far.
+    const top = await area.evaluate((element) => element.scrollTop);
+    await page.mouse.wheel(0, 30);
+    await expect.poll(() => area.evaluate((element) => element.scrollTop)).toBe(top + 30);
+    await page.mouse.wheel(0, -30);
+    await expect(pdfToolbar).toBeInViewport();
+  }
   const offset = async (target: Page) =>
     target.locator('.pdf-scroll').evaluate((element) => {
       const sheet = element.querySelector('.pdf-page[data-page="31"]')!;

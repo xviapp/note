@@ -85,6 +85,11 @@ export default function PdfView({
   });
   const initial = useRef(initialPosition);
   const programmedScroll = useRef<number | null>(null);
+  // Also tells the phone toolbars (useAutoHideChrome) that this scroll was no swipe.
+  const markProgrammed = (area: HTMLDivElement) => {
+    programmedScroll.current = area.scrollTop;
+    area.dataset.programmedTop = String(area.scrollTop);
+  };
   const onPositionRef = useRef(onPosition);
   const located = useRef<PdfSourceLocation | null>(null);
   const [locationError, setLocationError] = useState('');
@@ -208,8 +213,22 @@ export default function PdfView({
 
   // Preserve the page and the point within it when zoom, screen size, or a
   // newly measured mixed-size page changes the offsets above the viewport.
+  const anchoredBoxes = useRef<{ top: number; height: number }[] | null>(null);
   useLayoutEffect(() => {
     if (!layout || !scroll.current) return;
+    // A taller or shorter viewport alone (the phone toolbars sliding away) leaves
+    // every page in place; re-anchoring would stop a fling mid-scroll.
+    const previous = anchoredBoxes.current;
+    anchoredBoxes.current = layout.boxes;
+    if (
+      !zoomAnchor.current &&
+      previous?.length === layout.boxes.length &&
+      previous.every(
+        (box, index) =>
+          box.top === layout.boxes[index].top && box.height === layout.boxes[index].height,
+      )
+    )
+      return;
     const zoomPoint = zoomAnchor.current;
     if (zoomPoint) {
       zoomAnchor.current = null;
@@ -233,7 +252,7 @@ export default function PdfView({
     const anchor = position.current;
     const box = layout.boxes[anchor.page - 1];
     scroll.current.scrollTop = box.top - gap + anchor.pageRatio * box.height;
-    programmedScroll.current = scroll.current.scrollTop;
+    markProgrammed(scroll.current);
     setScrollTop(scroll.current.scrollTop);
     syncPage(anchor.page);
     // Re-anchor only when the layout is recomputed; width and viewport feed into it.
@@ -269,7 +288,7 @@ export default function PdfView({
     position.current = { page: sourceLocation.page, pageRatio: Math.max(0, y - 48 / box.height) };
     scroll.current.scrollTop = box.top - gap + position.current.pageRatio * box.height;
     scroll.current.scrollLeft = Math.max(0, x * width - 24);
-    programmedScroll.current = scroll.current.scrollTop;
+    markProgrammed(scroll.current);
     setScrollTop(scroll.current.scrollTop);
     syncPage(sourceLocation.page);
     onPositionRef.current?.(position.current);
@@ -308,7 +327,7 @@ export default function PdfView({
     position.current = { page: next, pageRatio };
     scroll.current.scrollTop =
       layout.boxes[next - 1].top - gap + pageRatio * layout.boxes[next - 1].height;
-    programmedScroll.current = scroll.current.scrollTop;
+    markProgrammed(scroll.current);
     setScrollTop(scroll.current.scrollTop);
     syncPage(next);
     onPositionRef.current?.(position.current);
