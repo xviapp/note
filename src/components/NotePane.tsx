@@ -590,8 +590,10 @@ export default function NotePane(props: Props) {
             visible={assistantOpen && !editing}
             enabled={!editing && !props.globalAssistantOpen}
             onGlobal={() => props.onGlobalAssistant(selection)}
-            // Docked beside the article has no place in the comparison view.
-            mode={compareOpen && assistantMode === 'docked' ? 'floating' : assistantMode}
+            // Docked beside the article has no place in a full-screen view.
+            mode={
+              (compareOpen || splitOpen) && assistantMode === 'docked' ? 'floating' : assistantMode
+            }
             onModeChange={setAssistantMode}
             selection={selection}
             readingRoot={readingRoot}
@@ -626,7 +628,12 @@ export default function NotePane(props: Props) {
       )}
       {splitOpen && !editing && (
         <Suspense fallback={null}>
-          <SplitView first={note} onClose={() => setSplitOpen(false)} />
+          <SplitView
+            first={note}
+            onClose={() => setSplitOpen(false)}
+            onQuote={addQuote}
+            onChanged={props.onChanged}
+          />
         </Suspense>
       )}
       {compareOpen && note.arxiv_id && (

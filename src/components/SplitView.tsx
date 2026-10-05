@@ -9,6 +9,10 @@ import { NodeList } from './NodeList';
 import { CachedImage } from './CachedImage';
 import { NodeIcon, Spinner } from './Primitives';
 import { useReading } from '../useReading';
+import { useAssistantHost } from '../assistant-host';
+import type { TranslationLaunch } from '../translation';
+import { SelectionToolbar } from './SelectionToolbar';
+import { TranslationPanel } from './TranslationPanel';
 
 const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
@@ -179,7 +183,11 @@ function SplitPane({
   };
   const pdf = note?.kind === 'pdf' && note.file;
   return (
-    <section className="split-pane" aria-label={note ? note.title : '未选择文件'}>
+    <section
+      className="split-pane"
+      aria-label={note ? note.title : '未选择文件'}
+      data-note-id={!picking ? note?.id : undefined}
+    >
       <header className="split-pane-header">
         <strong title={note?.title}>
           {picking ? '选择一份文件' : (note?.title ?? '选择一份文件')}
@@ -268,7 +276,19 @@ const remember = (id: string, other: string) => {
 // Two notes side by side, full screen. Each side scrolls on its own and has its
 // own outline; either can be swapped for another file. Phones show one side
 // at a time.
-export default function SplitView({ first, onClose }: { first: NoteDetail; onClose: () => void }) {
+export default function SplitView({
+  first,
+  onClose,
+  onQuote,
+  onChanged,
+}: {
+  first: NoteDetail;
+  onClose: () => void;
+  // Selected text for Qingli (of the note the view was opened from), which
+  // opens inside this view.
+  onQuote: (text: string) => string | undefined;
+  onChanged: () => void;
+}) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [notes, setNotes] = useState<[NoteDetail | null, NoteDetail | null]>([first, null]),
     // The empty right side lists files to choose from, unless a pairing is remembered.
@@ -289,6 +309,13 @@ export default function SplitView({ first, onClose }: { first: NoteDetail; onClo
     if (element && !element.open) element.showModal();
     return () => element?.close();
   }, []);
+  // Qingli shows inside this view while it is open.
+  useAssistantHost(dialog);
+  // A selection's translation is kept with the note it was selected in.
+  const [translation, setTranslation] = useState<(TranslationLaunch & { nodeId: string }) | null>(
+    null,
+  );
+  const owner = `split-${first.id}`;
   const choose = async (index: 0 | 1, id: string) => {
     setPicking(null);
     setError('');
@@ -399,7 +426,7 @@ export default function SplitView({ first, onClose }: { first: NoteDetail; onClo
           {error}
         </p>
       )}
-      <div className="split-body" ref={body}>
+      <div className="split-body" ref={body} data-selection-owner={owner}>
         {notes.map((note, index) => (
           <SplitPane
             // A new file starts a fresh pane: its own outline and scroll position.
@@ -414,6 +441,30 @@ export default function SplitView({ first, onClose }: { first: NoteDetail; onClo
           />
         ))}
       </div>
+      <SelectionToolbar
+        owner={owner}
+        onSelection={() => {}}
+        onQuote={onQuote}
+        onTranslate={(launch) => {
+          const anchor = window.getSelection()?.anchorNode;
+          const element = anchor instanceof Element ? anchor : anchor?.parentElement;
+          const nodeId = element?.closest<HTMLElement>('[data-note-id]')?.dataset.noteId;
+          if (nodeId) setTranslation({ ...launch, nodeId });
+        }}
+      />
+      {translation && (
+        <TranslationPanel
+          key={translation.nodeId}
+          nodeId={translation.nodeId}
+          launch={translation}
+          onClose={() => setTranslation(null)}
+          onChanged={onChanged}
+          onQuote={onQuote}
+          onLocate={() => '分屏查看中无法定位原文，请在笔记页面查看。'}
+          onNavigate={() => {}}
+          onImage={(src, alt) => setImage({ src, alt })}
+        />
+      )}
       {image && (
         <Suspense fallback={null}>
           <ImageViewer {...image} onClose={() => setImage(null)} />

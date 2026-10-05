@@ -172,3 +172,54 @@ test('split panes follow note links, enlarge images, remember the pairing and ca
     await expect(page.getByRole('dialog', { name: '快捷键' })).toContainText('Ctrl K 或 /');
   }
 });
+
+test('Qingli opens inside the split view, quoting text from either side', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers,
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
+  await page.route('**/api/nodes/*/assistant', (route) =>
+    route.fulfill({ json: { nextBefore: null, busy: false, messages: [] } }),
+  );
+  const name = info.project.name;
+  const left = await create(page, {
+    kind: 'markdown',
+    title: `问青藜左 ${name}`,
+    content: '左边正文。',
+  });
+  const right = await create(page, {
+    kind: 'markdown',
+    title: `问青藜右 ${name}`,
+    content: '右边这一段要拿去问青藜。',
+  });
+  await page.goto(`/n/${left.id}`);
+  const menu = page.locator('.note-actions .node-menu');
+  await menu.getByRole('button', { name: `管理 ${left.title}`, exact: true }).click();
+  await menu.getByRole('button', { name: '分屏查看', exact: true }).click();
+  const view = page.getByRole('dialog', { name: '分屏查看' });
+  await view.locator('.split-picker .node-list-main').filter({ hasText: right.title }).click();
+  const paragraph = view
+    .getByRole('region', { name: right.title })
+    .getByText('右边这一段要拿去问青藜。');
+  await paragraph.click();
+  await paragraph.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  await view
+    .getByRole('toolbar', { name: '选中文字操作' })
+    .getByRole('button', { name: '问青藜', exact: true })
+    .click();
+  await expect(view).toBeVisible();
+  const qingli = view.getByRole('complementary', { name: '青藜', exact: true });
+  await expect(qingli).toBeVisible();
+  await expect(qingli.locator('.context-quote')).toContainText('右边这一段要拿去问青藜');
+  await qingli.getByRole('button', { name: '关闭青藜', exact: true }).click();
+  await expect(view.getByRole('button', { name: '打开青藜', exact: true })).toBeVisible();
+});
