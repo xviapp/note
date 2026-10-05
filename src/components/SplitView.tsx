@@ -101,12 +101,15 @@ function SplitPane({ note, onReplace }: { note: NoteDetail | null; onReplace: ()
 export default function SplitView({ first, onClose }: { first: NoteDetail; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const [notes, setNotes] = useState<[NoteDetail | null, NoteDetail | null]>([first, null]),
-    [picking, setPicking] = useState<0 | 1 | null>(1),
+    [picking, setPicking] = useState<0 | 1 | null>(null),
     [side, setSide] = useState<0 | 1>(0),
     [error, setError] = useState('');
   useEffect(() => {
     const element = dialog.current;
     if (element && !element.open) element.showModal();
+    // The picker opens only now: a modal shown earlier would sit beneath this
+    // one, out of sight and out of reach.
+    setPicking(1);
     return () => element?.close();
   }, []);
   const choose = async (index: 0 | 1, node: NoteNode) => {

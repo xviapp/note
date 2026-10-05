@@ -50,7 +50,14 @@ test('two notes open side by side, each with its own scroll and outline', async 
   await picker.getByRole('combobox', { name: '搜索笔记标题' }).fill(`右边 ${name}`);
   await expect(picker.getByRole('option')).toHaveCount(1);
   await expect(picker.getByRole('option')).toContainText(right.title);
-  await picker.getByRole('combobox', { name: '搜索笔记标题' }).press('Enter');
+  // The picker sits above the split view, so the mouse reaches it.
+  await picker.getByRole('button', { name: '关闭' }).click();
+  await expect(picker).toHaveCount(0);
+  // Phones show one side at a time; the empty right side has its own button.
+  if (name === 'mobile') await view.getByRole('button', { name: '右', exact: true }).click();
+  await view.getByRole('button', { name: '选择文件', exact: true }).click();
+  await picker.getByRole('combobox', { name: '搜索笔记标题' }).fill(`右边 ${name}`);
+  await picker.getByRole('option').filter({ hasText: right.title }).click();
   await expect(picker).toHaveCount(0);
 
   const leftPane = view.getByRole('region', { name: left.title });
