@@ -402,18 +402,33 @@ button:active:not(:disabled) {
     width: 48px;
     padding: 0;
   }
+  /* One row under the title row: buttons narrow a little instead of wrapping. */
   .pdf-toolbar {
-    flex-wrap: wrap;
-    justify-content: center;
-    padding: 4px 8px;
-    gap: 4px;
+    padding: 2px 4px;
+    gap: 0;
   }
-  .pdf-toolbar .toolbar-spacer {
-    flex: 0 0 100%;
+  .pdf-toolbar .icon-button {
+    flex: 0 1 44px;
+    width: auto;
+    min-width: 34px;
+    height: 44px;
+    min-height: 44px;
+  }
+  .pdf-toolbar label {
+    width: 46px;
+  }
+  /* As specific as the 48px phone input rule above, so it wins by order. */
+  .pdf-toolbar input[type='number'][aria-label] {
+    height: 34px;
+    min-height: 34px;
+  }
+  .pdf-page-count {
+    margin-left: 3px;
   }
   .pdf-fit-button {
-    min-width: 48px;
-    height: 48px;
+    flex-shrink: 1;
+    min-width: 44px;
+    height: 44px;
     font-size: 13px;
   }
   .pdf-outline-expand {

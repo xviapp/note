@@ -2335,7 +2335,7 @@ button.node-list-toggle:focus-visible {
   gap: 4px;
   background: var(--surface-subtle);
   border-bottom: 1px solid var(--line);
-  padding: 9px 12px;
+  padding: 4px 12px;
   font-size: 12px;
   color: var(--muted);
   flex-shrink: 0;

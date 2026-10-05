@@ -77,10 +77,10 @@ export function NoteActions({
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   const canSplit = splittable(note);
   return (
-    // A folder, a plain link or an open editor leaves only a couple of buttons; they
-    // then share the location row instead of taking one of their own.
+    // A folder, PDF, image, plain link or an open editor leaves only a couple of
+    // buttons; they then share the location row instead of taking one of their own.
     <div
-      className={`note-actions${editing || note.kind === 'folder' || (note.kind === 'link' && !note.arxiv_id) ? ' is-short' : ''}`}
+      className={`note-actions${editing || (!TEXT_KINDS.includes(note.kind) && !note.arxiv_id) ? ' is-short' : ''}`}
     >
       {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
         <ReadingSettingsButton beforeChange={onReadingChange} />
