@@ -8,6 +8,7 @@ import {
   type RefObject,
 } from 'react';
 import { createPortal } from 'react-dom';
+import { assistantHost } from '../assistant-host';
 import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 
@@ -314,6 +315,6 @@ export function AssistantWindow({
         {children}
       </aside>
     </>,
-    document.body,
+    assistantHost(),
   );
 }

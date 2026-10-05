@@ -590,7 +590,8 @@ export default function NotePane(props: Props) {
             visible={assistantOpen && !editing}
             enabled={!editing && !props.globalAssistantOpen}
             onGlobal={() => props.onGlobalAssistant(selection)}
-            mode={assistantMode}
+            // Docked beside the article has no place in the comparison view.
+            mode={compareOpen && assistantMode === 'docked' ? 'floating' : assistantMode}
             onModeChange={setAssistantMode}
             selection={selection}
             readingRoot={readingRoot}
@@ -635,12 +636,7 @@ export default function NotePane(props: Props) {
             session={paperSession}
             onClose={() => setCompareOpen(false)}
             onChanged={props.onChanged}
-            onQuote={(text) => {
-              // Qingli lives on the note page, under the full-screen view.
-              const error = addQuote(text);
-              if (!error) setCompareOpen(false);
-              return error;
-            }}
+            onQuote={addQuote}
           />
         </Suspense>
       )}

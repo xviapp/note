@@ -296,3 +296,60 @@ test('a translation keeps running after the view closes, and the view reopens wh
     )
     .toBe(20);
 });
+
+test('Qingli opens inside the comparison view, with selected text quoted', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.put('/api/ai/settings', {
+    headers,
+    data: { apiKey: 'sk-e2e-placeholder-key' },
+  });
+  const paper = await openPaper(page, `对照问青藜 · ${info.project.name}`, content);
+  await modelServer(page, paper.id);
+  await page.route('**/api/nodes/*/assistant', (route) =>
+    route.fulfill({ json: { nextBefore: null, busy: false, messages: [] } }),
+  );
+  await page.goto(`/n/${paper.id}`);
+  await page
+    .locator('.note-actions')
+    .getByRole('button', { name: '对照阅读', exact: true })
+    .click();
+  const view = page.getByRole('dialog', { name: `对照阅读：${paper.title}` });
+  const target = view.getByRole('region', { name: '译文' });
+  const paragraph = target.locator('[data-block]').filter({ hasText: /^Paragraph 2 explains/ });
+  await paragraph.scrollIntoViewIfNeeded();
+  await paragraph.click();
+  await paragraph.evaluate((element) => {
+    const range = document.createRange();
+    range.selectNodeContents(element);
+    const selection = window.getSelection()!;
+    selection.removeAllRanges();
+    selection.addRange(range);
+  });
+  const toolbar = view.getByRole('toolbar', { name: '选中文字操作' });
+  await expect(toolbar).toBeVisible();
+  await toolbar.getByRole('button', { name: '问青藜', exact: true }).click();
+  // The view stays open; Qingli shows inside it with the quote.
+  await expect(view).toBeVisible();
+  const qingli = view.getByRole('complementary', { name: '青藜', exact: true });
+  await expect(qingli).toBeVisible();
+  await expect(qingli.locator('.context-quote')).toContainText('Paragraph 2 explains');
+  await qingli.getByRole('button', { name: '关闭青藜', exact: true }).click();
+  await expect(qingli).toBeHidden();
+  // The launcher is reachable inside the view too.
+  await view.getByRole('button', { name: '打开青藜', exact: true }).click();
+  await expect(qingli).toBeVisible();
+  if (info.project.name === 'mobile') {
+    // On phones Qingli covers the screen; closing it returns to the view.
+    await qingli.getByRole('button', { name: '关闭青藜', exact: true }).click();
+    await view.getByRole('button', { name: '关闭对照阅读' }).click();
+    await expect(view).toHaveCount(0);
+    await expect(page.getByRole('button', { name: '打开青藜', exact: true })).toBeVisible();
+  } else {
+    // Closing the view puts Qingli back on the page, still open.
+    await view.getByRole('button', { name: '关闭对照阅读' }).click();
+    await expect(view).toHaveCount(0);
+    await expect(page.getByRole('complementary', { name: '青藜', exact: true })).toBeVisible();
+  }
+});

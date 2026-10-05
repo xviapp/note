@@ -10,6 +10,7 @@ import '../paper.css';
 import { GlossaryDialog } from './GlossaryDialog';
 import { SelectionToolbar } from './SelectionToolbar';
 import { TranslationPanel } from './TranslationPanel';
+import { useAssistantHost } from '../assistant-host';
 
 const ImageViewer = lazy(() => import('./ImageViewer'));
 const TOC_KEY = 'paper-compare-toc',
@@ -59,7 +60,7 @@ export default function CompareView({
   // Translation state lives on the note page, so a run outlasts this view.
   session: PaperSession;
   onClose: () => void;
-  // Selected text for Qingli; the note page closes this view to show it.
+  // Selected text for Qingli, which opens inside this view.
   onQuote: (text: string) => string | undefined;
   onChanged: () => void;
 }) {
@@ -99,6 +100,8 @@ export default function CompareView({
     if (element && !element.open) element.showModal();
     return () => element?.close();
   }, []);
+  // Qingli shows inside this view while it is open.
+  useAssistantHost(dialog);
   // Both sides are clones of the same article, so their paragraphs pair up by order.
   useEffect(() => {
     const source = panes.source.current?.firstElementChild,
