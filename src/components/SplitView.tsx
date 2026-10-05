@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState, type RefObject } from 'react';
 import { ArrowLeftRight, ChevronRight, List, Search, X } from 'lucide-react';
 import { api, fileUrl } from '../api';
 import type { NoteDetail, NoteNode, SearchResult } from '../../shared/types';
@@ -13,6 +13,10 @@ import { useAssistantHost } from '../assistant-host';
 import type { TranslationLaunch } from '../translation';
 import { SelectionToolbar } from './SelectionToolbar';
 import { TranslationPanel } from './TranslationPanel';
+import { useAnnotations, type AnnotationStore } from '../annotations';
+import { useAnnotationLayer } from '../use-annotation-layer';
+import { useOffline } from '../connectivity';
+import { TEXT_KINDS } from '../../shared/types';
 
 const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
@@ -21,7 +25,15 @@ const PAIR_KEY = (id: string) => `split-pair:${id}`;
 const SYNC_KEY = 'split-sync';
 
 // A PDF resumes where it was last read and keeps recording progress.
-function SplitPdf({ note }: { note: NoteDetail }) {
+function SplitPdf({
+  note,
+  annotations,
+  onAnnotation,
+}: {
+  note: NoteDetail;
+  annotations: AnnotationStore;
+  onAnnotation: (id: string) => void;
+}) {
   const reading = useReading(note.id);
   if (!reading.initial) return <Spinner label="正在打开 PDF…" />;
   return (
@@ -32,6 +44,8 @@ function SplitPdf({ note }: { note: NoteDetail }) {
         cacheNote={note}
         initialPosition={reading.initial}
         onPosition={reading.update}
+        annotations={annotations.list}
+        onAnnotation={onAnnotation}
       />
     </Suspense>
   );
@@ -63,7 +77,11 @@ function FilePicker({
       api<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term)}`)
         .then((data) => {
           if (live)
-            setResults(data.results.filter((node) => node.kind === 'folder' || splittable(node)));
+            setResults(
+              data.results.filter(
+                (node) => !node.annotation && (node.kind === 'folder' || splittable(node)),
+              ),
+            );
         })
         .catch((e) => live && setMessage((e as Error).message));
     }, 180);
@@ -153,7 +171,11 @@ function FilePicker({
 
 // One side of the split: its own scroll position and outline. A PDF keeps the
 // reader's own toolbar, outline included. While choosing, the pane lists files.
+type Annotate = ReturnType<typeof useAnnotationLayer>['annotate'];
 function SplitPane({
+  index,
+  annotators,
+  onQuote,
   note,
   picking,
   onReplace,
@@ -162,6 +184,10 @@ function SplitPane({
   onOpen,
   onImage,
 }: {
+  index: number;
+  // Where the view's selection toolbar finds this side's highlighting.
+  annotators: RefObject<Record<number, Annotate>>;
+  onQuote: (text: string) => string | undefined;
   note: NoteDetail | null;
   picking: boolean;
   onReplace: () => void;
@@ -182,11 +208,31 @@ function SplitPane({
     if (narrow()) setTocOpen(false);
   };
   const pdf = note?.kind === 'pdf' && note.file;
+  // Each side shows the highlights and notes of its own file.
+  const offline = useOffline();
+  const annotatable =
+    !!note && !picking && (TEXT_KINDS.includes(note.kind) || !!note.arxiv_id || !!pdf);
+  const annotations = useAnnotations(note?.id, annotatable);
+  const layer = useAnnotationLayer({
+    store: annotations,
+    owner: `split-${index}`,
+    root: () => scroll.current?.querySelector<HTMLElement>('.read-content') ?? null,
+    active: annotatable,
+    offline,
+    paintKey: note?.id,
+    onAsk: onQuote,
+  });
+  useEffect(() => {
+    const current = annotators.current;
+    if (annotatable) current[index] = layer.annotate;
+    else delete current[index];
+  });
   return (
     <section
       className="split-pane"
       aria-label={note ? note.title : '未选择文件'}
       data-note-id={!picking ? note?.id : undefined}
+      data-pane={index}
     >
       <header className="split-pane-header">
         <strong title={note?.title}>
@@ -227,7 +273,7 @@ function SplitPane({
         {picking || !note ? (
           <FilePicker onPick={onPick} onCancel={note ? onCancelPick : undefined} />
         ) : pdf ? (
-          <SplitPdf note={note} />
+          <SplitPdf note={note} annotations={annotations} onAnnotation={layer.open} />
         ) : note.kind === 'image' && note.file ? (
           <div className="split-scroll split-image">
             <button
@@ -239,7 +285,7 @@ function SplitPane({
             </button>
           </div>
         ) : (
-          <div ref={scroll} className="split-scroll">
+          <div ref={scroll} className="split-scroll" onClick={layer.onClick}>
             <article className="note-article">
               <h1 className="split-title">{note.title}</h1>
               <NoteBody
@@ -254,6 +300,7 @@ function SplitPane({
           </div>
         )}
       </div>
+      {layer.editor}
     </section>
   );
 }
@@ -316,6 +363,7 @@ export default function SplitView({
     null,
   );
   const owner = `split-${first.id}`;
+  const annotators = useRef<Record<number, Annotate>>({});
   const choose = async (index: 0 | 1, id: string) => {
     setPicking(null);
     setError('');
@@ -431,6 +479,9 @@ export default function SplitView({
           <SplitPane
             // A new file starts a fresh pane: its own outline and scroll position.
             key={`${index}-${note?.id ?? ''}`}
+            index={index}
+            annotators={annotators}
+            onQuote={onQuote}
             note={note}
             picking={picking === index}
             onReplace={() => setPicking(index as 0 | 1)}
@@ -450,6 +501,13 @@ export default function SplitView({
           const element = anchor instanceof Element ? anchor : anchor?.parentElement;
           const nodeId = element?.closest<HTMLElement>('[data-note-id]')?.dataset.noteId;
           if (nodeId) setTranslation({ ...launch, nodeId });
+        }}
+        onAnnotate={(selection, withNote) => {
+          const anchor = window.getSelection()?.anchorNode;
+          const element = anchor instanceof Element ? anchor : anchor?.parentElement;
+          const pane = Number(element?.closest<HTMLElement>('[data-pane]')?.dataset.pane);
+          const annotate = annotators.current[pane];
+          return annotate ? annotate(selection, withNote) : '这里的文字不能批注。';
         }}
       />
       {translation && (

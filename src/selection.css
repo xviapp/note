@@ -68,21 +68,79 @@
 
 /* Highlights and notes on the reading page. Painted with the CSS Custom
    Highlight API, so the rendered text itself is never changed. */
-::highlight(annotation) {
-  background-color: color-mix(in srgb, var(--favorite) 26%, transparent);
+:root {
+  --annotation-yellow: var(--favorite);
+  --annotation-green: #4f9a66;
+  --annotation-blue: #4a82d4;
+  --annotation-pink: #d65c8a;
+  --annotation-purple: #8c66cf;
 }
-::highlight(annotation-note) {
-  background-color: color-mix(in srgb, var(--favorite) 26%, transparent);
+::highlight(annotation-yellow),
+::highlight(annotation-yellow-note) {
+  background-color: color-mix(in srgb, var(--annotation-yellow) 28%, transparent);
+}
+::highlight(annotation-yellow-note) {
   text-decoration: underline 2px;
-  text-decoration-color: var(--favorite);
+  text-decoration-color: var(--annotation-yellow);
   text-underline-offset: 3px;
+}
+.color-yellow {
+  --annotation: var(--annotation-yellow);
+}
+::highlight(annotation-green),
+::highlight(annotation-green-note) {
+  background-color: color-mix(in srgb, var(--annotation-green) 28%, transparent);
+}
+::highlight(annotation-green-note) {
+  text-decoration: underline 2px;
+  text-decoration-color: var(--annotation-green);
+  text-underline-offset: 3px;
+}
+.color-green {
+  --annotation: var(--annotation-green);
+}
+::highlight(annotation-blue),
+::highlight(annotation-blue-note) {
+  background-color: color-mix(in srgb, var(--annotation-blue) 28%, transparent);
+}
+::highlight(annotation-blue-note) {
+  text-decoration: underline 2px;
+  text-decoration-color: var(--annotation-blue);
+  text-underline-offset: 3px;
+}
+.color-blue {
+  --annotation: var(--annotation-blue);
+}
+::highlight(annotation-pink),
+::highlight(annotation-pink-note) {
+  background-color: color-mix(in srgb, var(--annotation-pink) 28%, transparent);
+}
+::highlight(annotation-pink-note) {
+  text-decoration: underline 2px;
+  text-decoration-color: var(--annotation-pink);
+  text-underline-offset: 3px;
+}
+.color-pink {
+  --annotation: var(--annotation-pink);
+}
+::highlight(annotation-purple),
+::highlight(annotation-purple-note) {
+  background-color: color-mix(in srgb, var(--annotation-purple) 28%, transparent);
+}
+::highlight(annotation-purple-note) {
+  text-decoration: underline 2px;
+  text-decoration-color: var(--annotation-purple);
+  text-underline-offset: 3px;
+}
+.color-purple {
+  --annotation: var(--annotation-purple);
 }
 .annotation-quote {
   max-height: 30vh;
   overflow: auto;
   margin: 0 0 12px;
   padding: 2px 0 2px 12px;
-  border-left: 3px solid var(--favorite);
+  border-left: 3px solid var(--annotation, var(--favorite));
   color: var(--muted);
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -102,7 +160,10 @@
 }
 .annotation-list-tools {
   display: flex;
+  flex-wrap: wrap;
+  align-items: center;
   justify-content: flex-end;
+  gap: 8px;
   margin-bottom: 8px;
 }
 .annotation-list-tools .button {
@@ -147,7 +208,7 @@
   display: -webkit-box;
   overflow: hidden;
   padding-left: 8px;
-  border-left: 3px solid var(--favorite);
+  border-left: 3px solid var(--annotation, var(--favorite));
   color: var(--muted);
   -webkit-box-orient: vertical;
   -webkit-line-clamp: 3;
@@ -185,4 +246,77 @@
 }
 .pdf-annotation.has-note {
   box-shadow: inset 0 -2px 0 #a8740d;
+}
+.pdf-annotation.color-green {
+  background: #7cc79059;
+}
+.pdf-annotation.color-green.has-note {
+  box-shadow: inset 0 -2px 0 #2f7a47;
+}
+.pdf-annotation.color-blue {
+  background: #7fb0f059;
+}
+.pdf-annotation.color-blue.has-note {
+  box-shadow: inset 0 -2px 0 #2c62b0;
+}
+.pdf-annotation.color-pink {
+  background: #f29bbb59;
+}
+.pdf-annotation.color-pink.has-note {
+  box-shadow: inset 0 -2px 0 #b03a66;
+}
+.pdf-annotation.color-purple {
+  background: #b9a0ee59;
+}
+.pdf-annotation.color-purple.has-note {
+  box-shadow: inset 0 -2px 0 #6a45ad;
+}
+.annotation-colors {
+  display: flex;
+  gap: 10px;
+  margin: 0 0 12px;
+}
+.annotation-swatch {
+  width: 28px;
+  height: 28px;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--annotation) 55%, var(--surface));
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--annotation) 70%, transparent);
+}
+.annotation-swatch[aria-checked='true'] {
+  border-color: var(--ink);
+}
+.annotation-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-right: auto;
+}
+.annotation-filter button {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  min-height: 30px;
+  padding: 3px 9px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.annotation-filter button[aria-pressed='true'] {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.annotation-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--annotation);
+}
+@media (pointer: coarse) {
+  .annotation-swatch {
+    width: 36px;
+    height: 36px;
+  }
 }

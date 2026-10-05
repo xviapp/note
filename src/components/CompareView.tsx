@@ -11,6 +11,8 @@ import { GlossaryDialog } from './GlossaryDialog';
 import { SelectionToolbar } from './SelectionToolbar';
 import { TranslationPanel } from './TranslationPanel';
 import { useAssistantHost } from '../assistant-host';
+import type { AnnotationStore } from '../annotations';
+import { useAnnotationLayer } from '../use-annotation-layer';
 
 const ImageViewer = lazy(() => import('./ImageViewer'));
 const TOC_KEY = 'paper-compare-toc',
@@ -55,6 +57,8 @@ export default function CompareView({
   onClose,
   onQuote,
   onChanged,
+  annotations,
+  offline,
 }: {
   note: NoteDetail;
   // Translation state lives on the note page, so a run outlasts this view.
@@ -63,6 +67,9 @@ export default function CompareView({
   // Selected text for Qingli, which opens inside this view.
   onQuote: (text: string) => string | undefined;
   onChanged: () => void;
+  // The paper's highlights and notes, shared with its page.
+  annotations: AnnotationStore;
+  offline: boolean;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const panes = { source: useRef<HTMLDivElement>(null), translation: useRef<HTMLDivElement>(null) };
@@ -102,6 +109,17 @@ export default function CompareView({
   }, []);
   // Qingli shows inside this view while it is open.
   useAssistantHost(dialog);
+  // Highlights and notes on the source side; the translation has none.
+  const layer = useAnnotationLayer({
+    store: annotations,
+    owner: 'compare',
+    root: () => panes.source.current?.querySelector<HTMLElement>('.read-content') ?? null,
+    active: true,
+    offline,
+    paintKey: built,
+    outside: '请在原文一侧选择文字批注。',
+    onAsk: onQuote,
+  });
   // Both sides are clones of the same article, so their paragraphs pair up by order.
   useEffect(() => {
     const source = panes.source.current?.firstElementChild,
@@ -467,8 +485,19 @@ export default function CompareView({
             ))}
           </nav>
         )}
-        <div ref={panes.source} className="compare-pane is-source" role="region" aria-label="原文">
-          <div className="paper-body" onClick={followLink} />
+        <div
+          ref={panes.source}
+          className="compare-pane is-source"
+          role="region"
+          aria-label="原文"
+          onClick={layer.onClick}
+        >
+          {/* Saved locations refer to the paper's text, as on its page. */}
+          <div
+            className="paper-body read-content"
+            data-version-id={note.current_version_id}
+            onClick={followLink}
+          />
         </div>
         <div
           ref={panes.translation}
@@ -512,7 +541,9 @@ export default function CompareView({
         onSelection={() => {}}
         onQuote={onQuote}
         onTranslate={setSelectionTranslation}
+        onAnnotate={layer.annotate}
       />
+      {layer.editor}
       {selectionTranslation && (
         <TranslationPanel
           nodeId={note.id}

@@ -51,7 +51,7 @@ export const backupColumns = {
     'updated_at',
   ],
   paper_translations: ['node_id', 'target_language', 'body_blob_id', 'updated_at'],
-  annotations: ['node_id', 'body_blob_id', 'updated_at'],
+  annotations: ['node_id', 'body_blob_id', 'updated_at', 'search_text'],
   trash_batches: [
     'id',
     'root_id',
@@ -141,6 +141,8 @@ export function validateBackup(input: unknown): LibraryBackup {
     if (!Array.isArray(rows)) invalid(`缺少 ${table}。`);
     for (const row of rows) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) invalid('记录格式错误。');
+      // Or the annotation search index, which is rebuilt on the next save.
+      if (table === 'annotations' && row.search_text === undefined) row.search_text = '';
       // Older v1 archives predate custom folder icons.
       if (table === 'nodes') {
         if (row.icon_emoji === undefined) row.icon_emoji = null;

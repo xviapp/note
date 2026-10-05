@@ -21,7 +21,7 @@ export function PdfPage({
   onMeasure: (number: number, aspect: number) => void;
   highlights?: PdfSourceRect[];
   // Saved highlights on this page; ones with a note are underlined.
-  marks?: { id: string; noted: boolean; rects: PdfSourceRect[] }[];
+  marks?: { id: string; noted: boolean; color: string; rects: PdfSourceRect[] }[];
 }) {
   const canvas = useRef<HTMLCanvasElement>(null);
   const textContainer = useRef<HTMLDivElement>(null);
@@ -118,7 +118,7 @@ export function PdfPage({
         mark.rects.map((rect, index) => (
           <div
             key={`${mark.id}-${index}`}
-            className={`pdf-annotation${mark.noted ? ' has-note' : ''}`}
+            className={`pdf-annotation color-${mark.color}${mark.noted ? ' has-note' : ''}`}
             aria-hidden="true"
             style={{
               left: `${rect.x * 100}%`,

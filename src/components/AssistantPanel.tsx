@@ -14,6 +14,7 @@ import {
   Copy,
   FilePlus2,
   FileText,
+  MessageSquareQuote,
   Paperclip,
   Quote,
   RefreshCw,
@@ -70,6 +71,8 @@ interface Props {
   onSettings: () => void;
   onNavigate: (id: string) => void;
   onImage: (src: string, alt: string) => void;
+  // How many highlights and notes the file has, to offer sending them along.
+  annotationCount?: number;
 }
 export function AssistantPanel(props: Props) {
   const { node, visible } = props;
@@ -82,7 +85,8 @@ export function AssistantPanel(props: Props) {
     [remoteBusy, setRemoteBusy] = useState(false);
   const [prompt, setPrompt] = useState(''),
     [quote, setQuote] = useState(''),
-    [image, setImage] = useState('');
+    [image, setImage] = useState(''),
+    [withNotes, setWithNotes] = useState(false);
   const [error, setError] = useState(''),
     [capturing, setCapturing] = useState(false),
     [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null);
@@ -198,6 +202,7 @@ export function AssistantPanel(props: Props) {
           content: prompt.trim(),
           ...(quote ? { quote } : {}),
           ...(image ? { image } : {}),
+          ...(withNotes && props.annotationCount ? { annotations: true } : {}),
           ...(attached.length ? { files: attached } : {}),
         };
       }
@@ -218,6 +223,7 @@ export function AssistantPanel(props: Props) {
             setPrompt('');
             setQuote('');
             setImage('');
+            setWithNotes(false);
             setFiles([]);
           }
           setMessages((old) => [
@@ -422,6 +428,12 @@ export function AssistantPanel(props: Props) {
                   <blockquote>{message.quote}</blockquote>
                 </details>
               )}
+              {message.annotations && (
+                <details className="chat-quote">
+                  <summary>我的批注</summary>
+                  <blockquote>{message.annotations}</blockquote>
+                </details>
+              )}
               {message.image && (
                 <button
                   className="chat-image"
@@ -557,6 +569,21 @@ export function AssistantPanel(props: Props) {
               </button>
             </div>
           )}
+          {withNotes && !!props.annotationCount && (
+            <div className="context-quote">
+              <MessageSquareQuote size={14} />
+              <span>附上这份文件的 {props.annotationCount} 条高亮与批注</span>
+              <button
+                type="button"
+                className="icon-button"
+                aria-label="不附上批注"
+                disabled={sending}
+                onClick={() => setWithNotes(false)}
+              >
+                <X size={14} />
+              </button>
+            </div>
+          )}
           {image && (
             <div className="context-image">
               <button type="button" onClick={() => props.onImage(image, '待发送截图')}>
@@ -646,6 +673,17 @@ export function AssistantPanel(props: Props) {
               <Quote size={15} />
               {props.selection ? '引用选中文字' : '选中正文后可引用'}
             </button>
+            {!!props.annotationCount && !withNotes && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={sending}
+                onClick={() => setWithNotes(true)}
+              >
+                <MessageSquareQuote size={15} />
+                附上我的批注
+              </button>
+            )}
             <button
               type="button"
               className="text-button"

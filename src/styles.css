@@ -2043,6 +2043,21 @@ button.node-list-toggle:focus-visible {
   color: var(--muted);
   font-size: 12px;
 }
+.search-annotation {
+  overflow: hidden;
+  color: var(--ink);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.search-annotation svg {
+  margin-right: 4px;
+  color: var(--favorite);
+  vertical-align: -2px;
+}
+.search-annotation q {
+  color: var(--muted);
+}
 .kind-choices {
   display: grid;
   grid-template-columns: 1fr 1fr;

@@ -2,6 +2,8 @@ import {
   ANNOTATION_COUNT,
   ANNOTATION_NOTE_CHARS,
   ANNOTATION_QUOTE_CHARS,
+  annotationSearchText,
+  isAnnotationColor,
   type Annotation,
   type AnnotationList,
 } from '../shared/annotations';
@@ -52,17 +54,24 @@ async function save(
     const now = Date.now();
     const saved = latest.row
       ? await env.DB.prepare(
-          `UPDATE annotations SET body_blob_id=?,updated_at=? WHERE node_id=? AND body_blob_id=?
+          `UPDATE annotations SET body_blob_id=?,updated_at=?,search_text=? WHERE node_id=? AND body_blob_id=?
            AND EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL) RETURNING node_id`,
         )
-          .bind(blob.id, now, nodeId, latest.row.body_blob_id, nodeId)
+          .bind(
+            blob.id,
+            now,
+            annotationSearchText(annotations),
+            nodeId,
+            latest.row.body_blob_id,
+            nodeId,
+          )
           .first()
       : await env.DB.prepare(
-          `INSERT INTO annotations(node_id,body_blob_id,updated_at)
-           SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL)
+          `INSERT INTO annotations(node_id,body_blob_id,updated_at,search_text)
+           SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL)
            ON CONFLICT DO NOTHING RETURNING node_id`,
         )
-          .bind(nodeId, blob.id, now, nodeId)
+          .bind(nodeId, blob.id, now, annotationSearchText(annotations), nodeId)
           .first();
     if (saved) {
       if (latest.row) await discardFile(env, latest.row.body_blob_id).catch(() => {});
@@ -95,6 +104,9 @@ export async function putAnnotation(
     throw new AppError(400, `批注的原文需在 1–${ANNOTATION_QUOTE_CHARS} 个字符之间。`);
   if (typeof data.note !== 'string' || data.note.length > ANNOTATION_NOTE_CHARS)
     throw new AppError(400, `批注最多 ${ANNOTATION_NOTE_CHARS} 个字符。`);
+  if (data.color !== undefined && !isAnnotationColor(data.color))
+    throw new AppError(400, '请选择支持的高亮颜色。');
+  const color = data.color ?? 'yellow';
   const note = data.note.replace(/\r\n?/g, '\n').trim();
   const location = await sourceLocation(env, nodeId, data.location);
   if (!location) throw new AppError(400, '原文位置信息不正确，请重新选择文字。');
@@ -109,6 +121,7 @@ export async function putAnnotation(
       id,
       quote,
       note,
+      color,
       location,
       createdAt: previous?.createdAt ?? now,
       updatedAt: now,

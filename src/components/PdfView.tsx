@@ -17,7 +17,7 @@ import type { NoteDetail, ReadingPosition } from '../../shared/types';
 import { Spinner } from './Primitives';
 import { PdfPage } from './PdfPage';
 import type { PdfSourceLocation, PdfSourceRect } from '../../shared/translation';
-import type { Annotation } from '../../shared/annotations';
+import { colorOf, type Annotation, type AnnotationColor } from '../../shared/annotations';
 import { PdfOutline } from './PdfOutline';
 import { cacheEpoch, cachedFile, rememberNote, shareFileDownload } from '../offline-cache';
 
@@ -319,14 +319,17 @@ export default function PdfView({
     else setPageInput(String(page));
   };
   const marks = useMemo(() => {
-    const pages = new Map<number, { id: string; noted: boolean; rects: PdfSourceRect[] }[]>();
+    const pages = new Map<
+      number,
+      { id: string; noted: boolean; color: AnnotationColor; rects: PdfSourceRect[] }[]
+    >();
     for (const item of annotations ?? []) {
       if (item.location.kind !== 'pdf' || item.location.fileId !== fileId) continue;
       for (const rect of item.location.rects) {
         const list = pages.get(rect.page) ?? [];
         let mark = list.find((entry) => entry.id === item.id);
         if (!mark) {
-          mark = { id: item.id, noted: !!item.note, rects: [] };
+          mark = { id: item.id, noted: !!item.note, color: colorOf(item), rects: [] };
           list.push(mark);
           pages.set(rect.page, list);
         }

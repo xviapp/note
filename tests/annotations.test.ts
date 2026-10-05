@@ -5,10 +5,11 @@ import {
   createExecutionContext,
   waitOnExecutionContext,
 } from 'cloudflare:test';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/types';
-import type { NoteNode, StorageInfo } from '../shared/types';
+import type { NoteNode, SearchResult, StorageInfo } from '../shared/types';
+import type { ChatHistory } from '../shared/assistant';
 import type { AnnotationList } from '../shared/annotations';
 import { cleanup } from '../worker/recovery';
 
@@ -75,6 +76,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await Promise.all(contexts.map(waitOnExecutionContext));
+  vi.restoreAllMocks();
 });
 
 describe('annotations', () => {
@@ -148,5 +150,73 @@ describe('annotations', () => {
     await cleanup(bindings);
     expect(await bindings.DB.prepare('SELECT COUNT(*) AS n FROM annotations').first('n')).toBe(0);
     expect((await ok<StorageInfo>('/api/storage')).allocatedBytes).toBe(0);
+  });
+
+  it('keeps a colour, defaulting to yellow, and rejects unknown ones', async () => {
+    const node = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'text', title: 'T' });
+    const plain = { quote: 'x', note: '', location: location('x') };
+    const list = await ok<AnnotationList>(`${path(node)}/a1`, 'PUT', plain);
+    expect(list.annotations[0].color).toBe('yellow');
+    await ok(`${path(node)}/a2`, 'PUT', { ...plain, color: 'blue' });
+    expect((await ok<AnnotationList>(path(node))).annotations[1].color).toBe('blue');
+    expect((await request(`${path(node)}/a3`, 'PUT', { ...plain, color: 'red' })).status).toBe(400);
+  });
+
+  it('finds files by their highlights and notes', async () => {
+    const node = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'text', title: '读书' });
+    await ok(`${path(node)}/a1`, 'PUT', {
+      quote: 'Attention is all you need',
+      note: '核心论点',
+      location: location('Attention is all you need'),
+    });
+    await ok(`${path(node)}/a2`, 'PUT', {
+      quote: 'Other words',
+      note: '',
+      location: location('Other words', 40),
+    });
+    const { results } = await ok<{ results: SearchResult[] }>(
+      `/api/search?q=${encodeURIComponent('attention 核心')}`,
+    );
+    expect(results).toHaveLength(1);
+    expect(results[0]).toMatchObject({
+      id: node.id,
+      annotation: { id: 'a1', quote: 'Attention is all you need', note: '核心论点' },
+    });
+    // Words split across two annotations do not match one.
+    expect(
+      (await ok<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent('other 核心')}`))
+        .results,
+    ).toHaveLength(0);
+    // A deleted annotation is no longer found.
+    await ok(`${path(node)}/a1`, 'DELETE');
+    expect((await ok<{ results: SearchResult[] }>('/api/search?q=attention')).results).toEqual([]);
+  });
+
+  it('sends the notes to Qingli with a question and keeps them on the message', async () => {
+    await ok('/api/ai/settings', 'PUT', { apiKey: 'sk-test-only-fake-deepseek-key' });
+    const node = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'text', title: 'T' });
+    const ask = (data: object) => request(`/api/nodes/${node.id}/assistant`, 'POST', data);
+    expect((await ask({ content: '总结', annotations: true })).status).toBe(400);
+    await ok(`${path(node)}/a1`, 'PUT', {
+      quote: '重要的一句',
+      note: '需要复习',
+      location: location('重要的一句'),
+    });
+    const sent: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async (_input, init) => {
+      sent.push(JSON.stringify(JSON.parse(String(init!.body)).messages));
+      return new Response(
+        `data: ${JSON.stringify({ choices: [{ delta: { content: '好的' } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+        { headers: { 'content-type': 'text/event-stream' } },
+      );
+    });
+    const response = await ask({ content: '总结', annotations: true });
+    expect(response.status).toBe(200);
+    await response.text();
+    expect(sent[0]).toContain('<我的批注>');
+    expect(sent[0]).toContain('原文：重要的一句');
+    expect(sent[0]).toContain('我的批注：需要复习');
+    const history = await ok<ChatHistory>(`/api/nodes/${node.id}/assistant`);
+    expect(history.messages[0].annotations).toContain('需要复习');
   });
 });

@@ -53,6 +53,8 @@ export interface ArxivImportProgress {
 // A title match, with the titles of its ancestors from the root down.
 export interface SearchResult extends NoteNode {
   path: string[];
+  // Set when the match is in one of the file's highlights or notes.
+  annotation?: { id: string; quote: string; note: string };
 }
 export const SEARCH_LIMIT = 30;
 export interface ShareSettings {

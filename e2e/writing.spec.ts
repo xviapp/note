@@ -134,7 +134,7 @@ test('search jumps to a note by title words and shows where it lives', async ({ 
   if (info.project.name === 'desktop') await page.keyboard.press('Control+k');
   else await page.locator('.app-header').getByRole('button', { name: '搜索笔记' }).click();
   const dialog = page.getByRole('dialog', { name: '搜索笔记', exact: true });
-  const field = dialog.getByRole('combobox', { name: '搜索笔记标题' });
+  const field = dialog.getByRole('combobox', { name: '搜索笔记标题或批注' });
   await expect(field).toBeFocused();
   await field.fill(`transformer ${info.project.name}`);
   const option = dialog.getByRole('option').filter({ hasText: target.title });
@@ -153,7 +153,7 @@ test('search jumps to a note by title words and shows where it lives', async ({ 
     await page.keyboard.press('/');
     await expect(dialog).toBeVisible();
     await field.fill('没有这样的标题');
-    await expect(dialog.getByText('没有标题匹配的笔记')).toBeVisible();
+    await expect(dialog.getByText('没有标题或批注匹配的笔记')).toBeVisible();
     // Enter pressed before the results arrive opens the new first result,
     // not the one listed for the previous query.
     await field.fill(`另一篇 ${info.project.name}`);

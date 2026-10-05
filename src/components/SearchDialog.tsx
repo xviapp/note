@@ -1,11 +1,13 @@
 import { useEffect, useId, useRef, useState } from 'react';
-import { Search } from 'lucide-react';
+import { MessageSquareQuote, Search } from 'lucide-react';
 import { api } from '../api';
 import type { NoteNode, SearchResult } from '../../shared/types';
 import { Modal, NodeIcon } from './Primitives';
+import { requestAnnotation } from '../annotations';
 
-// Jump to a note by title: Ctrl+K or / on computers, the search button on phones.
-// With nothing typed it lists recent visits.
+// Jump to a note by title, or to one of its highlights and notes: Ctrl+K or /
+// on computers, the search button on phones. With nothing typed it lists
+// recent visits.
 export function SearchDialog({
   onOpen,
   onClose,
@@ -41,7 +43,7 @@ export function SearchDialog({
               (data) => data.results,
             )
           : api<{ nodes: NoteNode[] }>('/api/nodes?view=recent').then((data) =>
-              data.nodes.map((node) => ({ ...node, path: [] })),
+              data.nodes.map((node): SearchResult => ({ ...node, path: [] })),
             );
         request
           .then((found) => {
@@ -49,6 +51,7 @@ export function SearchDialog({
             if (pendingEnter.current && found[0]) {
               pendingEnter.current = false;
               handlers.current.onClose();
+              if (found[0].annotation) requestAnnotation(found[0].id, found[0].annotation.id);
               handlers.current.onOpen(found[0]);
               return;
             }
@@ -75,8 +78,9 @@ export function SearchDialog({
       ?.querySelector(`[data-index="${active}"]`)
       ?.scrollIntoView({ block: 'nearest' });
   }, [active]);
-  const open = (node: NoteNode) => {
+  const open = (node: SearchResult) => {
     onClose();
+    if (node.annotation) requestAnnotation(node.id, node.annotation.id);
     onOpen(node);
   };
   const optionId = (index: number) => `${list}-${index}`;
@@ -90,11 +94,11 @@ export function SearchDialog({
           enterKeyHint="go"
           autoComplete="off"
           role="combobox"
-          aria-label="搜索笔记标题"
+          aria-label="搜索笔记标题或批注"
           aria-expanded={results.length > 0}
           aria-controls={list}
           aria-activedescendant={results.length ? optionId(active) : undefined}
-          placeholder="输入标题中的文字，多个词用空格分开"
+          placeholder="输入标题或批注中的文字，多个词用空格分开"
           value={query}
           maxLength={200}
           onChange={(event) => {
@@ -124,16 +128,16 @@ export function SearchDialog({
             ? '正在查找…'
             : query.trim()
               ? results.length
-                ? `找到 ${results.length} 篇${results.length >= 30 ? '（只显示最近修改的 30 篇）' : ''}`
-                : '没有标题匹配的笔记'
+                ? `找到 ${results.length} 项${results.length >= 30 ? '（只显示最近修改的 30 项）' : ''}`
+                : '没有标题或批注匹配的笔记'
               : results.length
                 ? '最近访问'
-                : '输入标题中的文字开始搜索'}
+                : '输入标题或批注中的文字开始搜索'}
       </p>
       <ul id={list} ref={listRef} className="search-results" role="listbox" aria-label="搜索结果">
         {results.map((node, index) => (
           <li
-            key={node.id}
+            key={`${node.id}:${node.annotation?.id ?? ''}`}
             id={optionId(index)}
             data-index={index}
             role="option"
@@ -145,6 +149,18 @@ export function SearchDialog({
             <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} node={node} />
             <span className="search-result-text">
               <strong>{node.title}</strong>
+              {node.annotation && (
+                <span className="search-annotation">
+                  <MessageSquareQuote size={13} aria-hidden="true" />
+                  {node.annotation.note ? (
+                    <>
+                      <q>{node.annotation.quote}</q> {node.annotation.note}
+                    </>
+                  ) : (
+                    <q>{node.annotation.quote}</q>
+                  )}
+                </span>
+              )}
               {node.path.length > 0 && <small>{node.path.join(' / ')}</small>}
             </span>
           </li>

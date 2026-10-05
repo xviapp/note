@@ -26,6 +26,8 @@ export interface ChatMessage {
   quote?: string;
   image?: FileInfo;
   files?: ChatFile[];
+  // The file's highlights and notes, as sent with the question.
+  annotations?: string;
   continueFrom?: string;
   exportedNodeId?: string;
   error?: string;
@@ -36,6 +38,8 @@ export interface ChatInput {
   quote?: string;
   image?: string;
   files?: ChatFileInput[];
+  // Include the file's highlights and notes.
+  annotations?: boolean;
   continueFrom?: string;
 }
 export interface ChatHistory {

@@ -1,3 +1,5 @@
+import { annotationsText } from '../shared/annotations';
+import { listAnnotations } from './annotations';
 import {
   GLOBAL_ASSISTANT_ID,
   AI_IMAGE_LIMIT,
@@ -55,7 +57,9 @@ export async function assistantNode(
   return node;
 }
 async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
-  let body: Pick<ChatMessage, 'content' | 'quote' | 'files' | 'continueFrom'> = { content: '' };
+  let body: Pick<ChatMessage, 'content' | 'quote' | 'files' | 'annotations' | 'continueFrom'> = {
+    content: '',
+  };
   if (row.body_key) {
     const object = await env.FILES.get(row.body_key);
     if (!object) throw new AppError(503, '会话内容暂时无法读取，请稍后重试。');
@@ -165,6 +169,7 @@ function contextMessage(value: ChatMessage): ContextMessage {
     : value.quote
       ? `${value.content}\n\n<引用文字>\n${value.quote}\n</引用文字>`
       : value.content;
+  if (value.annotations) text += `\n\n<我的批注>\n${value.annotations}\n</我的批注>`;
   for (const file of value.files ?? []) text += fileContext(file);
   const attachments = [
     ...(value.image ? [{ file: value.image, label: '引用截图' }] : []),
@@ -331,10 +336,23 @@ export async function sendChat(
       !previous.content.trim()
     )
       throw new AppError(400, '只能继续生成已有内容的中断回复。');
-    if (data.quote || data.image || (Array.isArray(data.files) && data.files.length))
+    if (
+      data.quote ||
+      data.image ||
+      data.annotations ||
+      (Array.isArray(data.files) && data.files.length)
+    )
       throw new AppError(400, '继续生成会沿用原问题的引用和附件。');
   }
   const attachments = await validateChatFiles(env, data.files);
+  if (data.annotations !== undefined && typeof data.annotations !== 'boolean')
+    throw new AppError(400, '批注参数不正确。');
+  let annotations = '';
+  if (data.annotations) {
+    if (id === GLOBAL_ASSISTANT_ID) throw new AppError(400, '全局对话没有可附上的批注。');
+    annotations = annotationsText((await listAnnotations(env, id)).annotations);
+    if (!annotations) throw new AppError(400, '这个文件还没有高亮或批注。');
+  }
   const duplicate = await env.DB.prepare(
     'SELECT id FROM assistant_messages WHERE node_id=? AND request_id=?',
   )
@@ -373,6 +391,7 @@ export async function sendChat(
         createdAt: now,
         content: prompt,
         quote,
+        ...(annotations ? { annotations } : {}),
         files: attachments.files,
         ...(continuation ? { continueFrom: continuation.id } : {}),
         ...(image
@@ -387,6 +406,7 @@ export async function sendChat(
         content: prompt,
         ...(continuation ? { continueFrom: continuation.id } : {}),
         ...(quote ? { quote } : {}),
+        ...(annotations ? { annotations } : {}),
         ...(attachments.files.length ? { files: attachments.files } : {}),
       }),
     );

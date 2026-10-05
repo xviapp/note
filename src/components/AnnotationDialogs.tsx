@@ -1,16 +1,23 @@
 import { useState } from 'react';
 import { FileDown, Pencil } from 'lucide-react';
-import { ANNOTATION_NOTE_CHARS, type Annotation } from '../../shared/annotations';
-import { annotationOrder } from '../annotations';
+import {
+  ANNOTATION_COLORS,
+  ANNOTATION_NOTE_CHARS,
+  annotationOrder,
+  colorOf,
+  type Annotation,
+  type AnnotationColor,
+} from '../../shared/annotations';
 import { Modal } from './Primitives';
 import { QingliIcon } from './QingliIcon';
 
-export type AnnotationDraft = Pick<Annotation, 'id' | 'quote' | 'note' | 'location'> & {
+export type AnnotationDraft = Pick<Annotation, 'id' | 'quote' | 'note' | 'location' | 'color'> & {
   // False while it exists only on screen, before the first save.
   saved: boolean;
 };
+const colors = Object.entries(ANNOTATION_COLORS) as [AnnotationColor, string][];
 
-// One highlight: its quote and an editable note.
+// One highlight: its quote, colour and an editable note.
 export function AnnotationEditor({
   draft,
   offline,
@@ -21,12 +28,13 @@ export function AnnotationEditor({
 }: {
   draft: AnnotationDraft;
   offline: boolean;
-  onSave: (note: string) => Promise<void>;
+  onSave: (note: string, color: AnnotationColor) => Promise<void>;
   onDelete: () => Promise<void>;
   onAsk: (note: string) => string | undefined;
   onClose: () => void;
 }) {
   const [note, setNote] = useState(draft.note),
+    [color, setColor] = useState(colorOf(draft)),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
   const run = async (action: () => Promise<void>) => {
@@ -42,7 +50,22 @@ export function AnnotationEditor({
   };
   return (
     <Modal title={draft.saved ? '批注' : '添加批注'} className="annotation-modal" onClose={onClose}>
-      <blockquote className="annotation-quote">{draft.quote}</blockquote>
+      <blockquote className={`annotation-quote color-${color}`}>{draft.quote}</blockquote>
+      <div className="annotation-colors" role="radiogroup" aria-label="高亮颜色">
+        {colors.map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            role="radio"
+            aria-checked={color === value}
+            aria-label={label}
+            title={label}
+            className={`annotation-swatch color-${value}`}
+            disabled={offline}
+            onClick={() => setColor(value)}
+          />
+        ))}
+      </div>
       <textarea
         className="annotation-note-input"
         aria-label="批注内容"
@@ -56,7 +79,7 @@ export function AnnotationEditor({
         onKeyDown={(event) => {
           if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !offline) {
             event.preventDefault();
-            void run(() => onSave(note));
+            void run(() => onSave(note, color));
           }
         }}
       />
@@ -90,7 +113,7 @@ export function AnnotationEditor({
         <button
           className="button primary"
           disabled={busy || offline}
-          onClick={() => void run(() => onSave(note))}
+          onClick={() => void run(() => onSave(note, color))}
         >
           保存
         </button>
@@ -99,7 +122,8 @@ export function AnnotationEditor({
   );
 }
 
-// Every highlight of the file in reading order; one opens its place.
+// Every highlight of the file in reading order, filtered by colour; one
+// opens its place.
 export function AnnotationList({
   list,
   missing,
@@ -118,11 +142,34 @@ export function AnnotationList({
   onClose: () => void;
 }) {
   const [status, setStatus] = useState<{ error: boolean; text: string } | null>(null),
-    [busy, setBusy] = useState(false);
-  const sorted = [...list].sort(annotationOrder);
+    [busy, setBusy] = useState(false),
+    [filter, setFilter] = useState<AnnotationColor | 'all'>('all');
+  const used = colors.filter(([value]) => list.some((item) => colorOf(item) === value));
+  const shown = [...list]
+    .filter((item) => filter === 'all' || colorOf(item) === filter)
+    .sort(annotationOrder);
   return (
     <Modal title={`批注（${list.length}）`} className="annotation-list-modal" onClose={onClose}>
       <div className="annotation-list-tools">
+        {used.length > 1 && (
+          <div className="annotation-filter" role="group" aria-label="按颜色筛选">
+            <button aria-pressed={filter === 'all'} onClick={() => setFilter('all')}>
+              全部
+            </button>
+            {used.map(([value, label]) => (
+              <button
+                key={value}
+                aria-pressed={filter === value}
+                aria-label={`只看${label}`}
+                title={`只看${label}`}
+                onClick={() => setFilter(value)}
+              >
+                <span className={`annotation-dot color-${value}`} aria-hidden="true" />
+                {list.filter((item) => colorOf(item) === value).length}
+              </button>
+            ))}
+          </div>
+        )}
         <button
           className="button compact"
           disabled={busy || offline || !list.length}
@@ -149,16 +196,18 @@ export function AnnotationList({
           {status.text}
         </p>
       )}
-      {sorted.length ? (
+      {shown.length ? (
         <ul className="annotation-items">
-          {sorted.map((item) => (
+          {shown.map((item) => (
             <li key={item.id} className={missing.has(item.id) ? 'is-missing' : undefined}>
               <button
                 className="annotation-item"
                 disabled={missing.has(item.id)}
                 onClick={() => onLocate(item)}
               >
-                <span className="annotation-item-quote">{item.quote}</span>
+                <span className={`annotation-item-quote color-${colorOf(item)}`}>
+                  {item.quote}
+                </span>
                 {item.note && <span className="annotation-item-note">{item.note}</span>}
                 {missing.has(item.id) && (
                   <span className="annotation-item-missing">原文已修改，无法定位</span>
