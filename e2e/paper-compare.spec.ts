@@ -199,4 +199,26 @@ test('only the current section can be translated, and glossary edits redo only a
     'Section 3 paragraph 2 describes',
   ]);
   await expect(target.getByText(/^译文（新）：Section 3 paragraph 1/)).toBeVisible();
+
+  // The outline names translated headings and moves both sides to a section.
+  await view.getByRole('button', { name: '目录', exact: true }).click();
+  const outline = view.getByRole('navigation', { name: '目录' });
+  await expect(outline.getByRole('button', { name: '译文：Part 3 heading' })).toBeVisible();
+  await outline.getByRole('button', { name: 'Part 4 heading' }).click();
+  const top = (pane: typeof target) =>
+    pane.evaluate((element) => {
+      const edge = element.getBoundingClientRect().top + 8;
+      const heading = Array.from(element.querySelectorAll('h2')).find(
+        (h) => h.getBoundingClientRect().bottom > edge,
+      );
+      return heading?.textContent;
+    });
+  await expect.poll(() => top(target)).toContain('Part 4');
+  if (info.project.name === 'desktop') {
+    await expect.poll(() => top(view.getByRole('region', { name: '原文' }))).toContain('Part 4');
+    await expect(outline.getByRole('button', { name: 'Part 4 heading' })).toHaveAttribute(
+      'aria-current',
+      'location',
+    );
+  } else await expect(outline).toHaveCount(0);
 });

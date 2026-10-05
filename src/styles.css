@@ -3116,6 +3116,14 @@ button.node-list-toggle:focus-visible {
   flex: 1;
   min-height: 0;
 }
+.compare-toc {
+  flex: 0 0 240px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 20px 8px 40px 12px;
+  border-left: 0;
+  border-right: 1px solid var(--line);
+}
 .compare-pane {
   position: relative;
   flex: 1 1 0;
@@ -3172,9 +3180,25 @@ button.node-list-toggle:focus-visible {
   }
   /* Phones: side switch, glossary and close on top; language and translate
      buttons below; progress on a line of its own. */
+  .compare-outline,
   .compare-glossary,
   .compare-close {
     order: 1;
+  }
+  /* The outline covers the article until a heading is chosen. */
+  .compare-body {
+    position: relative;
+  }
+  .compare-toc {
+    position: absolute;
+    inset: 0 0 auto;
+    z-index: 2;
+    max-height: 70%;
+    padding: 12px 16px 16px;
+    border-right: 0;
+    border-bottom: 1px solid var(--line);
+    background: var(--surface);
+    box-shadow: var(--shadow-popover);
   }
   .compare-tools {
     order: 2;

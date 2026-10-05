@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type MouseEvent } from 'react';
-import { BookOpenText, Languages, RotateCcw, X } from 'lucide-react';
+import { BookOpenText, Languages, List, RotateCcw, X } from 'lucide-react';
 import type { NoteDetail } from '../../shared/types';
 import {
   isTranslationLanguage,
@@ -13,7 +13,8 @@ import { hydratePaperImages, preparePaper } from './PaperView';
 import '../paper.css';
 import { GlossaryDialog } from './GlossaryDialog';
 
-const LANGUAGE_KEY = 'paper-translation-language';
+const LANGUAGE_KEY = 'paper-translation-language',
+  TOC_KEY = 'paper-compare-toc';
 type Anchor = { index: number; ratio: number; offset: number };
 type Block = PaperBlock & { hash: string };
 
@@ -59,6 +60,16 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
     }
   });
   const [side, setSide] = useState<'source' | 'translation'>('translation');
+  // The outline is remembered on computers; phones open it as an overlay.
+  const narrow = () => matchMedia('(max-width: 760px)').matches;
+  const [tocOpen, setTocOpen] = useState(() => {
+    try {
+      return !narrow() && localStorage.getItem(TOC_KEY) === 'open';
+    } catch {
+      return false;
+    }
+  });
+  const [headingLabels, setHeadingLabels] = useState<Record<string, string>>({});
   const [sources, setSources] = useState<PaperBlockSource[] | null>(null);
   const [active, setActive] = useState<{ index: number; top: number } | null>(null),
     [glossaryOpen, setGlossaryOpen] = useState(false),
@@ -122,7 +133,35 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
         element.classList.remove('is-pending');
       }
     }
-  }, [translation.blocks, sources]);
+    // Translated headings name the outline's entries.
+    const target = panes.translation.current;
+    const labels: Record<string, string> = {};
+    for (const heading of prepared.headings) {
+      const element = target?.querySelector<HTMLElement>(`#${CSS.escape(heading.id)}`);
+      if (element?.dataset.applied) labels[heading.id] = element.textContent?.trim() ?? '';
+    }
+    setHeadingLabels(labels);
+    // The panes' refs are stable.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [translation.blocks, sources, prepared]);
+  const toggleToc = () => {
+    const next = !tocOpen;
+    setTocOpen(next);
+    if (narrow()) return;
+    try {
+      localStorage.setItem(TOC_KEY, next ? 'open' : 'closed');
+    } catch {
+      /* Storage can be unavailable; the outline still toggles. */
+    }
+  };
+  // Jumps the side being read; the other follows by paragraph.
+  const jumpTo = (id: string) => {
+    const pane = narrow() ? panes[side].current : panes.source.current;
+    const element = pane?.querySelector<HTMLElement>(`#${CSS.escape(id)}`);
+    if (pane && element)
+      pane.scrollTop += element.getBoundingClientRect().top - pane.getBoundingClientRect().top;
+    if (narrow()) setTocOpen(false);
+  };
 
   // Scrolling either side brings the other along. A side moved by code
   // ignores its own next scroll event so the two never pull at each other.
@@ -133,6 +172,8 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
     let ignore: HTMLElement | null = null,
       frame = 0;
     const follow = (from: HTMLElement, to: HTMLElement) => () => {
+      // Either way the outline's current section may have changed.
+      setScrolled((count) => count + 1);
       if (ignore === from) {
         ignore = null;
         return;
@@ -220,6 +261,22 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
   })();
   const sectionPending = section.filter((block) => !(block.hash in translation.blocks)).length;
   const sourceOf = (block: Block) => ({ hash: block.hash, text: block.text });
+  // The section being read: the last heading at or above the top of the pane.
+  const activeHeading = (() => {
+    const pane = panes[side].current;
+    if (!pane || !tocOpen) return null;
+    const box = pane.getBoundingClientRect();
+    // At the end, the last sections can no longer reach the top edge: the
+    // last heading in view counts as the one being read.
+    const atEnd = pane.scrollTop + pane.clientHeight >= pane.scrollHeight - 2;
+    const edge = atEnd ? box.bottom - 40 : box.top + 8;
+    let current: string | null = null;
+    for (const heading of prepared.headings) {
+      const element = pane.querySelector(`#${CSS.escape(heading.id)}`);
+      if (element && element.getBoundingClientRect().top <= edge) current = heading.id;
+    }
+    return current;
+  })();
   return (
     <dialog
       ref={dialog}
@@ -287,7 +344,10 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
                       void translation.run(section.map(sourceOf), { glossaryText: glossaryText() })
                     }
                   >
-                    <span className="compare-long">只翻译</span>本节（{sectionPending} 段）
+                    {/* One span, so the button's flex gap does not split the words. */}
+                    <span>
+                      <span className="compare-long">只翻译</span>本节（{sectionPending} 段）
+                    </span>
                   </button>
                 )}
                 <button
@@ -301,6 +361,17 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
             )
           )}
         </div>
+        <button
+          className="icon-button toc-toggle compare-outline"
+          aria-label="目录"
+          title={tocOpen ? '隐藏目录' : '显示目录'}
+          aria-expanded={tocOpen}
+          aria-controls="compare-outline"
+          disabled={!prepared.headings.length}
+          onClick={toggleToc}
+        >
+          <List size={18} />
+        </button>
         <button
           className="icon-button compare-glossary"
           aria-label="术语表"
@@ -343,6 +414,21 @@ export default function CompareView({ note, onClose }: { note: NoteDetail; onClo
         />
       )}
       <div className="compare-body">
+        {tocOpen && (
+          <nav id="compare-outline" className="toc compare-toc" aria-label="目录">
+            {prepared.headings.map((heading) => (
+              <button
+                key={heading.id}
+                className={activeHeading === heading.id ? 'active' : ''}
+                aria-current={activeHeading === heading.id ? 'location' : undefined}
+                style={{ paddingLeft: 12 + (heading.level - 1) * 10 }}
+                onClick={() => jumpTo(heading.id)}
+              >
+                {(side === 'translation' && headingLabels[heading.id]) || heading.title || '无标题'}
+              </button>
+            ))}
+          </nav>
+        )}
         <div ref={panes.source} className="compare-pane is-source" role="region" aria-label="原文">
           <div className="paper-body" onClick={followLink} />
         </div>
