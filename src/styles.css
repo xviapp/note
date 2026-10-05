@@ -3186,9 +3186,19 @@ button.node-list-toggle:focus-visible {
     background: var(--selected);
     color: var(--ink);
   }
+  /* Both sides stay laid out, stacked; switching only changes which one is
+     visible, so a long paper is not laid out again on every switch. */
+  .compare-body {
+    position: relative;
+  }
+  .compare-pane {
+    position: absolute;
+    inset: 0;
+  }
   .compare-view.show-source .is-translation,
   .compare-view.show-translation .is-source {
-    display: none;
+    visibility: hidden;
+    pointer-events: none;
   }
   .compare-pane.is-source {
     border: 0;
@@ -3340,9 +3350,19 @@ button.node-list-toggle:focus-visible {
   place-items: center;
 }
 @media (max-width: 760px) {
+  /* As in the comparison view: both sides stay laid out, one is visible. */
+  .split-body {
+    position: relative;
+  }
+  .split-pane {
+    position: absolute;
+    inset: 0;
+    background: var(--surface);
+  }
   .split-view.show-0 .split-pane:nth-child(2),
   .split-view.show-1 .split-pane:nth-child(1) {
-    display: none;
+    visibility: hidden;
+    pointer-events: none;
   }
   .split-pane + .split-pane {
     border-left: 0;
@@ -3490,4 +3510,21 @@ button.node-list-toggle:focus-visible {
   background: var(--surface-subtle);
   color: var(--muted);
   font-size: 12px;
+}
+/* The comparison view holds a whole paper twice: the browser lays out and
+   paints only paragraphs near the viewport, keeping each one's last measured
+   height once seen. Its sides pair by paragraph, so estimates do no harm.
+   Not where positions are shares of the full height: the reading page's
+   saved position and the split view's proportional sync need real heights. */
+.compare-pane
+  :is(
+    .paper-body .ltx_para,
+    .paper-body figure,
+    .paper-body .ltx_equation,
+    .paper-body .ltx_equationgroup,
+    .paper-body .ltx_bibitem,
+    .markdown-body > :is(p, ul, ol, pre, blockquote, table, .katex-display)
+  ) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 120px;
 }

@@ -474,8 +474,17 @@ export default function CompareView({
           aria-label="译文"
           onClick={(event) => {
             const element = (event.target as Element).closest<HTMLElement>('[data-block]');
+            // Measured from the pane: a paragraph inside a content-visibility
+            // block has that block, not the pane, as its offsetParent.
+            const pane = event.currentTarget;
             if (element?.dataset.applied)
-              setActive({ index: Number(element.dataset.block), top: element.offsetTop });
+              setActive({
+                index: Number(element.dataset.block),
+                top:
+                  element.getBoundingClientRect().top -
+                  pane.getBoundingClientRect().top +
+                  pane.scrollTop,
+              });
           }}
         >
           <div className="paper-body" onClick={followLink} />
