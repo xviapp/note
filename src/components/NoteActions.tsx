@@ -39,6 +39,8 @@ export function NoteActions({
   annotationsOpen,
   onAnnotations,
   onEdit,
+  onBook,
+  onDiscuss,
   onAction,
 }: {
   note: NoteDetail;
@@ -71,8 +73,13 @@ export function NoteActions({
   annotationsOpen: boolean;
   onAnnotations: () => void;
   onEdit: () => void;
+  // Edit the book's details.
+  onBook: () => void;
+  // Start a discussion below a note inside a book.
+  onDiscuss: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
+  const inBook = !!note.book && note.book.id !== note.id;
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   const canSplit = splittable(note);
@@ -227,6 +234,28 @@ export function NoteActions({
               批注（{annotationCount}）
             </button>
           )}
+          {note.book?.id === note.id && (
+            <button
+              disabled={offline}
+              onClick={(event) => {
+                closeMenu(event.currentTarget);
+                onBook();
+              }}
+            >
+              书籍资料
+            </button>
+          )}
+          {inBook && note.kind !== 'folder' && (
+            <button
+              disabled={offline}
+              onClick={(event) => {
+                closeMenu(event.currentTarget);
+                onDiscuss();
+              }}
+            >
+              新建讨论
+            </button>
+          )}
           {/* Attachments also list under the body; this opens them without scrolling there. */}
           {attachments > 0 && (
             <button
@@ -248,10 +277,13 @@ export function NoteActions({
               分屏查看
             </button>
           )}
-          {/* Folders have none of the items above, so no divider either. */}
-          {(attachments > 0 || canSplit || note.kind !== 'folder') && (
-            <hr className={attachments > 0 || canSplit ? undefined : 'menu-compact-only'} />
-          )}
+          <hr
+            className={
+              attachments > 0 || canSplit || note.book?.id === note.id || inBook
+                ? undefined
+                : 'menu-compact-only'
+            }
+          />
         </NodeMenu>
       )}
     </div>

@@ -40,6 +40,7 @@ import {
   saveGlossary,
   translatePaperBlocks,
 } from './paper-translation';
+import { addPage, saveBook } from './books';
 import { deleteAnnotation, listAnnotations, putAnnotation } from './annotations';
 
 export default {
@@ -169,6 +170,10 @@ export default {
           return json(await extractGlossary(env, request, id, await body(request)));
         if (action === 'paper-translation/glossary' && method === 'PUT')
           return json(await saveGlossary(env, id, await body(request)));
+        if (action === 'book' && method === 'PUT')
+          return json(await saveBook(env, id, await body(request)));
+        if (action === 'pages' && method === 'POST')
+          return json(await addPage(env, id, await body(request), operationKey(request)), 201);
         if (action === 'annotations' && method === 'GET')
           return json(await listAnnotations(env, id));
         const annotation = action.match(/^annotations\/([a-zA-Z0-9_-]+)$/);

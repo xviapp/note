@@ -2,6 +2,7 @@ import { useRef, useState, type FormEvent } from 'react';
 import { api, upload } from '../api';
 import { importPaper } from '../arxiv-import';
 import {
+  BOOK_ROLE_LIMIT,
   KIND_LABELS,
   UNTITLED_NAMES,
   type ArxivImportProgress,
@@ -28,7 +29,7 @@ export function NodeForm({
   onClose: () => void;
   onSaved: (node: NoteNode) => void;
 }) {
-  const [kind, setKind] = useState<NodeKind | 'arxiv'>(
+  const [kind, setKind] = useState<NodeKind | 'arxiv' | 'book'>(
     node?.kind ||
       (existingFile ? (existingFile.mime === 'application/pdf' ? 'pdf' : 'image') : 'markdown'),
   );
@@ -46,6 +47,11 @@ export function NodeForm({
     emoji: node?.icon_emoji ?? null,
     fileId: node?.icon_blob_id ?? null,
   });
+  const [author, setAuthor] = useState(''),
+    [pageCount, setPageCount] = useState(''),
+    [role, setRole] = useState('');
+  // A book is a folder created with its reading details.
+  const folderLike = kind === 'folder' || kind === 'book';
   const [preparingIcon, setPreparingIcon] = useState(false);
   const uploadedIcon = useRef<{ source: File; info: FileInfo } | null>(null);
   const working = busy || preparingIcon;
@@ -64,7 +70,7 @@ export function NodeForm({
     setError('');
     try {
       let iconData;
-      if (kind === 'folder') {
+      if (folderLike) {
         if (icon.emoji && !isFolderEmoji(icon.emoji)) throw new Error('请输入一个 Emoji。');
         if (icon.file && uploadedIcon.current?.source !== icon.file) {
           if (uploadedIcon.current)
@@ -86,7 +92,7 @@ export function NodeForm({
             title,
             ...(kind === 'link' && !node.arxiv_id ? { url } : {}),
             revision: node.revision,
-            ...(kind === 'folder' ? { icon: iconData } : {}),
+            ...(folderLike ? { icon: iconData } : {}),
           })
         : kind === 'arxiv'
           ? await importPaper({ title, parentId: parent, url }, key.current, continued, setProgress)
@@ -94,13 +100,16 @@ export function NodeForm({
               '/api/nodes',
               'POST',
               {
-                kind,
+                kind: kind === 'book' ? 'folder' : kind,
                 title,
                 parentId: parent,
                 url,
                 fileId: uploaded.current?.id,
                 content: '',
-                ...(kind === 'folder' ? { icon: iconData } : {}),
+                ...(folderLike ? { icon: iconData } : {}),
+                ...(kind === 'book'
+                  ? { book: { author, pageCount: Number(pageCount) || 0, rolePrompt: role } }
+                  : {}),
               },
               key.current,
             );
@@ -130,20 +139,23 @@ export function NodeForm({
         {!node && !existingFile && (
           <fieldset className="kind-choices">
             <legend>内容类型</legend>
-            {Object.entries({ ...KIND_LABELS, arxiv: 'arXiv 论文' }).map(([value, label]) => (
-              <label key={value} className={kind === value ? 'selected' : ''}>
-                <input
-                  type="radio"
-                  name="kind"
-                  value={value}
-                  checked={kind === value}
-                  disabled={working || !!uploaded.current}
-                  onChange={() => setKind(value as NodeKind | 'arxiv')}
-                />
-                <NodeIcon kind={value as NodeKind | 'arxiv'} />
-                {label}
-              </label>
-            ))}
+            {Object.entries(KIND_LABELS)
+              .flatMap((entry) => (entry[0] === 'folder' ? [entry, ['book', '书籍']] : [entry]))
+              .concat([['arxiv', 'arXiv 论文']])
+              .map(([value, label]) => (
+                <label key={value} className={kind === value ? 'selected' : ''}>
+                  <input
+                    type="radio"
+                    name="kind"
+                    value={value}
+                    checked={kind === value}
+                    disabled={working || !!uploaded.current}
+                    onChange={() => setKind(value as NodeKind | 'arxiv' | 'book')}
+                  />
+                  <NodeIcon kind={value as NodeKind | 'arxiv' | 'book'} />
+                  {label}
+                </label>
+              ))}
           </fieldset>
         )}
         {!iconOnly && (
@@ -153,7 +165,13 @@ export function NodeForm({
               autoFocus
               required={!!node}
               placeholder={
-                kind === 'arxiv' ? '留空使用论文标题' : node ? undefined : UNTITLED_NAMES[kind]
+                kind === 'arxiv'
+                  ? '留空使用论文标题'
+                  : node
+                    ? undefined
+                    : kind === 'book'
+                      ? '书名'
+                      : UNTITLED_NAMES[kind]
               }
               maxLength={200}
               value={title}
@@ -165,7 +183,44 @@ export function NodeForm({
             />
           </label>
         )}
-        {kind === 'folder' && (
+        {kind === 'book' && !node && (
+          <>
+            <label>
+              作者
+              <input
+                maxLength={200}
+                value={author}
+                onChange={(e) => setAuthor(e.target.value)}
+                disabled={working}
+              />
+            </label>
+            <label>
+              总页数
+              <input
+                type="number"
+                inputMode="numeric"
+                min={0}
+                max={100000}
+                value={pageCount}
+                onChange={(e) => setPageCount(e.target.value)}
+                disabled={working}
+              />
+            </label>
+            <label>
+              青藜角色
+              <textarea
+                rows={4}
+                maxLength={BOOK_ROLE_LIMIT}
+                value={role}
+                placeholder="例如：你是这本书的导读老师，先讲清作者的论证，再提出值得追问的问题。"
+                onChange={(e) => setRole(e.target.value)}
+                disabled={working}
+              />
+              <span className="field-hint">书中所有页面和讨论与青藜对话时都会使用这个角色。</span>
+            </label>
+          </>
+        )}
+        {folderLike && (
           <FolderIconPicker
             value={icon}
             onChange={setIcon}
@@ -223,7 +278,7 @@ export function NodeForm({
           </button>
           <button
             className="button primary"
-            disabled={working || (kind === 'folder' && !!icon.emoji && !isFolderEmoji(icon.emoji))}
+            disabled={working || (folderLike && !!icon.emoji && !isFolderEmoji(icon.emoji))}
           >
             {busy
               ? kind === 'arxiv'

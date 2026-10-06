@@ -81,7 +81,11 @@ export function NoteHeading({
       <div className="document-meta">
         <span className="document-kind">
           <NodeIcon node={note} kind={note.arxiv_id ? 'arxiv' : note.kind} size={14} />
-          {note.arxiv_id ? 'arXiv 论文' : KIND_LABELS[note.kind]}
+          {note.arxiv_id
+            ? 'arXiv 论文'
+            : note.book?.id === note.id
+              ? '书籍'
+              : KIND_LABELS[note.kind]}
         </span>
         {note.arxiv_id ? (
           <a className="paper-source" href={note.url!} target="_blank" rel="noopener noreferrer">

@@ -36,6 +36,8 @@ export interface NoteNode {
   updated_at: number;
   child_count?: number;
   favorite?: number;
+  // A folder with book details.
+  is_book?: number;
 }
 export interface FileInfo {
   id: string;
@@ -73,6 +75,27 @@ export interface NoteDetail extends NoteNode {
   attachments: FileInfo[];
   file?: FileInfo;
   breadcrumbs: { id: string; title: string }[];
+  // The nearest book containing this note, or the note itself when it is a book.
+  book?: BookInfo;
+}
+export type BookStatus = 'want' | 'reading' | 'finished';
+export const BOOK_STATUS_LABELS: Record<BookStatus, string> = {
+  want: '想读',
+  reading: '在读',
+  finished: '已读完',
+};
+export const BOOK_ROLE_LIMIT = 4000;
+export const BOOK_PAGE_IMAGE_LIMIT = 5 * 1_048_576;
+export interface BookInfo {
+  id: string;
+  title: string;
+  author: string;
+  status: BookStatus;
+  page_count: number;
+  pages_read: number;
+  // Steers 青藜 for every note inside the book.
+  role_prompt: string;
+  updated_at: number;
 }
 export interface ReadingPosition {
   ratio?: number;

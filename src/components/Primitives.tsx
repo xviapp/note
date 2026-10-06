@@ -1,5 +1,15 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from 'react';
-import { X, FileText, Folder, File, Image, Link, LoaderCircle, BookOpen } from 'lucide-react';
+import {
+  X,
+  FileText,
+  Folder,
+  File,
+  Image,
+  Link,
+  LoaderCircle,
+  BookOpen,
+  BookMarked,
+} from 'lucide-react';
 import type { NodeKind, NoteNode } from '../../shared/types';
 import { CachedImage } from './CachedImage';
 import { fileUrl } from '../api';
@@ -9,10 +19,11 @@ export function NodeIcon({
   size = 17,
   node,
 }: {
-  kind: NodeKind | 'arxiv';
+  kind: NodeKind | 'arxiv' | 'book';
   size?: number;
-  node?: Pick<NoteNode, 'icon_emoji' | 'icon_blob_id'>;
+  node?: Pick<NoteNode, 'icon_emoji' | 'icon_blob_id' | 'is_book'>;
 }) {
+  if (kind === 'folder' && node?.is_book && !node.icon_emoji && !node.icon_blob_id) kind = 'book';
   if (kind === 'folder' && (node?.icon_emoji || node?.icon_blob_id))
     return (
       <span
@@ -33,6 +44,7 @@ export function NodeIcon({
     image: Image,
     link: Link,
     arxiv: BookOpen,
+    book: BookMarked,
   }[kind];
   return (
     <Icon size={size} strokeWidth={1.8} className={`node-icon kind-${kind}`} aria-hidden="true" />

@@ -1,5 +1,6 @@
 import { GLOBAL_ASSISTANT_ID } from './assistant';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folder-icons';
+import { BOOK_ROLE_LIMIT } from './types';
 
 export const BACKUP_FORMAT = 'yejian-library';
 export const BACKUP_METADATA_LIMIT = 16 * 1024 * 1024;
@@ -52,6 +53,7 @@ export const backupColumns = {
   ],
   paper_translations: ['node_id', 'target_language', 'body_blob_id', 'updated_at'],
   annotations: ['node_id', 'body_blob_id', 'updated_at', 'search_text'],
+  books: ['node_id', 'author', 'status', 'page_count', 'pages_read', 'role_prompt', 'updated_at'],
   trash_batches: [
     'id',
     'root_id',
@@ -137,6 +139,8 @@ export function validateBackup(input: unknown): LibraryBackup {
     // Or highlights and notes.
     if (table === 'annotations' && data.tables.annotations === undefined)
       data.tables.annotations = [];
+    // Or books.
+    if (table === 'books' && data.tables.books === undefined) data.tables.books = [];
     const rows = data.tables[table as BackupTable];
     if (!Array.isArray(rows)) invalid(`缺少 ${table}。`);
     for (const row of rows) {
@@ -226,6 +230,7 @@ export function validateBackup(input: unknown): LibraryBackup {
     'translations',
     'paper_translations',
     'annotations',
+    'books',
   ] as const)
     for (const row of data.tables[table]) {
       const global =
@@ -263,6 +268,23 @@ export function validateBackup(input: unknown): LibraryBackup {
   for (const row of data.tables.translations) hasFile(row.body_blob_id, true);
   for (const row of data.tables.paper_translations) hasFile(row.body_blob_id);
   for (const row of data.tables.annotations) hasFile(row.body_blob_id);
+  const books = new Set<unknown>();
+  for (const row of data.tables.books) {
+    if (
+      books.has(row.node_id) ||
+      nodes.get(row.node_id)!.kind !== 'folder' ||
+      !['want', 'reading', 'finished'].includes(String(row.status)) ||
+      typeof row.author !== 'string' ||
+      row.author.length > 200 ||
+      typeof row.role_prompt !== 'string' ||
+      row.role_prompt.length > BOOK_ROLE_LIMIT ||
+      ![row.page_count, row.pages_read].every(
+        (value) => Number.isSafeInteger(value) && Number(value) >= 0 && Number(value) <= 100_000,
+      )
+    )
+      invalid('书籍信息不正确。');
+    books.add(row.node_id);
+  }
   for (const row of data.tables.reading_states) {
     try {
       if (

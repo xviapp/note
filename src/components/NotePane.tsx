@@ -45,6 +45,8 @@ import { exportAnnotations, takeRequestedAnnotation, useAnnotations } from '../a
 import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
 import { AnnotationList, AnnotationPanel } from './AnnotationDialogs';
+import { BookCard, BookForm } from './BookPanel';
+import { createDiscussion, takeAssistantOnLoad } from '../books';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
 
@@ -118,7 +120,8 @@ export default function NotePane(props: Props) {
     [compareOpen, setCompareOpen] = useState(false),
     [splitOpen, setSplitOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false),
-    [linkOpen, setLinkOpen] = useState(false);
+    [linkOpen, setLinkOpen] = useState(false),
+    [bookOpen, setBookOpen] = useState(false);
   const question = useQuestion(),
     scroll = useRef<HTMLDivElement>(null);
   const toc = useNoteToc({
@@ -206,6 +209,12 @@ export default function NotePane(props: Props) {
     clearSourceHighlight();
     return clearSourceHighlight;
   }, [id, note?.content, editing]);
+  // A new discussion opens with 青藜 beside it.
+  useEffect(() => {
+    if (!loadedId || !takeAssistantOnLoad(loadedId)) return;
+    setAssistantMode('docked');
+    setAssistantOpen(true);
+  }, [loadedId]);
   const addQuote = (text: string) => {
     if (!assistantActions.current) return '青藜尚未就绪，请稍后重试。';
     const error = assistantActions.current.addQuote(text);
@@ -514,6 +523,15 @@ export default function NotePane(props: Props) {
           annotationsOpen={annotationPanel}
           onAnnotations={() => setAnnotationsOpen((open) => !(open && !toc.compact))}
           onEdit={() => void startEdit()}
+          onBook={() => setBookOpen(true)}
+          onDiscuss={() =>
+            void createDiscussion(note)
+              .then((node) => {
+                props.onChanged();
+                props.onOpen(node);
+              })
+              .catch(props.onError)
+          }
           onAction={props.onAction}
         />
       </div>
@@ -646,6 +664,19 @@ export default function NotePane(props: Props) {
                       className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
                       aria-label="下级笔记"
                     >
+                      {note.book?.id === note.id && (
+                        <BookCard
+                          book={note.book}
+                          offline={offline}
+                          onEdit={() => setBookOpen(true)}
+                          onChanged={() => {
+                            props.onChanged();
+                            setRetry((count) => count + 1);
+                          }}
+                          onOpen={props.onOpen}
+                          onError={props.onError}
+                        />
+                      )}
                       <NodeList
                         parent={id}
                         refresh={props.treeRefresh}
@@ -849,6 +880,16 @@ export default function NotePane(props: Props) {
             applyDetail(await api<NoteDetail>(`/api/nodes/${id}`));
             props.onChanged();
             setHistoryOpen(false);
+          }}
+        />
+      )}
+      {bookOpen && (
+        <BookForm
+          note={note}
+          onClose={() => setBookOpen(false)}
+          onSaved={() => {
+            props.onChanged();
+            setRetry((count) => count + 1);
           }}
         />
       )}

@@ -3,10 +3,12 @@ import type { FileInfo, NoteDetail, NoteNode, NodeKind, VersionInfo } from '../s
 import { PARENT_KINDS, TEXT_KINDS, UNTITLED_NAMES } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
 import { discardFile, getBlob, readText, storePaper, storeText } from './storage';
+import { bookFields, bookOf, insertBook } from './books';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
 
 export const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL) child_count,
-  EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite`;
+  EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite,
+  EXISTS(SELECT 1 FROM books b WHERE b.node_id=n.id) is_book`;
 export async function getNode(env: Env, id: string, includeTrash = false): Promise<NoteNode> {
   const node = await env.DB.prepare(`SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.id=?`)
     .bind(idValue(id))
@@ -75,12 +77,14 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
     if (version) content = await readText(env, version.body_blob_id);
   }
   const file = node.file_blob_id ? await getBlob(env, node.file_blob_id) : undefined;
+  const book = await bookOf(env, id);
   return {
     ...node,
     content,
     attachments: await attachments(env, node.current_version_id),
     file: file ? { id: file.id, name: file.name, mime: file.mime, size: file.size } : undefined,
     breadcrumbs: await nodePath(env, id),
+    ...(book ? { book } : {}),
   };
 }
 export function operationKey(request: Request): string {
@@ -158,8 +162,19 @@ export async function createNode(
   if (!['folder', 'markdown', 'text', 'pdf', 'image', 'link'].includes(kind))
     throw new AppError(400, '节点类型不正确。');
   const suppliedTitle = textValue(data.title ?? '', '标题', 200, true).trim();
-  let title = suppliedTitle || UNTITLED_NAMES[kind];
+  let title = suppliedTitle || (data.book !== undefined ? '未命名书籍' : UNTITLED_NAMES[kind]);
   const icon = await folderIcon(env, kind, data.icon);
+  // A book is a folder created together with its details.
+  if (data.book !== undefined && (kind !== 'folder' || paper))
+    throw new AppError(400, '只能新建文件夹形式的书籍。');
+  const book =
+    data.book === undefined
+      ? null
+      : bookFields(
+          data.book && typeof data.book === 'object' && !Array.isArray(data.book)
+            ? (data.book as Record<string, unknown>)
+            : {},
+        );
   const parent = data.parentId == null ? null : idValue(data.parentId);
   if (parent) {
     const p = await getNode(env, parent);
@@ -212,6 +227,7 @@ export async function createNode(
       icon.fileId,
     ),
   ];
+  if (book) statements.push(insertBook(env, id, book));
   if (blob)
     statements.push(
       env.DB.prepare(

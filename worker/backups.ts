@@ -386,6 +386,7 @@ export async function finishRestore(env: Env, jobId: string) {
     translations: archive.tables.translations.map(rewrite),
     paper_translations: archive.tables.paper_translations.map(rewrite),
     annotations: archive.tables.annotations.map(rewrite),
+    books: archive.tables.books.map(rewrite),
     trash_batches: [],
   };
   const statements = [
