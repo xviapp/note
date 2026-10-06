@@ -4155,3 +4155,88 @@ button.node-list-toggle:focus-visible {
 .lock-badge.is-open {
   color: var(--blue);
 }
+
+/* Journals */
+.journal-panel {
+  margin-top: 24px;
+}
+.journal-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+}
+.journal-template {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.journal-month {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 0 8px;
+}
+.journal-month h2 {
+  min-width: 108px;
+  text-align: center;
+  font-family: var(--font-book);
+  font-size: 17px;
+}
+.journal-calendar {
+  width: 100%;
+  max-width: 460px;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.journal-calendar th {
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.journal-calendar td {
+  padding: 2px;
+  text-align: center;
+}
+.journal-calendar button {
+  position: relative;
+  width: 100%;
+  max-width: 48px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.journal-calendar button:hover:not(:disabled) {
+  background: var(--surface-subtle);
+}
+.journal-calendar button:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+}
+.journal-calendar button.is-today {
+  outline: 1.5px solid var(--blue);
+  outline-offset: -1.5px;
+  color: var(--blue);
+  font-weight: 600;
+}
+.journal-calendar button.has-entry::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 6px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+.journal-recent-title {
+  margin-top: 24px;
+  font-size: 14px;
+  color: var(--muted);
+  font-weight: 500;
+}

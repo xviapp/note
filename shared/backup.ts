@@ -2,6 +2,7 @@ import { GLOBAL_ASSISTANT_ID } from './assistant';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folder-icons';
 import { BOOK_ROLE_LIMIT } from './types';
 import { KEY_ID } from './encryption';
+import { isJournalDate } from './journals';
 
 export const BACKUP_FORMAT = 'yejian-library';
 export const BACKUP_METADATA_LIMIT = 16 * 1024 * 1024;
@@ -83,6 +84,8 @@ export const backupColumns = {
   book_discussions: ['node_id', 'created_at'],
   book_note_sections: ['discussion_id', 'note_id', 'hash', 'updated_at'],
   projects: ['node_id'],
+  journals: ['node_id'],
+  journal_entries: ['node_id', 'journal_id', 'date', 'created_at'],
   node_references: ['node_id', 'target_id'],
   trash_batches: [
     'id',
@@ -200,6 +203,8 @@ export function validateBackup(input: unknown): LibraryBackup {
       'book_note_sections',
       'projects',
       'node_references',
+      'journals',
+      'journal_entries',
     ] as const)
       if (table === name && data.tables[name] === undefined) data.tables[name] = [];
     const rows = data.tables[table as BackupTable];
@@ -389,6 +394,32 @@ export function validateBackup(input: unknown): LibraryBackup {
     )
       invalid('项目信息不正确。');
     projects.add(row.node_id);
+  }
+  const journals = new Set<unknown>();
+  for (const row of data.tables.journals) {
+    if (
+      journals.has(row.node_id) ||
+      !nodes.has(row.node_id) ||
+      nodes.get(row.node_id)!.kind !== 'folder' ||
+      books.has(row.node_id) ||
+      projects.has(row.node_id)
+    )
+      invalid('日记本信息不正确。');
+    journals.add(row.node_id);
+  }
+  const days = new Set<string>();
+  for (const row of data.tables.journal_entries) {
+    const day = `${row.journal_id}:${row.date}`;
+    if (
+      !nodes.has(row.node_id) ||
+      nodes.get(row.node_id)!.kind !== 'markdown' ||
+      !journals.has(row.journal_id) ||
+      !isJournalDate(row.date) ||
+      !Number.isSafeInteger(row.created_at) ||
+      days.has(day)
+    )
+      invalid('日记信息不正确。');
+    days.add(day);
   }
   const references = new Set<unknown>();
   for (const row of data.tables.node_references) {

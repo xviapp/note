@@ -374,7 +374,8 @@ export const cacheablePath = (path: string) =>
   path === '/api/storage' ||
   /^\/api\/nodes(?:\?.*)?$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/annotations$/.test(path) ||
-  /^\/api\/nodes\/[\w-]+\/pages$/.test(path);
+  /^\/api\/nodes\/[\w-]+\/pages$/.test(path) ||
+  /^\/api\/nodes\/[\w-]+\/journal\?month=\d{4}-\d{2}$/.test(path);
 
 export async function cachedResponse<T>(path: string): Promise<T | undefined> {
   const id = path.match(/^\/api\/nodes\/([\w-]+)$/)?.[1];

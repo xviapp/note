@@ -1,6 +1,7 @@
 import { useBookPageView, useBookView } from './book';
 import { usePaperView } from './paper';
 import { useProjectView } from './project';
+import { useJournalView } from './journal';
 import type { TypeContext, TypeView } from './view';
 
 export { CREATABLE_TYPES, NOTE_TYPES, noteType, typeLabel } from './registry';
@@ -16,6 +17,7 @@ export function useTypeView(
     useBookView(ctx),
     useBookPageView(ctx),
     useProjectView(ctx),
+    useJournalView(ctx),
     usePaperView(ctx, extras),
   ];
   return views.find(Boolean) ?? {};

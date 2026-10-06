@@ -68,6 +68,7 @@ import {
   withKeys,
 } from './encryption';
 import { createProjectItem, projectOverview, saveProjectStatus } from './projects';
+import { journalEntry, journalMonth } from './journals';
 
 export default {
   async fetch(request: Request, baseEnv: Env, execution: ExecutionContext): Promise<Response> {
@@ -216,6 +217,9 @@ export default {
         if (sealedObject && method === 'PUT')
           return json(await replaceObject(env, request, id, sealedObject[1]));
         if (action === 'project' && method === 'GET') return json(await projectOverview(env, id));
+        if (action === 'journal' && method === 'GET') return json(await journalMonth(env, id, url));
+        if (action === 'journal/entries' && method === 'POST')
+          return json(await journalEntry(env, id, await body(request), operationKey(request)));
         if (action === 'project/items' && method === 'POST')
           return json(
             await createProjectItem(env, id, await body(request), operationKey(request)),

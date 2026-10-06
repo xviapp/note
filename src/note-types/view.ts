@@ -16,6 +16,8 @@ export interface TypeContext {
   openAssistant: () => void;
   onOpen: (node: NoteNode) => void;
   onNavigate: (id: string) => void;
+  // A note the type just created: opened for writing.
+  onCreated: (node: NoteNode) => void;
   onChanged: () => void;
   onError: (error: unknown) => void;
   onNotice?: (message: string) => void;

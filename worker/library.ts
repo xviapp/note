@@ -21,6 +21,7 @@ import {
 } from './projects';
 import { sealedSize } from '../shared/encryption';
 import { hasKey, locked } from './encryption';
+import { insertJournal, journalEntryOf } from './journals';
 
 // What a node is: its kind, or the kind of page a side table makes of it.
 // The first matching row wins; keep this in step with NoteVariant.
@@ -28,6 +29,7 @@ const VARIANT_SQL = `CASE
     WHEN EXISTS(SELECT 1 FROM node_references r WHERE r.node_id=n.id) THEN 'reference'
     WHEN EXISTS(SELECT 1 FROM books b WHERE b.node_id=n.id) THEN 'book'
     WHEN EXISTS(SELECT 1 FROM projects p WHERE p.node_id=n.id) THEN 'project'
+    WHEN EXISTS(SELECT 1 FROM journals j WHERE j.node_id=n.id) THEN 'journal'
     WHEN EXISTS(SELECT 1 FROM book_discussions d WHERE d.node_id=n.id) THEN 'discussion'
     WHEN EXISTS(SELECT 1 FROM book_pages p JOIN books b ON b.node_id=n.parent_id WHERE p.node_id=n.id) THEN 'book-page'
     WHEN n.arxiv_id IS NOT NULL THEN 'paper'
@@ -119,6 +121,7 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   const book = await bookOf(env, id);
   const page = book ? await pageInfo(env, node) : undefined;
   const discussion = book && node.parent_id && (await isDiscussion(env, id));
+  const entry = node.kind === 'markdown' ? await journalEntryOf(env, id) : null;
   let reference: NoteDetail['reference'];
   if (node.variant === 'reference') {
     let target: NoteNode | null = null;
@@ -143,6 +146,7 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
     ...(page ? { book_page: page } : {}),
     ...(discussion ? { discussion_page: node.parent_id! } : {}),
     ...(reference ? { reference } : {}),
+    ...(entry ? { journal_entry: entry } : {}),
   };
 }
 // A note's detail with its text, for the Worker's own use (books, projects):
@@ -239,6 +243,17 @@ export async function createNode(
       paper)
   )
     throw new AppError(400, '项目需要使用独立的文件夹。');
+  const journal = data.journal !== undefined;
+  if (
+    journal &&
+    (data.journal !== true ||
+      kind !== 'folder' ||
+      project ||
+      data.book !== undefined ||
+      data.referenceId !== undefined ||
+      paper)
+  )
+    throw new AppError(400, '日记本需要使用独立的文件夹。');
   const reference =
     data.referenceId === undefined ? null : await getNode(env, idValue(data.referenceId));
   if (reference && (kind !== 'folder' || data.book !== undefined || paper))
@@ -247,7 +262,9 @@ export async function createNode(
     suppliedTitle ||
     (project
       ? '未命名项目'
-      : reference
+      : journal
+        ? '日记'
+        : reference
         ? reference.title
         : data.book !== undefined
           ? '未命名书籍'
@@ -327,6 +344,7 @@ export async function createNode(
   ];
   if (book) statements.push(insertBook(env, id, book));
   if (project) statements.push(...insertProject(env, id, now));
+  if (journal) statements.push(...insertJournal(env, id, now));
   if (reference)
     statements.push(
       env.DB.prepare('INSERT INTO node_references(node_id,target_id) VALUES(?,?)').bind(

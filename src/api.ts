@@ -224,6 +224,13 @@ async function sealWrite<T>(path: string, method: string, data: unknown): Promis
     if (!keyId) return { done: false, data, scope: parent };
     return { done: false, data: await sealBody(keyId, String(fields.kind), fields), scope: parent };
   }
+  // A journal entry is created below the journal, with its key.
+  const entry = path.match(/^\/api\/nodes\/([\w-]+)\/journal\/entries$/);
+  if (entry && method === 'POST') {
+    const keyId = await scopeOf(entry[1]);
+    if (!keyId) return { done: false, data, scope: entry[1] };
+    return { done: false, data: await sealBody(keyId, 'markdown', fields), scope: entry[1] };
+  }
   const save = path.match(/^\/api\/nodes\/([\w-]+)\/content$/);
   if (save && method === 'PUT') {
     const keyId = await scopeOf(save[1]);

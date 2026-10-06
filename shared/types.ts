@@ -13,7 +13,14 @@ export type NodeKind = 'folder' | 'markdown' | 'text' | 'pdf' | 'image' | 'link'
 // paper is a link, a book or project a folder, a book page or discussion a
 // Markdown note, a reference a folder pointing elsewhere.
 export type NoteVariant =
-  NodeKind | 'paper' | 'book' | 'book-page' | 'discussion' | 'project' | 'reference';
+  | NodeKind
+  | 'paper'
+  | 'book'
+  | 'book-page'
+  | 'discussion'
+  | 'project'
+  | 'journal'
+  | 'reference';
 type LegacyFlags = { is_book?: number; is_project?: number; is_reference?: number };
 export function variantOf(
   node: Pick<NoteNode, 'kind' | 'variant' | 'arxiv_id'> & LegacyFlags,
@@ -122,6 +129,8 @@ export interface NoteDetail extends NoteNode {
   book_page?: BookPageInfo;
   // A discussion below a page (its 青藜 thread is the conversation).
   discussion_page?: string;
+  // A journal entry: its day (YYYY-MM-DD) and journal.
+  journal_entry?: { date: string; journal_id: string };
 }
 export interface BookDiscussion {
   id: string;

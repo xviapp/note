@@ -416,6 +416,8 @@ export async function finishRestore(env: Env, jobId: string) {
     book_discussions: archive.tables.book_discussions.map(rewrite),
     book_note_sections: archive.tables.book_note_sections.map(rewrite),
     projects: archive.tables.projects.map(rewrite),
+    journals: archive.tables.journals.map(rewrite),
+    journal_entries: archive.tables.journal_entries.map(rewrite),
     node_references: archive.tables.node_references.map(rewrite),
     trash_batches: [],
   };

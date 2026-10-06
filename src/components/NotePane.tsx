@@ -90,6 +90,8 @@ interface Props {
   onOpenSidebar: () => void;
   onBack: () => void;
   onNavigate: (id: string) => void;
+  // A note created from this page (e.g. a journal entry), opened for writing.
+  onCreated: (node: NoteNode) => void;
   onOpen: (node: NoteNode) => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
   onChanged: () => void;
@@ -203,7 +205,15 @@ export default function NotePane(props: Props) {
   }, []);
   const { autoEdit, onAutoEdit } = props;
   useEffect(() => {
-    if (!autoEdit || !note || editing || !TEXT_KINDS.includes(note.kind) || note.content) return;
+    // A new journal entry starts from its template, so it is not empty.
+    if (
+      !autoEdit ||
+      !note ||
+      editing ||
+      !TEXT_KINDS.includes(note.kind) ||
+      (note.content && !note.journal_entry)
+    )
+      return;
     onAutoEdit?.();
     void startEdit(false);
     // startEdit is recreated each render; this runs once the new note has loaded.
@@ -459,6 +469,7 @@ export default function NotePane(props: Props) {
       },
       onOpen: props.onOpen,
       onNavigate: props.onNavigate,
+      onCreated: props.onCreated,
       onChanged: props.onChanged,
       onError: props.onError,
       onNotice: props.onNotice,

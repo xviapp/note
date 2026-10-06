@@ -114,6 +114,7 @@ export function NodeForm({
                 fileId: uploaded.current?.id,
                 content: '',
                 ...(kind === 'project' ? { project: true } : {}),
+                ...(kind === 'journal' ? { journal: true } : {}),
                 ...(kind === 'reference' ? { referenceId: reference!.id } : {}),
                 ...(folderLike ? { icon: iconData } : {}),
                 ...(kind === 'book'
@@ -179,6 +180,8 @@ export function NodeForm({
                       ? '书名'
                       : kind === 'project'
                         ? '项目名称'
+                        : kind === 'journal'
+                          ? '日记'
                         : kind === 'reference'
                           ? reference?.title || '留空使用原文件名称'
                           : UNTITLED_NAMES[NOTE_TYPES[kind].create?.kind ?? 'markdown']
@@ -196,6 +199,11 @@ export function NodeForm({
         {kind === 'project' && !node && (
           <p className="field-hint">
             自动创建 todo、issue、note 目录，项目页汇总其中的 Markdown 文件。
+          </p>
+        )}
+        {kind === 'journal' && !node && (
+          <p className="field-hint">
+            按日历写日记，每天一篇，自动放入年、月目录。templates 目录中的 Markdown 文件作为模板。
           </p>
         )}
         {kind === 'reference' && !node && (

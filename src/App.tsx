@@ -544,6 +544,11 @@ function Notebook({
                   onOpenSidebar={openSidebar}
                   onBack={navigation.back}
                   onNavigate={navigate}
+                  onCreated={(node) => {
+                    changed();
+                    setFreshNote(node.id);
+                    void navigate(node.id);
+                  }}
                   onOpen={openNode}
                   onAction={action}
                   onChanged={changed}
