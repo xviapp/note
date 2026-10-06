@@ -6,6 +6,7 @@ import type { NoteDetail, NoteNode } from '../shared/types';
 import type { ProjectOverview } from '../shared/projects';
 import { validateBackup, type LibraryBackup } from '../shared/backup';
 import { storeText } from '../worker/storage';
+import { projectPrompt } from '../worker/projects';
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -395,5 +396,24 @@ describe('project folders and Markdown indexing', () => {
       ])
         delete node[field];
     expect(validateBackup(legacy).tables.projects).toEqual([]);
+  });
+
+  it('tells 青藜 about the project and its open work, not its notes', async () => {
+    const project = await create({ kind: 'folder', title: '页间改版', project: true });
+    const add = (category: string, title: string) =>
+      ok<NoteNode>(`/api/nodes/${project.id}/project/items`, 'POST', { category, title });
+    const todo = await add('todo', '增加引用');
+    await add('issue', '同步失败');
+    await add('note', '方案草稿');
+    // Indexing happens when the project page reads its overview.
+    await ok(`/api/nodes/${project.id}/project`);
+    const prompt = await projectPrompt(bindings, await detail(todo.id));
+    expect(prompt).toContain('当前文件属于项目「页间改版」');
+    expect(prompt).toContain('[待办·待办] 增加引用');
+    expect(prompt).toContain('[问题·待处理] 同步失败');
+    expect(prompt).not.toContain('方案草稿');
+    expect(await projectPrompt(bindings, await create({ kind: 'markdown', title: '无关' }))).toBe(
+      '',
+    );
   });
 });

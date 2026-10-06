@@ -1,4 +1,4 @@
-import type { RefObject } from 'react';
+import type { ReactNode, RefObject } from 'react';
 import {
   Columns2,
   FolderTree,
@@ -39,7 +39,7 @@ export function NoteActions({
   annotationsOpen,
   onAnnotations,
   onEdit,
-  onBook,
+  menu,
   onAction,
 }: {
   note: NoteDetail;
@@ -72,11 +72,10 @@ export function NoteActions({
   annotationsOpen: boolean;
   onAnnotations: () => void;
   onEdit: () => void;
-  // Edit the book's details.
-  onBook: () => void;
+  // A note type's own items (e.g. a book's details).
+  menu?: ReactNode;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
-  const inBook = !!note.book && note.book.id !== note.id;
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   const canSplit = splittable(note);
@@ -231,16 +230,11 @@ export function NoteActions({
               批注（{annotationCount}）
             </button>
           )}
-          {note.book?.id === note.id && (
-            <button
-              disabled={offline}
-              onClick={(event) => {
-                closeMenu(event.currentTarget);
-                onBook();
-              }}
-            >
-              书籍资料
-            </button>
+          {menu && (
+            // Choosing one of the type's items closes the menu like the others.
+            <div className="menu-extra" onClick={(event) => closeMenu(event.currentTarget)}>
+              {menu}
+            </div>
           )}
           {/* Attachments also list under the body; this opens them without scrolling there. */}
           {attachments > 0 && (
@@ -263,13 +257,7 @@ export function NoteActions({
               分屏查看
             </button>
           )}
-          <hr
-            className={
-              attachments > 0 || canSplit || note.book?.id === note.id || inBook
-                ? undefined
-                : 'menu-compact-only'
-            }
-          />
+          <hr className={attachments > 0 || canSplit || menu ? undefined : 'menu-compact-only'} />
         </NodeMenu>
       )}
     </div>

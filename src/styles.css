@@ -1638,12 +1638,16 @@ button.node-list-toggle:focus-visible {
 }
 /* A book's details above its pages. */
 /* A book page: the photo stays a thumbnail above the recognized text (tap to zoom). */
-.book-page-view .markdown-body > p:first-child > img:only-child {
+.variant-book-page .markdown-body > p:first-child > img:only-child {
   max-height: 96px;
   width: auto;
   border: 1px solid var(--line);
   border-radius: 8px;
   margin: 0 0 1em;
+}
+/* A note type's own ⋯ menu items sit among the others. */
+.menu-extra {
+  display: contents;
 }
 .book-page-nav {
   display: flex;

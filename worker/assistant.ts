@@ -13,7 +13,7 @@ import type { FileInfo, NoteNode } from '../shared/types';
 import type { BlobRow, Env } from './types';
 import { AppError, asError, idValue, textValue } from './http';
 import { createNode, getNode } from './library';
-import { bookPrompt } from './books';
+import { assistantContext } from './assistant-context';
 import { discardFile, getBlob, storeChatBody, storeText, uploadFile } from './storage';
 import { aiSettings, deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
 import { CHAT_CONTEXT_IMAGE_LIMIT } from '../shared/chat-files';
@@ -401,7 +401,7 @@ export async function sendChat(
           : {}),
       },
       maxTokens,
-      id === GLOBAL_ASSISTANT_ID ? '' : await bookPrompt(env, node as NoteNode),
+      id === GLOBAL_ASSISTANT_ID ? '' : await assistantContext(env, node as NoteNode),
     );
     body = await storeChatBody(
       env,

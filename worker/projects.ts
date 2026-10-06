@@ -3,6 +3,7 @@ import type { NoteNode } from '../shared/types';
 import {
   markdownMetadata,
   PROJECT_CATEGORIES,
+  PROJECT_LABELS,
   PROJECT_STATUSES,
   projectCategory,
   projectMarkdown,
@@ -124,6 +125,36 @@ export async function projectOverview(env: Env, id: string): Promise<ProjectOver
         .map((row) => row.id),
     ).size,
   };
+}
+// What 青藜 is told about a note inside a project: the project and its open
+// work. Only summaries already indexed are used; a chat never re-indexes.
+export async function projectPrompt(env: Env, node: NoteNode): Promise<string> {
+  const project = await env.DB.prepare(
+    `WITH RECURSIVE parents(id,parent_id,depth) AS (
+      SELECT id,parent_id,0 FROM nodes WHERE id=?
+      UNION ALL SELECT n.id,n.parent_id,p.depth+1 FROM nodes n JOIN parents p ON p.parent_id=n.id WHERE p.depth<200
+    ) SELECT n.id,n.title FROM parents p JOIN projects j ON j.node_id=p.id JOIN nodes n ON n.id=p.id
+    ORDER BY p.depth LIMIT 1`,
+  )
+    .bind(node.id)
+    .first<{ id: string; title: string }>();
+  if (!project) return '';
+  const open = new Map<string, string>();
+  for (const row of await projectRows(env, project.id)) {
+    if (row.category === 'note' || open.size >= 40) continue;
+    const indexed = row.metadata_version_id === row.current_version_id;
+    const status = (indexed && row.metadata_status) || '';
+    if (status === 'done' || status === 'closed') continue;
+    const label = PROJECT_STATUSES[row.category][status] || PROJECT_LABELS[row.category];
+    open.set(
+      row.id,
+      `- [${PROJECT_LABELS[row.category]}·${label}] ${(indexed && row.metadata_title) || row.title}`,
+    );
+  }
+  let prompt = `\n\n当前文件属于项目「${project.title}」。`;
+  if (open.size)
+    prompt += `项目中未完成的待办与未关闭的问题如下，作为背景资料：\n${[...open.values()].join('\n')}`;
+  return prompt;
 }
 export async function createProjectItem(
   env: Env,
