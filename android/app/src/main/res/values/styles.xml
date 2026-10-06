@@ -12,11 +12,24 @@
         <item name="android:background">@null</item>
     </style>
     <style name="AppTheme.NoActionBarLaunch" parent="Theme.SplashScreen">
-        <!-- The screen follows the system's light or dark surface; the mark keeps its white paper disc. -->
+        <!-- Follows the system's light or dark surface. A chosen app theme replaces it
+             on Android 13+ (MainActivity.updateSplashTheme). -->
         <item name="windowSplashScreenBackground">@color/note_surface</item>
-        <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/splash_icon_disc</item>
         <item name="windowSplashScreenAnimatedIcon">@drawable/ic_launcher_foreground</item>
         <item name="postSplashScreenTheme">@style/AppTheme.NoActionBar</item>
+    </style>
+    <style name="AppTheme.NoActionBarLaunch.Light">
+        <item name="windowSplashScreenBackground">@color/note_surface_light</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/note_surface_light</item>
+    </style>
+    <style name="AppTheme.NoActionBarLaunch.Dark">
+        <item name="windowSplashScreenBackground">@color/note_surface_dark</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
+    </style>
+    <style name="AppTheme.NoActionBarLaunch.Starry">
+        <item name="windowSplashScreenBackground">@color/note_surface_starry</item>
+        <item name="windowSplashScreenIconBackgroundColor">@color/ic_launcher_background</item>
     </style>
     <!-- The share window: clear, so the sending app stays visible under the page's sheet. -->
     <style name="ShareTheme" parent="Theme.AppCompat.DayNight.NoActionBar">

@@ -11,7 +11,7 @@
 - `public/android-webview.html`：旧系统网页组件提示页。
 - `android/app/src/main/res/`：普通和圆形桌面图标共用自适应前景，单色主题图标与启动画面复用同一轮廓。
 
-Android 前景直接使用 `mark.json` 的三条矢量路径，采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。系统深色模式下桌面图标不变；启动画面背景跟随系统深浅色（`note_surface`），图标放在米白圆底上，深色模式冷启动不出现整屏亮帧。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
+Android 前景直接使用 `mark.json` 的三条矢量路径，采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。系统深色模式下桌面图标不变。启动画面背景跟随 App 内选择的主题：白天米白、夜间深灰、星空深蓝；选「跟随系统」时按系统深浅色（`note_surface`）。深色背景上图标放在米白圆底上；浅色背景与圆底同为纸色，会模糊图案边缘，因此不加圆底，深绿图案直接置于米白背景。Android 13+ 通过 `SplashScreen.setSplashScreenTheme` 让系统记住所选主题，从下一次冷启动起生效；更早的版本只能跟随系统深浅色。深色模式冷启动不出现整屏亮帧。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
 
 桌面图标缓存的刷新时间由系统决定；已安装的网页快捷方式是否刷新图标由浏览器及系统决定。
 

@@ -3,6 +3,7 @@ package app.xvi.note;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
+import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -65,6 +66,21 @@ public class MainActivity extends NoteBridgeActivity {
             default -> R.color.note_surface;
         };
         applyThemeBackground(getColor(background));
+        updateSplashTheme(preference);
+    }
+
+    // The system draws the next cold start's splash before any app code runs.
+    // Android 13+ remembers a chosen splash theme, so it matches the app theme;
+    // older versions keep the manifest theme, which follows the system.
+    private void updateSplashTheme(String preference) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
+        int theme = switch (preference) {
+            case "light" -> R.style.AppTheme_NoActionBarLaunch_Light;
+            case "dark" -> R.style.AppTheme_NoActionBarLaunch_Dark;
+            case "starry" -> R.style.AppTheme_NoActionBarLaunch_Starry;
+            default -> R.style.AppTheme_NoActionBarLaunch;
+        };
+        getSplashScreen().setSplashScreenTheme(theme);
     }
 
     @Override
@@ -74,6 +90,7 @@ public class MainActivity extends NoteBridgeActivity {
         getSharedPreferences(APPEARANCE_PREFS, MODE_PRIVATE).edit()
             .putString("theme", preference).apply();
         applyThemeBackground(color);
+        updateSplashTheme(preference);
     }
 
     private void applyThemeBackground(int color) {

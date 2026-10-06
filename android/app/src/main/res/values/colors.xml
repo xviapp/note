@@ -5,4 +5,7 @@
     <color name="note_surface_dark">#242220</color>
     <color name="note_surface_starry">#20263B</color>
     <color name="note_surface">@color/note_surface_light</color>
+    <!-- The splash mark's disc: none on the light surface (paper on paper would blur
+         the mark's edge), the white paper disc on dark surfaces. -->
+    <color name="splash_icon_disc">@color/note_surface_light</color>
 </resources>
