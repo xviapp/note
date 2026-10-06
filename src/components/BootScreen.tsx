@@ -1,12 +1,10 @@
 import { useEffect, useState } from 'react';
-import { useTheme } from '../theme';
 
 // After this long, add a line saying we are still connecting.
 const SLOW_MS = 4000;
 
 // The first screen while the session is checked; on Android it follows the splash.
 export function BootScreen({ error, onRetry }: { error: string; onRetry: () => void }) {
-  const { theme } = useTheme();
   const [slow, setSlow] = useState(false);
   useEffect(() => {
     if (error) return;
@@ -16,13 +14,7 @@ export function BootScreen({ error, onRetry }: { error: string; onRetry: () => v
   return (
     <div className="boot-screen">
       <div className={`boot-mark${error ? '' : ' is-loading'}`}>
-        <img
-          src={`/brand/${theme === 'light' ? 'day' : 'night'}-192.png`}
-          width="88"
-          height="88"
-          alt=""
-          draggable={false}
-        />
+        <img src="/brand/day-192.png" width="88" height="88" alt="" draggable={false} />
       </div>
       <h1 className="boot-name">页间</h1>
       {error ? (

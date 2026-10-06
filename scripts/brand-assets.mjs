@@ -1,9 +1,9 @@
-import { mkdir, readFile, writeFile } from 'node:fs/promises';
+import { mkdir, writeFile } from 'node:fs/promises';
 import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import path from 'node:path';
 
-// Package the approved paths without retracing or changing their geometry.
+// Package the approved ink painting; derive every variant from the same artwork.
 // Generated assets are committed so ordinary builds do not need ImageMagick.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'public/brand');
@@ -16,71 +16,67 @@ const run = (command, args) => {
 };
 await mkdir(output, { recursive: true });
 await mkdir(temporary, { recursive: true });
-const mark = JSON.parse(await readFile(path.join(root, 'assets/brand/mark.json'), 'utf8'));
-if (
-  !Number.isFinite(mark.staffOffsetX) ||
-  !['staff', 'leaf', 'pages'].every((part) => typeof mark[part] === 'string' && mark[part])
-)
-  throw new Error('Expected the approved staff, leaf and book paths');
-for (const variant of ['day', 'night']) {
-  const source = path.join(root, `assets/brand/${variant}-original.png`);
-  const background = variant === 'day' ? palette.paper : palette.green;
-  const foreground = variant === 'day' ? palette.green : palette.paper;
-  await writeFile(
-    path.join(native, variant === 'day' ? 'values' : 'values-night', 'ic_launcher_background.xml'),
-    `<?xml version="1.0" encoding="utf-8"?>
+const painting = path.join(root, 'assets/brand/ink-original.png');
+const inkMask = path.join(temporary, 'ink-mask.png');
+// Remove the pale paper from the native foreground, retaining ink and dry-brush gaps.
+// Discard faint paper fibres below 18% darkness; ink becomes opaque at 82%.
+run('magick', [painting, '-colorspace', 'Gray', '-negate', '-level', '18%,82%', inkMask]);
+// One white-paper icon in every theme and system mode; there is no dark variant.
+const source = path.join(root, 'assets/brand/day-original.png');
+await writeFile(
+  path.join(native, 'values', 'ic_launcher_background.xml'),
+  `<?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <color name="ic_launcher_background">${background}</color>
-    <color name="brand_mark">${foreground}</color>
+    <color name="ic_launcher_background">${palette.paper}</color>
+    <color name="brand_mark">${palette.green}</color>
 </resources>
 `,
-  );
-  const svg = path.join(temporary, `${variant}.svg`);
-  await writeFile(
-    svg,
-    `<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
-  <rect width="1254" height="1254" fill="${background}"/>
-  <g fill="${foreground}" transform="translate(0 1254) scale(0.1 -0.1)">
-    <g transform="translate(${mark.staffOffsetX} 0)">
-      <path d="${mark.staff}"/>
-      <path d="${mark.leaf}"/>
-    </g>
-    <path d="${mark.pages}"/>
-  </g>
-</svg>
-`,
-  );
-  run('magick', [svg, '-strip', source]);
-  for (const size of [64, 128, 180, 192, 512])
-    run('magick', [
-      source,
-      '-resize',
-      `${size}x${size}`,
-      '-strip',
-      path.join(output, `${variant}-${size}.png`),
-    ]);
-  const manifest = {
-    id: '/',
-    name: '页间',
-    short_name: '页间',
-    lang: 'zh-CN',
-    start_url: '/',
-    scope: '/',
-    display: 'standalone',
-    background_color: variant === 'day' ? '#F9EFE2' : '#191817',
-    theme_color: variant === 'day' ? '#F9EFE2' : '#191817',
-    icons: [192, 512].map((size) => ({
-      src: `/brand/${variant}-${size}.png`,
-      sizes: `${size}x${size}`,
-      type: 'image/png',
-      purpose: 'any',
-    })),
-  };
-  await writeFile(
-    path.join(output, `${variant}.webmanifest`),
-    JSON.stringify(manifest, null, 2) + '\n',
-  );
-}
+);
+const ink = path.join(temporary, 'day-ink.png');
+run('magick', [painting, inkMask, '-alpha', 'off', '-compose', 'CopyOpacity', '-composite', ink]);
+run('magick', [painting, '-strip', source]);
+// Fit the entire square artwork into 66 dp; its ink stays within the circular safe zone.
+const nativeOutput = path.join(native, 'drawable-nodpi');
+await mkdir(nativeOutput, { recursive: true });
+run('magick', [
+  ink,
+  '-resize',
+  '264x264',
+  '-gravity',
+  'center',
+  '-background',
+  'none',
+  '-extent',
+  '432x432',
+  '-strip',
+  path.join(nativeOutput, 'brand_ink.png'),
+]);
+for (const size of [64, 128, 180, 192, 512])
+  run('magick', [
+    source,
+    '-resize',
+    `${size}x${size}`,
+    '-strip',
+    path.join(output, `day-${size}.png`),
+  ]);
+const manifest = {
+  id: '/',
+  name: '页间',
+  short_name: '页间',
+  lang: 'zh-CN',
+  start_url: '/',
+  scope: '/',
+  display: 'standalone',
+  background_color: '#F9EFE2',
+  theme_color: '#F9EFE2',
+  icons: [192, 512].map((size) => ({
+    src: `/brand/day-${size}.png`,
+    sizes: `${size}x${size}`,
+    type: 'image/png',
+    purpose: 'any',
+  })),
+};
+await writeFile(path.join(output, 'day.webmanifest'), JSON.stringify(manifest, null, 2) + '\n');
 run('magick', [
   path.join(root, 'assets/brand/day-original.png'),
   '-define',
@@ -88,23 +84,15 @@ run('magick', [
   path.join(root, 'public/favicon.ico'),
 ]);
 
-// Reuse the same paths for Android's adaptive and monochrome layers.
-// Its furthest point stays inside the 66 dp circular safe zone in a 108 dp tile.
-const vector = `<?xml version="1.0" encoding="utf-8"?>
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp" android:height="108dp"
-    android:viewportWidth="108" android:viewportHeight="108">
-    <group android:translateX="16.38" android:translateY="91.62"
-        android:scaleX="0.006" android:scaleY="-0.006">
-        <group android:translateX="${mark.staffOffsetX}">
-            <path android:fillColor="@color/brand_mark" android:pathData="${mark.staff}" />
-            <path android:fillColor="@color/brand_mark" android:pathData="${mark.leaf}" />
-        </group>
-        <path android:fillColor="@color/brand_mark" android:pathData="${mark.pages}" />
-    </group>
-</vector>
+// The native foreground and system-tinted monochrome icon share the same ink alpha.
+const foreground = `<?xml version="1.0" encoding="utf-8"?>
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:width="108dp" android:height="108dp" android:gravity="center">
+        <bitmap android:src="@drawable/brand_ink" android:gravity="fill" android:filter="true" />
+    </item>
+</layer-list>
 `;
-await writeFile(path.join(native, 'drawable/ic_launcher_foreground.xml'), vector);
+await writeFile(path.join(native, 'drawable/ic_launcher_foreground.xml'), foreground);
 
 const qingli = path.join(root, 'public/qingli');
 await mkdir(qingli, { recursive: true });
@@ -131,4 +119,4 @@ run('magick', [
   '-strip',
   path.join(qingli, 'mark-128.png'),
 ]);
-console.log('Updated web icons, manifests, favicon, Android vectors and Qingli mark.');
+console.log('Updated web icons, manifests, favicon, Android ink layers and Qingli mark.');
