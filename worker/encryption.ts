@@ -181,20 +181,40 @@ const subtree = () => `WITH RECURSIVE sub(id,key_id,depth) AS (
   FROM nodes c JOIN sub s ON c.parent_id=s.id WHERE s.depth<200
 )`;
 // Every object the subtree refers to. `current` marks the body of a Markdown
-// note's current version, whose summary fields follow its key.
-const REFS = `refs(kind,blob_id,node_id,target,current,version_id) AS (
-  SELECT 'body',v.body_blob_id,s.id,s.key_id,v.id=n.current_version_id AND n.kind='markdown',v.id
-    FROM sub s JOIN nodes n ON n.id=s.id JOIN versions v ON v.node_id=s.id
-  UNION ALL SELECT 'file',a.blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN versions v ON v.node_id=s.id JOIN version_assets a ON a.version_id=v.id
-  UNION ALL SELECT 'file',n.file_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id WHERE n.file_blob_id IS NOT NULL
-  UNION ALL SELECT 'file',n.icon_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id WHERE n.icon_blob_id IS NOT NULL
-  UNION ALL SELECT 'chat',m.body_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id WHERE m.body_blob_id IS NOT NULL
-  UNION ALL SELECT 'file',m.image_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id WHERE m.image_blob_id IS NOT NULL
-  UNION ALL SELECT 'file',f.blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN assistant_message_files f ON f.message_id=m.id
-  UNION ALL SELECT 'translation',t.body_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN translations t ON t.node_id=s.id WHERE t.body_blob_id IS NOT NULL
-  UNION ALL SELECT 'translation',p.body_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN paper_translations p ON p.node_id=s.id
-  UNION ALL SELECT 'annotation',x.body_blob_id,s.id,s.key_id,0,NULL FROM sub s JOIN annotations x ON x.node_id=s.id
-)`;
+// note's current version, whose summary fields follow its key. D1 limits how
+// many SELECTs one compound query may join, so each kind is its own query.
+const REFS = [
+  `'body',v.body_blob_id,v.id=n.current_version_id AND n.kind='markdown',v.id FROM sub s JOIN nodes n ON n.id=s.id JOIN versions v ON v.node_id=s.id JOIN blobs b ON b.id=v.body_blob_id`,
+  `'file',a.blob_id,0,NULL FROM sub s JOIN versions v ON v.node_id=s.id JOIN version_assets a ON a.version_id=v.id JOIN blobs b ON b.id=a.blob_id`,
+  `'file',n.file_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.file_blob_id`,
+  `'file',n.icon_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.icon_blob_id`,
+  `'chat',m.body_blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN blobs b ON b.id=m.body_blob_id`,
+  `'file',m.image_blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN blobs b ON b.id=m.image_blob_id`,
+  `'file',f.blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN assistant_message_files f ON f.message_id=m.id JOIN blobs b ON b.id=f.blob_id`,
+  `'translation',t.body_blob_id,0,NULL FROM sub s JOIN translations t ON t.node_id=s.id JOIN blobs b ON b.id=t.body_blob_id`,
+  `'translation',p.body_blob_id,0,NULL FROM sub s JOIN paper_translations p ON p.node_id=s.id JOIN blobs b ON b.id=p.body_blob_id`,
+  `'annotation',x.body_blob_id,0,NULL FROM sub s JOIN annotations x ON x.node_id=s.id JOIN blobs b ON b.id=x.body_blob_id`,
+];
+// The subtree's objects, one entry per object (a Markdown body's current
+// version wins), ordered by ID.
+async function subtreeObjects(env: Env, root: string, blobId?: string): Promise<PlanObject[]> {
+  const results = await env.DB.batch<PlanObject>(
+    REFS.map((columns) =>
+      env.DB.prepare(
+        `${subtree()} SELECT ${columns.replace(
+          /^('\w+'),([\w.]+),(.+?),(\S+) FROM/,
+          '$1 kind,$2 id,s.id node_id,s.key_id target,$3 current,$4 version_id,b.key_id,b.mime,b.name,b.size FROM',
+        )} WHERE b.state='ready'${blobId ? ' AND b.id=?' : ''}`,
+      ).bind(root, ...(blobId ? [blobId] : [])),
+    ),
+  );
+  const objects = new Map<string, PlanObject>();
+  for (const row of results.flatMap((result) => result.results)) {
+    const seen = objects.get(row.id);
+    if (!seen || (row.current && !seen.current)) objects.set(row.id, row);
+  }
+  return [...objects.values()].sort((a, b) => (a.id < b.id ? -1 : 1));
+}
 // What still has to be re-encrypted (or decrypted) so the subtree matches its
 // settings. The device does the work: it reads each object, re-seals it and
 // replaces it in place; IDs and every reference stay the same.
@@ -208,16 +228,15 @@ export async function encryptionPlan(
   const sealedText = url.searchParams.get('sealed') === '1';
   // Pages are ordered by object ID; `after` continues from the previous page.
   const after = url.searchParams.get('after') ? idValue(url.searchParams.get('after')) : '';
-  const [objects, pages, translations] = await env.DB.batch<Record<string, unknown>>([
-    env.DB.prepare(
-      `${subtree()}, ${REFS}
-      SELECT r.blob_id id,r.kind,r.node_id,r.target,MAX(r.current) current,
-        MAX(CASE WHEN r.current THEN r.version_id END) version_id,b.key_id,b.mime,b.name,b.size
-      FROM refs r JOIN blobs b ON b.id=r.blob_id AND b.state='ready'
-      WHERE ${sealedText ? "b.key_id IS NOT NULL AND r.kind!='file'" : 'b.key_id IS NOT r.target'}
-      AND r.blob_id>?
-      GROUP BY r.blob_id ORDER BY r.blob_id LIMIT ?`,
-    ).bind(id, after, PLAN_LIMIT),
+  const objects = (await subtreeObjects(env, id))
+    .filter((object) =>
+      sealedText
+        ? object.key_id !== null && object.kind !== 'file'
+        : (object.key_id ?? null) !== (object.target ?? null),
+    )
+    .filter((object) => object.id > after)
+    .slice(0, PLAN_LIMIT);
+  const [pages, translations] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(
       `${subtree()} SELECT p.node_id id,p.summary,p.questions,s.key_id target FROM book_pages p JOIN sub s ON s.id=p.node_id`,
     ).bind(id),
@@ -256,16 +275,12 @@ export async function encryptionPlan(
         values: { excerpt: String(row.excerpt) },
       });
   }
-  return { objects: objects.results as unknown as PlanObject[], fields };
+  return { objects, fields };
 }
 async function objectTarget(env: Env, root: string, blobId: string) {
-  const row = await env.DB.prepare(
-    `${subtree()}, ${REFS} SELECT r.target,r.kind,r.node_id FROM refs r WHERE r.blob_id=? LIMIT 1`,
-  )
-    .bind(root, blobId)
-    .first<{ target: string | null; kind: PlanObject['kind']; node_id: string }>();
+  const [row] = await subtreeObjects(env, root, blobId);
   if (!row) throw new AppError(404, '这个文件不在当前目录中。');
-  return row;
+  return { target: row.target ?? null, kind: row.kind, node_id: row.node_id };
 }
 async function readAll(request: Request, limit: number): Promise<Uint8Array<ArrayBuffer>> {
   const reader = request.body?.getReader();

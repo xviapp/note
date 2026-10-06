@@ -112,7 +112,8 @@ export async function sealData(keyId: string, bytes: Uint8Array): Promise<Bytes>
 }
 // A file as read from the server or the offline cache, decrypted when sealed.
 export async function openBlob(blob: Blob, type = ''): Promise<Blob> {
-  if (blob.size < 64) return blob;
+  // (A copy read back from IndexedDB in tests may not be a real Blob.)
+  if (!(blob instanceof Blob) || blob.size < 64) return blob;
   const head = new Uint8Array(await blob.slice(0, 64).arrayBuffer());
   const keyId = sealedKeyId(head);
   if (!keyId) return blob;

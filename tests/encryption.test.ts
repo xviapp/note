@@ -143,7 +143,7 @@ describe('sealed format', () => {
   it('round-trips across chunks and refuses tampering', async () => {
     const key = await newContentKey();
     const id = crypto.randomUUID();
-    const plain = crypto.getRandomValues(new Uint8Array(65_536 * 2 + 17));
+    const plain = new Uint8Array(65_536 * 2 + 17).map((_, i) => (i * 31) % 251);
     const sealed = await sealBytes(key, id, plain);
     expect(sealed.length).toBe(sealedSize(plain.length));
     expect(plainSize(sealed.length)).toBe(plain.length);
