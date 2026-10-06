@@ -1959,6 +1959,34 @@ button.node-list-toggle:focus-visible {
 .form-stack .dialog-actions {
   margin-top: 4px;
 }
+.share-import-files {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.share-import-files li {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.share-import-files img {
+  width: 100%;
+  max-height: 220px;
+  object-fit: contain;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.share-import-modal textarea {
+  min-height: 144px;
+  max-height: 280px;
+  resize: vertical;
+  line-height: 1.7;
+}
 .field-hint {
   font-size: 11px;
   color: var(--muted);

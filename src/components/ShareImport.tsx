@@ -1,8 +1,13 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
 import { Modal } from './Primitives';
 import { NodePicker } from './Tree';
-import { importShare, type IncomingShare } from '../shared-import';
+import {
+  importShare,
+  incomingShareTitle,
+  incomingShareFilePath,
+  type IncomingShare,
+} from '../shared-import';
 import { useOffline } from '../connectivity';
 import type { NoteNode, ShareSettings } from '../../shared/types';
 import { api } from '../api';
@@ -20,28 +25,39 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
   const [retry, setRetry] = useState(0);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const loading = useRef(false);
+  // A share that arrives while one load is reading the inbox is read right after.
+  const missed = useRef(false);
+  const operating = useRef(false);
   const offline = useOffline();
-  const load = async () => {
-    const { device } = await import('../mobile');
-    const result = await device.getPendingShare();
-    setShare(result.share);
-    setMessage('');
-    setParent(null);
-    setDestinationReady(false);
-    setDestinationError('');
-    setDestinationTitle('根目录');
-    setInitialPath([]);
-    if (result.share) {
-      setTitle(
-        (
-          result.share.title ||
-          result.share.files[0]?.name ||
-          result.share.text?.split('\n')[0] ||
-          '分享内容'
-        ).slice(0, 200),
-      );
-      setText(result.share.text || '');
+  const load = async (): Promise<void> => {
+    if (loading.current) {
+      missed.current = true;
+      return;
     }
+    loading.current = true;
+    missed.current = false;
+    let found = false;
+    try {
+      const { device } = await import('../mobile');
+      const result = await device.getPendingShare();
+      found = !!result.share;
+      setShare(result.share);
+      setMessage('');
+      setParent(null);
+      setDestinationReady(false);
+      setDestinationError('');
+      setDestinationTitle('根目录');
+      setInitialPath([]);
+      if (result.share) {
+        setTitle(incomingShareTitle(result.share));
+        setText(result.share.text || '');
+      }
+    } finally {
+      loading.current = false;
+    }
+    // With a share already open, the next one waits until this one is saved or cancelled.
+    if (missed.current && !found) return load();
   };
   useEffect(() => {
     if (!share || offline || destinationReady) return;
@@ -71,20 +87,34 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
     };
     refresh();
     window.addEventListener('note:share', refresh);
-    return () => window.removeEventListener('note:share', refresh);
+    window.addEventListener('focus', refresh);
+    return () => {
+      window.removeEventListener('note:share', refresh);
+      window.removeEventListener('focus', refresh);
+    };
     // Keyed by the share's id, which also decides whether refresh() loads.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [share?.id]);
   const discard = async () => {
-    if (busy || !share) return;
-    const { device } = await import('../mobile');
-    await device.discardShare({ id: share.id });
-    await load();
+    if (operating.current || !share) return;
+    operating.current = true;
+    setBusy(true);
+    try {
+      const { device } = await import('../mobile');
+      await device.discardShare({ id: share.id });
+      await load();
+    } catch (error) {
+      setMessage(error instanceof Error ? error.message : '无法取消，请重试。');
+    } finally {
+      operating.current = false;
+      setBusy(false);
+    }
   };
   if (!share) return null;
   return (
     <Modal
       title="保存到页间"
+      className="share-import-modal"
       onClose={() => {
         void discard();
       }}
@@ -93,7 +123,8 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
         className="form-stack"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (busy || offline || share.error || !destinationReady) return;
+          if (operating.current || offline || share.error || !destinationReady) return;
+          operating.current = true;
           setBusy(true);
           setMessage('');
           try {
@@ -105,6 +136,7 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
           } catch (error) {
             setMessage((error as Error).message);
           } finally {
+            operating.current = false;
             setBusy(false);
           }
         }}
@@ -126,19 +158,20 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
               />
             </label>
             {share.files.length > 0 && (
-              <ul>
+              <ul className="share-import-files">
                 {share.files.map((file) => (
-                  <li key={file.id}>{file.name}</li>
+                  <ShareFilePreview key={file.id} share={share} file={file} />
                 ))}
               </ul>
             )}
-            {!!share.text && (
+            {(!!share.text || !share.files.length) && (
               <label>
-                文字或链接
+                正文
                 <textarea
+                  aria-label="正文"
                   value={text}
                   disabled={busy}
-                  rows={4}
+                  rows={8}
                   onChange={(e) => setText(e.target.value)}
                 />
               </label>
@@ -193,6 +226,7 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
               offline ||
               !destinationReady ||
               !!share.error ||
+              !title.trim() ||
               (!text.trim() && !share.files.length)
             }
           >
@@ -201,5 +235,31 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
         </div>
       </form>
     </Modal>
+  );
+}
+
+function ShareFilePreview({
+  share,
+  file,
+}: {
+  share: IncomingShare;
+  file: IncomingShare['files'][number];
+}) {
+  const [failed, setFailed] = useState(false);
+  let path = '';
+  try {
+    path = incomingShareFilePath(share, file);
+  } catch {
+    /* Import will report the invalid payload before saving. */
+  }
+  const image = /^image\/(png|jpeg|gif|webp|avif)$/.test(file.mime);
+  return (
+    <li>
+      {path && image && !failed && (
+        <img src={path} alt={file.name} onError={() => setFailed(true)} />
+      )}
+      <span>{file.name}</span>
+      {failed && <span className="field-hint">无法预览，保存时会重新读取图片。</span>}
+    </li>
   );
 }

@@ -76,7 +76,12 @@ async function nativeMock(page: Page, shares: unknown[] = []) {
         win.__nativeCalls.push({ plugin, method, options });
         if (method === 'getBuildInfo')
           return { version: '0.2.4', build: 6, certificate: 'b'.repeat(64) };
-        if (method === 'getPendingShare') return { share: incoming[0] || null };
+        if (method === 'getPendingShare') {
+          // Reads the inbox first, then may wait, like a slow native call.
+          const share = incoming[0] || null;
+          await win.__shareGate;
+          return { share };
+        }
         if (method === 'discardShare') {
           incoming.shift();
           return {};
@@ -85,8 +90,111 @@ async function nativeMock(page: Page, shares: unknown[] = []) {
         return {};
       },
     };
+    win.__shares = incoming;
   }, shares);
 }
+test('a share that arrives while the inbox is being read still opens', async ({ page }) => {
+  await login(page);
+  await page.addInitScript(() => {
+    const win = window as any;
+    win.__shareGate = new Promise((resolve) => (win.__openGate = resolve));
+  });
+  await nativeMock(page);
+  await page.goto('/');
+  await expect
+    .poll(() => page.evaluate(() => (window as any).__nativeCalls.length))
+    .toBeGreaterThan(0);
+  await page.evaluate(() => {
+    const win = window as any;
+    win.__shares.push({ id: crypto.randomUUID(), title: '迟到的分享', text: '正文', files: [] });
+    window.dispatchEvent(new Event('note:share'));
+    win.__openGate();
+  });
+  const dialog = page.getByRole('dialog', { name: '保存到页间', exact: true });
+  await expect(dialog.getByLabel('标题', { exact: true })).toHaveValue('迟到的分享');
+});
+test('reader shares preserve Markdown and provenance, preview images and only save after confirmation', async ({
+  page,
+}, info) => {
+  await login(page);
+  await page.request.put('/api/share/settings', { headers, data: { parentId: null } });
+  const id = crypto.randomUUID(),
+    cancelledId = crypto.randomUUID(),
+    imageShareId = crypto.randomUUID(),
+    imageId = crypto.randomUUID();
+  const text =
+    'AI 回答\n\n# 阅读方法\n\n**保留完整回答**\n\n——\n书名：阅读之书\n作者：作者甲\n讨论：章节问题';
+  const image = Buffer.from(
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+jRZkAAAAASUVORK5CYII=',
+    'base64',
+  );
+  const filename = '阅读之书-第 12 页-第一节.png';
+  await nativeMock(page, [
+    { id, title: '章节问题', text, files: [] },
+    {
+      id: cancelledId,
+      title: '阅读之书 · OCR 原文',
+      text: 'OCR 原文\n\n——\n书名：阅读之书\n位置：第 12 页',
+      files: [],
+    },
+    {
+      id: imageShareId,
+      text: '',
+      files: [
+        {
+          id: imageId,
+          name: filename,
+          mime: 'image/png',
+          size: image.length,
+          path: `/__share/${imageShareId}/${imageId}`,
+        },
+      ],
+    },
+  ]);
+  await page.route('**/__share/**', (route) =>
+    route.fulfill({ contentType: 'application/octet-stream', body: image }),
+  );
+  let writes = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && request.url().endsWith('/api/nodes')) writes++;
+  });
+  await page.goto('/');
+  const dialog = page.getByRole('dialog', { name: '保存到页间', exact: true });
+  await expect(dialog.getByLabel('正文', { exact: true })).toHaveValue(text);
+  await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
+  expect(writes).toBe(0);
+  await dialog.getByLabel('标题', { exact: true }).fill('我的读书笔记');
+  await page.evaluate(() => window.dispatchEvent(new Event('note:share')));
+  await expect(dialog.getByLabel('标题', { exact: true })).toHaveValue('我的读书笔记');
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(dialog.getByLabel('标题', { exact: true })).toHaveValue('阅读之书 · OCR 原文');
+  await dialog.getByRole('button', { name: '取消', exact: true }).click();
+  await expect(dialog.getByLabel('标题', { exact: true })).toHaveValue('阅读之书-第 12 页-第一节');
+  const preview = dialog.getByRole('img', { name: filename });
+  await expect(preview).toBeVisible();
+  await expect.poll(() => preview.evaluate((img: HTMLImageElement) => img.naturalWidth)).toBe(1);
+  expect(writes).toBe(1);
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((theme) => {
+      document.documentElement.dataset.theme = theme;
+    }, theme);
+    const bounds = await dialog.boundingBox();
+    expect(bounds!.x).toBeGreaterThanOrEqual(0);
+    expect(bounds!.width).toBeLessThanOrEqual(page.viewportSize()!.width);
+    await page.screenshot({ path: `test-results/reader-share-${info.project.name}-${theme}.png` });
+  }
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(dialog).toHaveCount(0);
+  expect(writes).toBe(2);
+  const { nodes } = await (await page.request.get('/api/nodes?parent=')).json();
+  expect(nodes).toHaveLength(2);
+  const note = nodes.find((node: { title: string }) => node.title === '我的读书笔记');
+  const detail = await (await page.request.get(`/api/nodes/${note.id}`)).json();
+  expect(detail.content).toBe(text);
+  expect(nodes.find((node: { kind: string }) => node.kind === 'image').title).toBe(
+    '阅读之书-第 12 页-第一节',
+  );
+});
 test('share destination settings persist and allow a one-time override without submitting the picker', async ({
   page,
 }, info) => {
