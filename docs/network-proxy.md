@@ -35,8 +35,4 @@ node scripts/android.mjs lintDebug
 node scripts/android.mjs assembleDebug
 ```
 
-隔离模拟器中的 `NoteProxyNetworkTest` 使用空白测试 Activity、本地 HTTP 服务和临时节点配置，覆盖 WebView/原生入口、HttpOnly Cookie、POST 请求体、Range 206、逐段流式响应、规则阻止、节点不可达、重复启动、重载、核心正常停止及进程突然退出后的降级与重试恢复，并核对系统代理未改变；不请求正式 API 或 AI 服务。调试包仅为这些本地测试地址允许明文 HTTP，正式包不包含测试 Activity 或测试网络配置。
-
-2026-10-06 验证通过：TypeScript 检查、oxlint、客户端 29 项测试、Worker 109 项测试、离线构建 4 项测试、Android CLI 7 项测试、Android 单元测试、lint 和 APK 构建；Android 14 隔离模拟器上的上述网络集成测试通过。白天、夜间、星空主题已检查。APK 核对为单一宿主 Launcher、无 VPN/root 服务，包含四种 ABI 核心与 GeoIP/GeoSite 数据。真实订阅及公网代理节点尚未实测。
-
-同日完成扩展精简后，再次通过客户端检查、29 项测试、Android 单元测试、lint 和构建，以及隔离模拟器 2 项集成测试。新增用例导入旧 VPN/root/共享/认证设置，核对普通 VLESS 配置只生成宿主管理的 loopback 入口、不生成包名/UID 条件，并能启动核心。APK 的 DEX 核对无已删除的系统代理、外部入口、独立更新与外观管理类。原生配置页的三种主题、note 关于页和许可入口也已验证。
+验证时，隔离模拟器中的 `NoteProxyNetworkTest` 使用空白测试 Activity、本地 HTTP 服务和临时节点配置，覆盖 WebView/原生入口、HttpOnly Cookie、POST 请求体、Range 206、逐段流式响应、规则阻止、节点不可达、重复启动、重载、核心正常停止及进程突然退出后的降级与重试恢复，并核对系统代理未改变；不请求正式 API 或 AI 服务。调试包仅为这些本地测试地址允许明文 HTTP，正式包不包含测试 Activity 或测试网络配置。真实订阅和公网代理节点尚未实测。

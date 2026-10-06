@@ -4,8 +4,6 @@
 
 ## 已实现
 
-- Android 应用内网络代理：内置完整 v2rayNG 节点、订阅、路由、DNS 与高级配置；手机请求统一按规则分流，核心故障自动直连并显示右上角软提醒。配置仅保存在本机，云端请求继续由 Worker 处理。详见[网络代理](docs/network-proxy.md)。
-
 - Aa 阅读设置：系统／宋体／黑体、字号、字间距、行距、段落间距、正文宽度；三档预设，按设备记忆，正文即时预览。
 - 本机阅读缓存与手动离线保存：Markdown、TXT、导入论文、图片、完整 PDF 及附件，断网重开并恢复阅读进度；默认 200 MB，按容量清理自动副本，手动保存保留，联网检查更新，退出清除私人副本。详见[离线阅读](docs/offline-reading.md)。
 - 树形目录；文件夹及各类文件均可包含下级笔记，有下级时才显示展开箭头；主页面列表有下级时可原地展开浏览；笔记的下级从工具栏的「下级笔记」按钮打开（位于标题目录按钮之前），文件夹页面直接列出；支持新建未命名笔记、重命名、拖动、菜单移动与删除。文件夹可自定义 Emoji 或图片图标，图片自动缩为小图，可随备份恢复。
@@ -17,7 +15,7 @@
 - 分屏查看：在笔记的「⋯」菜单打开，全屏左右各显示一份 Markdown、纯文本、arXiv 论文、PDF 或图片，各自滚动，各有目录（PDF 用自带目录并从上次读到的页继续），空的一侧直接列出笔记目录供选择，任一侧可「换一份」；笔记里的内部链接在同一侧打开，图片可点开放大；记住每篇笔记上次并排的文件；电脑上可勾选「同步滚动」按比例联动；手机上切换左右两侧。
 - 按标题搜索：电脑按 Ctrl+K 或 /，手机点顶部搜索按钮；多个词用空格分开，结果显示所在目录，未输入时列出最近访问。电脑上 N 新建笔记、E 编辑当前笔记，按 ? 查看全部快捷键。
 - 单篇笔记直接移到回收站，提示条可撤销；含下级笔记时先确认。成功提示自动消失，错误提示保留到手动关闭。
-- 书籍：文件夹可在「⋯」菜单设为书籍，记录作者、阅读状态、已读／总页数和青藜角色。书页上的「拍照添加页面」可一次选多张照片并填写起始页码，照片交给 DeepSeek 识别文字（使用你的 API 额度），每张保存为书下的一篇 Markdown 笔记（原图在前、识别文字在后），并更新已读页数。书或书中笔记可「新建讨论」，讨论作为下级笔记打开并在旁边展开青藜；书中所有对话都使用该书的角色设定，讨论还会自动带上所讨论页面的文字。
+- 书籍：「新建 → 书籍」创建，记录作者、阅读状态、已读／总页数和青藜角色，之后在书的「⋯ → 书籍资料」修改。书页上的「拍照添加页面」可一次选多张照片并填写起始页码，照片交给 DeepSeek 识别文字（使用你的 API 额度），每张保存为书下的一篇 Markdown 笔记（原图在前、识别文字在后），并更新已读页数。书或书中笔记可「新建讨论」，讨论作为下级笔记打开并在旁边展开青藜；书中所有对话都使用该书的角色设定，讨论还会自动带上所讨论页面的文字。
 - 7 天回收站、当前版本加最近 5 个历史版本、收藏、最近 20 项访问记录。
 - Markdown、纯文本及 PDF 阅读位置本地记录、最多每 30 秒云端同步；PDF 记忆页码与页内位置，缩放和调整窗口后接续阅读；切换笔记时补写，版本检查避免旧进度覆盖新进度。
 - 文件页仅保留文件工具栏，手机的笔记树入口位于左侧；列表、收藏、回收站和设置页保留应用顶栏。
@@ -25,6 +23,7 @@
 - 修改密码、退出当前设备或所有设备、部署端重置密码；新密码至少 8 个字符。
 - 青藜（AI 助手）：每个文件独立会话，可附上当前文件或另选 Markdown、TXT、PDF、图片，引用选中文字或内置框选截图提问。PDF 支持选页提取文字、扫描页自动转图和整页图片。流式回复、停止生成、复制及保存为本文件下的 Markdown 子笔记。
 - 全库默认 8 GB，上限可调，80% 用量提醒；历史、回收站、待清理文件和上传预留均计入空间。
+- Android 应用内网络代理：内置 v2rayNG 的节点、订阅、路由和 DNS 配置，手机请求按规则分流，核心故障时自动直连并在右上角提示。配置只保存在本机。详见[网络代理](docs/network-proxy.md)。
 
 普通笔记正文最多 1 MiB，单文件最多 50 MB。附件最多 100 个。超额时可以继续阅读、收藏、删除和清理。支持整库 ZIP 备份与恢复；目前只搜索标题，全文搜索和离线编辑暂未提供。
 
@@ -66,38 +65,33 @@ SVG 文件和论文内嵌 SVG 均作为独立矢量图片保存，保留路径�
 
 截断、手动停止或连接中断后，已收到并保存的回复可点击「继续生成」；续写会带上所选回复和原问题，沿用原引用与附件，不提交或清空输入框里的草稿。多次续写沿原分支追溯，原问题与续写内容一起检查预算；无法完整放入时提示重新提问，不丢弃必要的原文，也不绕过模型容量、20 条消息或 8 张图片限制。续写作为新回复保存在同一会话中，失败不会自动重试付费调用。完整或中断的非空回复均可一键保存为当前文件下的 Markdown 子笔记，已保存的笔记保留原内容。设置、聊天、保存回复为子笔记及整理目录可直接操作，无需进入编辑模式；删除内容、清空会话等操作保留各自的确认。
 
+首页、收藏、设置等页面有全局青藜入口，文件对话里也可切换过去。全局对话独立保存，使用同一套 DeepSeek 配置，回复可保存为根目录笔记，也可主动附上正在阅读的文件。
+
 会话正文、附件原件及处理后的图片存在私有 R2，计入全库空间；文字按发送时的内容保存快照。随源文件进入回收站时保留，清空会话或永久删除源文件后由清理流程回收；其他笔记仍在使用的共享原文件不受影响，已生成的 Markdown 是独立子笔记。取消或失败留下的未引用上传由既有草稿清理机制回收。API Key 由 `APP_SECRET` 派生 AES-GCM 密钥加密后存入 D1，浏览器仅收到配置状态；轮换 `APP_SECRET` 后需要重新保存 AI Key，修改登录密码无需重新配置。
 
-`pnpm run deploy` 会先构建、应用生产数据库迁移，再部署新版；也可单独运行 `pnpm db:remote`。本地启动脚本自动应用迁移。自动测试使用模拟 DeepSeek 响应；真实 API 联调需配置自己的有效 Key。
+自动测试使用模拟 DeepSeek 响应；真实 API 联调需配置自己的有效 Key。
+
+## 整库备份与恢复
+
+设置中可导出 ZIP 并预览、恢复。备份包含当前笔记、书籍资料、文件夹图标、回收站内容、附件、保留的历史版本、收藏、阅读位置、青藜对话及附件、翻译与原文位置；不含登录密码、会话、AI 密钥和本机缓存。恢复时新建「备份恢复 日期」目录，原回收站内容放在其下的「原回收站」，全局对话恢复为「青藜全局对话（恢复）」笔记，当前资料与账号设置保留，恢复的文件计入空间。
+
+导出时服务端在一个 D1 事务中读取清单并保留文件引用，期间的编辑或清理不会移除正在下载的附件。ZIP 在客户端逐个文件生成（支持 Zip64）：Android 逐块写入用户选择的文档，支持 File System Access API 的桌面浏览器流式写入，其他浏览器在内存中生成，超过 256 MiB 时提示改用 Android 或桌面 Chrome。恢复会检查路径、重复项、CRC、大小、目录循环和引用完整性，逐个上传文件后在一个 D1 事务中写入目录和记录；文件、版本、节点使用新 ID，正文链接和翻译位置同步映射。中断不会留下半棵目录，重试复用已上传的文件；任务最长保留 24 小时，清单上限 16 MiB。
 
 ## Android 客户端
 
-Android 客户端使用 Capacitor，工程位于同一仓库的 `android/`，共用 React 界面与 Cloudflare 服务。安装后连接 `https://note.xvi.app`，用现有密码登录；笔记、阅读位置、翻译记录和青藜会话沿用同一份云端数据。0.2.0 支持阅读排版设置、自动缓存和手动离线保存；已缓存文件可以断网重开，编辑、翻译与青藜仍需联网。
+Android 客户端使用 Capacitor，工程位于 `android/`，共用 React 界面与云端数据。默认连接 `https://note.xvi.app`；首次启动、登录页或「设置 → 服务器」可改为其他自建服务器，不同服务器的登录和离线缓存分开保存。已缓存的文件可以断网重开，编辑、翻译与青藜需联网。需要 Android 8.0+ 与 Android System WebView 125+，旧网页组件会显示更新提示。
 
-需要 Android 8.0+，以及 Android System WebView 125+。旧网页组件会显示更新提示。支持系统文件选择与保存、外部链接交给浏览器、系统返回键收起窗口或目录、未保存修改的离开确认，以及应用切到后台时补写阅读进度。
+从其他应用分享到页间时，会在原应用上方弹出小窗口，按内容显示 arXiv 论文、网页链接、Markdown、纯文本、PDF、图片，保存后回到原应用。应用内可检查并下载新版本。
 
-本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 37 和 Build Tools 37，设置 `JAVA_HOME` 与 `ANDROID_SDK_ROOT` 后运行：
+本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 37 和 Build Tools 37：
 
 ```bash
 npm ci
-npm run android:apk
+npm run android:apk        # 默认 arm64-v8a 调试包，输出到 artifacts/
+pnpm install:android       # 连接手机后构建并覆盖安装，保留应用数据
 ```
 
-默认只构建 `arm64-v8a`，输出 `artifacts/yejian-<版本>-android-arm64-v8a-debug.apk`。其他架构手动运行 `node scripts/android.mjs assembleDebug --abi armeabi-v7a`（也支持 `x86_64`、`x86`）；先执行 `npm run build:android` 可同步最新前端资源。`--abi all` 才生成四种架构包和通用包，通用包保持 `artifacts/yejian-<版本>-android-debug.apk` 命名。安装其他架构用 `pnpm install:android --abi <架构>`，脚本在构建前检查设备兼容性。
-
-这些安装包是可直接安装的测试版。可复制到手机安装，或连接手机后用 `adb install -r` 安装。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
-
-连接并授权 USB 调试后，可以一条命令构建、复制 APK 并覆盖安装，保留应用数据：
-
-```bash
-pnpm install:android
-```
-
-只有一个可用手机或模拟器时自动选择；多个设备时用 `pnpm install:android --device <设备序列号>`，也可通过 `ANDROID_SERIAL` 指定。脚本先检查设备，再开始构建，任一步失败即停止。查看帮助用 `pnpm install:android --help`；只生成安装包用 `pnpm android:apk`。也保留 `npm run install:android` 用法，npm 传参时需加 `--`。
-
-只更新客户端资源可执行 `npm run build:android`，打开原生工程用 `npm run android:open`。Web 构建仍输出到 `dist/`，Android 单独输出到 `dist-android/`。修改客户端后需要重新构建并安装 APK；部署网站不会替换已安装包内的界面。实现与验证方式见 [Android 客户端](docs/android.md)。
-
-从其他应用分享到页间时，会在原应用上方弹出小窗口，按内容显示 arXiv 论文（标题、作者、摘要，可导入全文或只存链接）、网页链接、Markdown、纯文本、PDF、图片；保存后回到原应用。应用内可检查并下载新版本，支持 PDF 双指缩放和整库 ZIP 备份与恢复。图标在所有主题下使用同一个白底版本，见[应用图标](docs/branding.md)。
+修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。其他架构、签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
 
 ## 本地运行
 
@@ -118,7 +112,7 @@ npm run dev
 
 架构为 **Workers 静态资源 + Worker API + D1 + 私有 R2**。浏览器与 API 同源。正文保存在 R2 的不可变对象中，D1 保存节点、版本指针、文件引用、会话、阅读记录和容量登记。
 
-已于 2026-10-01 部署到 [页间](https://note.xvi.app)。生产环境使用 `xvi-note` Worker、同名 D1 和私有 `xvi-note-files` R2 桶；配置位于 `wrangler.jsonc` 的 `env.production`，绑定 `note.xvi.app`，关闭 `workers.dev` 与预览地址。顶层数据库 ID 继续用于本地开发，保留原有 `.wrangler/state` 数据。线上是独立的新库，首次密码由使用者设置。
+正式站点为 [页间](https://note.xvi.app)，生产环境使用 `xvi-note` Worker、同名 D1 和私有 `xvi-note-files` R2 桶；配置位于 `wrangler.jsonc` 的 `env.production`，绑定 `note.xvi.app`，关闭 `workers.dev` 与预览地址。顶层数据库 ID 继续用于本地开发，保留原有 `.wrangler/state` 数据。线上是独立的新库，首次密码由使用者设置。
 
 后续更新：
 
@@ -157,15 +151,9 @@ pnpm run deploy
 
 密码在浏览器使用独立随机盐与 PBKDF2 SHA-256 计算 600,000 次，服务端再使用 `APP_SECRET` 做 HMAC-SHA-256 校验，D1 只保存经 HMAC 处理的校验值和公开参数。原密码及可登录的派生值不落库、不记录日志；HTTPS 和限速仍生效。该方式避开 Cloudflare 云端 PBKDF2 100,000 次上限，保留原有密码计算强度；参考 [Libsodium 的客户端预计算方案](https://doc.libsodium.org/password_hashing#server-relief) 与 [OWASP Pepper 建议](https://cheatsheetseries.owasp.org/cheatsheets/Password_Storage_Cheat_Sheet.html#post-hashing-peppers)。旧本地密码首次成功登录后自动升级，密码和资料保留；旧格式记录若迁入云端，应先执行部署端密码重置。轮换 `APP_SECRET` 后也需要重置登录密码并重新保存 AI Key。
 
-### 免费额度验证状态
+### 免费额度
 
-2026-10-01 的独立云端测试已通过设置密码、登录、修改密码、会话撤销、正文读写、上传、PDF Range、回收和清理；部署没有执行套餐升级。采集到的密码设置 / 登录 / 改密 CPU 最大值分别为 9 / 5 / 8 ms。接近 1 MiB 正文的读写达到 20 ms，永久删除达到 13 ms：这些请求此次成功，但超过免费版标称 10 ms CPU，**不能保证所有操作始终落在免费预算内**。完整记录见 [Cloudflare 部署验证](docs/cloudflare-deployment.md)。
-
-后续容量与压力验收应在单独测试站点进行，每项至少重复 10 次并记录最大值与 P95；用 Workers Observability 的事件 CPU 时间核对，不以浏览器请求耗时代替。此次是功能冒烟验证，部分操作只执行一次，未覆盖 50 MB 文件上传或长期高负载。出现 CPU 限制时，应重新评审实现方式或部署预算，不能降低密码参数或自动升级套餐来掩盖问题。
-
-截至设计核对日（2026-10-01），Workers Free 为每天 100,000 次请求、单次请求 10 ms CPU；D1 免费版每天读取 500 万行、写入 10 万行，单库上限 500 MB；R2 标准存储包含 10 GB-month、每月 100 万次 A 类和 1,000 万次 B 类操作。额度由账号中的项目共享，应用的 8 GB 上限不是费用封顶。R2 需要先开通订阅；请在部署时核对官方最新额度。
-
-官方来源：[Workers 限制](https://developers.cloudflare.com/workers/platform/limits/)、[D1 计费](https://developers.cloudflare.com/d1/platform/pricing/)、[D1 限制](https://developers.cloudflare.com/d1/platform/limits/)、[R2 计费](https://developers.cloudflare.com/r2/pricing/)、[R2 开通](https://developers.cloudflare.com/r2/get-started/)。
+首次部署的冒烟测试中，接近 1 MiB 的正文读写和永久删除超过 Workers Free 的 10 ms CPU 标称预算，不能保证所有操作都在免费额度内；额度由账号中的项目共享，应用的 8 GB 上限不是费用封顶。详见 [Cloudflare 部署](docs/cloudflare-deployment.md)，部署前请核对官方最新额度。
 
 ## 忘记密码
 
@@ -187,9 +175,7 @@ npm run reset-password -- --remote --url https://你的站点
 
 ## 验证
 
-界面基础颜色、字号、圆角与点击尺寸从共享主题导出到 `src/family-tokens.css`，青绿色与星空主题在 `src/themes.css` 中保留。独立构建使用仓库内的 CSS，无需依赖其他应用；在完整工作区可运行 `npm run theme:check` 检查同步，`npm run theme:sync` 更新，也可用 `-- --source=/path/to/brand-theme.ts` 指定主题源。
-
-手机使用「笔记／收藏／设置」底部导航，电脑保留目录树。收藏、最近访问、离线阅读、回收站和各项设置使用独立地址；进入笔记后返回原列表，离开未保存的编辑仍需确认。青藜在手机全屏打开，电脑保留悬浮、贴边与最大化模式。
+界面基础颜色、字号、圆角与点击尺寸来自共享主题，导出在 `src/family-tokens.css`；在完整工作区可用 `npm run theme:check` 检查同步、`npm run theme:sync` 更新。
 
 ```bash
 npm run check          # 前后端 TypeScript 检查
@@ -203,8 +189,6 @@ npx wrangler deploy --dry-run
 ```
 
 浏览器测试优先使用本机 Chrome（若存在），也可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定路径；否则使用 Playwright 安装的 Chromium。测试自动启动 `8799` 端口并使用独立 `.wrangler/e2e/state`；仅这个测试目录会被清空，日常开发数据不受影响。截图与失败追踪位于 `test-results`。
-
-测试覆盖私有 API、单篇文件编辑确认与令牌隔离、来源校验、初始化并发、密码变更、正文并发冲突、幂等保存、历史保留、共享文件引用、容量竞争、上传中断、清理重试、独立回收批次和跨设备阅读进度；AI 测试覆盖凭据加密、文件间会话隔离、文字和图片上下文、附件限制与引用回收、流式中断、并发锁及重复导出。浏览器验证电脑与手机的主题、阅读、编辑、文字引用、触摸框选截图、当前文件与本地文件附件、PDF 选页提取和无文字页面转图，以及 Markdown 子笔记保存。
 
 ## 项目结构
 
@@ -220,9 +204,12 @@ npx wrangler deploy --dry-run
 | `worker/assistant.ts`   | 文件会话、流式生成、历史与 Markdown 导出  |
 | `worker/translation.ts` | 划词翻译、持久缓存、原文位置与记录管理    |
 | `worker/deepseek.ts`    | AI 凭据加密、连接测试与 DeepSeek 适配     |
+| `worker/books.ts`       | 书籍资料、书页拍照识别、书中对话的角色    |
+| `worker/backups.ts`     | 整库备份导出与恢复                        |
+| `shared/`               | 前后端共用的类型、限制与备份格式          |
+| `android/`              | Capacitor 原生工程与服务器、下载、分享    |
+| `android/v2ray/`        | 内置 v2rayNG 网络代理模块（GPL-3.0）      |
 | `migrations/`           | D1 schema、索引与事务保护触发器           |
 | `scripts/`              | 开发环境、密码重置和测试服务              |
 
 数据库提交使用 D1 batch 与触发器保证版本、引用及容量检查原子性。R2 与 D1 之间没有跨服务事务：上传先预留容量，提交失败保留旧版本并清理新对象；垃圾清理先在 D1 中标记对象并禁止新引用，R2 确认删除后才释放容量。定时任务每 30 分钟执行一批，未引用的草稿文件最多保留 24 小时。
-
-[设计记录](docs/superpowers/specs/2026-10-01-personal-notebook-design.md) · [实施计划](docs/superpowers/plans/2026-10-01-personal-notebook-implementation.md)

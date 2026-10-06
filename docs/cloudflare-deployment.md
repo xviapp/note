@@ -1,58 +1,26 @@
-# Cloudflare 部署验证
-
-日期：2026-10-01。用户授权部署，未执行套餐升级。
+# Cloudflare 部署
 
 ## 正式环境
 
-| 项目          | 值                                                              |
-| ------------- | --------------------------------------------------------------- |
-| 地址          | https://note.xvi.app                                           |
-| Wrangler 环境 | `production`                                                    |
-| Worker        | `xvi-note`                                                      |
-| 首次发布版本  | `b8275710-707d-40f8-ad75-50229effa7bc`                          |
-| D1            | `xvi-note` / `6ee905d7-80bf-46fa-a35c-80d839581ff7`             |
-| R2            | `xvi-note-files`，公开访问关闭                                  |
-| 迁移          | `0001_initial.sql`、`0002_assistant.sql`、`0003_chat_files.sql`、`0004_ai_reply_limit.sql` |
-| 清理任务      | 每 30 分钟                                                      |
+| 项目          | 值                                                    |
+| ------------- | ----------------------------------------------------- |
+| 地址          | https://note.xvi.app（关闭 `workers.dev` 与预览地址） |
+| Wrangler 环境 | `production`                                          |
+| Worker        | `xvi-note`                                            |
+| D1            | `xvi-note` / `6ee905d7-80bf-46fa-a35c-80d839581ff7`   |
+| R2            | `xvi-note-files`，公开访问关闭                        |
+| 清理任务      | 每 30 分钟                                            |
 
-生产 D1 与 R2 是新建的独立资源，本地 `.wrangler/state` 和密码未改动。首次密码由使用者通过专属链接设置，部署验证没有初始化生产账号。专属链接和初始密钥保存在 Git 忽略的 `.wrangler/deploy/`，目录权限 0700，敏感文件权限 0600；不写入本记录。后续部署使用 `pnpm run deploy`（或 `npm run deploy`），保留线上密钥；远端密码重置命令固定选择 `production`。`pnpm deploy` 是 pnpm 内置命令，不能省略 `run`。
+生产 D1、R2 与本地 `.wrangler/state` 相互独立。首次设置链接和初始密钥保存在 Git 忽略的 `.wrangler/deploy/`（目录 0700、文件 0600），不写入文档。更新使用 `pnpm run deploy`（或 `npm run deploy`），它依次构建、应用生产迁移、部署，并保留线上 Secrets；`pnpm deploy` 是 pnpm 内置命令，不能省略 `run`。远端密码重置命令固定使用 `production` 环境。
 
-## AI 回复更新
+## 平台差异与限制
 
-- 部署配置同步已有自定义域名 `note.xvi.app`，保持 `workers.dev` 和预览地址关闭。
-- 新迁移为已有 AI 配置补上默认 8192 tokens，保留加密 Key；设置中可单独调整回复上限。默认等待 5 分钟，更长的上限相应延长等待时间与会话锁。
-- 中断回复可保存为 Markdown 子笔记，也可继续生成；续写携带所选回复及原问题、引用和附件，支持连续续写，并保留输入框草稿及待发送附件。
-- 构建、38 项服务端测试通过；电脑、手机共 30 项浏览器用例验证通过（修正新增用例的下拉框定位后单独重跑该用例）。DeepSeek 使用模拟响应，未触发真实付费调用。
+- **D1 迁移解析**：云端对触发器中未加括号的 `CASE … END` 报 `incomplete input`，本地却能通过。迁移里的 CASE 表达式一律加括号，见 [workers-sdk#4727](https://github.com/cloudflare/workers-sdk/issues/4727)。
+- **PBKDF2 次数上限**：云端 Workers 最多 100,000 次（[workerd 限制](https://github.com/cloudflare/workerd/blob/main/src/workerd/io/limit-enforcer.h)），本地不受限。因此 600,000 次 PBKDF2 在浏览器中计算，服务端用 `APP_SECRET` 做带域标识的 HMAC-SHA256 校验；不要为通过限制而降低次数。
+- **D1 单次限制**：免费方案每次调用最多 50 条查询、单个绑定值 2 MB，备份恢复按此分块（见 `worker/backups.ts`）。
 
-## 首次部署时修正
+## 免费额度与 CPU
 
-1. **D1 迁移解析。** 云端对触发器中未加括号的 `CASE … END` 返回 `incomplete input`。最小 SQL 在云端复现，加括号后成功。已对三个迁移的 CASE 表达式加括号，约束语义不变；随后生产库和独立测试库均完整迁移成功。对应 [Cloudflare 问题记录](https://github.com/cloudflare/workers-sdk/issues/4727)。
-2. **密码计算运行时差异。** 原生 PBKDF2 600,000 次在本地通过，云端返回 `NotSupportedError`，明确限制最多 100,000 次。该限制也存在于 [workerd 的限制器实现](https://github.com/cloudflare/workerd/blob/main/src/workerd/io/limit-enforcer.h)。已保留 600,000 次，将计算移到浏览器，服务端使用 APP_SECRET 做带域标识的 HMAC-SHA256 校验。新记录不保存可直接登录的派生值；旧本地记录经原密码验证后自动升级。新增测试模拟服务端禁止 PBKDF2，覆盖初始化、登录、改密、参数降级拒绝、数据库校验值重放拒绝和旧格式升级。
+首次部署时的云端冒烟测试中，登录、改密、上传、PDF 分段读取等请求 CPU 在 10 ms 以内，但接近 1 MiB 的正文读写（约 20 ms）和永久删除（约 13 ms）超过 [Workers Free 的 10 ms 标称预算](https://developers.cloudflare.com/workers/platform/limits/)。请求都能完成，但不能承诺所有操作始终在免费 CPU 预算内；出现限制时应调整实现或部署预算，不降低密码强度、不限制既定正文容量，也不自动升级套餐。容量与压力验收应在单独测试站点进行，每项至少重复 10 次，用 Workers Observability 的事件 CPU 时间记录最大值与 P95。
 
-## 首次部署验证结果
-
-- 构建和 TypeScript 检查通过。原有 33 项集成测试与新增的 2 项密码回归测试通过；电脑、手机共 28 项浏览器测试通过。
-- 独立云端 Worker、D1、R2 执行完整 HTTP 冒烟：短密码与无效设置令牌拒绝、初始化、正确与错误密码、10 次正确登录、会话撤销、编辑确认、笔记创建 / 读取 / 保存、1,048,013 字节正文、文件上传、10 次 PDF Range 请求、回收站永久删除及清理。清理后所有容量计数为 0。
-- 云端浏览器以 1440 × 960 和 390 × 844 尺寸实际登录成功，确认密码在浏览器派生，请求不包含原密码，无页面异常。
-- 验证结束后已删除临时 Worker、D1 和 R2，停止日志监听；生产资源保持独立。
-- 正式站点 HTML 和状态接口返回 200；未登录访问笔记、文件、存储和 AI 设置返回 401，无效初始化令牌返回 403。专属链接页面移除地址栏中的令牌，密码输入要求至少 8 位。
-- DeepSeek 未配置真实 Key，付费模型调用仍仅有本地模拟测试。
-
-## CPU 观察与免费额度边界
-
-以下为第一次云端 HTTP 冒烟中实际收到的 Workers Tail 事件；CPU 时间取自事件 `cpuTime`，不是浏览器耗时。部分操作只有一次成功样本，初始化包含两次预期的拒绝请求，读取与保存也包含大正文或权限拒绝。数据用于说明此次验证范围，不代表持续负载保证。
-
-| 请求类别             | 采集数 | 最大 CPU / P95（ms） |
-| -------------------- | -----: | -------------------: |
-| 初始化               |      3 |                9 / 9 |
-| 登录                 |     13 |                5 / 5 |
-| 改密                 |      1 |                8 / 8 |
-| 创建笔记             |      1 |                9 / 9 |
-| 读取笔记（含大正文） |      7 |              20 / 20 |
-| 保存正文（含大正文） |      2 |              20 / 20 |
-| 文件上传             |      1 |                4 / 4 |
-| PDF 分段读取         |      9 |                4 / 4 |
-| 永久删除回收批次     |      1 |              13 / 13 |
-| 清理批次             |      3 |                5 / 5 |
-
-请求均按预期完成，但大正文和永久删除样本超过 [Workers Free 的 10 ms CPU 标称预算](https://developers.cloudflare.com/workers/platform/limits/)。未降低密码计算强度、未限制既定正文容量、未升级套餐；因此不能承诺所有操作始终处于免费 CPU 预算内。50 MB 上传、长期负载、每类至少 10 次的容量压力验收仍未完成。R2 / D1 / Workers 的免费额度由账户内项目共享，8 GB 内容上限不是费用封顶。
+R2 / D1 / Workers 的免费额度由账户内项目共享，应用的 8 GB 内容上限不是费用封顶；部署前请核对官方最新额度：[Workers 限制](https://developers.cloudflare.com/workers/platform/limits/)、[D1 计费](https://developers.cloudflare.com/d1/platform/pricing/)、[D1 限制](https://developers.cloudflare.com/d1/platform/limits/)、[R2 计费](https://developers.cloudflare.com/r2/pricing/)。
