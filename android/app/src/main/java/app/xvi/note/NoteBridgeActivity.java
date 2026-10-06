@@ -23,6 +23,7 @@ abstract class NoteBridgeActivity extends BridgeActivity {
     /** Registers plugins; call before super.onCreate. */
     void registerNotePlugins() {
         registerPlugin(NoteDevicePlugin.class);
+        registerPlugin(NoteProxyPlugin.class);
         registerPlugin(NoteArchivePlugin.class);
     }
 

@@ -1,0 +1,10 @@
+.proxy-status { position: fixed; top: 8px; right: 12px; z-index: 950; }
+.proxy-warning { color: var(--warning); background: var(--surface); border: 1px solid var(--line); border-radius: 50%; }
+.proxy-details { position: absolute; top: 44px; right: 0; width: min(290px, calc(100vw - 24px)); padding: 16px; background: var(--surface); color: var(--ink); border: 1px solid var(--line); border-radius: 12px; box-shadow: 0 6px 24px #0002; }
+.proxy-details p { font-size: 13px; line-height: 1.6; margin: 8px 0; }
+.proxy-actions { margin: 12px 0; display: flex; flex-wrap: wrap; gap: 12px; align-items: center; }
+.proxy-toggle { display: flex; flex-direction: row; align-items: center; gap: 8px; white-space: nowrap; }
+.proxy-toggle input { width: 18px; height: 18px; accent-color: var(--button-bg); }
+body:has(.proxy-status) .app-header, body:has(.proxy-status) .note-toolbar { padding-right: 58px; }
+body:has(.proxy-status) .auth-theme { right: 58px; }
+.proxy-boot-settings { margin-top: 12px; }

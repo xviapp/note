@@ -102,6 +102,36 @@ public class NoteDevicePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void getServer(PluginCall call) {
+        call.resolve(new JSObject().put("host", URI.create(bridge.getLocalUrl()).getHost())
+            .put("defaultHost", ServerConfig.defaultHost(getContext()))
+            .put("configured", ServerConfig.configured(getContext())));
+    }
+
+    /** Chooses the server; a different one restarts the app at its origin. */
+    @PluginMethod
+    public void setServer(PluginCall call) {
+        String host;
+        try {
+            host = ServerConfig.normalize(call.getString("url"));
+        } catch (IllegalArgumentException error) {
+            call.reject(error.getMessage());
+            return;
+        }
+        boolean changed = !host.equalsIgnoreCase(URI.create(bridge.getLocalUrl()).getHost());
+        ServerConfig.save(getContext(), host);
+        call.resolve(new JSObject().put("host", host).put("restarting", changed));
+        if (!changed) return;
+        Activity activity = getActivity();
+        CookieManager.getInstance().flush();
+        activity.runOnUiThread(() -> {
+            activity.startActivity(new Intent(activity, MainActivity.class)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK | Intent.FLAG_ACTIVITY_CLEAR_TASK));
+            activity.finish();
+        });
+    }
+
+    @PluginMethod
     public void finishBoot(PluginCall call) {
         host().finishBoot();
         call.resolve();
@@ -172,7 +202,7 @@ public class NoteDevicePlugin extends Plugin {
             try {
                 InputStream source;
                 if (url != null) {
-                    connection = (HttpURLConnection) URI.create(url).toURL().openConnection();
+                    connection = (HttpURLConnection) URI.create(url).toURL().openConnection(NoteProxyNetwork.get(getContext()).proxy());
                     connection.setInstanceFollowRedirects(false);
                     connection.setConnectTimeout(15_000);
                     connection.setReadTimeout(60_000);

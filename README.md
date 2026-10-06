@@ -4,6 +4,8 @@
 
 ## 已实现
 
+- Android 应用内网络代理：内置完整 v2rayNG 节点、订阅、路由、DNS 与高级配置；手机请求统一按规则分流，核心故障自动直连并显示右上角软提醒。配置仅保存在本机，云端请求继续由 Worker 处理。详见[网络代理](docs/network-proxy.md)。
+
 - Aa 阅读设置：系统／宋体／黑体、字号、字间距、行距、段落间距、正文宽度；三档预设，按设备记忆，正文即时预览。
 - 本机阅读缓存与手动离线保存：Markdown、TXT、导入论文、图片、完整 PDF 及附件，断网重开并恢复阅读进度；默认 200 MB，按容量清理自动副本，手动保存保留，联网检查更新，退出清除私人副本。详见[离线阅读](docs/offline-reading.md)。
 - 树形目录；文件夹及各类文件均可包含下级笔记，有下级时才显示展开箭头；主页面列表有下级时可原地展开浏览；笔记的下级从工具栏的「下级笔记」按钮打开（位于标题目录按钮之前），文件夹页面直接列出；支持新建未命名笔记、重命名、拖动、菜单移动与删除。文件夹可自定义 Emoji 或图片图标，图片自动缩为小图，可随备份恢复。
@@ -74,14 +76,16 @@ Android 客户端使用 Capacitor，工程位于同一仓库的 `android/`，共
 
 需要 Android 8.0+，以及 Android System WebView 125+。旧网页组件会显示更新提示。支持系统文件选择与保存、外部链接交给浏览器、系统返回键收起窗口或目录、未保存修改的离开确认，以及应用切到后台时补写阅读进度。
 
-本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 36 和 Build Tools 36，设置 `JAVA_HOME` 与 `ANDROID_SDK_ROOT` 后运行：
+本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 37 和 Build Tools 37，设置 `JAVA_HOME` 与 `ANDROID_SDK_ROOT` 后运行：
 
 ```bash
 npm ci
 npm run android:apk
 ```
 
-安装包输出为 `artifacts/yejian-<版本>-android-debug.apk`，是可直接安装的测试版。可复制到手机安装，或连接手机后用 `adb install -r` 安装。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
+默认只构建 `arm64-v8a`，输出 `artifacts/yejian-<版本>-android-arm64-v8a-debug.apk`。其他架构手动运行 `node scripts/android.mjs assembleDebug --abi armeabi-v7a`（也支持 `x86_64`、`x86`）；先执行 `npm run build:android` 可同步最新前端资源。`--abi all` 才生成四种架构包和通用包，通用包保持 `artifacts/yejian-<版本>-android-debug.apk` 命名。安装其他架构用 `pnpm install:android --abi <架构>`，脚本在构建前检查设备兼容性。
+
+这些安装包是可直接安装的测试版。可复制到手机安装，或连接手机后用 `adb install -r` 安装。此包使用本机 Android 调试签名；应用商店发布需另行配置正式签名，密钥不进入 Git。
 
 连接并授权 USB 调试后，可以一条命令构建、复制 APK 并覆盖安装，保留应用数据：
 

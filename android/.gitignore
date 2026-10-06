@@ -99,3 +99,8 @@ app/src/main/assets/public
 app/src/main/assets/capacitor.config.json
 app/src/main/assets/capacitor.plugins.json
 app/src/main/res/xml/config.xml
+
+# Verified, pinned proxy runtime assets downloaded by Gradle
+v2ray/src/main/assets/*.dat
+v2ray/libs/*.download
+v2ray/libs/libv2ray.jar

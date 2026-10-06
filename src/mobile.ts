@@ -13,6 +13,9 @@ export const device = registerPlugin<{
   notify(options: { message: string }): Promise<void>;
   haptic(): Promise<void>;
   finishBoot(): Promise<void>;
+  // The server whose origin serves this UI; changing it restarts the app there.
+  getServer(): Promise<import('./server').ServerInfo>;
+  setServer(options: { url: string }): Promise<{ host: string; restarting: boolean }>;
   saveFile(options: {
     url?: string;
     sha256?: string;

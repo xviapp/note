@@ -2,6 +2,10 @@
 
 Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React、编辑确认、PDF 连续阅读、翻译和青藜都共用现有实现。0.2.0 加入字体与排版设置、本机文件缓存和离线阅读，详见[阅读设置与本机缓存](offline-reading.md)。编辑和青藜仍需联网。iOS 工程暂未添加。
 
+## 应用内网络代理
+
+Android 设置提供「网络代理」，内置完整 v2rayNG 配置界面。手机请求由内置 Xray 按规则分流；云端请求继续由 Worker 处理。默认关闭，核心故障自动直连并显示右上角软提醒。详见[网络代理](network-proxy.md)。
+
 ## 服务与会话
 
 `capacitor.config.ts` 指定包内资源目录 `dist-android/`，并把本地 WebView origin 设为 `https://note.xvi.app`，没有配置远程 `server.url`。`MainActivity` 使用 Capacitor 的本地资源服务加载界面，只有同源 `/api/` 请求交还 Chromium 走真实 HTTPS 网络。
@@ -24,7 +28,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 ## 构建
 
-- JDK 21；Node.js 22.12+；Android SDK Platform 36 / Build Tools 36。
+- JDK 21；Node.js 22.12+；Android SDK Platform 37 / Build Tools 37。
 - `npm run android:apk`：构建前端、同步 Capacitor、编译调试 APK，并复制到 `artifacts/`。
 - `pnpm install:android`：先选定唯一可用设备，再完成上述构建并覆盖安装，保留应用数据；支持 `--device <序列号>` 或 `ANDROID_SERIAL` 指定目标。连接多个可用设备时必须指定，离线或未授权设备会报错，构建失败不会安装旧包。
 - `npm run build:android`：仅构建与同步包内资源。
@@ -37,7 +41,9 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`。React�
 
 Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 WebView 125+；Web 构建保持原来的现代包。兼容范围参考 [PDF.js 浏览器支持](https://github.com/mozilla/pdf.js/wiki/Frequently-Asked-Questions#which-browsersenvironments-are-supported)。最低 Android 版本为 8.0，旧 WebView 显示本地更新提示页。
 
-`artifacts/yejian-0.4.21-android-debug.apk` 是测试包，使用开发机调试签名，`versionCode` 为 30，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
+默认只构建 `arm64-v8a`，输出 `artifacts/yejian-<版本>-android-arm64-v8a-debug.apk`。其他架构手动运行 `node scripts/android.mjs assembleDebug --abi armeabi-v7a`（也支持 `x86_64`、`x86`）；先执行 `npm run build:android` 可同步最新前端资源。`--abi all` 才生成四种架构包和通用包，通用包保持 `artifacts/yejian-<版本>-android-debug.apk` 命名。安装其他架构用 `pnpm install:android --abi <架构>`，脚本在构建前检查设备兼容性。
+
+`artifacts/yejian-0.4.21-android-arm64-v8a-debug.apk` 是默认测试包，使用开发机调试签名，`versionCode` 为 30，可覆盖安装前一测试版。正式分发前使用单独保管的发布密钥，并继续递增 `android/app/build.gradle` 的 `versionCode`。不要提交任何签名密钥或密码。
 
 桌面图标、单色主题图标和启动画面的来源与规则见[应用图标](branding.md)。
 
@@ -49,11 +55,15 @@ Android 构建为 PDF.js 主库和 worker 同时选择 `legacy` 包，以兼容 
 
 ```bash
 pnpm android:apk
+# 发布通用包前需手动构建全部架构
+node scripts/android.mjs assembleDebug --abi all
 pnpm run deploy
 pnpm android:publish --apk artifacts/yejian-0.4.21-android-debug.apk --notes docs/releases/0.4.21.txt --remote
 ```
 
 安装包保存在 R2 的 `releases/android/` 中，通过登录接口访问，GitHub 仓库保持私有。发行文件不计入应用的笔记库容量统计，但使用同一 Cloudflare 账号的 R2 存储额度。历史安装包采用构建号与摘要寻址，不被新发布覆盖。
+
+release 默认启用 R8 代码压缩、混淆和资源裁剪，仍只构建 `arm64-v8a`。嵌入模块提供 Gson 配置字段与枚举的保留规则；Xray JNI、MMKV 与 Capacitor 使用依赖自带的保留规则。打包脚本会同步复制对应的混淆映射为 `artifacts/yejian-<版本>-android-<架构>-release-mapping.txt`，请与安装包一起保管，用于还原混淆后的崩溃堆栈。调试构建保持不压缩。
 
 当前调试包继续沿用已有签名，支持覆盖升级。正式签名构建使用 `pnpm android:release`，需要在部署环境中设置 `NOTE_ANDROID_KEYSTORE`（绝对路径）、`NOTE_ANDROID_STORE_PASSWORD`、`NOTE_ANDROID_KEY_ALIAS` 和 `NOTE_ANDROID_KEY_PASSWORD`；缺少配置即停止，不生成未签名的分发包。密钥及密码不进入仓库。改用另一证书时，当前测试版不能直接覆盖升级，应先完成整库备份并迁移；应用也会阻止把证书不同的版本当作普通覆盖更新。
 

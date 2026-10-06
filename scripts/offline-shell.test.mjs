@@ -115,6 +115,7 @@ test('collection and settings deep links reopen offline without caching API requ
       '/settings/storage',
       '/settings/account',
       '/settings/about',
+      '/settings/proxy',
     ]) {
       let response;
       handlers.get('fetch')({

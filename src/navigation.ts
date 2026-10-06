@@ -10,6 +10,8 @@ export const settingsTitles = {
   storage: '存储空间',
   account: '密码与设备',
   about: '关于页间',
+  proxy: '网络代理',
+  server: '服务器',
 } as const;
 export type SettingsSection = keyof typeof settingsTitles;
 export type View = 'tree' | 'favorites' | 'recent' | 'offline' | 'trash' | 'settings';

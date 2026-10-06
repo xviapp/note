@@ -22,6 +22,7 @@ public class ShareActivity extends NoteBridgeActivity {
     public void onCreate(Bundle savedInstanceState) {
         config = shareConfig();
         registerNotePlugins();
+        config = ServerConfig.load(this);
         super.onCreate(savedInstanceState);
         if (bridge == null) return;
         // The page draws its own scrim and sheet; everything else shows the app below.

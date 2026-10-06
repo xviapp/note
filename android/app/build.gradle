@@ -1,5 +1,11 @@
 apply plugin: 'com.android.application'
 
+def supportedAbis = ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86']
+def requestedAbi = providers.gradleProperty('noteAbi').getOrElse('arm64-v8a')
+if (requestedAbi != 'all' && !supportedAbis.contains(requestedAbi)) {
+    throw new GradleException("Unsupported noteAbi: ${requestedAbi}")
+}
+
 android {
     namespace = "app.xvi.note"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,6 +22,14 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    splits {
+        abi {
+            enable true
+            reset()
+            include(*(requestedAbi == 'all' ? supportedAbis : [requestedAbi]))
+            universalApk requestedAbi == 'all'
+        }
+    }
     signingConfigs {
         if (System.getenv('NOTE_ANDROID_KEYSTORE')) {
             production {
@@ -26,11 +40,18 @@ android {
             }
         }
     }
+    compileOptions {
+        coreLibraryDesugaringEnabled true
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+    packagingOptions { jniLibs { useLegacyPackaging = true } }
     buildTypes {
         release {
             if (System.getenv('NOTE_ANDROID_KEYSTORE')) signingConfig signingConfigs.production
-            minifyEnabled false
-            proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
+            minifyEnabled true
+            shrinkResources true
+            proguardFiles getDefaultProguardFile('proguard-android-optimize.txt'), 'proguard-rules.pro'
         }
     }
 }
@@ -47,6 +68,10 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
+    implementation project(':v2ray')
+    implementation files('../v2ray/libs/libv2ray.aar').builtBy(':v2ray:prepareXray')
+    implementation "androidx.webkit:webkit:$androidxWebkitVersion"
+    coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     testImplementation "junit:junit:$junitVersion"
     androidTestImplementation "androidx.test.ext:junit:$androidxJunitVersion"
     androidTestImplementation "androidx.test.espresso:espresso-core:$androidxEspressoCoreVersion"

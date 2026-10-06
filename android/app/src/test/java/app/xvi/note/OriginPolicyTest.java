@@ -23,7 +23,8 @@ public class OriginPolicyTest {
         for (String path : new String[] {
             "/favorites", "/recent", "/offline", "/trash", "/settings",
             "/settings/theme", "/settings/reading", "/settings/ai", "/settings/offline",
-            "/settings/share", "/settings/backup", "/settings/storage", "/settings/account", "/settings/about"
+            "/settings/share", "/settings/backup", "/settings/storage", "/settings/account", "/settings/about", "/settings/proxy",
+            "/settings/server"
         }) {
             assertTrue(path, policy.isDocument("https://note.xvi.app" + path));
             assertFalse(path, policy.isDocument("https://other.test" + path));

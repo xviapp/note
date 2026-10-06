@@ -25,6 +25,7 @@ public class MainActivity extends NoteBridgeActivity {
         SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> booting);
         new Handler(Looper.getMainLooper()).postDelayed(this::finishBoot, BOOT_TIMEOUT_MS);
         registerNotePlugins();
+        config = ServerConfig.load(this);
         super.onCreate(savedInstanceState);
         if (bridge == null) return;
         // The first WebView frame precedes the JS bridge/theme callback. Prime

@@ -3,6 +3,8 @@ import { Capacitor } from '@capacitor/core';
 import { App } from '@capacitor/app';
 import ShareWindow from './components/ShareWindow';
 import { device } from './mobile';
+import { prepareProxy } from './proxy';
+import { ProxyStatus } from './components/ProxySettings';
 import './theme';
 import './family-tokens.css';
 import './styles.css';
@@ -17,4 +19,8 @@ if (Capacitor.isNativePlatform())
     const event = new CustomEvent('note:native-back', { cancelable: true });
     if (window.dispatchEvent(event)) void device.closeShare({}).catch(() => {});
   }).catch(() => {});
-createRoot(document.getElementById('root')!).render(<ShareWindow />);
+async function start() {
+  await prepareProxy();
+  createRoot(document.getElementById('root')!).render(<><ShareWindow /><ProxyStatus /></>);
+}
+void start();

@@ -11,6 +11,8 @@ import { BackupSettings } from './BackupSettings';
 import { AppUpdates } from './AppUpdates';
 import { CacheSettings } from './OfflineCache';
 import { ShareSettings } from './ShareSettings';
+import { ProxySettings } from './ProxySettings';
+import { ServerSettings } from './ServerSettings';
 import { settingsTitles, type SettingsSection } from '../navigation';
 import { SettingsIndex } from './SettingsIndex';
 import type { Confirm } from './Primitives';
@@ -44,6 +46,8 @@ export function Settings({
     <section className="collection-page settings-page settings-detail">
       <h1>{settingsTitles[section]}</h1>
       {section === 'about' && <AppUpdates />}
+      {section === 'proxy' && <ProxySettings />}
+      {section === 'server' && <ServerSettings />}
       {section === 'theme' && (
         <section className="settings-section">
           <h2>
