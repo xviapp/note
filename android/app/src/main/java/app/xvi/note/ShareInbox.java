@@ -16,9 +16,15 @@ import java.util.*;
 /** Copies granted content URIs while the sender's permission is alive. No path from
  * an external intent is ever used as a filesystem path or sent straight to the API. */
 final class ShareInbox {
+    private static ShareInbox instance;
     private final Context context;
     private final File root;
-    ShareInbox(Context context) {
+    /** One inbox per process: the notebook and the share window may both be open. */
+    static synchronized ShareInbox get(Context context) {
+        if (instance == null) instance = new ShareInbox(context);
+        return instance;
+    }
+    private ShareInbox(Context context) {
         this.context = context.getApplicationContext();
         root = new File(context.getFilesDir(), "share-inbox");
         root.mkdirs();
@@ -55,7 +61,15 @@ final class ShareInbox {
         if (id != null && id.matches("[a-f0-9-]{36}")) remove(new File(root, id));
     }
     @SuppressWarnings("deprecation")
-    synchronized void receive(Intent intent) throws Exception {
+    /** The share received as `id`, or null once it has been saved or discarded. */
+    synchronized JSONObject get(String id) throws Exception {
+        if (id == null || !id.matches("[a-f0-9-]{36}")) return null;
+        File manifest = new File(new File(root, id), "share.json");
+        if (!manifest.isFile()) return null;
+        return new JSONObject(new String(Files.readAllBytes(manifest.toPath()), StandardCharsets.UTF_8));
+    }
+    /** Copies the share and returns its id; a share that cannot be read is kept with its error. */
+    synchronized String receive(Intent intent) throws Exception {
         next(); // Expire abandoned imports.
         if (entries().length >= 4) throw new IOException("请先处理页间中待导入的分享。");
         String id = UUID.randomUUID().toString();
@@ -100,9 +114,15 @@ final class ShareInbox {
                 name = name.substring(0, Math.min(name.length(), 200));
                 String mime = context.getContentResolver().getType(uri);
                 if (mime == null || mime.equals("application/octet-stream")) mime = intent.getType();
-                if (name.toLowerCase(Locale.ROOT).endsWith(".pdf")) mime = "application/pdf";
-                if (mime == null || !(mime.equals("application/pdf") || mime.matches("image/(png|jpeg|gif|webp|avif|svg\\+xml)")))
-                    throw new IOException("分享文件支持 PDF 和常用图片格式。");
+                String lower = name.toLowerCase(Locale.ROOT);
+                if (lower.endsWith(".pdf")) mime = "application/pdf";
+                if (lower.endsWith(".md") || lower.endsWith(".markdown")) mime = "text/markdown";
+                if (mime != null && mime.equals("text/x-markdown")) mime = "text/markdown";
+                if (mime == null || !(mime.equals("application/pdf") || mime.matches("image/(png|jpeg|gif|webp|avif|svg\\+xml)")
+                        || mime.matches("text/(plain|markdown)")))
+                    throw new IOException("分享文件仅支持 PDF、常用图片、Markdown 和纯文本格式。");
+                // Text files are read into the note body, so they share the text limit.
+                long limit = mime.startsWith("text/") ? 1024L * 1024 : 50_000_000L;
                 String fileId = UUID.randomUUID().toString();
                 long size = 0;
                 try (InputStream input = context.getContentResolver().openInputStream(uri);
@@ -111,8 +131,8 @@ final class ShareInbox {
                     byte[] buffer = new byte[32768]; int length;
                     while ((length = input.read(buffer)) != -1) {
                         size += length; total += length;
-                        if (size > 50_000_000L || total > 100L * 1024 * 1024)
-                            throw new IOException("单个文件最多 50 MB，一次分享最多 100 MiB。");
+                        if (size > limit || total > 100L * 1024 * 1024)
+                            throw new IOException(limit < 50_000_000L ? "文本文件最多 1 MiB。" : "单个文件最多 50 MB，一次分享最多 100 MiB。");
                         output.write(buffer, 0, length);
                     }
                 }
@@ -127,6 +147,7 @@ final class ShareInbox {
         File pending = new File(dir, "share.tmp");
         Files.write(pending.toPath(), result.toString().getBytes(StandardCharsets.UTF_8));
         Files.move(pending.toPath(), new File(dir, "share.json").toPath(), java.nio.file.StandardCopyOption.ATOMIC_MOVE);
+        return id;
     }
     synchronized WebResourceResponse open(String path) {
         if (!path.matches("/__share/[a-f0-9-]{36}/[a-f0-9-]{36}")) return missing();

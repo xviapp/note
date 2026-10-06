@@ -1,4 +1,4 @@
-import type { ArxivImportProgress } from '../shared/types';
+import type { ArxivImportProgress, ArxivPreview } from '../shared/types';
 import type { Env, Session } from './types';
 import { AppError, asError, idValue, textValue } from './http';
 import { createNode, getNode, priorOperation } from './library';
@@ -61,6 +61,49 @@ export function arxivUrl(input: unknown): URL {
   )
     throw new AppError(400, '仅支持 arxiv.org 的 HTML、摘要或 PDF 论文链接。');
   return new URL(`https://arxiv.org/html/${id}`);
+}
+// Title, authors and abstract from arXiv's own API, for the share window. Only
+// export.arxiv.org is contacted, for an ID that arxivUrl has already validated.
+export async function arxivPreview(
+  input: unknown,
+  requestSignal: AbortSignal,
+): Promise<ArxivPreview> {
+  const id = arxivUrl(input).pathname.replace(/^\/html\//, '');
+  const signal = AbortSignal.any([requestSignal, AbortSignal.timeout(10_000)]);
+  let response: Response;
+  try {
+    response = await fetch(
+      `https://export.arxiv.org/api/query?id_list=${encodeURIComponent(id)}&max_results=1`,
+      { signal, redirect: 'error', headers: { accept: 'application/atom+xml' } },
+    );
+  } catch {
+    throw new AppError(502, '暂时无法读取 arXiv，请稍后重试。');
+  }
+  if (!response.ok) {
+    await response.body?.cancel();
+    throw new AppError(
+      502,
+      response.status === 429
+        ? 'arXiv 暂时限制了访问，请稍后重试。'
+        : '暂时无法读取 arXiv，请稍后重试。',
+    );
+  }
+  const xml = new TextDecoder().decode(await bounded(response, 1_000_000));
+  const entry = xml.match(/<entry>([\s\S]*?)<\/entry>/)?.[1] ?? '';
+  const field = (name: string) =>
+    entry.match(new RegExp(`<${name}(?:\\s[^>]*)?>([\\s\\S]*?)</${name}>`))?.[1] ?? '';
+  const title = titleText(field('title'));
+  // A missing paper comes back as an entry from arxiv.org/api/errors.
+  if (!title || !/arxiv\.org\/abs\//.test(field('id')))
+    throw new AppError(404, '未找到这篇 arXiv 论文。');
+  return {
+    id,
+    title,
+    authors: [...entry.matchAll(/<author>\s*<name>([\s\S]*?)<\/name>/g)]
+      .map((match) => titleText(match[1]!))
+      .slice(0, 50),
+    summary: titleText(field('summary'), 2000),
+  };
 }
 function imageUrl(input: string, paper: URL): URL {
   let url: URL;
@@ -145,7 +188,7 @@ async function bounded(response: Response, limit: number): Promise<Uint8Array<Ar
   }
   return bytes;
 }
-function titleText(value: string): string {
+function titleText(value: string, limit = 200): string {
   return value
     .replace(/&#(x[\da-f]+|\d+);/gi, (_, code: string) => {
       const n = code[0].toLowerCase() === 'x' ? parseInt(code.slice(1), 16) : Number(code);
@@ -157,7 +200,7 @@ function titleText(value: string): string {
     )
     .replace(/\s+/g, ' ')
     .trim()
-    .slice(0, 200);
+    .slice(0, limit);
 }
 // Downloads images in order until this request's fetch budget runs out.
 async function fetchImages(

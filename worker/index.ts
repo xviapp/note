@@ -31,7 +31,7 @@ import { aiSettings, saveAiSettings, testAiSettings } from './deepseek';
 import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
-import { continueArxiv, importArxiv } from './arxiv';
+import { arxivPreview, continueArxiv, importArxiv } from './arxiv';
 import { searchNodes } from './search';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
 import {
@@ -115,6 +115,9 @@ export default {
       if (path === '/api/search' && method === 'GET') return json(await searchNodes(env, url));
       if (path === '/api/nodes' && method === 'POST') {
         return json(await createNode(env, await body(request), operationKey(request)), 201);
+      }
+      if (path === '/api/import/arxiv/preview' && method === 'GET') {
+        return json(await arxivPreview(url.searchParams.get('url'), request.signal));
       }
       if (path === '/api/import/arxiv' && method === 'POST') {
         const result = await importArxiv(

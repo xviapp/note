@@ -1,5 +1,6 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { api, ApiError, upload } from '../api';
+import { api, upload } from '../api';
+import { importPaper } from '../arxiv-import';
 import {
   KIND_LABELS,
   UNTITLED_NAMES,
@@ -56,34 +57,6 @@ export function NodeForm({
       void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
     onClose();
   };
-  // Papers with many images import over several requests; the server returns
-  // signed progress until the note is created.
-  async function importPaper() {
-    if (!continued.current) setProgress(null);
-    let result = continued.current
-      ? null
-      : await api<NoteNode | ArxivImportProgress>(
-          '/api/import/arxiv',
-          'POST',
-          { title, parentId: parent, url },
-          key.current,
-        );
-    for (;;) {
-      if (result && !('continuation' in result)) return result;
-      if (result) {
-        continued.current = result.continuation;
-        setProgress(result);
-      }
-      try {
-        result = await api<NoteNode | ArxivImportProgress>('/api/import/arxiv/continue', 'POST', {
-          continuation: continued.current,
-        });
-      } catch (e) {
-        if (e instanceof ApiError && e.status === 410) continued.current = null;
-        throw e;
-      }
-    }
-  }
   async function save(event: FormEvent) {
     event.preventDefault();
     if (working) return;
@@ -107,6 +80,7 @@ export function NodeForm({
         if (!file) throw new Error('请先选择一个文件。');
         uploaded.current = await upload(file);
       }
+      if (kind === 'arxiv' && !continued.current) setProgress(null);
       const result = node
         ? await api<NoteNode>(`/api/nodes/${node.id}`, 'PATCH', {
             title,
@@ -115,7 +89,7 @@ export function NodeForm({
             ...(kind === 'folder' ? { icon: iconData } : {}),
           })
         : kind === 'arxiv'
-          ? await importPaper()
+          ? await importPaper({ title, parentId: parent, url }, key.current, continued, setProgress)
           : await api<NoteNode>(
               '/api/nodes',
               'POST',

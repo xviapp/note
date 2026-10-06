@@ -55,14 +55,24 @@ public class NoteDevicePlugin extends Plugin {
     @PluginMethod
     public void getPendingShare(PluginCall call) {
         try { call.resolve(new JSObject().put("share", java.util.Objects.requireNonNullElse(
-            ((MainActivity) getActivity()).shareInbox.next(), org.json.JSONObject.NULL))); }
+            host().pendingShare(), org.json.JSONObject.NULL))); }
         catch (Exception error) { call.reject("无法读取待导入内容。", error); }
     }
 
     @PluginMethod
     public void discardShare(PluginCall call) {
-        ((MainActivity) getActivity()).shareInbox.discard(call.getString("id"));
+        host().shareInbox.discard(call.getString("id"));
         call.resolve();
+    }
+
+    @PluginMethod
+    public void closeShare(PluginCall call) {
+        host().closeShare(call.getBoolean("saved", false), call.getBoolean("openApp", false));
+        call.resolve();
+    }
+
+    private NoteBridgeActivity host() {
+        return (NoteBridgeActivity) getActivity();
     }
 
     @PluginMethod
@@ -77,7 +87,7 @@ public class NoteDevicePlugin extends Plugin {
             int value = Color.parseColor(color);
             // SystemBars handles insets; background and icon contrast are updated
             // together to follow the app even when Android uses another theme.
-            ((MainActivity) getActivity()).setThemeBackground(value, preference);
+            host().setThemeBackground(value, preference);
             call.resolve();
         });
     }
@@ -86,14 +96,14 @@ public class NoteDevicePlugin extends Plugin {
     public void openExternal(PluginCall call) {
         String url = call.getString("url", "");
         getActivity().runOnUiThread(() -> {
-            ((MainActivity) getActivity()).openExternal(Uri.parse(url));
+            host().openExternal(Uri.parse(url));
             call.resolve();
         });
     }
 
     @PluginMethod
     public void finishBoot(PluginCall call) {
-        ((MainActivity) getActivity()).finishBoot();
+        host().finishBoot();
         call.resolve();
     }
 

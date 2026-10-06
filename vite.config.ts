@@ -16,5 +16,10 @@ export default defineConfig(({ mode }) => ({
         : [],
   },
   server: { proxy: { '/api': `http://127.0.0.1:${process.env.NOTE_WORKER_PORT || 8787}` } },
-  build: { chunkSizeWarningLimit: 900, outDir: mode === 'android' ? 'dist-android' : 'dist' },
+  build: {
+    chunkSizeWarningLimit: 900,
+    outDir: mode === 'android' ? 'dist-android' : 'dist',
+    // share.html is Android's share window, a page of its own over the sending app.
+    rollupOptions: { input: { main: 'index.html', share: 'share.html' } },
+  },
 }));

@@ -7,10 +7,14 @@ export interface IncomingShare {
   error?: string;
   files: { id: string; name: string; mime: string; size: number; path: string }[];
 }
+type IncomingFile = IncomingShare['files'][number];
+// A shared .md or .txt file is read into the note body instead of being uploaded.
+export const isTextFile = (file: Pick<IncomingFile, 'mime'>) =>
+  /^text\/(plain|markdown)$/.test(file.mime);
 export function incomingShareTitle(share: IncomingShare): string {
   const subject = share.title?.trim();
   const filename = share.files[0]?.name
-    .replace(/\.(?:jpe?g|png|gif|webp|avif|svg|pdf)$/i, '')
+    .replace(/\.(?:jpe?g|png|gif|webp|avif|svg|pdf|md|markdown|txt)$/i, '')
     .trim();
   const firstLine = share.text
     ?.split(/\r?\n/)
@@ -31,9 +35,13 @@ export function incomingShareFilePath(
     file.path !== `/__share/${share.id}/${file.id}`
   )
     throw new Error('分享文件地址无效。');
-  if (!/^(application\/pdf|image\/(png|jpeg|gif|webp|avif|svg\+xml))$/.test(file.mime))
-    throw new Error('分享文件支持 PDF 和常用图片格式。');
-  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > 50_000_000)
+  if (
+    !isTextFile(file) &&
+    !/^(application\/pdf|image\/(png|jpeg|gif|webp|avif|svg\+xml))$/.test(file.mime)
+  )
+    throw new Error('分享文件仅支持 PDF、常用图片、Markdown 和纯文本格式。');
+  const limit = isTextFile(file) ? 1024 * 1024 : 50_000_000;
+  if (!Number.isSafeInteger(file.size) || file.size <= 0 || file.size > limit)
     throw new Error('分享文件大小无效。');
   return file.path;
 }
@@ -49,12 +57,19 @@ export function sharedUrl(text: string) {
 }
 export async function importShare(
   share: IncomingShare,
-  options: { title: string; text: string; parent: string | null },
+  options: {
+    title: string;
+    text: string;
+    parent: string | null;
+    // How the text is saved; by default a lone URL becomes a link, else Markdown.
+    format?: 'markdown' | 'text' | 'link';
+  },
   onProgress: (text: string) => void,
 ) {
   if (share.error) throw new Error(share.error);
   if (!options.title.trim()) throw new Error('请填写标题。');
-  if (!options.text.trim() && !share.files.length) throw new Error('分享内容为空。');
+  const uploads = share.files.filter((file) => !isTextFile(file));
+  if (!options.text.trim() && !uploads.length) throw new Error('分享内容为空。');
   if (options.text.length > 1024 * 1024) throw new Error('分享文字超过 1 MiB。');
   if (
     share.files.length > 10 ||
@@ -62,9 +77,12 @@ export async function importShare(
   )
     throw new Error('一次最多分享 10 个文件，总计最多 100 MiB。');
   // Validate the entire batch before creating any notes or uploading files.
-  const paths = share.files.map((file) => incomingShareFilePath(share, file));
+  share.files.forEach((file) => incomingShareFilePath(share, file));
+  const url = options.format === 'link' || !options.format ? sharedUrl(options.text) : null;
+  if (options.format === 'link' && !url) throw new Error('链接地址无效。');
+  const paths = uploads.map((file) => file.path);
   const created: NoteNode[] = [];
-  const entries = [...share.files];
+  const entries = uploads;
   // Deterministic operation keys make retrying after a lost response safe.
   for (const [index, item] of entries.entries()) {
     onProgress(`正在导入 ${index + 1}/${entries.length}：${item.name}`);
@@ -96,13 +114,12 @@ export async function importShare(
   }
   if (options.text.trim()) {
     onProgress('正在保存文字…');
-    const url = sharedUrl(options.text);
     created.push(
       await api<NoteNode>(
         '/api/nodes',
         'POST',
         {
-          kind: url ? 'link' : 'markdown',
+          kind: url ? 'link' : options.format === 'text' ? 'text' : 'markdown',
           title: options.title,
           parentId: options.parent,
           ...(url ? { url } : { content: options.text }),

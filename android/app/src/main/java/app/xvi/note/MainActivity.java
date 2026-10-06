@@ -3,31 +3,20 @@ package app.xvi.note;
 import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.drawable.ColorDrawable;
-import android.net.Uri;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
-import android.webkit.CookieManager;
-import android.webkit.WebResourceRequest;
-import android.webkit.WebResourceResponse;
-import android.webkit.WebView;
-import android.widget.Toast;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
-import com.getcapacitor.BridgeActivity;
-import com.getcapacitor.BridgeWebViewClient;
-import org.json.JSONObject;
 
-public class MainActivity extends BridgeActivity {
+public class MainActivity extends NoteBridgeActivity {
     private static final String APPEARANCE_PREFS = "note-appearance";
     // Longest the splash waits for the UI; past this the page's own loading shows.
     private static final long BOOT_TIMEOUT_MS = 5000;
     private ColorDrawable themeBackground;
     private volatile boolean booting = true;
-    ShareInbox shareInbox;
-    private final java.util.concurrent.ExecutorService shareExecutor = java.util.concurrent.Executors.newSingleThreadExecutor();
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -35,38 +24,13 @@ public class MainActivity extends BridgeActivity {
         // stays put instead of giving way to the page's smaller loading logo.
         SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> booting);
         new Handler(Looper.getMainLooper()).postDelayed(this::finishBoot, BOOT_TIMEOUT_MS);
-        registerPlugin(NoteDevicePlugin.class);
-        registerPlugin(NoteArchivePlugin.class);
+        registerNotePlugins();
         super.onCreate(savedInstanceState);
         if (bridge == null) return;
         // The first WebView frame precedes the JS bridge/theme callback. Prime
         // every native surface now so the splash never reveals a light canvas.
         restoreThemeBackground();
-        shareInbox = new ShareInbox(this);
-        OriginPolicy policy = new OriginPolicy(bridge.getLocalUrl());
-        CookieManager.getInstance().setAcceptThirdPartyCookies(bridge.getWebView(), false);
-        bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
-            @Override
-            public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
-                if (policy.sameOrigin(request.getUrl().toString()) && request.getUrl().getPath().startsWith("/__share/"))
-                    return shareInbox.open(request.getUrl().getPath());
-                // Let Chromium issue these requests itself: it keeps HttpOnly cookies,
-                // request bodies, Range responses and streaming fetch intact.
-                if (policy.isApi(request.getUrl().toString())) return null;
-                return super.shouldInterceptRequest(view, request);
-            }
-
-            @Override
-            public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
-                String url = request.getUrl().toString();
-                if (policy.isDocument(url)) return false;
-                if (policy.isDownload(url)) {
-                    view.evaluateJavascript("window.dispatchEvent(new CustomEvent('note:download', {detail: "
-                        + JSONObject.quote(url) + "}))", null);
-                } else openExternal(request.getUrl());
-                return true;
-            }
-        });
+        installWebView();
         if (savedInstanceState == null) receiveShare(getIntent());
     }
 
@@ -76,25 +40,10 @@ public class MainActivity extends BridgeActivity {
         receiveShare(intent);
     }
 
+    // Shares open in ShareActivity; an older launcher shortcut or task may still
+    // deliver one here, and the notebook's own import dialog then shows it.
     private void receiveShare(Intent intent) {
-        if (!ShareInbox.accepts(intent) || shareInbox == null) return;
-        shareExecutor.execute(() -> {
-            try {
-                shareInbox.receive(intent);
-                runOnUiThread(() -> {
-                    if (!isDestroyed() && bridge != null)
-                        bridge.getWebView().evaluateJavascript("window.dispatchEvent(new Event('note:share'))", null);
-                });
-            } catch (Exception error) {
-                runOnUiThread(() -> Toast.makeText(this, error.getMessage() == null ? "无法读取分享内容。" : error.getMessage(), Toast.LENGTH_LONG).show());
-            }
-        });
-    }
-
-    @Override
-    public void onDestroy() {
-        shareExecutor.shutdown();
-        super.onDestroy();
+        receiveShare(intent, id -> {}, () -> {});
     }
 
     @Override
@@ -117,6 +66,7 @@ public class MainActivity extends BridgeActivity {
         applyThemeBackground(getColor(background));
     }
 
+    @Override
     void setThemeBackground(int color, String preference) {
         // Save the preference, not its resolved color: system appearance may
         // change while the process is stopped.
@@ -143,23 +93,8 @@ public class MainActivity extends BridgeActivity {
         bars.setAppearanceLightNavigationBars(lightBackground);
     }
 
+    @Override
     void finishBoot() {
         booting = false;
-    }
-
-    void openExternal(Uri uri) {
-        String scheme = uri.getScheme();
-        if (!"https".equals(scheme) && !"http".equals(scheme) && !"mailto".equals(scheme)) return;
-        try {
-            startActivity(new Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE));
-        } catch (android.content.ActivityNotFoundException error) {
-            Toast.makeText(this, "没有可打开此链接的应用", Toast.LENGTH_SHORT).show();
-        }
-    }
-
-    @Override
-    public void onPause() {
-        CookieManager.getInstance().flush();
-        super.onPause();
     }
 }

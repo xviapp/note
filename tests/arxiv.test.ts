@@ -488,3 +488,56 @@ describe('arXiv paper import', () => {
     expect((await ok<StorageInfo>('/api/storage')).allocatedBytes).toBe(0);
   });
 });
+
+describe('arXiv preview for shares', () => {
+  const feed = (entry: string) =>
+    `<?xml version="1.0"?><feed xmlns="http://www.w3.org/2005/Atom"><title>ArXiv Query</title>${entry}</feed>`;
+  it('reads title, authors and abstract from the arXiv API only', async () => {
+    const fetch = vi.spyOn(globalThis, 'fetch').mockResolvedValue(
+      new Response(
+        feed(`<entry><id>http://arxiv.org/abs/2501.12948v2</id>
+          <title>DeepSeek-R1: Incentivizing
+            Reasoning &amp; More</title>
+          <summary>  We introduce a model.\n  It reasons.  </summary>
+          <author><name>DeepSeek-AI</name></author><author><name>Ada Lovelace</name></author></entry>`),
+      ),
+    );
+    const preview = await ok(
+      `/api/import/arxiv/preview?url=${encodeURIComponent('https://arxiv.org/pdf/2501.12948v2')}`,
+    );
+    expect(preview).toEqual({
+      id: '2501.12948v2',
+      title: 'DeepSeek-R1: Incentivizing Reasoning & More',
+      authors: ['DeepSeek-AI', 'Ada Lovelace'],
+      summary: 'We introduce a model. It reasons.',
+    });
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(String(fetch.mock.calls[0]![0])).toBe(
+      'https://export.arxiv.org/api/query?id_list=2501.12948v2&max_results=1',
+    );
+  });
+  it('reports a missing paper and never fetches other sites', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockResolvedValue(
+        new Response(
+          feed(
+            '<entry><id>http://arxiv.org/api/errors#incorrect_id</id><title>Error</title></entry>',
+          ),
+        ),
+      );
+    const missing = await request(
+      `/api/import/arxiv/preview?url=${encodeURIComponent('https://arxiv.org/abs/2501.99999')}`,
+    );
+    expect(missing.status).toBe(404);
+    const other = await request(
+      `/api/import/arxiv/preview?url=${encodeURIComponent('https://example.com/abs/2501.12948')}`,
+    );
+    expect(other.status).toBe(400);
+    expect(fetch).toHaveBeenCalledOnce();
+    expect(
+      (await request('/api/import/arxiv/preview?url=x', 'GET', undefined, { anonymous: true }))
+        .status,
+    ).toBe(401);
+  });
+});

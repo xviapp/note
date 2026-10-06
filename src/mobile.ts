@@ -4,6 +4,9 @@ import { App } from '@capacitor/app';
 export const device = registerPlugin<{
   getPendingShare(): Promise<{ share: import('./shared-import').IncomingShare | null }>;
   discardShare(options: { id: string }): Promise<void>;
+  // The share window only: discard its share and close, with a toast once saved,
+  // or hand over to the full app.
+  closeShare(options: { saved?: boolean; openApp?: boolean }): Promise<void>;
   getBuildInfo(): Promise<{ version: string; build: number; certificate: string }>;
   openExternal(options: { url: string }): Promise<void>;
   setBackground(options: { color: string; preference: string }): Promise<void>;

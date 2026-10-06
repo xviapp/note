@@ -1,0 +1,305 @@
+/* The share window floats over the sending app: the page itself stays clear. */
+html.share-page,
+html.share-page body,
+html.share-page #root {
+  height: 100%;
+  margin: 0;
+  background: transparent;
+}
+.share-window {
+  position: fixed;
+  inset: 0;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+}
+.share-window-scrim {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  background: var(--scrim);
+  animation: share-fade 0.16s ease-out;
+}
+.share-window-sheet {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  width: min(560px, 100%);
+  max-height: calc(100% - 32px - env(safe-area-inset-top));
+  padding: 16px 18px max(16px, env(safe-area-inset-bottom));
+  border: 1px solid var(--line);
+  border-bottom: 0;
+  border-radius: var(--radius-panel) var(--radius-panel) 0 0;
+  background: var(--surface-raised);
+  color: var(--ink);
+  box-shadow: var(--shadow-popover);
+  animation: share-rise 0.2s ease-out;
+}
+@media (min-width: 600px) {
+  .share-window {
+    align-items: center;
+  }
+  .share-window-sheet {
+    border-bottom: 1px solid var(--line);
+    border-radius: var(--radius-panel);
+  }
+}
+@keyframes share-fade {
+  from {
+    opacity: 0;
+  }
+}
+@keyframes share-rise {
+  from {
+    transform: translateY(24px);
+    opacity: 0;
+  }
+}
+.share-window-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.share-window-header h1 {
+  flex: 1;
+  margin: 0;
+  font-size: 17px;
+  font-weight: 600;
+}
+.share-kind {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  border-radius: var(--family-radius-pill);
+  background: var(--selected);
+  color: var(--blue);
+  font-size: 12px;
+  white-space: nowrap;
+}
+.share-window-body {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+.share-window-body label {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.share-window-status {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 12px;
+  margin: 8px 0;
+  color: var(--muted);
+}
+.share-window-status p {
+  margin: 0;
+}
+.share-window-message {
+  margin: 0;
+  font-size: 13px;
+  color: var(--muted);
+}
+.share-window-sheet .dialog-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+}
+.share-paper {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.share-paper small {
+  color: var(--muted);
+  font-variant-numeric: tabular-nums;
+}
+.share-paper strong {
+  font-family: var(--font-book);
+  font-size: 16px;
+  line-height: 1.4;
+}
+.share-paper-authors {
+  font-size: 13px;
+  color: var(--muted);
+}
+.share-paper p {
+  display: -webkit-box;
+  margin: 0;
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 4;
+  font-size: 13px;
+  line-height: 1.6;
+}
+.share-text {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+.share-text-tabs {
+  display: flex;
+  gap: 4px;
+}
+.share-text-tabs button {
+  min-height: 32px;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--family-radius-pill);
+  background: transparent;
+  color: var(--muted);
+  font-size: 13px;
+}
+.share-text-tabs button[aria-pressed='true'] {
+  border-color: transparent;
+  background: var(--selected);
+  color: var(--blue);
+}
+.share-text-tabs .share-preview-toggle {
+  margin-left: auto;
+}
+.share-text textarea {
+  min-height: 144px;
+  max-height: 40vh;
+  resize: vertical;
+  line-height: 1.7;
+}
+.share-markdown {
+  max-height: 40vh;
+  overflow-y: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  font-size: 14px;
+}
+.share-link,
+.share-pdf {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  text-decoration: none;
+}
+.share-link span,
+.share-pdf span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.share-link small,
+.share-pdf small {
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-pdf strong {
+  overflow-wrap: anywhere;
+}
+.share-pdf canvas {
+  flex-shrink: 0;
+  width: 88px;
+  height: auto;
+  border: 1px solid var(--line);
+  background: #fff;
+}
+.share-images {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.share-images.is-single {
+  grid-template-columns: 1fr;
+}
+.share-images li {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  font-size: 11px;
+  color: var(--muted);
+}
+.share-images li span {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.share-images img {
+  width: 100%;
+  aspect-ratio: 1;
+  object-fit: cover;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+}
+.share-images.is-single img {
+  aspect-ratio: auto;
+  max-height: 260px;
+  object-fit: contain;
+}
+.share-file-list {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.share-file-list li {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+.share-file-list li span {
+  flex: 1;
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.share-file-list small {
+  color: var(--muted);
+}
+.share-destination {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--muted);
+}
+.share-destination strong {
+  color: var(--ink);
+  font-weight: 500;
+}
+@media (prefers-reduced-motion: reduce) {
+  .share-window-scrim,
+  .share-window-sheet {
+    animation: none;
+  }
+}

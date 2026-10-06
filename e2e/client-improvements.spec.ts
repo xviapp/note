@@ -66,7 +66,13 @@ async function nativeMock(page: Page, shares: unknown[] = []) {
       PluginHeaders: [
         {
           name: 'NoteDevice',
-          methods: ['getBuildInfo', 'getPendingShare', 'discardShare', 'saveFile'].map((name) => ({
+          methods: [
+            'getBuildInfo',
+            'getPendingShare',
+            'discardShare',
+            'closeShare',
+            'saveFile',
+          ].map((name) => ({
             name,
             rtype: 'promise',
           })),

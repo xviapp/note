@@ -45,6 +45,13 @@ export interface FileInfo {
 }
 // A paper with many images imports over several requests. Until the note is
 // created, the server answers with signed progress for the next request.
+// What the share window shows before a paper is imported or linked.
+export interface ArxivPreview {
+  id: string;
+  title: string;
+  authors: string[];
+  summary: string;
+}
 export interface ArxivImportProgress {
   continuation: string;
   done: number;
