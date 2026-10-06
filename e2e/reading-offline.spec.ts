@@ -483,3 +483,51 @@ test('an incomplete auth response leaves the previously saved offline session in
   await expect(page.locator('.plain-text')).toHaveText('已经保存的内容不能因为响应中断而丢失。');
   await context.setOffline(false);
 });
+
+test('a note opened before shows from this device at once, then the server copy replaces it', async ({
+  page,
+}) => {
+  await login(page);
+  const note = await create(page, {
+    kind: 'markdown',
+    title: '先读本机',
+    content: '# 旧正文\n\n本机副本',
+  });
+  await page.goto(`/n/${note.id}`);
+  await expect(page.locator('.read-content')).toContainText('本机副本');
+  await expect
+    .poll(async () => (await cacheRecords(page)).map((item) => item.title))
+    .toContain('先读本机');
+  const token = (
+    await (
+      await page.request.post('/api/edit/unlock', { headers, data: { nodeId: note.id } })
+    ).json()
+  ).token;
+  const saved = await page.request.put(`/api/nodes/${note.id}/content`, {
+    headers: { ...headers, 'x-note-edit': token },
+    data: { revision: note.revision, content: '# 新正文\n\n服务器副本', attachments: [] },
+  });
+  expect(saved.ok()).toBeTruthy();
+  await page.goto('/');
+  // Hold the server's answer: the cached copy shows, with editing held back.
+  let release!: () => void;
+  const held = new Promise<void>((done) => (release = done));
+  await page.route(`**/api/nodes/${note.id}`, async (route) => {
+    if (route.request().method() !== 'GET') return route.continue();
+    await held;
+    await route.continue();
+  });
+  await page.evaluate((id) => {
+    history.pushState(
+      { notebook: { path: `/n/${id}`, index: 1, key: 'cached-open' } },
+      '',
+      `/n/${id}`,
+    );
+    dispatchEvent(new PopStateEvent('popstate', { state: history.state }));
+  }, note.id);
+  await expect(page.locator('.read-content')).toContainText('本机副本');
+  await expect(page.locator('.note-actions .edit-note-button')).toBeDisabled();
+  release();
+  await expect(page.locator('.read-content')).toContainText('服务器副本');
+  await expect(page.locator('.note-actions .edit-note-button')).toBeEnabled();
+});

@@ -49,6 +49,7 @@ import { BookCard, BookForm } from './BookPanel';
 import { createDiscussion, takeAssistantOnLoad } from '../books';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
+import { cachedNote } from '../offline-cache';
 
 const Editor = lazy(() => import('./Editor'));
 const CompareView = lazy(() => import('./CompareView'));
@@ -112,6 +113,9 @@ export default function NotePane(props: Props) {
     noteRef = useRef<NoteDetail | null>(null);
   const [loadError, setLoadError] = useState<ApiError | Error | null>(null),
     [retry, setRetry] = useState(0);
+  // Showing this device's copy while the server's answer is on its way. Editing
+  // and other changes wait for the fresh copy, so they never start from old text.
+  const [stale, setStale] = useState(false);
   const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
@@ -181,16 +185,17 @@ export default function NotePane(props: Props) {
   const draftChecked = useRef(false);
   const loadedId = note?.id;
   useEffect(() => {
-    if (!loadedId || draftChecked.current || !TEXT_KINDS.includes(noteRef.current!.kind)) return;
+    if (!loadedId || stale || draftChecked.current || !TEXT_KINDS.includes(noteRef.current!.kind))
+      return;
     draftChecked.current = true;
     void offerDraft();
     // offerDraft reads the latest note through noteRef; run once it has loaded.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [loadedId]);
+  }, [loadedId, stale]);
   // The E shortcut, sent by the notebook when no field has focus.
   const editShortcut = useRef(() => {});
   editShortcut.current = () => {
-    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline) void startEdit();
+    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline && !stale) void startEdit();
   };
   useEffect(() => {
     const edit = () => editShortcut.current();
@@ -246,14 +251,30 @@ export default function NotePane(props: Props) {
   };
   useEffect(() => {
     if (editing) return;
-    let live = true;
+    let live = true,
+      answered = false;
     setLoadError(null);
+    // A note opened before shows at once from this device (a long paper takes
+    // seconds to download); the server's copy then replaces it.
+    if (noteRef.current?.id !== id)
+      void cachedNote(id).then((cached) => {
+        if (!live || answered || !cached) return;
+        setStale(true);
+        applyDetail(cached);
+      });
     api<NoteDetail>(`/api/nodes/${id}`)
       .then((detail) => {
-        if (live) applyDetail(detail);
+        answered = true;
+        if (!live) return;
+        setStale(false);
+        applyDetail(detail);
       })
       .catch((e) => {
-        if (live) setLoadError(e);
+        answered = true;
+        if (!live) return;
+        // Deleted, trashed or signed out: never keep showing the old private copy.
+        setStale(false);
+        setLoadError(e);
       });
     return () => {
       live = false;
@@ -493,7 +514,7 @@ export default function NotePane(props: Props) {
         <NoteActions
           note={note}
           editing={editing}
-          offline={offline}
+          offline={offline || stale}
           translating={!!translation}
           toc={{
             available: toc.headings.length > 0,
@@ -667,7 +688,7 @@ export default function NotePane(props: Props) {
                       {note.book?.id === note.id && (
                         <BookCard
                           book={note.book}
-                          offline={offline}
+                          offline={offline || stale}
                           onEdit={() => setBookOpen(true)}
                           onChanged={() => {
                             props.onChanged();

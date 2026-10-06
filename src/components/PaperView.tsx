@@ -7,9 +7,30 @@ import { fileBlob } from '../offline-cache';
 import { imageUrl } from '../image-url';
 import { internalFileId } from './CachedImage';
 
+type PreparedPaper = { fragment: DocumentFragment; headings: Heading[] };
+// Sanitizing a long paper takes about a second on a phone, and the reader, the
+// translation session and the comparison view all need it. Keep the last few
+// results; every caller gets its own copy of the fragment to change freely.
+const prepared = new Map<string, PreparedPaper>();
+const PREPARED_LIMIT = 3;
+
 // The paper's article as a fragment: local anchors, private images only, and
 // heading IDs for the outline. Shared by the reader and the comparison view.
-export function preparePaper(note: NoteDetail) {
+export function preparePaper(note: NoteDetail): PreparedPaper {
+  const key = [
+    note.id,
+    note.url,
+    note.attachments.map((file) => file.id).join(','),
+    note.content,
+  ].join('\n');
+  let paper = prepared.get(key);
+  if (paper) prepared.delete(key);
+  else paper = buildPaper(note);
+  prepared.set(key, paper);
+  if (prepared.size > PREPARED_LIMIT) prepared.delete(prepared.keys().next().value!);
+  return { fragment: paper.fragment.cloneNode(true) as DocumentFragment, headings: paper.headings };
+}
+function buildPaper(note: NoteDetail): PreparedPaper {
   const fragment = paperFragment(note.content),
     prefix = `paper-${note.id}-`;
   fragment.querySelector('.ltx_title_document')?.remove();
@@ -97,17 +118,20 @@ export const PaperView = memo(function PaperView({
   onImage: (src: string, alt: string) => void;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const prepared = useMemo(
+  // A refreshed copy of the same note (from the server after the cached one)
+  // keeps the article as it is.
+  const files = note.attachments.map((file) => file.id).join(',');
+  const paper = useMemo(
     () => preparePaper(note),
     // Only these fields of the note shape the article.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-    [note.id, note.content, note.url, note.attachments],
+    [note.id, note.content, note.url, files],
   );
   useEffect(() => {
-    ref.current?.replaceChildren(prepared.fragment.cloneNode(true));
-    onHeadings(prepared.headings);
+    ref.current?.replaceChildren(paper.fragment.cloneNode(true));
+    onHeadings(paper.headings);
     return hydratePaperImages(ref.current);
-  }, [prepared, onHeadings]);
+  }, [paper, onHeadings]);
   const imageAction = (target: EventTarget | null) => {
     if (target instanceof HTMLImageElement) {
       onImage(target.dataset.fileSource || target.src, target.alt || '论文插图');
@@ -117,7 +141,7 @@ export const PaperView = memo(function PaperView({
   };
   return (
     <div
-      className="paper-body"
+      className="paper-body paper-reader"
       ref={ref}
       onClick={(event) => {
         if (imageAction(event.target)) {

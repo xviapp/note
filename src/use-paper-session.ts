@@ -61,25 +61,34 @@ export function usePaperSession(
     setSources(null);
     if (!paper) return;
     let live = true;
-    const blocks = paperBlocks(preparePaper(paper).fragment);
-    setGlossaryText(
-      [
-        paper.title,
-        ...blocks
-          .filter(
-            (b) => b.element.matches('h1,h2,h3,h4,h5,h6') || b.element.closest('.ltx_abstract'),
-          )
-          .map((b) => b.text),
-      ]
-        .join('\n')
-        .slice(0, GLOSSARY_SOURCE_CHARS),
-    );
-    void Promise.all(blocks.map((block) => blockHash(block.text))).then((hashes) => {
-      if (live)
-        setSources(blocks.map((block, index) => ({ hash: hashes[index], text: block.text })));
-    });
+    // Paragraphs and their hashes are only needed for translation; work them out
+    // once the article is on screen instead of holding up its first paint.
+    const prepare = () => {
+      const blocks = paperBlocks(preparePaper(paper).fragment);
+      setGlossaryText(
+        [
+          paper.title,
+          ...blocks
+            .filter(
+              (b) => b.element.matches('h1,h2,h3,h4,h5,h6') || b.element.closest('.ltx_abstract'),
+            )
+            .map((b) => b.text),
+        ]
+          .join('\n')
+          .slice(0, GLOSSARY_SOURCE_CHARS),
+      );
+      void Promise.all(blocks.map((block) => blockHash(block.text))).then((hashes) => {
+        if (live)
+          setSources(blocks.map((block, index) => ({ hash: hashes[index], text: block.text })));
+      });
+    };
+    const idle = window.requestIdleCallback
+      ? window.requestIdleCallback(() => live && prepare(), { timeout: 2000 })
+      : window.setTimeout(() => live && prepare(), 300);
     return () => {
       live = false;
+      if (window.cancelIdleCallback) window.cancelIdleCallback(idle);
+      else window.clearTimeout(idle);
     };
     // The paragraphs depend on the article only.
     // oxlint-disable-next-line react-hooks/exhaustive-deps

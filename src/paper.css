@@ -8,6 +8,13 @@
 .paper-body .ltx_document {
   min-width: 0;
 }
+/* A long paper lays out a top-level section only as it nears the screen; until
+   then it keeps its last measured height (or this estimate). The comparison view
+   pairs paragraphs by position, so it renders everything. */
+.paper-reader section:not(section section) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 1200px;
+}
 .paper-body p {
   margin: 1em 0;
 }
