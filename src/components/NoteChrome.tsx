@@ -10,9 +10,9 @@ import {
   Plus,
 } from 'lucide-react';
 import { formatDate } from '../api';
-import { KIND_LABELS, PARENT_KINDS, type NoteDetail } from '../../shared/types';
+import type { NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
-import { PROJECT_LABELS } from '../../shared/projects';
+import { noteType, typeLabel } from '../note-types/registry';
 
 // The parts of a note page around its body: location, heading, edit bar.
 
@@ -81,18 +81,8 @@ export function NoteHeading({
       {/* Kind, date and New share one ruled row to keep the page top short. */}
       <div className="document-meta">
         <span className="document-kind">
-          <NodeIcon node={note} kind={note.arxiv_id ? 'arxiv' : note.kind} size={14} />
-          {note.arxiv_id
-            ? 'arXiv 论文'
-            : note.book?.id === note.id
-              ? '书籍'
-              : note.is_project
-                ? '项目'
-                : note.is_reference
-                  ? '文件／文件夹引用'
-                  : note.project_category && note.kind === 'markdown'
-                    ? PROJECT_LABELS[note.project_category]
-                    : KIND_LABELS[note.kind]}
+          <NodeIcon node={note} size={14} />
+          {typeLabel(note)}
         </span>
         {note.arxiv_id ? (
           <a className="paper-source" href={note.url!} target="_blank" rel="noopener noreferrer">
@@ -102,17 +92,12 @@ export function NoteHeading({
         ) : (
           <span>更新于 {formatDate(note.updated_at)}</span>
         )}
-        {/* Books add pages from the book card; pages gather notes on their own. */}
-        {PARENT_KINDS.includes(note.kind) &&
-          !note.is_reference &&
-          !note.book_page &&
-          note.book?.id !== note.id &&
-          !editing && (
-            <button className="text-button" onClick={onNew}>
-              <Plus size={14} />
-              新建
-            </button>
-          )}
+        {noteType(note).newChild && !editing && (
+          <button className="text-button" onClick={onNew}>
+            <Plus size={14} />
+            新建
+          </button>
+        )}
       </div>
     </header>
   );

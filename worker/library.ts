@@ -7,14 +7,22 @@ import { bookFields, bookOf, insertBook, isDiscussion, pageInfo } from './books'
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
 import { insertProject, metadataStatement, PROJECT_CATEGORY_SQL } from './projects';
 
+// What a node is: its kind, or the kind of page a side table makes of it.
+// The first matching row wins; keep this in step with NoteVariant.
+const VARIANT_SQL = `CASE
+    WHEN EXISTS(SELECT 1 FROM node_references r WHERE r.node_id=n.id) THEN 'reference'
+    WHEN EXISTS(SELECT 1 FROM books b WHERE b.node_id=n.id) THEN 'book'
+    WHEN EXISTS(SELECT 1 FROM projects p WHERE p.node_id=n.id) THEN 'project'
+    WHEN EXISTS(SELECT 1 FROM book_discussions d WHERE d.node_id=n.id) THEN 'discussion'
+    WHEN EXISTS(SELECT 1 FROM book_pages p JOIN books b ON b.node_id=n.parent_id WHERE p.node_id=n.id) THEN 'book-page'
+    WHEN n.arxiv_id IS NOT NULL THEN 'paper'
+    ELSE n.kind END`;
 // Discussions below a book page live in the page, not in the tree or lists.
 export const NOT_DISCUSSION = (alias: string) =>
   `NOT EXISTS(SELECT 1 FROM book_discussions d WHERE d.node_id=${alias}.id)`;
 export const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL AND ${NOT_DISCUSSION('c')}) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite,
-  EXISTS(SELECT 1 FROM books b WHERE b.node_id=n.id) is_book,
-  EXISTS(SELECT 1 FROM projects p WHERE p.node_id=n.id) is_project,
-  EXISTS(SELECT 1 FROM node_references r WHERE r.node_id=n.id) is_reference,
+  ${VARIANT_SQL} variant,
   (SELECT target_id FROM node_references r WHERE r.node_id=n.id) reference_target_id,
   (SELECT t.kind FROM node_references r JOIN nodes t ON t.id=r.target_id WHERE r.node_id=n.id AND t.trash_id IS NULL) reference_kind,
   ${PROJECT_CATEGORY_SQL} project_category`;
@@ -90,7 +98,7 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   const page = book ? await pageInfo(env, node) : undefined;
   const discussion = book && node.parent_id && (await isDiscussion(env, id));
   let reference: NoteDetail['reference'];
-  if (node.is_reference) {
+  if (node.variant === 'reference') {
     let target: NoteNode | null = null;
     if (node.reference_target_id) {
       try {
@@ -228,7 +236,7 @@ export async function createNode(
   const parent = data.parentId == null ? null : idValue(data.parentId);
   if (parent) {
     const p = await getNode(env, parent);
-    if (!PARENT_KINDS.includes(p.kind) || p.is_reference)
+    if (!PARENT_KINDS.includes(p.kind) || p.variant === 'reference')
       throw new AppError(400, '这个节点不能包含子节点，请打开引用的原目录。');
   }
   const url = kind === 'link' ? validUrl(data.url) : null;
@@ -388,7 +396,7 @@ export async function updateNode(
     throw new AppError(400, '节点顺序不正确。');
   // Only write parent_id when moving; renaming must not depend on an unrelated parent update trigger.
   const moving = data.parentId !== undefined;
-  if (moving && parent && (await getNode(env, parent)).is_reference)
+  if (moving && parent && (await getNode(env, parent)).variant === 'reference')
     throw new AppError(400, '不能移入引用，请打开原目录后再移动。');
   const result = await env.DB.prepare(
     `UPDATE nodes SET title=?,url=?,icon_emoji=?,icon_blob_id=?,${moving ? 'parent_id=?,position=?,' : ''} revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id`,

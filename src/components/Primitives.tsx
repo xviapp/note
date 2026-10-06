@@ -1,53 +1,46 @@
 import { useEffect, useId, useRef, useState, type ReactNode, type CSSProperties } from 'react';
-import {
-  X,
-  FileText,
-  Folder,
-  File,
-  Image,
-  Link,
-  LoaderCircle,
-  BookOpen,
-  BookMarked,
-  BriefcaseBusiness,
-  ListTodo,
-  CircleAlert,
-  NotebookPen,
-  CornerUpRight,
-} from 'lucide-react';
-import type { NodeKind, NoteNode } from '../../shared/types';
+import { X, LoaderCircle, CornerUpRight } from 'lucide-react';
+import { variantOf, type NoteNode, type NoteVariant } from '../../shared/types';
+import type { ProjectCategory } from '../../shared/projects';
+import { NOTE_TYPES, PROJECT_ICONS } from '../note-types/registry';
 import { CachedImage } from './CachedImage';
 import { fileUrl } from '../api';
 
+export type IconType = NoteVariant | ProjectCategory;
+// A node's icon from its type; pass `kind` alone for a type without a node.
 export function NodeIcon({
   kind,
   size = 17,
   node,
 }: {
-  kind: NodeKind | 'arxiv' | 'book' | 'project' | 'reference' | 'todo' | 'issue' | 'note';
+  kind?: IconType;
   size?: number;
-  node?: Pick<
-    NoteNode,
-    | 'icon_emoji'
-    | 'icon_blob_id'
-    | 'is_book'
-    | 'is_project'
-    | 'is_reference'
-    | 'reference_kind'
-    | 'project_category'
+  node?: Partial<
+    Pick<
+      NoteNode,
+      | 'kind'
+      | 'variant'
+      | 'arxiv_id'
+      | 'icon_emoji'
+      | 'icon_blob_id'
+      | 'reference_kind'
+      | 'project_category'
+    >
   >;
 }) {
-  if (node?.is_reference)
+  const variant =
+    kind ?? (node?.kind ? variantOf(node as Parameters<typeof variantOf>[0]) : 'markdown');
+  if (node && variant === 'reference')
     return (
       <span className="node-reference-icon" aria-hidden="true">
         <NodeIcon kind={node.project_category || node.reference_kind || 'reference'} size={size} />
         <CornerUpRight size={Math.max(10, size * 0.65)} className="reference-arrow" />
       </span>
     );
-  if (node?.is_project && kind === 'folder' && !node.icon_emoji && !node.icon_blob_id)
-    kind = 'project';
-  if (kind === 'folder' && node?.is_book && !node.icon_emoji && !node.icon_blob_id) kind = 'book';
-  if (kind === 'folder' && (node?.icon_emoji || node?.icon_blob_id))
+  if (
+    (variant === 'folder' || variant === 'book' || variant === 'project') &&
+    (node?.icon_emoji || node?.icon_blob_id)
+  )
     return (
       <span
         className="node-icon custom-folder-icon"
@@ -59,25 +52,16 @@ export function NodeIcon({
         )}
       </span>
     );
-  if (node?.project_category && (kind === 'folder' || kind === 'markdown'))
-    kind = node.project_category;
-  const Icon = {
-    folder: Folder,
-    markdown: FileText,
-    text: File,
-    pdf: BookOpen,
-    image: Image,
-    link: Link,
-    arxiv: BookOpen,
-    book: BookMarked,
-    project: BriefcaseBusiness,
-    reference: CornerUpRight,
-    todo: ListTodo,
-    issue: CircleAlert,
-    note: NotebookPen,
-  }[kind];
+  const shown: IconType =
+    node?.project_category && (variant === 'folder' || variant === 'markdown')
+      ? node.project_category
+      : variant;
+  const Icon =
+    shown in PROJECT_ICONS
+      ? PROJECT_ICONS[shown as ProjectCategory]
+      : NOTE_TYPES[shown as NoteVariant].icon;
   return (
-    <Icon size={size} strokeWidth={1.8} className={`node-icon kind-${kind}`} aria-hidden="true" />
+    <Icon size={size} strokeWidth={1.8} className={`node-icon kind-${shown}`} aria-hidden="true" />
   );
 }
 export function Spinner({ label = '正在加载…' }: { label?: string }) {

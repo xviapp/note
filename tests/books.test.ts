@@ -107,7 +107,7 @@ afterEach(async () => {
 describe('books', () => {
   it('creates a book that its notes report, and edits only books', async () => {
     const book = await newBook();
-    expect(book.is_book).toBe(1);
+    expect(book.variant).toBe('book');
     const page = await ok<NoteNode>('/api/nodes', 'POST', {
       kind: 'markdown',
       title: '摘录',
@@ -116,7 +116,7 @@ describe('books', () => {
     });
     const detail = await ok<NoteDetail>(`/api/nodes/${page.id}`);
     expect(detail.book).toMatchObject({ id: book.id, title: '人类简史', author: '赫拉利' });
-    expect((await ok<NoteDetail>(`/api/nodes/${book.id}`)).is_book).toBe(1);
+    expect((await ok<NoteDetail>(`/api/nodes/${book.id}`)).variant).toBe('book');
     expect((await request(`/api/nodes/${page.id}/book`, 'PUT', { author: 'x' })).status).toBe(404);
     expect((await request(`/api/nodes/${book.id}/book`, 'PUT', { pagesRead: 401 })).status).toBe(
       400,

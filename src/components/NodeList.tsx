@@ -1,11 +1,11 @@
 import { useState } from 'react';
 import { ArrowUpRight, ChevronRight, History, Star } from 'lucide-react';
 import { formatDate } from '../api';
-import { KIND_LABELS, type NoteNode } from '../../shared/types';
+import type { NoteNode } from '../../shared/types';
 import { Empty, NodeIcon, Spinner } from './Primitives';
 import { NodeMenu, type NodeAction } from './Tree';
 import { useNodeListing } from '../use-node-listing';
-import { PROJECT_LABELS } from '../../shared/projects';
+import { typeLabel } from '../note-types/registry';
 
 type NodeListProps = {
   refresh: number;
@@ -100,7 +100,7 @@ function NodeRows({
                 nestable && <span className="node-list-toggle" aria-hidden="true" />
               )}
               <button className="node-list-main" onClick={() => props.onOpen(node)}>
-                <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} size={20} />
+                <NodeIcon node={node} size={20} />
                 <span>
                   <strong>{node.title}</strong>
                   <small>
@@ -108,13 +108,7 @@ function NodeRows({
                       ? `arXiv 论文 · ${node.arxiv_id}`
                       : node.kind === 'link'
                         ? node.url
-                        : node.is_project
-                          ? '项目'
-                          : node.is_reference
-                            ? '文件／文件夹引用'
-                            : node.project_category
-                              ? PROJECT_LABELS[node.project_category]
-                              : KIND_LABELS[node.kind]}
+                        : typeLabel(node)}
                   </small>
                 </span>
                 {node.kind === 'link' && !node.arxiv_id ? (

@@ -15,7 +15,6 @@ import {
 } from 'lucide-react';
 import { api, lockEdits } from './api';
 import {
-  PARENT_KINDS,
   TEXT_KINDS,
   type AuthStatus,
   type FileInfo,
@@ -48,6 +47,7 @@ import { AuthScreen } from './components/AuthScreen';
 import { translationWindowId } from './screen-link';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
 import { useNotebookNavigation, type SettingsSection, type View } from './navigation';
+import { noteType } from './note-types/registry';
 // The translation window for a second screen loads only what it shows.
 const TranslationScreen = lazy(() => import('./components/TranslationScreen'));
 
@@ -410,10 +410,7 @@ function Notebook({
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
     setForm({
-      parent:
-        loaded && PARENT_KINDS.includes(loaded.kind) && !loaded.is_reference
-          ? loaded.id
-          : loaded?.parent_id || null,
+      parent: loaded && noteType(loaded).container ? loaded.id : loaded?.parent_id || null,
     });
   };
   shortcuts.current.newNode = () => void newNode();

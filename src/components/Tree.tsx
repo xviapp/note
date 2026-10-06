@@ -12,12 +12,13 @@ import {
 import { createPortal } from 'react-dom';
 import { ChevronRight, CornerLeftUp, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../api';
-import { PARENT_KINDS, type NoteNode } from '../../shared/types';
+import type { NoteNode } from '../../shared/types';
 import { NodeIcon, Spinner } from './Primitives';
 import { OfflineSaveButton } from './OfflineCache';
 import { useNodeListing, type NodeListing as Listing } from '../use-node-listing';
 import { useOffline } from '../connectivity';
 import { ghostTransform, ROOT_TARGET, useTreeDrag, type TreeDrag } from '../use-tree-drag';
+import { noteType } from '../note-types/registry';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
 export interface TreeProps {
@@ -63,13 +64,11 @@ export function NodeMenu({
       <div className="menu-popup">
         {children}
         <OfflineSaveButton node={node} />
-        {PARENT_KINDS.includes(node.kind) && !node.is_reference && (
-          <button onClick={() => onAction('new', node)}>新建笔记</button>
-        )}
+        {noteType(node).newChild && <button onClick={() => onAction('new', node)}>新建笔记</button>}
         <button onClick={() => onAction('rename', node)}>
           重命名{node.kind === 'link' && !node.arxiv_id ? ' / 修改链接' : ''}
         </button>
-        {node.kind === 'folder' && !node.is_reference && (
+        {noteType(node).customIcon && (
           <button onClick={() => onAction('icon', node)}>更换图标</button>
         )}
         <button onClick={() => onAction('move', node)}>移动到…</button>
@@ -133,7 +132,7 @@ function Branch({
   // Dragging over a folder opens it.
   const reveal = useRef<(id: string) => void>(() => {});
   reveal.current = (id) => {
-    if (listing?.nodes.some((node) => node.id === id && PARENT_KINDS.includes(node.kind)))
+    if (listing?.nodes.some((node) => node.id === id && noteType(node).container))
       setOpen(id, true);
   };
   const expandListeners = view?.expandListeners;
@@ -151,7 +150,7 @@ function Branch({
   useEffect(() => {
     if (!listing || !revealPath?.size) return;
     for (const node of listing.nodes)
-      if (revealPath.has(node.id) && PARENT_KINDS.includes(node.kind)) setOpen(node.id, true);
+      if (revealPath.has(node.id) && noteType(node).container) setOpen(node.id, true);
     // setOpen is recreated each render; listing and the path decide when to run.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [listing, revealPath]);
@@ -179,7 +178,7 @@ function Branch({
       >
         {listing.nodes.map((node) => {
           // Any container accepts a drop; only one with children shows an arrow.
-          const container = PARENT_KINDS.includes(node.kind) && !node.is_reference,
+          const container = noteType(node).container,
             hasChildren = container && (node.child_count ?? 0) > 0,
             open = expanded.has(node.id);
           return (
@@ -226,7 +225,7 @@ function Branch({
                   onClick={() => props.onOpen(node)}
                   title={node.title}
                 >
-                  <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
+                  <NodeIcon node={node} />
                   <span>{node.title}</span>
                 </button>
                 <NodeMenu node={node} onAction={props.onAction} />
@@ -396,10 +395,7 @@ export function Tree(props: TreeProps) {
             aria-hidden="true"
           >
             <span className={`tree-drag-card${drag.target !== undefined ? ' can-drop' : ''}`}>
-              <NodeIcon
-                node={drag.source}
-                kind={drag.source.arxiv_id ? 'arxiv' : drag.source.kind}
-              />
+              <NodeIcon node={drag.source} />
               <span>{drag.source.title}</span>
             </span>
           </div>,
@@ -477,11 +473,7 @@ export function NodePicker({
       {error && <p className="inline-error">{error}</p>}
       {!listing && !error && <Spinner />}
       {listing?.nodes
-        .filter(
-          (node) =>
-            node.id !== exclude &&
-            (!parentsOnly || (PARENT_KINDS.includes(node.kind) && !node.is_reference)),
-        )
+        .filter((node) => node.id !== exclude && (!parentsOnly || noteType(node).container))
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
             <button
@@ -494,10 +486,10 @@ export function NodePicker({
                 )
               }
             >
-              <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
+              <NodeIcon node={node} />
               <span>{node.title}</span>
             </button>
-            {PARENT_KINDS.includes(node.kind) && !node.is_reference && (
+            {noteType(node).container && (
               <button
                 type="button"
                 className="icon-button"

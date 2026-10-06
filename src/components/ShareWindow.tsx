@@ -29,8 +29,8 @@ const LABELS: Record<ShareKind, string> = {
   image: '图片',
   files: '文件',
 };
-const ICONS: Record<Exclude<ShareKind, 'files'>, NodeKind | 'arxiv'> = {
-  arxiv: 'arxiv',
+const ICONS: Record<Exclude<ShareKind, 'files'>, NodeKind | 'paper'> = {
+  arxiv: 'paper',
   link: 'link',
   markdown: 'markdown',
   text: 'text',

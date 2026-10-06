@@ -42,7 +42,7 @@ export function metadataStatement(env: Env, id: string, version: string, content
 }
 async function requireProject(env: Env, id: string) {
   const node = await getNode(env, id);
-  if (!node.is_project) throw new AppError(404, '这个目录不是项目。');
+  if (node.variant !== 'project') throw new AppError(404, '这个目录不是项目。');
   return node;
 }
 

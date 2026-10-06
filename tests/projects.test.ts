@@ -70,7 +70,7 @@ describe('project folders and Markdown indexing', () => {
   it('creates exactly three real directories atomically and replays creation and item requests', async () => {
     const key = crypto.randomUUID();
     const project = await create({ kind: 'folder', project: true }, key);
-    expect(project).toMatchObject({ title: '未命名项目', is_project: 1, is_book: 0 });
+    expect(project).toMatchObject({ title: '未命名项目', variant: 'project' });
     expect((await create({ kind: 'folder', project: true }, key)).id).toBe(project.id);
     expect((await children(project.id)).map((node) => [node.title, node.project_category])).toEqual(
       [
@@ -375,7 +375,7 @@ describe('project folders and Markdown indexing', () => {
       expect(response.ok, await response.clone().text()).toBe(true);
     }
     const { rootId } = await ok<{ rootId: string }>(`/api/backups/${stage.id}/commit`, 'POST', {});
-    const restored = (await children(rootId)).find((node) => node.is_project)!;
+    const restored = (await children(rootId)).find((node) => node.variant === 'project')!;
     const result = await overview(restored.id);
     expect(result.items).toHaveLength(1);
     expect(result.items[0]).toMatchObject({ title: '原任务', status: 'doing' });

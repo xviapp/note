@@ -12,6 +12,7 @@ import { FileText, X } from 'lucide-react';
 import { api, ApiError, fileUrl, lockNote, unlockNote } from '../api';
 import {
   TEXT_KINDS,
+  variantOf,
   type FileInfo,
   type NoteDetail,
   type NoteNode,
@@ -750,10 +751,10 @@ export default function NotePane(props: Props) {
                     />
                   )}
                   {/* A folder is its list; other notes open their children from the toolbar. */}
-                  {!!note.is_reference && !editing && (
+                  {variantOf(note) === 'reference' && !editing && (
                     <ReferencePanel note={note} onOpen={props.onOpen} />
                   )}
-                  {!!note.is_project && !editing && (
+                  {variantOf(note) === 'project' && !editing && (
                     <ProjectPanel
                       id={id}
                       refresh={props.treeRefresh + retry}
@@ -762,41 +763,43 @@ export default function NotePane(props: Props) {
                       onNavigate={props.onNavigate}
                     />
                   )}
-                  {note.kind === 'folder' && !note.is_reference && !note.is_project && !editing && (
-                    <section
-                      className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
-                      aria-label="下级笔记"
-                    >
-                      {note.book?.id === note.id && (
-                        <BookCard
-                          book={note.book}
-                          offline={offline || stale}
-                          onEdit={() => setBookOpen(true)}
-                          onChanged={() => {
-                            props.onChanged();
-                            setRetry((count) => count + 1);
-                          }}
-                          onOpen={props.onOpen}
-                          onError={props.onError}
-                        />
-                      )}
-                      {note.book?.id === note.id ? (
-                        <BookPageList
-                          bookId={id}
-                          refresh={props.treeRefresh + retry}
-                          onOpen={props.onOpen}
-                          onNavigate={props.onNavigate}
-                        />
-                      ) : (
-                        <NodeList
-                          parent={id}
-                          refresh={props.treeRefresh}
-                          onOpen={props.onOpen}
-                          onAction={props.onAction}
-                        />
-                      )}
-                    </section>
-                  )}
+                  {note.kind === 'folder' &&
+                    !['reference', 'project'].includes(variantOf(note)) &&
+                    !editing && (
+                      <section
+                        className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
+                        aria-label="下级笔记"
+                      >
+                        {note.book?.id === note.id && (
+                          <BookCard
+                            book={note.book}
+                            offline={offline || stale}
+                            onEdit={() => setBookOpen(true)}
+                            onChanged={() => {
+                              props.onChanged();
+                              setRetry((count) => count + 1);
+                            }}
+                            onOpen={props.onOpen}
+                            onError={props.onError}
+                          />
+                        )}
+                        {note.book?.id === note.id ? (
+                          <BookPageList
+                            bookId={id}
+                            refresh={props.treeRefresh + retry}
+                            onOpen={props.onOpen}
+                            onNavigate={props.onNavigate}
+                          />
+                        ) : (
+                          <NodeList
+                            parent={id}
+                            refresh={props.treeRefresh}
+                            onOpen={props.onOpen}
+                            onAction={props.onAction}
+                          />
+                        )}
+                      </section>
+                    )}
                 </article>
               </div>
             </>

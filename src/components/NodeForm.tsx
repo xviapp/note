@@ -2,13 +2,14 @@ import { useRef, useState, type FormEvent } from 'react';
 import { api, upload } from '../api';
 import { importPaper } from '../arxiv-import';
 import {
-  KIND_LABELS,
   UNTITLED_NAMES,
+  variantOf,
   type ArxivImportProgress,
   type FileInfo,
-  type NodeKind,
   type NoteNode,
+  type NoteVariant,
 } from '../../shared/types';
+import { CREATABLE_TYPES, NOTE_TYPES } from '../note-types/registry';
 import { BookRoleField } from './BookRoleField';
 import { Modal, NodeIcon } from './Primitives';
 import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
@@ -30,8 +31,8 @@ export function NodeForm({
   onClose: () => void;
   onSaved: (node: NoteNode) => void;
 }) {
-  const [kind, setKind] = useState<NodeKind | 'arxiv' | 'book' | 'project' | 'reference'>(
-    node?.kind ||
+  const [kind, setKind] = useState<NoteVariant>(
+    (node && variantOf(node)) ||
       (existingFile ? (existingFile.mime === 'application/pdf' ? 'pdf' : 'image') : 'markdown'),
   );
   const [title, setTitle] = useState(node?.title || existingFile?.name || ''),
@@ -53,8 +54,7 @@ export function NodeForm({
     [pageCount, setPageCount] = useState(''),
     [role, setRole] = useState('');
   // A book is a folder created with its reading details.
-  const folderLike =
-    !node?.is_reference && (kind === 'folder' || kind === 'book' || kind === 'project');
+  const folderLike = NOTE_TYPES[kind].customIcon;
   const [preparingIcon, setPreparingIcon] = useState(false);
   const uploadedIcon = useRef<{ source: File; info: FileInfo } | null>(null);
   const working = busy || preparingIcon;
@@ -90,7 +90,7 @@ export function NodeForm({
         if (!file) throw new Error('请先选择一个文件。');
         uploaded.current = await upload(file);
       }
-      if (kind === 'arxiv' && !continued.current) setProgress(null);
+      if (kind === 'paper' && !continued.current) setProgress(null);
       const result = node
         ? await api<NoteNode>(`/api/nodes/${node.id}`, 'PATCH', {
             title,
@@ -98,13 +98,13 @@ export function NodeForm({
             revision: node.revision,
             ...(folderLike ? { icon: iconData } : {}),
           })
-        : kind === 'arxiv'
+        : kind === 'paper'
           ? await importPaper({ title, parentId: parent, url }, key.current, continued, setProgress)
           : await api<NoteNode>(
               '/api/nodes',
               'POST',
               {
-                kind: ['book', 'project', 'reference'].includes(kind) ? 'folder' : kind,
+                kind: NOTE_TYPES[kind].create?.kind ?? kind,
                 title,
                 parentId: parent,
                 url,
@@ -145,32 +145,20 @@ export function NodeForm({
         {!node && !existingFile && (
           <fieldset className="kind-choices">
             <legend>内容类型</legend>
-            {Object.entries(KIND_LABELS)
-              .flatMap((entry) =>
-                entry[0] === 'folder'
-                  ? [
-                      entry,
-                      ['book', '书籍'],
-                      ['project', '项目'],
-                      ['reference', '文件／文件夹引用'],
-                    ]
-                  : [entry],
-              )
-              .concat([['arxiv', 'arXiv 论文']])
-              .map(([value, label]) => (
-                <label key={value} className={kind === value ? 'selected' : ''}>
-                  <input
-                    type="radio"
-                    name="kind"
-                    value={value}
-                    checked={kind === value}
-                    disabled={working || !!uploaded.current}
-                    onChange={() => setKind(value as typeof kind)}
-                  />
-                  <NodeIcon kind={value as typeof kind} />
-                  {label}
-                </label>
-              ))}
+            {CREATABLE_TYPES.map(({ variant: value, label }) => (
+              <label key={value} className={kind === value ? 'selected' : ''}>
+                <input
+                  type="radio"
+                  name="kind"
+                  value={value}
+                  checked={kind === value}
+                  disabled={working || !!uploaded.current}
+                  onChange={() => setKind(value)}
+                />
+                <NodeIcon kind={value} />
+                {label}
+              </label>
+            ))}
           </fieldset>
         )}
         {!iconOnly && (
@@ -180,7 +168,7 @@ export function NodeForm({
               autoFocus
               required={!!node}
               placeholder={
-                kind === 'arxiv'
+                kind === 'paper'
                   ? '留空使用论文标题'
                   : node
                     ? undefined
@@ -190,7 +178,7 @@ export function NodeForm({
                         ? '项目名称'
                         : kind === 'reference'
                           ? reference?.title || '留空使用原文件名称'
-                          : UNTITLED_NAMES[kind]
+                          : UNTITLED_NAMES[NOTE_TYPES[kind].create?.kind ?? 'markdown']
               }
               maxLength={200}
               value={title}
@@ -260,9 +248,9 @@ export function NodeForm({
             onBusy={setPreparingIcon}
           />
         )}
-        {(kind === 'link' || kind === 'arxiv') && !node?.arxiv_id && (
+        {(kind === 'link' || kind === 'paper') && !node?.arxiv_id && (
           <label>
-            {kind === 'arxiv' ? 'arXiv 论文地址' : '网页地址'}
+            {kind === 'paper' ? 'arXiv 论文地址' : '网页地址'}
             <input
               type="url"
               required
@@ -272,7 +260,7 @@ export function NodeForm({
                 continued.current = null;
               }}
               placeholder={
-                kind === 'arxiv' ? 'https://arxiv.org/html/2503.01800v1' : 'https://example.com'
+                kind === 'paper' ? 'https://arxiv.org/html/2503.01800v1' : 'https://example.com'
               }
               disabled={busy}
             />
@@ -313,14 +301,14 @@ export function NodeForm({
             disabled={working || (folderLike && !!icon.emoji && !isFolderEmoji(icon.emoji))}
           >
             {busy
-              ? kind === 'arxiv'
+              ? kind === 'paper'
                 ? progress
                   ? `正在下载论文图片 ${progress.done}/${progress.total}…`
                   : '正在导入论文和图片…'
                 : '正在保存…'
               : node
                 ? '保存信息'
-                : kind === 'arxiv'
+                : kind === 'paper'
                   ? '导入论文'
                   : '创建'}
           </button>

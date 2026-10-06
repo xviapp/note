@@ -352,7 +352,7 @@ export function ReferencePanel({
         <>
           <p>引用「{target.title}」，打开后阅读和修改原内容。</p>
           <button className="button" onClick={() => onOpen(target)}>
-            <NodeIcon kind={target.kind} node={target} />
+            <NodeIcon node={target} />
             打开原{target.kind === 'folder' ? '目录' : '文件'}
           </button>
         </>

@@ -124,7 +124,7 @@ export function CacheSettings() {
               </h3>
               {pinned.map((item) => (
                 <div className="cache-pinned-row" key={item.node.id}>
-                  <NodeIcon node={item.node} kind={item.node.arxiv_id ? 'arxiv' : item.node.kind} />
+                  <NodeIcon node={item.node} />
                   <span>
                     {item.node.title}
                     <small>{formatBytes(item.bytes)}</small>
@@ -171,7 +171,7 @@ export function OfflineLibrary({ onOpen }: { onOpen: (node: NoteNode) => void })
           {notes.map((item) => (
             <div className="node-list-row" key={item.node.id}>
               <button className="node-list-main" onClick={() => onOpen(item.node)}>
-                <NodeIcon node={item.node} kind={item.node.arxiv_id ? 'arxiv' : item.node.kind} />
+                <NodeIcon node={item.node} />
                 <span className="offline-file-title">
                   {item.node.title}
                   <small>

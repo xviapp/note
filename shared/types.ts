@@ -9,6 +9,22 @@ export interface AuthStatus {
 }
 
 export type NodeKind = 'folder' | 'markdown' | 'text' | 'pdf' | 'image' | 'link';
+// A stored kind, or the kind of page a side table makes of a node: an arXiv
+// paper is a link, a book or project a folder, a book page or discussion a
+// Markdown note, a reference a folder pointing elsewhere.
+export type NoteVariant =
+  NodeKind | 'paper' | 'book' | 'book-page' | 'discussion' | 'project' | 'reference';
+type LegacyFlags = { is_book?: number; is_project?: number; is_reference?: number };
+export function variantOf(
+  node: Pick<NoteNode, 'kind' | 'variant' | 'arxiv_id'> & LegacyFlags,
+): NoteVariant {
+  if (node.variant) return node.variant;
+  // Copies cached offline before the server reported variants.
+  if (node.is_reference) return 'reference';
+  if (node.is_book) return 'book';
+  if (node.is_project) return 'project';
+  return node.arxiv_id ? 'paper' : node.kind;
+}
 export const TEXT_KINDS: NodeKind[] = ['markdown', 'text'];
 export const PARENT_KINDS: NodeKind[] = ['folder', 'markdown', 'text', 'pdf', 'image', 'link'];
 export const UNTITLED_NAMES: Record<NodeKind, string> = {
@@ -37,10 +53,8 @@ export interface NoteNode {
   updated_at: number;
   child_count?: number;
   favorite?: number;
-  // A folder with book details.
-  is_book?: number;
-  is_project?: number;
-  is_reference?: number;
+  // What the node is to the reader (worked out by the server; see variantOf).
+  variant?: NoteVariant;
   reference_target_id?: string | null;
   reference_kind?: NodeKind | null;
   project_category?: ProjectCategory | null;

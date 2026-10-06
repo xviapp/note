@@ -146,7 +146,7 @@ export function SearchDialog({
             onMouseMove={() => setActive(index)}
             onClick={() => open(node)}
           >
-            <NodeIcon kind={node.arxiv_id ? 'arxiv' : node.kind} node={node} />
+            <NodeIcon node={node} />
             <span className="search-result-text">
               <strong>{node.title}</strong>
               {node.annotation && (

@@ -304,7 +304,7 @@ export function BookPageList({
           {list.others.map((node) => (
             <button key={node.id} className="book-page-row" onClick={() => onOpen(node)}>
               <span className="book-page-number">
-                <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} size={18} />
+                <NodeIcon node={node} size={18} />
               </span>
               <span>
                 <strong>{node.title}</strong>
