@@ -284,6 +284,13 @@ button:active:not(:disabled) {
   .text-button {
     min-height: 48px;
   }
+  /* Tree rows keep full-height targets in narrower columns, so titles keep their width. */
+  .tree-chevron {
+    min-width: 32px;
+  }
+  .tree-row .node-menu > summary {
+    min-width: 40px;
+  }
   .menu-popup button {
     min-height: 48px;
     font-size: 14px;
@@ -554,7 +561,7 @@ button:active:not(:disabled) {
   min-height: 48px;
 }
 .android-shell .library-home .tree-chevron {
-  min-width: 36px;
+  min-width: 32px;
 }
 .android-shell .library-home .tree-label {
   font-size: 14px;

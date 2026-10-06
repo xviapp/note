@@ -613,6 +613,7 @@ progress::-moz-progress-bar {
   align-items: center;
   border-radius: 9px;
   min-height: 36px;
+  padding-left: calc(8px + var(--tree-depth, 0) * 15px);
   padding-right: 3px;
   margin: 3px 4px;
 }
@@ -2813,6 +2814,35 @@ button.node-list-toggle:focus-visible {
   }
   .tree-row {
     min-height: 41px;
+    /* Shallower steps leave room for the title at depth. */
+    padding-left: calc(4px + var(--tree-depth, 0) * 12px);
+  }
+  /* Two lines tell apart siblings that share a long prefix. */
+  .tree-label span,
+  .node-list-main strong {
+    display: -webkit-box;
+    -webkit-box-orient: vertical;
+    -webkit-line-clamp: 2;
+    line-clamp: 2;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    line-height: 1.35;
+  }
+  /* Every row has a menu on phones; keep it quiet beside the titles. */
+  .tree-row .node-menu > summary,
+  .node-list-row .node-menu > summary {
+    color: var(--muted);
+    opacity: 0.6;
+  }
+  .tree-row .node-menu > summary > svg,
+  .node-list-row .node-menu > summary > svg {
+    width: 16px;
+    height: 16px;
+  }
+  .tree-row.selected .node-menu > summary,
+  .tree-row .node-menu[open] > summary,
+  .node-list-row .node-menu[open] > summary {
+    opacity: 1;
   }
 
   .tree-row:not(:hover):not(:focus-within) .node-menu:not([open]) {

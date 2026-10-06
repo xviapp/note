@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
   type ReactNode,
 } from 'react';
 import { createPortal } from 'react-dom';
@@ -202,7 +203,7 @@ function Branch({
                 ]
                   .filter(Boolean)
                   .join(' ')}
-                style={{ paddingLeft: 8 + Math.min(depth, 10) * 15 }}
+                style={{ '--tree-depth': Math.min(depth, 10) } as CSSProperties}
                 data-tree-node={node.id}
                 data-tree-title={node.title}
                 data-tree-container={container ? 'true' : undefined}
