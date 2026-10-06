@@ -1,7 +1,7 @@
 import type { ChatEvent, ChatInput } from '../shared/assistant';
 import { sseData } from '../shared/sse';
 import { CHAT_EVENT_CHARACTER_LIMIT } from '../shared/chat-files';
-import { parse } from './api';
+import { keyHeaders, parse } from './api';
 
 export async function streamChat(
   nodeId: string,
@@ -14,7 +14,11 @@ export async function streamChat(
     method: 'POST',
     credentials: 'same-origin',
     signal,
-    headers: { 'content-type': 'application/json', 'x-idempotency-key': key },
+    headers: {
+      'content-type': 'application/json',
+      'x-idempotency-key': key,
+      ...(await keyHeaders(`/api/nodes/${nodeId}/assistant`)),
+    },
     body: JSON.stringify(data),
   });
   if (!response.ok) await parse(response);

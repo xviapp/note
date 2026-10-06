@@ -1,4 +1,4 @@
-import { AI_IMAGE_LIMIT } from '../shared/assistant';
+import { AI_IMAGE_LIMIT, GLOBAL_ASSISTANT_ID } from '../shared/assistant';
 import {
   CHAT_FILE_IMAGE_LIMIT,
   CHAT_FILE_LIMIT,
@@ -7,7 +7,8 @@ import {
   type ChatFileKind,
 } from '../shared/chat-files';
 import type { FileInfo, NoteDetail } from '../shared/types';
-import { fileUrl, parse } from './api';
+import { fileUrl, parse, scopeOf } from './api';
+import { openBlob, plainUpload, sealData } from './encryption';
 import { paperParts } from './paper';
 import { svgDataUrl } from './image-url';
 
@@ -76,7 +77,7 @@ export async function sourceBlob(source: AttachmentSource, signal: AbortSignal):
     await parse(response);
     throw new Error('文件暂时无法读取。');
   }
-  return response.blob();
+  return openBlob(await response.blob());
 }
 export function canvasImage(canvas: HTMLCanvasElement): string {
   for (const quality of [0.9, 0.75, 0.6]) {
@@ -159,9 +160,20 @@ export function validatePreparedFiles(files: PreparedChatFile[]): void {
     );
 }
 async function upload(nodeId: string, file: File, signal: AbortSignal): Promise<FileInfo> {
+  // Attachments to an encrypted note's chat are sealed with its key.
+  const keyId = nodeId === GLOBAL_ASSISTANT_ID ? null : await scopeOf(nodeId);
+  let body: Blob | Uint8Array<ArrayBuffer> = file,
+    query = '';
+  if (keyId) {
+    const plain = await plainUpload(file);
+    body = await sealData(keyId, plain.bytes);
+    query = `&key=${keyId}&mime=${encodeURIComponent(plain.mime)}`;
+  }
+  signal.throwIfAborted();
+  const size = body instanceof Blob ? body.size : body.length;
   const response = await fetch(
-    `/api/nodes/${nodeId}/assistant/files?name=${encodeURIComponent(file.name)}&size=${file.size}`,
-    { method: 'POST', credentials: 'same-origin', signal, body: file },
+    `/api/nodes/${nodeId}/assistant/files?name=${encodeURIComponent(file.name)}&size=${size}${query}`,
+    { method: 'POST', credentials: 'same-origin', signal, body },
   );
   return parse<FileInfo>(response);
 }

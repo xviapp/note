@@ -1,5 +1,8 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
 import { App } from '@capacitor/app';
+import { sealedFile } from './encryption';
+import { fileBlob } from './offline-cache';
+import { sealedFileId } from './sealed-download';
 
 export const device = registerPlugin<{
   getPendingShare(): Promise<{ share: import('./shared-import').IncomingShare | null }>;
@@ -30,8 +33,26 @@ const isFile = (url: URL) =>
 const report = (error: unknown) =>
   device.notify({ message: error instanceof Error ? error.message : '操作未完成，请重试。' });
 
+const base64 = (blob: Blob) =>
+  new Promise<string>((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(new Error('无法读取待保存的文件。'));
+    reader.onload = () => resolve(String(reader.result).split(',')[1]);
+    reader.readAsDataURL(blob);
+  });
 async function download(url: URL, name = '') {
-  if (isFile(url)) {
+  const sealed = isFile(url) ? sealedFileId(url.href) : null;
+  if (sealed) {
+    // Decrypted here and handed over as data, so it has a size limit.
+    const blob = await fileBlob(sealed);
+    if (blob.size > 25 * 1024 * 1024)
+      throw new Error('加密文件超过 25 MiB，请在桌面浏览器中下载。');
+    await device.saveFile({
+      data: await base64(blob),
+      name: name || sealedFile(sealed)?.name || '页间文件',
+      mime: blob.type.split(';')[0] || 'application/octet-stream',
+    });
+  } else if (isFile(url)) {
     const response = await fetch(url, { method: 'HEAD', credentials: 'same-origin' });
     if (!response.ok)
       throw new Error(response.status === 401 ? '登录已失效，请重新登录。' : '文件暂时无法下载。');
@@ -47,14 +68,8 @@ async function download(url: URL, name = '') {
     const response = await fetch(url);
     const blob = await response.blob();
     if (blob.size > 6 * 1024 * 1024) throw new Error('此图片或草稿过大，暂时无法保存。');
-    const data = await new Promise<string>((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onerror = () => reject(new Error('无法读取待保存的文件。'));
-      reader.onload = () => resolve(String(reader.result).split(',')[1]);
-      reader.readAsDataURL(blob);
-    });
     await device.saveFile({
-      data,
+      data: await base64(blob),
       name: name || '页间截图.jpg',
       mime: blob.type.split(';')[0] || 'application/octet-stream',
     });

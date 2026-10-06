@@ -81,7 +81,7 @@ export async function createBackup(env: Env) {
       env.DB.prepare(`SELECT ${columns.join(',')} FROM ${table}`),
     ),
     env.DB.prepare(
-      'SELECT b.id,b.name,b.mime,b.size,b.created_at FROM blobs b JOIN backup_files f ON f.blob_id=b.id WHERE f.job_id=? ORDER BY b.id',
+      'SELECT b.id,b.name,b.mime,b.size,b.created_at,b.key_id FROM blobs b JOIN backup_files f ON f.blob_id=b.id WHERE f.job_id=? ORDER BY b.id',
     ).bind(id),
   ]);
   const archive: LibraryBackup = {
@@ -144,9 +144,9 @@ export async function startRestore(env: Env, input: unknown, key: string) {
       ? [GLOBAL_ASSISTANT_ID]
       : []),
     ...archive.files.map((file) => file.id),
-    ...Object.values(archive.tables).flatMap((rows) =>
-      rows.filter((r) => r.id).map((r) => String(r.id)),
-    ),
+    ...Object.entries(archive.tables)
+      .filter(([table]) => table !== 'encryption_keys')
+      .flatMap(([, rows]) => rows.filter((r) => r.id).map((r) => String(r.id))),
   ];
   const restore: RestorePlan = {
     archive,
@@ -191,7 +191,8 @@ export async function uploadRestoreFile(
   const incoming = request.body || new Blob([]).stream();
   let content: Uint8Array | ReadableStream<Uint8Array> = incoming;
   let size = file.size;
-  const textual = /^(text\/|application\/json|image\/svg\+xml)/.test(file.mime);
+  // A sealed file is restored byte for byte; see docs/encryption.md.
+  const textual = !file.key_id && /^(text\/|application\/json|image\/svg\+xml)/.test(file.mime);
   if (textual) {
     if (size > 16 * 1024 * 1024) throw new AppError(413, '单份正文超过允许大小。');
     const reader = incoming.getReader(),
@@ -226,8 +227,17 @@ export async function uploadRestoreFile(
     objectKey = `objects/${id}`;
   await env.DB.batch([
     env.DB.prepare(
-      "INSERT INTO blobs(id,object_key,name,mime,size,state,draft_until,created_at) VALUES(?,?,?,?,?,'pending',?,?)",
-    ).bind(id, objectKey, file.name, file.mime, size, now + DAY, file.created_at),
+      "INSERT INTO blobs(id,object_key,name,mime,size,state,draft_until,created_at,key_id) VALUES(?,?,?,?,?,'pending',?,?,?)",
+    ).bind(
+      id,
+      objectKey,
+      file.name,
+      file.mime,
+      size,
+      now + DAY,
+      file.created_at,
+      file.key_id ?? null,
+    ),
     env.DB.prepare('UPDATE backup_files SET blob_id=? WHERE job_id=? AND source_id=?').bind(
       id,
       jobId,
@@ -243,7 +253,7 @@ export async function uploadRestoreFile(
       const stream = new FixedLengthStream(size);
       const pump = content.pipeTo(stream.writable, { signal: transfer.signal });
       const put = env.FILES.put(objectKey, stream.readable, {
-        httpMetadata: { contentType: file.mime },
+        httpMetadata: { contentType: file.key_id ? 'application/octet-stream' : file.mime },
       });
       transfers = [pump, put];
       await Promise.all(transfers);
@@ -276,7 +286,8 @@ function inserts(env: Env, table: string, columns: readonly string[], rows: Back
     if (!chunk.length) return;
     statements.push(
       env.DB.prepare(
-        `INSERT INTO ${table}(${columns.join(',')}) SELECT ${columns.map((column) => `json_extract(value,'$.${column}')`).join(',')} FROM json_each(?) ORDER BY CAST(key AS INTEGER)`,
+        // A key may already be here (restoring into the same library).
+        `INSERT ${table === 'encryption_keys' ? 'OR IGNORE ' : ''}INTO ${table}(${columns.join(',')}) SELECT ${columns.map((column) => `json_extract(value,'$.${column}')`).join(',')} FROM json_each(?) ORDER BY CAST(key AS INTEGER)`,
       ).bind(`[${chunk.join(',')}]`),
     );
     chunk = [];
@@ -300,9 +311,18 @@ async function restoreBatch(env: Env, statements: D1PreparedStatement[]) {
   if (statements.length > 40) throw new AppError(413, '备份记录过多，超过单次恢复上限。');
   return env.DB.batch(statements);
 }
+// Sealed text cannot be rewritten here, so the IDs it mentions (attachments,
+// links) are returned for a device holding the keys to rewrite it.
+function sealedMapping(restore: RestorePlan) {
+  return restore.archive.files.some(
+    (file) => file.key_id && /^(text\/|application\/json)/.test(file.mime),
+  )
+    ? { mapping: restore.mapping }
+    : {};
+}
 export async function finishRestore(env: Env, jobId: string) {
   const state = await job(env, jobId, 'restore');
-  if (state.root_id) return { rootId: state.root_id };
+  if (state.root_id) return { rootId: state.root_id, ...sealedMapping(await plan(env, jobId)) };
   const restore = await plan(env, jobId),
     { archive, mapping, root, trashRoot } = restore;
   const pending = await env.DB.prepare(
@@ -344,6 +364,7 @@ export async function finishRestore(env: Env, jobId: string) {
     metadata_status: null,
     metadata_excerpt: null,
     metadata_version_id: null,
+    encryption: null,
   });
   const restoredNodes: BackupRow[] = nodes.map((node) => ({
     ...rewrite(node),
@@ -426,8 +447,8 @@ export async function finishRestore(env: Env, jobId: string) {
     await restoreBatch(env, statements);
   } catch (error) {
     const repeated = await job(env, jobId, 'restore');
-    if (repeated.root_id) return { rootId: repeated.root_id };
+    if (repeated.root_id) return { rootId: repeated.root_id, ...sealedMapping(restore) };
     throw error;
   }
-  return { rootId: root };
+  return { rootId: root, ...sealedMapping(restore) };
 }

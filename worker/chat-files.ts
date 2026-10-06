@@ -18,6 +18,7 @@ const info = (file: BlobRow): FileInfo => ({
   name: file.name,
   mime: file.mime,
   size: file.size,
+  ...(file.key_id ? { key_id: file.key_id } : {}),
 });
 function supportsSource(file: BlobRow): boolean {
   return (

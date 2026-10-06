@@ -50,11 +50,28 @@ import {
   pageInsights,
   saveBook,
 } from './books';
-import { deleteAnnotation, listAnnotations, putAnnotation } from './annotations';
+import {
+  deleteAnnotation,
+  listAnnotations,
+  putAnnotation,
+  replaceAnnotations,
+} from './annotations';
+import {
+  createKey,
+  encryptionPlan,
+  listKeys,
+  nodeKeys,
+  replaceFields,
+  replaceObject,
+  rewrapKey,
+  setEncryption,
+  withKeys,
+} from './encryption';
 import { createProjectItem, projectOverview, saveProjectStatus } from './projects';
 
 export default {
-  async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
+  async fetch(request: Request, baseEnv: Env, execution: ExecutionContext): Promise<Response> {
+    let env = baseEnv;
     const url = new URL(request.url);
     if (!url.pathname.startsWith('/api/'))
       return env.ASSETS
@@ -103,6 +120,12 @@ export default {
         return json({ token: await editToken(env, session, nodeId) });
       }
       if (path === '/api/storage' && method === 'GET') return json(await storageInfo(env));
+      if (path === '/api/encryption/keys' && method === 'GET') return json(await listKeys(env));
+      if (path === '/api/encryption/keys' && method === 'POST')
+        return json(await createKey(env, await body(request)), 201);
+      const encryptionKey = path.match(/^\/api\/encryption\/keys\/([0-9a-f-]{36})$/);
+      if (encryptionKey && method === 'PUT')
+        return json(await rewrapKey(env, encryptionKey[1], await body(request)));
       if (path === '/api/ai/settings' && method === 'GET') return json(await aiSettings(env));
       if (path === '/api/ai/settings' || path === '/api/ai/test') {
         if (path === '/api/ai/settings' && method === 'PUT')
@@ -149,7 +172,7 @@ export default {
       }
       if (path === '/api/files' && method === 'POST') {
         const f = await uploadFile(env, request);
-        return json({ id: f.id, name: f.name, mime: f.mime, size: f.size }, 201);
+        return json({ id: f.id, name: f.name, mime: f.mime, size: f.size, key_id: f.key_id }, 201);
       }
       const file = path.match(/^\/api\/files\/([a-zA-Z0-9_-]+)$/);
       if (file) {
@@ -174,7 +197,24 @@ export default {
       if (note) {
         const id = note[1],
           action = note[2] || '';
+        // Features the Worker runs on the note's text receive its keys.
+        if (
+          /^(assistant|translations|paper-translation|project|pages$|insights$|discussions$|organize$|book-note$)/.test(
+            action,
+          )
+        )
+          env = await withKeys(env, request);
         if (!action && method === 'GET') return json(await noteDetail(env, id));
+        if (action === 'keys' && method === 'GET') return json(await nodeKeys(env, id));
+        if (action === 'encryption' && method === 'PUT')
+          return json(await setEncryption(env, id, await body(request)));
+        if (action === 'encryption/plan' && method === 'GET')
+          return json(await encryptionPlan(env, id, url));
+        if (action === 'encryption/fields' && method === 'POST')
+          return json(await replaceFields(env, id, await body(request)));
+        const sealedObject = action.match(/^encryption\/objects\/([a-zA-Z0-9_-]+)$/);
+        if (sealedObject && method === 'PUT')
+          return json(await replaceObject(env, request, id, sealedObject[1]));
         if (action === 'project' && method === 'GET') return json(await projectOverview(env, id));
         if (action === 'project/items' && method === 'POST')
           return json(
@@ -212,6 +252,8 @@ export default {
           );
         if (action === 'annotations' && method === 'GET')
           return json(await listAnnotations(env, id));
+        if (action === 'annotations' && method === 'PUT')
+          return json(await replaceAnnotations(env, id, await body(request)));
         const annotation = action.match(/^annotations\/([a-zA-Z0-9_-]+)$/);
         if (annotation && method === 'PUT')
           return json(await putAnnotation(env, id, annotation[1], await body(request)));

@@ -8,6 +8,7 @@ export const settingsTitles = {
   share: '分享保存',
   backup: '备份与恢复',
   storage: '存储空间',
+  encryption: '本地加密',
   account: '密码与设备',
   about: '关于页间',
   proxy: '网络代理',

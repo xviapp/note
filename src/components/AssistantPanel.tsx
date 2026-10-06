@@ -36,6 +36,7 @@ import {
 import type { NoteDetail, NoteNode } from '../../shared/types';
 import { CHAT_FILE_LIMIT, pageLabel } from '../../shared/chat-files';
 import { api, fileUrl } from '../api';
+import { CachedImage } from './CachedImage';
 import { streamChat } from '../assistant';
 import { captureReading } from '../capture';
 import {
@@ -475,7 +476,11 @@ export function AssistantPanel(props: Props) {
                   aria-label="查看会话截图"
                   onClick={() => props.onImage(fileUrl(message.image!.id), '会话截图')}
                 >
-                  <img src={fileUrl(message.image.id)} alt="发送给青藜的截图" loading="lazy" />
+                  <CachedImage
+                    src={fileUrl(message.image.id)}
+                    alt="发送给青藜的截图"
+                    loading="lazy"
+                  />
                 </button>
               )}
               {message.files?.map((file, index) => (
@@ -505,7 +510,7 @@ export function AssistantPanel(props: Props) {
                         )
                       }
                     >
-                      <img
+                      <CachedImage
                         src={fileUrl(image.file.id)}
                         alt={image.page ? `第 ${image.page} 页` : file.name}
                         loading="lazy"

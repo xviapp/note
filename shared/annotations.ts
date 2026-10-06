@@ -36,6 +36,12 @@ export const colorOf = (annotation: Pick<Annotation, 'color'>): AnnotationColor 
 export interface AnnotationList {
   annotations: Annotation[];
   updatedAt: number | null;
+  // An encrypted list: the sealed document (base64url) and its object ID,
+  // which a device decrypts into `annotations` and names when replacing it.
+  sealed?: string;
+  body?: string;
+  // Set on the device when the list's key is not unlocked.
+  locked?: string;
 }
 
 // Reading order: PDF pages first by page and height, then text by offset.

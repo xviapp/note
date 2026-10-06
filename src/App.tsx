@@ -27,6 +27,8 @@ import { Tree, type NodeAction } from './components/Tree';
 import { useMoveNotes } from './use-move-notes';
 import { useToast } from './use-toast';
 import { MoveDialog } from './components/MoveDialog';
+import { EncryptionDialog } from './components/Encryption';
+import { refreshCatalog } from './keyring';
 import { NodeForm } from './components/NodeForm';
 import { NodeList } from './components/NodeList';
 import { Settings } from './components/Settings';
@@ -76,6 +78,8 @@ export default function App() {
         setError('');
         const connected = state.authenticated && !isOffline();
         if (connected) window.dispatchEvent(new Event('note:library-refresh'));
+        // Picks up passwords changed on other devices (and locks them here).
+        if (connected) void refreshCatalog().catch(() => {});
         return connected;
       } catch (e) {
         setError((e as Error).message);
@@ -164,7 +168,8 @@ function Notebook({
       file?: FileInfo;
       iconOnly?: boolean;
     } | null>(null),
-    [moving, setMoving] = useState<NoteNode | null>(null);
+    [moving, setMoving] = useState<NoteNode | null>(null),
+    [encrypting, setEncrypting] = useState<NoteDetail | null>(null);
   const leaveGuard = useRef<() => Promise<boolean>>(async () => true),
     question = useQuestion();
   const navigation = useNotebookNavigation(leaveGuard);
@@ -360,6 +365,7 @@ function Notebook({
       if (kind === 'rename') setForm({ node: fresh, parent: fresh.parent_id });
       else if (kind === 'icon') setForm({ node: fresh, parent: fresh.parent_id, iconOnly: true });
       else if (kind === 'move') setMoving(fresh);
+      else if (kind === 'encryption') setEncrypting(fresh);
       else {
         const preview = await api<{ count: number; title: string }>(
           `/api/nodes/${node.id}/delete-preview`,
@@ -715,6 +721,16 @@ function Notebook({
             openNode(node);
           }}
           onClose={() => setSearchOpen(false)}
+        />
+      )}
+      {encrypting && (
+        <EncryptionDialog
+          note={encrypting}
+          onClose={() => setEncrypting(null)}
+          onChanged={() => {
+            changed();
+            setDetailRevision((r) => r + 1);
+          }}
         />
       )}
       {moving && (

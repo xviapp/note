@@ -4,9 +4,23 @@ import { AppError, idValue } from './http';
 import type { StorageInfo } from '../shared/types';
 import { sanitizeSvg, SVG_LIMIT, SVG_MIME } from '../shared/svg';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
+import {
+  KEY_ID,
+  openBytes,
+  SEALED_HEADER,
+  sealBytes,
+  sealedKeyId,
+  sealedSize,
+  toBase64Url,
+} from '../shared/encryption';
+import { keyFor } from './encryption';
 
 export const MAX_FILE_BYTES = 50_000_000;
 export const MAX_TEXT_BYTES = 1_048_576;
+// Types a stored object may have (as in backups).
+export const STORED_MIME =
+  /^(text\/(plain|html)(; charset=utf-8)?|application\/(json(; charset=utf-8)?|pdf|octet-stream)|image\/(png|jpeg|gif|webp|avif|svg\+xml))$/;
+const TEXT_MIME = /^(text\/(plain|html)|application\/json); charset=utf-8$/;
 const DAY = 86400_000;
 export const LIBRARY_UNREFERENCED = `NOT EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=blobs.id)
  AND NOT EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=blobs.id)
@@ -27,7 +41,13 @@ export async function getBlob(env: Env, id: string): Promise<BlobRow> {
   if (!file) throw new AppError(404, '文件不存在或已被清理。', 'FILE_UNAVAILABLE');
   return file;
 }
-async function reserve(env: Env, name: string, mime: string, size: number): Promise<BlobRow> {
+async function reserve(
+  env: Env,
+  name: string,
+  mime: string,
+  size: number,
+  keyId: string | null = null,
+): Promise<BlobRow> {
   const id = crypto.randomUUID(),
     now = Date.now();
   const row: BlobRow = {
@@ -39,11 +59,12 @@ async function reserve(env: Env, name: string, mime: string, size: number): Prom
     state: 'pending',
     draft_until: now + DAY,
     created_at: now,
+    key_id: keyId,
   };
   await env.DB.prepare(
-    "INSERT INTO blobs(id,object_key,name,mime,size,state,draft_until,created_at) VALUES(?,?,?,?,?,'pending',?,?)",
+    "INSERT INTO blobs(id,object_key,name,mime,size,state,draft_until,created_at,key_id) VALUES(?,?,?,?,?,'pending',?,?,?)",
   )
-    .bind(id, row.object_key, name, mime, size, row.draft_until, now)
+    .bind(id, row.object_key, name, mime, size, row.draft_until, now, keyId)
     .run();
   return row;
 }
@@ -66,16 +87,26 @@ async function abandon(env: Env, file: BlobRow): Promise<void> {
       .run();
   }
 }
-export async function storeText(env: Env, content: string): Promise<BlobRow> {
-  return storeBody(env, content, 'content.txt', 'text/plain; charset=utf-8', MAX_TEXT_BYTES);
+// `keyId` seals the content with that key, which the request must carry.
+export async function storeText(
+  env: Env,
+  content: string,
+  keyId: string | null = null,
+): Promise<BlobRow> {
+  return storeBody(env, content, 'content.txt', 'text/plain; charset=utf-8', MAX_TEXT_BYTES, keyId);
 }
-export async function storeChatBody(env: Env, content: string): Promise<BlobRow> {
+export async function storeChatBody(
+  env: Env,
+  content: string,
+  keyId: string | null = null,
+): Promise<BlobRow> {
   return storeBody(
     env,
     content,
     'conversation.json',
     'application/json; charset=utf-8',
     CHAT_BODY_BYTE_LIMIT,
+    keyId,
   );
 }
 export async function storePaper(env: Env, content: string): Promise<BlobRow> {
@@ -96,9 +127,10 @@ async function storeBody(
   name: string,
   mime: string,
   limit: number,
+  keyId: string | null = null,
 ): Promise<BlobRow> {
-  const bytes = new TextEncoder().encode(content);
-  if (bytes.byteLength > limit)
+  const plain = new TextEncoder().encode(content);
+  if (plain.byteLength > limit)
     throw new AppError(
       413,
       name === 'paper.html'
@@ -107,9 +139,22 @@ async function storeBody(
           ? '本次对话数据超过 16 MiB，请减少附件或缩小 PDF 页码范围。'
           : '单篇正文最多 1 MiB，请拆分为多个子笔记。',
     );
-  const file = await reserve(env, name, mime, bytes.byteLength);
+  return storeBytes(env, plain, name, mime, keyId);
+}
+// Stores bytes as one object, sealed when a key is given.
+export async function storeBytes(
+  env: Env,
+  plain: Uint8Array<ArrayBuffer>,
+  name: string,
+  mime: string,
+  keyId: string | null = null,
+): Promise<BlobRow> {
+  const bytes = keyId ? await sealBytes(keyFor(env, keyId), keyId, plain) : plain;
+  const file = await reserve(env, name, mime, bytes.byteLength, keyId);
   try {
-    await env.FILES.put(file.object_key, bytes, { httpMetadata: { contentType: file.mime } });
+    await env.FILES.put(file.object_key, bytes, {
+      httpMetadata: { contentType: keyId ? 'application/octet-stream' : file.mime },
+    });
     return await finish(env, file);
   } catch (error) {
     await abandon(env, file);
@@ -130,29 +175,39 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
   const url = new URL(request.url),
     name = url.searchParams.get('name')?.trim(),
     size = Number(url.searchParams.get('size'));
+  // A device-sealed upload names its key and the type of the plain file.
+  const keyId = url.searchParams.get('key') || null,
+    declaredMime = url.searchParams.get('mime') || '';
   if (
     !name ||
     name.length > 200 ||
     !Number.isSafeInteger(size) ||
     size <= 0 ||
-    size > MAX_FILE_BYTES ||
+    size > (keyId ? sealedSize(MAX_FILE_BYTES) : MAX_FILE_BYTES) ||
     !request.body
   )
     throw new AppError(400, '请选择不超过 50 MB 的文件。');
+  if (keyId) {
+    if (!KEY_ID.test(keyId) || !STORED_MIME.test(declaredMime))
+      throw new AppError(400, '加密文件信息不正确。');
+    if (!(await env.DB.prepare('SELECT 1 FROM encryption_keys WHERE id=?').bind(keyId).first()))
+      throw new AppError(404, '密钥不存在，请重新设置密码。');
+  }
   const declared = request.headers.get('content-length');
   if (declared !== null && Number(declared) !== size)
     throw new AppError(400, '上传未完成或文件大小发生变化，请重新选择文件。');
   const reader = request.body.getReader(),
     prefix: Uint8Array[] = [];
   let prefixSize = 0;
-  while (prefixSize < 16) {
+  const want = keyId ? SEALED_HEADER : 16;
+  while (prefixSize < want) {
     const chunk = await reader.read();
     if (chunk.done) break;
     prefix.push(chunk.value);
     prefixSize += chunk.value.length;
   }
   if (!prefixSize) throw new AppError(400, '文件内容为空。');
-  const signature = new Uint8Array(Math.min(prefixSize, 16));
+  const signature = new Uint8Array(Math.min(prefixSize, want));
   let offset = 0;
   for (const chunk of prefix) {
     const take = Math.min(signature.length - offset, chunk.length);
@@ -160,10 +215,15 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
     offset += take;
     if (offset === signature.length) break;
   }
+  if (keyId && new TextDecoder('latin1').decode(signature.subarray(0, 40)) !== `XVE1${keyId}`) {
+    await reader.cancel().catch(() => {});
+    throw new AppError(400, '加密文件格式不正确，请重试。');
+  }
   if (
-    /\.svg$/i.test(name) ||
-    request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === SVG_MIME ||
-    /^\s*<svg[\s>]/i.test(new TextDecoder().decode(signature))
+    !keyId &&
+    (/\.svg$/i.test(name) ||
+      request.headers.get('content-type')?.split(';')[0].trim().toLowerCase() === SVG_MIME ||
+      /^\s*<svg[\s>]/i.test(new TextDecoder().decode(signature)))
   ) {
     let received = prefixSize;
     try {
@@ -189,10 +249,12 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
     }
     return storeSvg(env, bytes, name);
   }
-  const mime = detectMime(signature);
+  let mime = keyId ? declaredMime : detectMime(signature);
+  // Text re-uploaded in plain keeps its type (see the encryption plan).
+  if (mime === 'application/octet-stream' && TEXT_MIME.test(declaredMime)) mime = declaredMime;
   let file: BlobRow;
   try {
-    file = await reserve(env, name, mime, size);
+    file = await reserve(env, name, mime, size, keyId);
   } catch (error) {
     await reader.cancel().catch(() => {});
     throw error;
@@ -215,7 +277,7 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
     }
   })();
   const put = env.FILES.put(file.object_key, stream.readable, {
-    httpMetadata: { contentType: mime },
+    httpMetadata: { contentType: keyId ? 'application/octet-stream' : mime },
   });
   try {
     await Promise.all([pump, put]);
@@ -229,11 +291,31 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
     throw new AppError(400, '上传未完成或文件大小发生变化，请重新选择文件。');
   }
 }
+// The plain bytes of an object; a sealed one needs its key in the request.
+export async function readBytes(env: Env, file: BlobRow): Promise<Uint8Array<ArrayBuffer>> {
+  const key = file.key_id ? keyFor(env, file.key_id) : null;
+  const object = await env.FILES.get(file.object_key);
+  if (!object) throw new AppError(503, '内容暂时无法读取，请稍后重试。');
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  return key ? openBytes(key, bytes) : bytes;
+}
 export async function readText(env: Env, blobId: string): Promise<string> {
+  return new TextDecoder().decode(await readBytes(env, await getBlob(env, blobId)));
+}
+// A body for the device: plain text, or the sealed object when the request
+// does not carry its key (the device decrypts it).
+export async function readBody(
+  env: Env,
+  blobId: string,
+): Promise<{ content: string; sealed?: string }> {
   const file = await getBlob(env, blobId);
+  if (!file.key_id || env.KEYS?.has(file.key_id))
+    return { content: new TextDecoder().decode(await readBytes(env, file)) };
   const object = await env.FILES.get(file.object_key);
   if (!object) throw new AppError(503, '正文暂时无法读取，请稍后重试。');
-  return object.text();
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (sealedKeyId(bytes) !== file.key_id) throw new AppError(503, '正文已损坏，无法解密。');
+  return { content: '', sealed: toBase64Url(bytes) };
 }
 export async function serveFile(env: Env, request: Request, id: string): Promise<Response> {
   const file = await getBlob(env, id),
@@ -263,10 +345,14 @@ export async function serveFile(env: Env, request: Request, id: string): Promise
       : await env.FILES.get(file.object_key, partial ? { range: partial } : undefined);
   if (!object) throw new AppError(404, '文件不存在。');
   const inline =
-    file.mime === 'application/pdf' || /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(file.mime);
+    !file.key_id &&
+    (file.mime === 'application/pdf' ||
+      /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/.test(file.mime));
   const download = new URL(request.url).searchParams.has('download');
   const headers = new Headers({
-    'content-type': file.mime,
+    // A sealed object is only meaningful to a device holding its key.
+    'content-type': file.key_id ? 'application/octet-stream' : file.mime,
+    ...(file.key_id ? { 'x-note-key': file.key_id, 'x-note-type': file.mime } : {}),
     'cache-control': 'private, no-store',
     'x-content-type-options': 'nosniff',
     'content-disposition': `${inline && !download ? 'inline' : 'attachment'}; filename*=UTF-8''${encodeURIComponent(file.name)}`,

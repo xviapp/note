@@ -1,10 +1,13 @@
 import { GLOBAL_ASSISTANT_ID } from './assistant';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folder-icons';
 import { BOOK_ROLE_LIMIT } from './types';
+import { KEY_ID } from './encryption';
 
 export const BACKUP_FORMAT = 'yejian-library';
 export const BACKUP_METADATA_LIMIT = 16 * 1024 * 1024;
 export const backupColumns = {
+  // First: restored nodes and files name these keys. Keys keep their IDs.
+  encryption_keys: ['id', 'salt', 'iterations', 'wrapped', 'check_value', 'created_at'],
   nodes: [
     'id',
     'parent_id',
@@ -25,6 +28,7 @@ export const backupColumns = {
     'metadata_status',
     'metadata_excerpt',
     'metadata_version_id',
+    'encryption',
   ],
   versions: ['id', 'node_id', 'sequence', 'body_blob_id', 'created_at'],
   version_assets: ['version_id', 'blob_id'],
@@ -99,6 +103,8 @@ export interface BackupFile {
   mime: string;
   size: number;
   created_at: number;
+  // Sealed with this key: restored as is, without rewriting IDs inside.
+  key_id?: string | null;
 }
 export interface LibraryBackup {
   format: typeof BACKUP_FORMAT;
@@ -142,8 +148,28 @@ export function validateBackup(input: unknown): LibraryBackup {
     if (!id(value) || globalIds.has(value)) invalid('标识缺失或重复。');
     globalIds.add(value as string);
   };
+  if (data.tables.encryption_keys === undefined) data.tables.encryption_keys = [];
+  if (!Array.isArray(data.tables.encryption_keys)) invalid('缺少 encryption_keys。');
+  const keys = new Set<string>();
+  for (const key of data.tables.encryption_keys) {
+    if (
+      !key ||
+      typeof key.id !== 'string' ||
+      !KEY_ID.test(String(key.id)) ||
+      keys.has(String(key.id)) ||
+      ![key.salt, key.wrapped, key.check_value].every(
+        (value) => typeof value === 'string' && /^[A-Za-z0-9_-]{1,200}$/.test(value),
+      ) ||
+      !Number.isSafeInteger(key.iterations) ||
+      !Number.isSafeInteger(key.created_at)
+    )
+      invalid('加密密钥不正确。');
+    keys.add(String(key.id));
+  }
   for (const file of data.files) {
     unique(file.id);
+    if (file.key_id === undefined) file.key_id = null;
+    if (file.key_id !== null && !keys.has(String(file.key_id))) invalid('文件的加密密钥缺失。');
     if (
       typeof file.name !== 'string' ||
       file.name.length > 200 ||
@@ -153,12 +179,13 @@ export function validateBackup(input: unknown): LibraryBackup {
       ) ||
       !Number.isSafeInteger(file.size) ||
       file.size < 0 ||
-      file.size > 50_000_000 ||
+      file.size > (file.key_id ? 50_100_000 : 50_000_000) ||
       !Number.isSafeInteger(file.created_at)
     )
       invalid('文件信息不正确。');
   }
   for (const [table, columns] of Object.entries(backupColumns)) {
+    if (table === 'encryption_keys') continue;
     // Older v1 archives predate whole-paper translations.
     if (table === 'paper_translations' && data.tables.paper_translations === undefined)
       data.tables.paper_translations = [];
@@ -191,8 +218,15 @@ export function validateBackup(input: unknown): LibraryBackup {
           'metadata_status',
           'metadata_excerpt',
           'metadata_version_id',
+          'encryption',
         ])
           if (row[field] === undefined) row[field] = null;
+        if (
+          row.encryption !== null &&
+          row.encryption !== 'none' &&
+          !keys.has(String(row.encryption))
+        )
+          invalid('笔记的加密密钥缺失。');
       }
       for (const column of columns) {
         const value = row[column];

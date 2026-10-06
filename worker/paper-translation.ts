@@ -18,6 +18,7 @@ import { deepseekReply, readApiKey, type ProviderMessage } from './deepseek';
 import { AppError, textValue } from './http';
 import { getNode } from './library';
 import { discardFile, readText, storeText } from './storage';
+import { requireKey } from './encryption';
 import type { Env } from './types';
 
 interface Row {
@@ -59,10 +60,11 @@ async function save(
   first: Awaited<ReturnType<typeof stored>>,
   change: (doc: Document) => Document,
 ) {
+  const keyId = (await getNode(env, nodeId)).key_id ?? null;
   for (let attempt = 0; attempt < 4; attempt++) {
     const latest = attempt ? await stored(env, nodeId, target) : first;
     const doc = change(latest.doc);
-    const blob = await storeText(env, JSON.stringify(doc));
+    const blob = await storeText(env, JSON.stringify(doc), keyId);
     const now = Date.now();
     const saved = latest.row
       ? await env.DB.prepare(
@@ -176,6 +178,7 @@ export async function extractGlossary(
   data: Record<string, unknown>,
 ): Promise<PaperTranslation> {
   const node = await paperNode(env, nodeId);
+  requireKey(env, node);
   const target = language(data.language);
   const text = textValue(data.text, '论文摘要', GLOSSARY_SOURCE_CHARS).trim();
   const before = await stored(env, nodeId, target);
@@ -221,6 +224,7 @@ export async function translatePaperBlocks(
   data: Record<string, unknown>,
 ): Promise<PaperTranslation> {
   const node = await paperNode(env, nodeId);
+  requireKey(env, node);
   const target = language(data.language);
   if (data.refresh !== undefined && typeof data.refresh !== 'boolean')
     throw new AppError(400, '重新翻译参数不正确。');

@@ -2,10 +2,25 @@ import type { Env } from './types';
 import type { FileInfo, NoteDetail, NoteNode, NodeKind, VersionInfo } from '../shared/types';
 import { PARENT_KINDS, TEXT_KINDS, UNTITLED_NAMES } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
-import { discardFile, getBlob, readText, storePaper, storeText } from './storage';
+import {
+  discardFile,
+  getBlob,
+  MAX_TEXT_BYTES,
+  readBody,
+  readText,
+  storePaper,
+  storeText,
+} from './storage';
 import { bookFields, bookOf, insertBook, isDiscussion, pageInfo } from './books';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
-import { insertProject, metadataStatement, PROJECT_CATEGORY_SQL } from './projects';
+import {
+  insertProject,
+  metadataStatement,
+  PROJECT_CATEGORY_SQL,
+  sealedMetadataStatement,
+} from './projects';
+import { sealedSize } from '../shared/encryption';
+import { hasKey, locked } from './encryption';
 
 // What a node is: its kind, or the kind of page a side table makes of it.
 // The first matching row wins; keep this in step with NoteVariant.
@@ -20,7 +35,14 @@ const VARIANT_SQL = `CASE
 // Discussions below a book page live in the page, not in the tree or lists.
 export const NOT_DISCUSSION = (alias: string) =>
   `NOT EXISTS(SELECT 1 FROM book_discussions d WHERE d.node_id=${alias}.id)`;
-export const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL AND ${NOT_DISCUSSION('c')}) child_count,
+// The key a node's content is encrypted with: its own setting or the nearest
+// ancestor's ('none' stops inheritance), null when plain.
+export const KEY_SQL = (alias: string) => `(WITH RECURSIVE up(id,parent_id,encryption,depth) AS (
+  SELECT ${alias}.id,${alias}.parent_id,${alias}.encryption,0
+  UNION ALL SELECT p.id,p.parent_id,p.encryption,u.depth+1 FROM nodes p JOIN up u ON p.id=u.parent_id
+  WHERE u.encryption IS NULL AND u.depth<200
+) SELECT NULLIF(encryption,'none') FROM up WHERE encryption IS NOT NULL ORDER BY depth LIMIT 1)`;
+export const NODE_COLUMNS = `n.*,${KEY_SQL('n')} key_id,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL AND ${NOT_DISCUSSION('c')}) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite,
   ${VARIANT_SQL} variant,
   (SELECT target_id FROM node_references r WHERE r.node_id=n.id) reference_target_id,
@@ -67,7 +89,7 @@ async function attachments(env: Env, version: string | null): Promise<FileInfo[]
   if (!version) return [];
   return (
     await env.DB.prepare(
-      'SELECT b.id,b.name,b.mime,b.size FROM version_assets a JOIN blobs b ON b.id=a.blob_id WHERE a.version_id=? ORDER BY b.created_at,b.id',
+      'SELECT b.id,b.name,b.mime,b.size,b.key_id FROM version_assets a JOIN blobs b ON b.id=a.blob_id WHERE a.version_id=? ORDER BY b.created_at,b.id',
     )
       .bind(version)
       .all<FileInfo>()
@@ -75,23 +97,23 @@ async function attachments(env: Env, version: string | null): Promise<FileInfo[]
 }
 export async function nodePath(env: Env, id: string) {
   const crumbs = await env.DB.prepare(
-    `WITH RECURSIVE parents(id,title,parent_id,depth) AS (
-    SELECT id,title,parent_id,0 FROM nodes WHERE id=?
-    UNION ALL SELECT n.id,n.title,n.parent_id,p.depth+1 FROM nodes n JOIN parents p ON p.parent_id=n.id WHERE p.depth<200
-  ) SELECT id,title FROM parents ORDER BY depth DESC`,
+    `WITH RECURSIVE parents(id,title,parent_id,encryption,depth) AS (
+    SELECT id,title,parent_id,encryption,0 FROM nodes WHERE id=?
+    UNION ALL SELECT n.id,n.title,n.parent_id,n.encryption,p.depth+1 FROM nodes n JOIN parents p ON p.parent_id=n.id WHERE p.depth<200
+  ) SELECT id,title,encryption FROM parents ORDER BY depth DESC`,
   )
     .bind(id)
-    .all<{ id: string; title: string }>();
+    .all<{ id: string; title: string; encryption: string | null }>();
   return crumbs.results;
 }
 export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   const node = await getNode(env, id);
-  let content = '';
+  let body: { content: string; sealed?: string } = { content: '' };
   if (node.current_version_id) {
     const version = await env.DB.prepare('SELECT body_blob_id FROM versions WHERE id=?')
       .bind(node.current_version_id)
       .first<{ body_blob_id: string }>();
-    if (version) content = await readText(env, version.body_blob_id);
+    if (version) body = await readBody(env, version.body_blob_id);
   }
   const file = node.file_blob_id ? await getBlob(env, node.file_blob_id) : undefined;
   const book = await bookOf(env, id);
@@ -111,15 +133,24 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   }
   return {
     ...node,
-    content,
+    ...body,
     attachments: await attachments(env, node.current_version_id),
-    file: file ? { id: file.id, name: file.name, mime: file.mime, size: file.size } : undefined,
+    file: file
+      ? { id: file.id, name: file.name, mime: file.mime, size: file.size, key_id: file.key_id }
+      : undefined,
     breadcrumbs: await nodePath(env, id),
     ...(book ? { book } : {}),
     ...(page ? { book_page: page } : {}),
     ...(discussion ? { discussion_page: node.parent_id! } : {}),
     ...(reference ? { reference } : {}),
   };
+}
+// A note's detail with its text, for the Worker's own use (books, projects):
+// an encrypted body needs its key in the request.
+export async function plainDetail(env: Env, id: string): Promise<NoteDetail> {
+  const detail = await noteDetail(env, id);
+  if (detail.sealed) throw locked();
+  return detail;
 }
 export function operationKey(request: Request): string {
   const key = request.headers.get('x-idempotency-key');
@@ -234,10 +265,13 @@ export async function createNode(
             : {},
         );
   const parent = data.parentId == null ? null : idValue(data.parentId);
+  // The key the new node's content inherits.
+  let scope: string | null = null;
   if (parent) {
     const p = await getNode(env, parent);
     if (!PARENT_KINDS.includes(p.kind) || p.variant === 'reference')
       throw new AppError(400, '这个节点不能包含子节点，请打开引用的原目录。');
+    scope = p.key_id ?? null;
   }
   const url = kind === 'link' ? validUrl(data.url) : null;
   let fileId: string | null = null;
@@ -245,11 +279,16 @@ export async function createNode(
     const file = await getBlob(env, idValue(data.fileId));
     if (kind === 'pdf' ? file.mime !== 'application/pdf' : !file.mime.startsWith('image/'))
       throw new AppError(400, '文件内容与节点类型不符。');
+    if (scope && file.key_id !== scope)
+      throw new AppError(409, '目标位置已加密，请刷新后重新上传。', 'ENCRYPTION_CHANGED');
     fileId = file.id;
     if (!suppliedTitle && file.name.trim()) title = file.name.trim();
   }
-  const isText = TEXT_KINDS.includes(kind),
-    content = isText ? textValue(data.content ?? '', '正文', 1_048_576, true) : '';
+  const isText = TEXT_KINDS.includes(kind);
+  // arXiv papers are public and imported as they are; see docs/encryption.md.
+  const sealedBody = isText && !paper ? await deviceBody(env, data, scope) : null;
+  const content =
+    isText && !sealedBody ? textValue(data.content ?? '', '正文', 1_048_576, true) : '';
   const assets = paper
     ? paper.assets
     : isText
@@ -258,7 +297,7 @@ export async function createNode(
   const blob = paper
       ? await storePaper(env, paper.html)
       : isText
-        ? await storeText(env, content)
+        ? (sealedBody ?? (await storeText(env, content, scope)))
         : null,
     id = crypto.randomUUID(),
     now = Date.now(),
@@ -308,7 +347,13 @@ export async function createNode(
         version,
         id,
       ),
-      ...(kind === 'markdown' ? [metadataStatement(env, id, version, content)] : []),
+      ...(kind === 'markdown'
+        ? [
+            sealedBody
+              ? sealedMetadataStatement(env, id, version, data.metadata, scope!)
+              : await metadataStatement(env, id, version, content, scope),
+          ]
+        : []),
     );
   try {
     await env.DB.batch(statements);
@@ -320,12 +365,32 @@ export async function createNode(
   }
   return getNode(env, id);
 }
+// A body sealed on the device: the note's key must match, so plain text never
+// lands in an encrypted folder (and sealed text never in a plain one).
+async function deviceBody(env: Env, data: Record<string, unknown>, scope: string | null) {
+  if (data.bodyBlobId === undefined) {
+    // Features that write on the Worker carry the key; plain writes from a
+    // device that missed the setting are refused so it can seal and retry.
+    if (scope && !hasKey(env, scope))
+      throw env.KEYS
+        ? locked()
+        : new AppError(409, '这个位置已加密，请刷新后重试。', 'ENCRYPTION_CHANGED');
+    return null;
+  }
+  const blob = await getBlob(env, idValue(data.bodyBlobId));
+  if (!scope || blob.key_id !== scope)
+    throw new AppError(409, '这个位置的加密设置已变化，请刷新后重试。', 'ENCRYPTION_CHANGED');
+  if (blob.size > sealedSize(MAX_TEXT_BYTES))
+    throw new AppError(413, '单篇正文最多 1 MiB，请拆分为多个子笔记。');
+  return blob;
+}
 export async function saveNote(
   env: Env,
   id: string,
   data: Record<string, unknown>,
   key: string,
-  reuseBody?: string,
+  // Restoring a version reuses its body; a sealed one has no text here.
+  reuse?: { bodyId: string; sealed: boolean },
 ): Promise<NoteNode> {
   const previous = await priorOperation(env, key, `save:${id}`);
   if (previous) return previous;
@@ -334,16 +399,28 @@ export async function saveNote(
   if (!TEXT_KINDS.includes(node.kind)) throw new AppError(400, '只有文本笔记可以编辑正文。');
   if (node.revision !== revision)
     throw new AppError(409, '这篇笔记已在其他页面更新，当前编辑内容已保留。', 'VERSION_CONFLICT');
-  const content = textValue(data.content, '正文', 1_048_576, true),
+  const scope = node.key_id ?? null;
+  const sealedBody = reuse ? null : await deviceBody(env, data, scope);
+  const known = !sealedBody && !reuse?.sealed;
+  const content = known ? textValue(data.content, '正文', 1_048_576, true) : '',
     assets = attachmentIds(content, data.attachments ?? []);
-  const current = await env.DB.prepare('SELECT body_blob_id FROM versions WHERE id=?')
+  const current = await env.DB.prepare(
+    'SELECT body_blob_id,key_id FROM versions v JOIN blobs b ON b.id=v.body_blob_id WHERE v.id=?',
+  )
     .bind(node.current_version_id)
-    .first<{ body_blob_id: string }>();
+    .first<{ body_blob_id: string; key_id: string | null }>();
   const oldAssets = (await attachments(env, node.current_version_id)).map((x) => x.id).sort();
-  const unchangedBody = current && content === (await readText(env, current.body_blob_id));
+  // Text is compared only when this request can read both sides.
+  const unchangedBody =
+    !!current &&
+    (current.body_blob_id === (reuse?.bodyId ?? sealedBody?.id) ||
+      (known &&
+        current.key_id === scope &&
+        (!current.key_id || hasKey(env, current.key_id)) &&
+        content === (await readText(env, current.body_blob_id))));
   if (unchangedBody && JSON.stringify(assets) === JSON.stringify(oldAssets)) return node;
-  const fresh = reuseBody || unchangedBody ? null : await storeText(env, content),
-    bodyId = reuseBody || (unchangedBody ? current!.body_blob_id : fresh!.id);
+  const fresh = reuse || sealedBody || unchangedBody ? null : await storeText(env, content, scope),
+    bodyId = reuse?.bodyId ?? sealedBody?.id ?? (unchangedBody ? current!.body_blob_id : fresh!.id);
   const version = crypto.randomUUID(),
     now = Date.now();
   try {
@@ -360,7 +437,14 @@ export async function saveNote(
       env.DB.prepare(
         'UPDATE nodes SET current_version_id=?,revision=revision+1,updated_at=? WHERE id=?',
       ).bind(version, now, id),
-      ...(node.kind === 'markdown' ? [metadataStatement(env, id, version, content)] : []),
+      // A restored sealed version leaves its summary to be rebuilt when read.
+      ...(node.kind === 'markdown' && !reuse?.sealed
+        ? [
+            sealedBody
+              ? sealedMetadataStatement(env, id, version, data.metadata, scope!)
+              : await metadataStatement(env, id, version, content, scope),
+          ]
+        : []),
       env.DB.prepare(
         'DELETE FROM versions WHERE node_id=? AND id NOT IN (SELECT id FROM versions WHERE node_id=? ORDER BY sequence DESC LIMIT 6)',
       ).bind(id, id),
@@ -430,14 +514,14 @@ export async function versionDetail(
   env: Env,
   id: string,
   version: string,
-): Promise<{ content: string; attachments: FileInfo[]; bodyId: string }> {
+): Promise<{ content: string; sealed?: string; attachments: FileInfo[]; bodyId: string }> {
   await getNode(env, id);
   const row = await env.DB.prepare('SELECT body_blob_id FROM versions WHERE id=? AND node_id=?')
     .bind(idValue(version), id)
     .first<{ body_blob_id: string }>();
   if (!row) throw new AppError(404, '这个历史版本已超出保留数量。');
   return {
-    content: await readText(env, row.body_blob_id),
+    ...(await readBody(env, row.body_blob_id)),
     attachments: await attachments(env, version),
     bodyId: row.body_blob_id,
   };
@@ -455,6 +539,6 @@ export async function restoreVersion(
     id,
     { revision, content: detail.content, attachments: detail.attachments.map((x) => x.id) },
     key,
-    detail.bodyId,
+    { bodyId: detail.bodyId, sealed: !!detail.sealed },
   );
 }

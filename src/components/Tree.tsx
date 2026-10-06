@@ -20,7 +20,7 @@ import { useOffline } from '../connectivity';
 import { ghostTransform, ROOT_TARGET, useTreeDrag, type TreeDrag } from '../use-tree-drag';
 import { noteType } from '../note-types/registry';
 
-export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon';
+export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon' | 'encryption';
 export interface TreeProps {
   expansionState?: Set<string>;
   showRefresh?: boolean;
@@ -72,6 +72,9 @@ export function NodeMenu({
           <button onClick={() => onAction('icon', node)}>更换图标</button>
         )}
         <button onClick={() => onAction('move', node)}>移动到…</button>
+        <button onClick={() => onAction('encryption', node)}>
+          本地加密{node.key_id ? '（已加密）' : ''}
+        </button>
         <button className="danger-text" onClick={() => onAction('delete', node)}>
           移到回收站
         </button>

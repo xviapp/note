@@ -1,4 +1,20 @@
-import type { AuthStatus, FileInfo, NoteDetail } from '../shared/types';
+import { TEXT_KINDS, type AuthStatus, type FileInfo, type NoteDetail } from '../shared/types';
+import type { Annotation, AnnotationList } from '../shared/annotations';
+import { KEY_HEADER } from '../shared/encryption';
+import { markdownMetadata } from '../shared/projects';
+import {
+  forgetScope,
+  keyOrThrow,
+  knownChain,
+  knownScope,
+  LockedError,
+  plainUpload,
+  rememberScope,
+  reveal,
+  sealData,
+  sealString,
+} from './encryption';
+import { keyHeader, lockAll } from './keyring';
 import {
   cacheEpoch,
   cachedResponse,
@@ -31,12 +47,30 @@ export async function api<T = Record<string, unknown>>(
   data?: unknown,
   key?: string,
 ): Promise<T> {
+  if (method === 'GET') return request<T>(path, method, data, key);
+  // Writes into an encrypted place are sealed here first. A device that had
+  // an old idea of the place's key learns the new one and seals again.
+  for (let attempt = 0; ; attempt++) {
+    const sealed = await sealWrite<T>(path, method, data);
+    if (sealed.done) return sealed.value;
+    try {
+      const value = await request<T>(path, method, sealed.data, key);
+      moved(path, method, data);
+      return value;
+    } catch (error) {
+      if (attempt || !(error instanceof ApiError) || error.code !== 'ENCRYPTION_CHANGED')
+        throw error;
+      forgetScope(sealed.scope ?? undefined);
+    }
+  }
+}
+async function request<T>(path: string, method: string, data: unknown, key?: string): Promise<T> {
   await proxyReady();
   const epoch = cacheEpoch();
   const authProbe = path === '/api/auth/status';
   if (isOffline() && !authProbe) {
     const cached = method === 'GET' ? await cachedResponse<T>(path) : undefined;
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return reveal(cached);
     throw new ApiError(
       method === 'GET' ? '此内容尚未缓存，请联网后打开。' : '当前离线，联网后即可继续此操作。',
       0,
@@ -48,6 +82,7 @@ export async function api<T = Record<string, unknown>>(
   const node = path.match(/^\/api\/nodes\/([^/]+)/)?.[1];
   if (node && noteTokens.has(node)) headers['x-note-edit'] = noteTokens.get(node)!;
   if (method !== 'GET') headers['x-idempotency-key'] = key ?? crypto.randomUUID();
+  Object.assign(headers, await keyHeaders(path));
   let response: Response;
   try {
     response = await fetch(path, {
@@ -60,7 +95,7 @@ export async function api<T = Record<string, unknown>>(
   } catch {
     setOffline(true);
     const cached = method === 'GET' ? await cachedResponse<T>(path) : undefined;
-    if (cached !== undefined) return cached;
+    if (cached !== undefined) return reveal(cached);
     throw new ApiError(
       method === 'GET'
         ? '无法连接，且此内容尚未缓存。请联网后重试。'
@@ -85,7 +120,7 @@ export async function api<T = Record<string, unknown>>(
     throw new ApiError('登录状态暂时无法读取，请稍后重试。', 502, 'INVALID_RESPONSE');
   if (authProbe && epoch !== cacheEpoch())
     throw new ApiError('会话已更新，请重新连接。', 409, 'SESSION_CHANGED');
-  if (authProbe && !(value as AuthStatus).authenticated) await clearPrivateCache();
+  if (authProbe && !(value as AuthStatus).authenticated) await signedOut();
   else {
     if (method === 'GET') {
       await rememberResponse(path, value, epoch).catch(() => {});
@@ -93,12 +128,176 @@ export async function api<T = Record<string, unknown>>(
         void rememberNote(value as NoteDetail, false, epoch).catch(() => {});
     }
     if (/^\/api\/auth\/(logout|logout-all|password)$/.test(path) && method === 'POST')
-      await clearPrivateCache();
+      await signedOut();
     if (node && method === 'DELETE' && path === `/api/nodes/${node}`)
       await removeCachedNote(node).catch(() => {});
   }
   if (authProbe) setOffline(false);
-  return value;
+  return reveal(value);
+}
+// A moved note takes the encryption of its new place: what is unlocked is
+// re-sealed in the background (the note's menu can finish the rest).
+function moved(path: string, method: string, data: unknown) {
+  const node = path.match(/^\/api\/nodes\/([\w-]+)$/)?.[1];
+  if (!node || method !== 'PATCH' || (data as { parentId?: unknown })?.parentId === undefined)
+    return;
+  forgetScope();
+  void import('./encryption-sync')
+    .then(({ syncEncryption }) => syncEncryption(node))
+    .catch(() => {});
+}
+// Signing out drops cached notes and locks every key on this device.
+async function signedOut() {
+  lockAll();
+  forgetScope();
+  await clearPrivateCache();
+}
+
+// The key a node's content is (or new content below it would be) sealed with.
+export async function scopeOf(id: string | null | undefined): Promise<string | null> {
+  if (!id) return null;
+  const known = knownScope(id);
+  if (known !== undefined) return known;
+  return (await nodeKeys(id)).key_id;
+}
+async function nodeKeys(id: string) {
+  const result = await request<{ key_id: string | null; chain: string[] }>(
+    `/api/nodes/${id}/keys`,
+    'GET',
+    undefined,
+  );
+  rememberScope(id, result.key_id, result.chain);
+  return result;
+}
+// Features the Worker runs on a note's text (青藜, translation, books,
+// projects) receive the unlocked keys on the note's path for that request.
+const PROCESSING =
+  /^\/api\/nodes\/([\w-]+)\/(assistant|translations|paper-translation|project|pages$|insights$|discussions$|organize$|book-note$)/;
+export async function keyHeaders(path: string): Promise<Record<string, string>> {
+  const node = path.match(PROCESSING)?.[1];
+  if (!node || node === 'qingli-global') return {};
+  let chain = knownChain(node);
+  if (!chain)
+    chain = await nodeKeys(node)
+      .then((result) => result.chain)
+      .catch(() => []);
+  const value = chain.length ? await keyHeader(chain) : '';
+  return value ? { [KEY_HEADER]: value } : {};
+}
+
+type Sealed<T> = { done: true; value: T } | { done: false; data: unknown; scope?: string | null };
+const ids = (content: string) =>
+  [...content.matchAll(/\/api\/files\/([a-zA-Z0-9_-]{1,80})/g)].map((match) => match[1]);
+// A text body sealed and uploaded on its own; the request then names it.
+async function sealBody(keyId: string, kind: string, data: Record<string, unknown>) {
+  const content = typeof data.content === 'string' ? data.content : '';
+  const { content: _content, ...rest } = data;
+  const body = await uploadSealed(
+    new TextEncoder().encode(content),
+    'content.txt',
+    'text/plain; charset=utf-8',
+    keyId,
+  );
+  const metadata = kind === 'markdown' ? markdownMetadata(content) : null;
+  return {
+    ...rest,
+    bodyBlobId: body.id,
+    attachments: [
+      ...new Set([...(Array.isArray(data.attachments) ? data.attachments : []), ...ids(content)]),
+    ],
+    ...(metadata
+      ? {
+          metadata: {
+            title: await sealString(keyId, metadata.title),
+            status: await sealString(keyId, metadata.status),
+            excerpt: await sealString(keyId, metadata.summary),
+          },
+        }
+      : {}),
+  };
+}
+async function sealWrite<T>(path: string, method: string, data: unknown): Promise<Sealed<T>> {
+  const fields = (data ?? {}) as Record<string, unknown>;
+  if (path === '/api/nodes' && method === 'POST' && TEXT_KINDS.includes(fields.kind as never)) {
+    const parent = (fields.parentId as string | null | undefined) ?? null;
+    const keyId = await scopeOf(parent);
+    if (!keyId) return { done: false, data, scope: parent };
+    return { done: false, data: await sealBody(keyId, String(fields.kind), fields), scope: parent };
+  }
+  const save = path.match(/^\/api\/nodes\/([\w-]+)\/content$/);
+  if (save && method === 'PUT') {
+    const keyId = await scopeOf(save[1]);
+    if (!keyId) return { done: false, data, scope: save[1] };
+    // Only Markdown has summary fields; text notes ignore them.
+    return { done: false, data: await sealBody(keyId, 'markdown', fields), scope: save[1] };
+  }
+  const annotation = path.match(/^\/api\/nodes\/([\w-]+)\/annotations\/([\w-]+)$/);
+  if (annotation && (method === 'PUT' || method === 'DELETE')) {
+    const keyId = await scopeOf(annotation[1]);
+    if (keyId)
+      return {
+        done: true,
+        value: (await sealedAnnotation(annotation[1], annotation[2], keyId, method, fields)) as T,
+      };
+  }
+  return { done: false, data };
+}
+// An encrypted note's highlights: read, changed and sealed here, then saved
+// in place of the list it was read from.
+async function sealedAnnotation(
+  nodeId: string,
+  id: string,
+  keyId: string,
+  method: string,
+  data: Record<string, unknown>,
+): Promise<AnnotationList> {
+  await keyOrThrow(keyId);
+  for (let attempt = 0; attempt < 4; attempt++) {
+    const list = await request<AnnotationList>(
+      `/api/nodes/${nodeId}/annotations`,
+      'GET',
+      undefined,
+    );
+    if (list.locked) throw new LockedError(list.locked);
+    const now = Date.now();
+    const previous = list.annotations.find((item) => item.id === id);
+    let annotations: Annotation[];
+    if (method === 'DELETE') {
+      if (!previous) return list;
+      annotations = list.annotations.filter((item) => item.id !== id);
+    } else {
+      const next = {
+        id,
+        quote: String(data.quote ?? '').trim(),
+        note: String(data.note ?? '')
+          .replace(/\r\n?/g, '\n')
+          .trim(),
+        color: (data.color ?? 'yellow') as Annotation['color'],
+        location: data.location as Annotation['location'],
+        createdAt: previous?.createdAt ?? now,
+        updatedAt: now,
+      };
+      annotations = previous
+        ? list.annotations.map((item) => (item.id === id ? next : item))
+        : [...list.annotations, next];
+    }
+    const body = await uploadSealed(
+      new TextEncoder().encode(JSON.stringify({ annotations })),
+      'content.txt',
+      'text/plain; charset=utf-8',
+      keyId,
+    );
+    try {
+      const saved = await request<AnnotationList>(`/api/nodes/${nodeId}/annotations`, 'PUT', {
+        bodyBlobId: body.id,
+        previous: list.body ?? null,
+      });
+      return { annotations, updatedAt: saved.updatedAt, body: saved.body };
+    } catch (error) {
+      if (!(error instanceof ApiError) || error.code !== 'ANNOTATIONS_CHANGED') throw error;
+    }
+  }
+  throw new ApiError('批注正在别处保存，请稍后重试。', 409);
 }
 export async function parse<T>(response: Response): Promise<T> {
   const value = (await response.json().catch(() => {
@@ -115,7 +314,7 @@ export async function parse<T>(response: Response): Promise<T> {
   if (!response.ok) {
     if (response.status === 401 && value.code === 'UNAUTHENTICATED') {
       lockEdits();
-      await clearPrivateCache();
+      await signedOut();
       window.dispatchEvent(new Event('note:unauthenticated'));
     }
     if (response.status === 403 && value.code === 'EDIT_LOCKED') {
@@ -129,8 +328,31 @@ export async function unlockNote(id: string) {
   const result = await api<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: id });
   noteTokens.set(id, result.token);
 }
-export async function upload(file: File): Promise<FileInfo> {
+// Bytes sealed with a key, uploaded as one object.
+export async function uploadSealed(
+  bytes: Uint8Array,
+  name: string,
+  mime: string,
+  keyId: string,
+): Promise<FileInfo> {
   await proxyReady();
+  const sealed = await sealData(keyId, bytes);
+  const response = await fetch(
+    `/api/files?name=${encodeURIComponent(name)}&size=${sealed.length}&key=${keyId}&mime=${encodeURIComponent(mime)}`,
+    { method: 'POST', credentials: 'same-origin', body: sealed },
+  );
+  return parse<FileInfo>(response);
+}
+// `scope` is the node the file will belong to: in an encrypted place the file
+// is sealed with its key before it leaves the device.
+export async function upload(file: File, scope?: string | null): Promise<FileInfo> {
+  await proxyReady();
+  const keyId = await scopeOf(scope);
+  if (keyId) {
+    await keyOrThrow(keyId);
+    const { bytes, mime } = await plainUpload(file);
+    return uploadSealed(bytes, file.name, mime, keyId);
+  }
   const response = await fetch(
     `/api/files?name=${encodeURIComponent(file.name)}&size=${file.size}`,
     {

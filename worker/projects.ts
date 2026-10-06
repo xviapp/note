@@ -12,8 +12,10 @@ import {
   type ProjectOverview,
 } from '../shared/projects';
 import { AppError, idValue, textValue } from './http';
-import { createNode, getNode, noteDetail, saveNote } from './library';
+import { createNode, getNode, KEY_SQL, plainDetail, saveNote } from './library';
 import { readText } from './storage';
+import { openFor, sealFor } from './encryption';
+import { sealedTextKeyId } from '../shared/encryption';
 
 // Category follows the actual tree, including a category folder itself. The
 // project overview additionally traverses references without copying content.
@@ -34,12 +36,50 @@ export function insertProject(env: Env, id: string, now: number): D1PreparedStat
     ),
   ];
 }
-export function metadataStatement(env: Env, id: string, version: string, content: string) {
+const METADATA_UPDATE = `UPDATE nodes SET metadata_title=?,metadata_status=?,metadata_excerpt=?,metadata_version_id=?
+     WHERE id=? AND current_version_id=?`;
+// Summary fields of an encrypted note are sealed with its key.
+export async function metadataStatement(
+  env: Env,
+  id: string,
+  version: string,
+  content: string,
+  keyId: string | null = null,
+) {
   const metadata = markdownMetadata(content);
-  return env.DB.prepare(
-    `UPDATE nodes SET metadata_title=?,metadata_status=?,metadata_excerpt=?,metadata_version_id=?
-     WHERE id=? AND current_version_id=?`,
-  ).bind(metadata.title, metadata.status, metadata.summary, version, id, version);
+  const seal = async (value: string | null) => (value ? sealFor(env, keyId, value) : value);
+  return env.DB.prepare(METADATA_UPDATE).bind(
+    await seal(metadata.title),
+    await seal(metadata.status),
+    await seal(metadata.summary),
+    version,
+    id,
+    version,
+  );
+}
+// Summary fields a device worked out and sealed itself.
+export function sealedMetadataStatement(
+  env: Env,
+  id: string,
+  version: string,
+  input: unknown,
+  keyId: string,
+) {
+  const value = (input && typeof input === 'object' ? input : {}) as Record<string, unknown>;
+  const field = (item: unknown, max: number) => {
+    if (item == null || item === '') return null;
+    if (typeof item !== 'string' || item.length > max || sealedTextKeyId(item) !== keyId)
+      throw new AppError(400, '笔记摘要格式不正确。');
+    return item;
+  };
+  return env.DB.prepare(METADATA_UPDATE).bind(
+    field(value.title, 2000),
+    field(value.status, 400),
+    field(value.excerpt, 4000),
+    version,
+    id,
+    version,
+  );
 }
 async function requireProject(env: Env, id: string) {
   const node = await getNode(env, id);
@@ -60,30 +100,34 @@ async function projectRows(env: Env, id: string) {
   return (
     await env.DB.prepare(
       `${REACH}
-      SELECT n.*,r.category,v.body_blob_id FROM reach r JOIN nodes n ON n.id=r.id
-      JOIN versions v ON v.id=n.current_version_id WHERE n.kind='markdown' AND n.trash_id IS NULL
+      SELECT n.*,${KEY_SQL('n')} key_id,r.category,v.body_blob_id,b.key_id body_key_id FROM reach r JOIN nodes n ON n.id=r.id
+      JOIN versions v ON v.id=n.current_version_id JOIN blobs b ON b.id=v.body_blob_id
+      WHERE n.kind='markdown' AND n.trash_id IS NULL
       ORDER BY n.updated_at DESC,n.id,r.category`,
     )
       .bind(id)
-      .all<NoteNode & { category: ProjectCategory; body_blob_id: string }>()
+      .all<
+        NoteNode & { category: ProjectCategory; body_blob_id: string; body_key_id: string | null }
+      >()
   ).results;
 }
 export async function projectOverview(env: Env, id: string): Promise<ProjectOverview> {
   await requireProject(env, id);
   const rows = await projectRows(env, id);
-  const missing = [
-    ...new Map(
-      rows
-        .filter((row) => row.metadata_version_id !== row.current_version_id)
-        .map((row) => [row.id, row]),
-    ).values(),
-  ];
+  // An encrypted note is indexed once a request carries its key.
+  const unindexed = (row: (typeof rows)[number]) =>
+    row.metadata_version_id !== row.current_version_id &&
+    (!row.body_key_id || !!env.KEYS?.has(row.body_key_id)) &&
+    (!row.key_id || !!env.KEYS?.has(row.key_id));
+  const missing = [...new Map(rows.filter(unindexed).map((row) => [row.id, row])).values()];
   // Old notes and restored archives rebuild only the summaries they need.
   // Bound first-open rebuilding to keep each request inside D1's query budget.
   // The client continues automatically until every current version is indexed.
   for (const row of missing.slice(0, 12)) {
     const content = await readText(env, row.body_blob_id);
-    await metadataStatement(env, row.id, row.current_version_id!, content).run();
+    await (
+      await metadataStatement(env, row.id, row.current_version_id!, content, row.key_id ?? null)
+    ).run();
   }
   const current = missing.length ? await projectRows(env, id) : rows;
   const directories = (
@@ -119,11 +163,7 @@ export async function projectOverview(env: Env, id: string): Promise<ProjectOver
       };
     }),
     warnings: broken.map((row) => `「${row.title}」引用的内容已删除或在回收站中。`),
-    indexing: new Set(
-      current
-        .filter((row) => row.metadata_version_id !== row.current_version_id)
-        .map((row) => row.id),
-    ).size,
+    indexing: new Set(current.filter(unindexed).map((row) => row.id)).size,
   };
 }
 // What 青藜 is told about a note inside a project: the project and its open
@@ -143,12 +183,15 @@ export async function projectPrompt(env: Env, node: NoteNode): Promise<string> {
   for (const row of await projectRows(env, project.id)) {
     if (row.category === 'note' || open.size >= 40) continue;
     const indexed = row.metadata_version_id === row.current_version_id;
-    const status = (indexed && row.metadata_status) || '';
+    // Notes whose key this request lacks are listed by title only.
+    const opened = async (value: string | null | undefined) =>
+      indexed && value ? openFor(env, value).catch(() => '') : '';
+    const status = await opened(row.metadata_status);
     if (status === 'done' || status === 'closed') continue;
     const label = PROJECT_STATUSES[row.category][status] || PROJECT_LABELS[row.category];
     open.set(
       row.id,
-      `- [${PROJECT_LABELS[row.category]}·${label}] ${(indexed && row.metadata_title) || row.title}`,
+      `- [${PROJECT_LABELS[row.category]}·${label}] ${(await opened(row.metadata_title)) || row.title}`,
     );
   }
   let prompt = `\n\n当前文件属于项目「${project.title}」。`;
@@ -211,7 +254,7 @@ export async function saveProjectStatus(
     .bind(projectId, category, idValue(id))
     .first();
   if (!member) throw new AppError(409, '这篇笔记已移出项目，请刷新后重试。');
-  const detail = await noteDetail(env, id);
+  const detail = await plainDetail(env, id);
   if (detail.kind !== 'markdown') throw new AppError(400, '只有 Markdown 文件支持项目状态。');
   let content: string;
   try {

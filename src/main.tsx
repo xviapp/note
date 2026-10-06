@@ -8,11 +8,12 @@ import './assistant.css';
 import './themes.css';
 import './shell.css';
 import { prepareOfflineShell } from './offline-shell';
+import { installSealedDownloads } from './sealed-download';
 async function start() {
   if (import.meta.env.MODE === 'android') {
     (await import('./mobile')).installMobile();
     void prepareProxy();
-  }
+  } else installSealedDownloads();
   createRoot(document.getElementById('root')!).render(
     <>
       <App />

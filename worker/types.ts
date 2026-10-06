@@ -7,6 +7,10 @@ export interface Env {
   APP_NAME?: string;
   // Test servers point this at a local stand-in; production leaves it unset.
   DEEPSEEK_BASE_URL?: string;
+  // Content keys sent with this request (AI features only), held in memory.
+  KEYS?: Map<string, CryptoKey>;
+  // HMAC keys derived from them, for cache digests.
+  HASHES?: Map<string, CryptoKey>;
 }
 export interface Site {
   id: number;
@@ -32,6 +36,8 @@ export interface BlobRow {
   state: 'pending' | 'ready' | 'deleting';
   draft_until: number | null;
   created_at: number;
+  // The content key it is sealed with, null for plain text.
+  key_id: string | null;
 }
 export interface RequestContext {
   request: Request;

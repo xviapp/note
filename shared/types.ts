@@ -62,12 +62,23 @@ export interface NoteNode {
   metadata_status?: string | null;
   metadata_excerpt?: string | null;
   metadata_version_id?: string | null;
+  // Its own encryption setting: inherit (null), 'none' or a key ID.
+  encryption?: string | null;
+  // The key its content is encrypted with (own or inherited), null when plain.
+  key_id?: string | null;
 }
 export interface FileInfo {
   id: string;
   name: string;
   mime: string;
   size: number;
+  // Sealed with this key; `size` is then the sealed size.
+  key_id?: string | null;
+}
+export interface Crumb {
+  id: string;
+  title: string;
+  encryption?: string | null;
 }
 // A paper with many images imports over several requests. Until the note is
 // created, the server answers with signed progress for the next request.
@@ -97,9 +108,14 @@ export interface ShareSettings {
 export interface NoteDetail extends NoteNode {
   reference?: { target: NoteNode | null };
   content: string;
+  // The body sealed with a key the request did not carry (base64url); the
+  // device decrypts it into `content`.
+  sealed?: string;
+  // Set on the device when the body's key is not unlocked.
+  locked?: string;
   attachments: FileInfo[];
   file?: FileInfo;
-  breadcrumbs: { id: string; title: string }[];
+  breadcrumbs: Crumb[];
   // The nearest book containing this note, or the note itself when it is a book.
   book?: BookInfo;
   // A photographed page of the book: its summary, questions and discussions.

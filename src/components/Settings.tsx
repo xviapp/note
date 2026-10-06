@@ -6,6 +6,7 @@ import { Modal, Spinner } from './Primitives';
 import { ThemeChoices } from './ThemePicker';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../../shared/password';
 import { AiSettings } from './AiSettings';
+import { EncryptionSettings } from './Encryption';
 import { ReadingControls } from './ReadingSettings';
 import { BackupSettings } from './BackupSettings';
 import { AppUpdates } from './AppUpdates';
@@ -70,6 +71,7 @@ export function Settings({
       {section === 'share' && <ShareSettings />}
       {section === 'backup' && <BackupSettings confirm={confirm} onChanged={onChanged} />}
       {section === 'ai' && <AiSettings confirm={confirm} />}
+      {section === 'encryption' && <EncryptionSettings />}
       {section === 'storage' && (
         <section className="settings-section">
           <h2>

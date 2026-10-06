@@ -4074,3 +4074,75 @@ button.node-list-toggle:focus-visible {
     width: 80px;
   }
 }
+
+/* Local encryption */
+.locked-note {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+  max-width: 360px;
+  margin: 12vh auto 40px;
+  padding: 0 20px;
+  text-align: center;
+}
+.locked-note > svg {
+  color: var(--blue);
+}
+.locked-note h2 {
+  font-family: var(--font-book);
+  font-size: 18px;
+}
+.locked-note > p {
+  color: var(--muted);
+  font-size: 13px;
+}
+.locked-note .unlock-form {
+  width: 100%;
+  text-align: left;
+}
+.encryption-status {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.encryption-status svg {
+  flex: none;
+  color: var(--blue);
+}
+.encryption-choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+.encryption-report {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.unlocked-keys {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin: 8px 0 12px;
+  padding: 0;
+  list-style: none;
+}
+.unlocked-keys li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+}
+.unlocked-keys li > span {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.unlocked-keys small {
+  color: var(--muted);
+}

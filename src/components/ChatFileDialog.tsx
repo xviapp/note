@@ -11,6 +11,8 @@ import {
 } from '../chat-files';
 import { Modal, Spinner } from './Primitives';
 import { paperParts, type PaperPart } from '../paper';
+import { sealedFile } from '../encryption';
+import { fileBlob } from '../offline-cache';
 
 export function ChatFileDialog({
   source,
@@ -61,7 +63,9 @@ export function ChatFileDialog({
           const input =
             source.type === 'local'
               ? new Uint8Array(await source.file.arrayBuffer())
-              : fileUrl(description.sourceId!);
+              : sealedFile(description.sourceId!)
+                ? new Uint8Array(await (await fileBlob(description.sourceId!)).arrayBuffer())
+                : fileUrl(description.sourceId!);
           controller.signal.throwIfAborted();
           task = openPdf(input);
           const document = await task.promise;

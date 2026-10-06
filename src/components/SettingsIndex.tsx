@@ -4,6 +4,7 @@ import {
   Download,
   HardDrive,
   Info,
+  LockKeyhole,
   Network,
   Palette,
   Server,
@@ -32,6 +33,7 @@ const groups = [
       { key: 'share', icon: Share2 },
       { key: 'backup', icon: Archive },
       { key: 'storage', icon: HardDrive },
+      { key: 'encryption', icon: LockKeyhole },
     ],
   },
   {

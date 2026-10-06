@@ -8,7 +8,12 @@ export async function shareSettings(env: Env): Promise<ShareSettings> {
     'SELECT n.id FROM site s LEFT JOIN nodes n ON n.id=s.share_parent_id AND n.trash_id IS NULL WHERE s.id=1',
   ).first<{ id: string | null }>();
   const parentId = row?.id ?? null;
-  return { parentId, breadcrumbs: parentId ? await nodePath(env, parentId) : [] };
+  return {
+    parentId,
+    breadcrumbs: parentId
+      ? (await nodePath(env, parentId)).map(({ id, title }) => ({ id, title }))
+      : [],
+  };
 }
 
 export async function saveShareSettings(env: Env, data: Record<string, unknown>) {

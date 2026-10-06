@@ -79,7 +79,10 @@ export function NodeForm({
         if (icon.file && uploadedIcon.current?.source !== icon.file) {
           if (uploadedIcon.current)
             await api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
-          uploadedIcon.current = { source: icon.file, info: await upload(icon.file) };
+          uploadedIcon.current = {
+            source: icon.file,
+            info: await upload(icon.file, node ? node.id : parent),
+          };
         }
         iconData = {
           emoji: icon.emoji,
@@ -88,7 +91,7 @@ export function NodeForm({
       }
       if (!node && ['pdf', 'image'].includes(kind) && !uploaded.current) {
         if (!file) throw new Error('请先选择一个文件。');
-        uploaded.current = await upload(file);
+        uploaded.current = await upload(file, parent);
       }
       if (kind === 'paper' && !continued.current) setProgress(null);
       const result = node

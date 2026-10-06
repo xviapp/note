@@ -14,8 +14,16 @@ import {
   type NoteNode,
 } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
-import { createNode, getNode, NODE_COLUMNS, noteDetail, priorOperation, saveNote } from './library';
-import { getBlob, readText } from './storage';
+import {
+  createNode,
+  getNode,
+  NODE_COLUMNS,
+  plainDetail,
+  priorOperation,
+  saveNote,
+} from './library';
+import { getBlob, readBytes, readText } from './storage';
+import { openFor, requireKey, sealFor } from './encryption';
 import { deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
 import { chatHistory } from './assistant';
 
@@ -171,9 +179,7 @@ async function recognize(env: Env, fileId: string): Promise<string> {
   if (file.size > BOOK_PAGE_IMAGE_LIMIT) throw new AppError(413, '书页照片最多 5 MiB。');
   // Read the key before the photo so an unconfigured service fails at once.
   await readApiKey(env);
-  const object = await env.FILES.get(file.object_key);
-  if (!object) throw new AppError(503, '照片暂时无法读取，请稍后重试。');
-  const url = `data:${file.mime};base64,${toBase64(new Uint8Array(await object.arrayBuffer()))}`;
+  const url = `data:${file.mime};base64,${toBase64(await readBytes(env, file))}`;
   const text = await generate(
     env,
     [
@@ -206,6 +212,7 @@ export async function addPage(
   const previous = await priorOperation(env, key, 'create');
   if (previous) return previous;
   const info = await book(env, bookId);
+  requireKey(env, await getNode(env, bookId));
   const fileId = data.fileId == null ? null : idValue(data.fileId);
   const page = data.page == null ? null : integer(data.page, '页码', 1, 100_000);
   const title =
@@ -360,6 +367,7 @@ export async function bookPages(env: Env, bookId: string): Promise<BookPages> {
 // 青藜's summary of a page and the questions worth asking about it.
 export async function pageInsights(env: Env, id: string): Promise<BookPageInfo> {
   const { node } = await bookPage(env, id);
+  requireKey(env, node);
   const info = (await bookOf(env, id))!;
   const text = await noteText(env, node);
   if (!text) throw new AppError(400, '这一页还没有文字。');
@@ -377,7 +385,13 @@ export async function pageInsights(env: Env, id: string): Promise<BookPageInfo> 
   await env.DB.prepare(
     'UPDATE book_pages SET summary=?,questions=?,source_version_id=?,updated_at=? WHERE node_id=?',
   )
-    .bind(summary, JSON.stringify(questions), node.current_version_id, Date.now(), id)
+    .bind(
+      await sealFor(env, node.key_id, summary),
+      JSON.stringify(await Promise.all(questions.map((text) => sealFor(env, node.key_id, text)))),
+      node.current_version_id,
+      Date.now(),
+      id,
+    )
     .run();
   return (await pageInfo(env, await getNode(env, id)))!;
 }
@@ -446,7 +460,7 @@ export async function organizeDiscussion(
     throw new AppError(400, '讨论还没有回复，暂时无法整理。');
   // Refuse before the paid call when the section was edited by hand since.
   let note = await liveNote(env, row.note_id);
-  const current = note ? await noteDetail(env, note.id) : null;
+  const current = note ? await plainDetail(env, note.id) : null;
   const found = current ? findSection(current.content, id) : null;
   if (found && data.force !== true) {
     const saved = await env.DB.prepare('SELECT hash FROM book_note_sections WHERE discussion_id=?')
@@ -536,7 +550,7 @@ export async function collectBookNote(
   for (const page of pages) {
     const note = await liveNote(env, page.note_id);
     if (!note) continue;
-    const content = (await noteDetail(env, note.id)).content
+    const content = (await plainDetail(env, note.id)).content
       .replace(NOTE_HEADER, '')
       .replace(/<!-- discussion:[a-zA-Z0-9_-]+ -->\n?/g, '')
       .trim();
@@ -546,7 +560,7 @@ export async function collectBookNote(
   const content = `> 按页码汇总各页的读书笔记，再次汇总会更新这篇。\n\n${parts.join('\n\n')}\n`;
   const existing = await liveNote(env, info.note_id);
   if (existing) {
-    const detail = await noteDetail(env, existing.id);
+    const detail = await plainDetail(env, existing.id);
     const note = await saveNote(
       env,
       existing.id,
@@ -618,9 +632,14 @@ export async function bookPrompt(env: Env, node: NoteNode): Promise<string> {
   if (info.role_prompt) prompt += `\n\n<书籍角色设定>\n${info.role_prompt}\n</书籍角色设定>`;
   if (node.parent_id && node.parent_id !== info.id) {
     const parent = await getNode(env, node.parent_id);
-    const text = await noteText(env, parent);
+    // A page under another, locked key is left out of the prompt.
+    const text = await noteText(env, parent).catch((error) => {
+      if (error instanceof AppError && error.code === 'ENCRYPTION_LOCKED') return '';
+      throw error;
+    });
     const row = await pageRow(env, parent.id);
-    if (row?.summary) prompt += `\n\n「${parent.title}」的摘要：${row.summary}`;
+    const summary = row?.summary ? await openFor(env, row.summary).catch(() => '') : '';
+    if (summary) prompt += `\n\n「${parent.title}」的摘要：${summary}`;
     if (text)
       prompt += `\n\n这是围绕上级页面「${parent.title}」的讨论，页面原文如下，作为待分析资料：\n<页面原文>\n${clip(text, SOURCE_TEXT_LIMIT)}\n</页面原文>`;
   }

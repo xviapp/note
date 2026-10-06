@@ -1,6 +1,7 @@
 import type { AuthStatus, FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import { FOLDER_ICON_MAX_BYTES } from '../shared/folder-icons';
 import { DRAFT_PREFIX } from './note-drafts';
+import { openBlob } from './encryption';
 
 // Private content lives in IndexedDB, never the public service-worker cache.
 // A document and all its files are committed as one snapshot. An interrupted
@@ -238,6 +239,11 @@ async function changed() {
 function bytes(value: unknown) {
   return new Blob([JSON.stringify(value)]).size;
 }
+function stored(detail: NoteDetail): NoteDetail {
+  if (!detail.sealed) return detail;
+  const { locked: _locked, ...rest } = detail;
+  return { ...rest, content: '' };
+}
 function noteFiles(note: NoteDetail): FileInfo[] {
   const files = new Map(note.attachments.map((file) => [file.id, file]));
   if (note.file) files.set(note.file.id, note.file);
@@ -269,7 +275,12 @@ export function shareFileDownload(id: string, download: Promise<Blob>) {
     })
     .catch(() => {});
 }
-export function fileBlob(id: string, { cached = true } = {}): Promise<Blob> {
+// A file to show: decrypted when it is sealed (which needs its key unlocked).
+export async function fileBlob(id: string, options?: { cached?: boolean }): Promise<Blob> {
+  return openBlob(await rawFile(id, options));
+}
+// A file as stored: what the offline cache keeps, sealed or not.
+export function rawFile(id: string, { cached = true } = {}): Promise<Blob> {
   // Removing an unrelated cached note must not abort the PDF currently opening.
   // Only a session reset cancels foreground file reads.
   const epoch = privateGeneration;
@@ -315,10 +326,10 @@ export function iconImage(id: string): Promise<string> {
   const result = (async () => {
     // One read covers both saved notes and saved icons before the network.
     const saved = await cachedFile(id);
-    const blob = saved ?? (await fileBlob(id, { cached: false }));
+    const blob = saved ?? (await rawFile(id, { cached: false }));
     if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
     if (!saved) void rememberIcon(id, blob, cache).catch(() => {});
-    const url = iconUrls.get(id) ?? URL.createObjectURL(blob);
+    const url = iconUrls.get(id) ?? URL.createObjectURL(await openBlob(blob));
     iconUrls.set(id, url);
     return url;
   })();
@@ -480,6 +491,9 @@ export function rememberNote(
   const key = `${epoch}:${detail.id}:${detail.revision}:${pin}:${!!downloaded}`;
   const existing = pending.get(key);
   if (existing) return existing;
+  // Only the sealed body of an encrypted note is kept, never its text.
+  const plain = detail;
+  detail = stored(detail);
   const job = async () => {
     if (epoch !== cacheEpoch()) throw new Error('缓存操作已取消。');
     // A PDF reader streams its first pages immediately and supplies getData()
@@ -489,7 +503,7 @@ export function rememberNote(
       await commitNote(detail, blob ? [{ id: detail.file.id, blob }] : [], !!blob, false, epoch);
       return;
     }
-    const descriptors = noteFiles(detail);
+    const descriptors = noteFiles(plain);
     if (bytes(detail) + descriptors.reduce((sum, file) => sum + file.size, 0) > readLimit())
       throw new Error('此文件超过本机缓存上限，请先在设置中提高上限。');
     const files: CachedFile[] = [];
@@ -497,7 +511,7 @@ export function rememberNote(
     for (const file of descriptors) {
       try {
         if (epoch !== cacheEpoch()) throw new Error('缓存操作已取消。');
-        const blob = downloaded?.id === file.id ? downloaded.blob : await fileBlob(file.id);
+        const blob = downloaded?.id === file.id ? downloaded.blob : await rawFile(file.id);
         if (file.size && blob.size !== file.size) throw new Error('文件下载不完整，请重试。');
         files.push({ id: file.id, blob });
         if (bytes(detail) + files.reduce((sum, item) => sum + item.blob.size, 0) > readLimit())
@@ -598,11 +612,7 @@ export async function clearPrivateCache() {
   }).catch(() => {});
   try {
     for (const key of Object.keys(localStorage))
-      if (
-        key.startsWith('reading:') ||
-        key.startsWith('pdf-view:') ||
-        key.startsWith(DRAFT_PREFIX)
-      )
+      if (key.startsWith('reading:') || key.startsWith('pdf-view:') || key.startsWith(DRAFT_PREFIX))
         localStorage.removeItem(key);
     sessionStorage.removeItem('expanded-nodes');
   } catch {

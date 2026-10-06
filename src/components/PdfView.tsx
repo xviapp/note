@@ -19,7 +19,8 @@ import { PdfPage } from './PdfPage';
 import type { PdfSourceLocation, PdfSourceRect } from '../../shared/translation';
 import { colorOf, type Annotation, type AnnotationColor } from '../../shared/annotations';
 import { PdfOutline } from './PdfOutline';
-import { cacheEpoch, cachedFile, rememberNote, shareFileDownload } from '../offline-cache';
+import { cacheEpoch, cachedFile, rawFile, rememberNote, shareFileDownload } from '../offline-cache';
+import { openBlob, sealedFile } from '../encryption';
 
 type Position = { page: number; pageRatio: number };
 type PageBox = { top: number; height: number };
@@ -103,7 +104,17 @@ export default function PdfView({
     const epoch = cacheEpoch();
     void cachedFile(fileId)
       .then(async (blob) => {
-        const source = blob ? new Uint8Array(await blob.arrayBuffer()) : fileUrl(fileId);
+        // A sealed PDF is downloaded whole and decrypted; PDF.js cannot read
+        // ranges of it. The offline cache keeps the sealed copy.
+        const sealed = !blob && !!sealedFile(fileId);
+        if (sealed) {
+          blob = await rawFile(fileId, { cached: false });
+          if (cacheNote)
+            void rememberNote(cacheNote, false, epoch, { id: fileId, blob }).catch(() => {});
+        }
+        const source = blob
+          ? new Uint8Array(await (await openBlob(blob)).arrayBuffer())
+          : fileUrl(fileId);
         if (!live) return;
         task = openPdf(source);
         if (!blob && cacheNote) {
@@ -130,7 +141,9 @@ export default function PdfView({
           setError(
             e?.name === 'PasswordException'
               ? '这个 PDF 需要额外的文件密码，请下载后打开。'
-              : 'PDF 暂时无法打开，请重试或下载文件。',
+              : e?.code === 'ENCRYPTION_LOCKED'
+                ? e.message
+                : 'PDF 暂时无法打开，请重试或下载文件。',
           );
       });
     return () => {

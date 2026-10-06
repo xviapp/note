@@ -64,6 +64,8 @@ export function useNoteEditor({
   }, [editing, dirty]);
   // Keep unsaved edits on this device shortly after each change.
   const baseRevision = useRef(0);
+  // An encrypted note's draft is sealed with its key.
+  const keyId = note?.key_id ?? null;
   useEffect(() => {
     if (!editing) return;
     if (!dirty) {
@@ -72,16 +74,20 @@ export function useNoteEditor({
     }
     const timer = setTimeout(
       () =>
-        writeDraft(id, {
-          content,
-          attachments: assets,
-          revision: baseRevision.current,
-          savedAt: Date.now(),
-        }),
+        writeDraft(
+          id,
+          {
+            content,
+            attachments: assets,
+            revision: baseRevision.current,
+            savedAt: Date.now(),
+          },
+          keyId,
+        ),
       600,
     );
     return () => clearTimeout(timer);
-  }, [id, editing, dirty, content, assets]);
+  }, [id, editing, dirty, content, assets, keyId]);
 
   const abandonUploads = () => {
     for (const fileId of draftUploads.current)
@@ -182,7 +188,7 @@ export function useNoteEditor({
   };
   // Offers a draft left by a closed tab or a reclaimed app when the note opens.
   const offerDraft = async () => {
-    const draft = readDraft(id),
+    const draft = await readDraft(id),
       current = noteRef.current;
     if (!draft || !current || editing) return;
     if (
@@ -231,7 +237,7 @@ export function useNoteEditor({
     setSaveError('');
     try {
       for (const selected of Array.from(files)) {
-        const file = await upload(selected);
+        const file = await upload(selected, id);
         draftUploads.current.add(file.id);
         setAssets((previous) => [...previous, file]);
         if (note?.kind === 'markdown' && file.mime.startsWith('image/'))

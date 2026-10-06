@@ -36,7 +36,7 @@ export async function pagePhoto(file: File): Promise<File> {
 
 // Upload and recognize one photographed page into the book.
 export async function addBookPage(bookId: string, file: File, page: number | null) {
-  const uploaded = await upload(await pagePhoto(file));
+  const uploaded = await upload(await pagePhoto(file), bookId);
   return api<NoteNode>(`/api/nodes/${bookId}/pages`, 'POST', {
     fileId: uploaded.id,
     ...(page ? { page } : {}),

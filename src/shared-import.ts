@@ -90,7 +90,10 @@ export async function importShare(
     if (!response.ok) throw new Error('分享文件已失效，请重新分享。');
     const blob = await response.blob();
     if (blob.size !== item.size) throw new Error('分享文件不完整，请重新分享。');
-    const uploaded: FileInfo = await upload(new File([blob], item.name, { type: item.mime }));
+    const uploaded: FileInfo = await upload(
+      new File([blob], item.name, { type: item.mime }),
+      options.parent,
+    );
     let node: NoteNode | undefined;
     try {
       node = await api<NoteNode>(

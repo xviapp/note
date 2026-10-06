@@ -33,7 +33,9 @@ import { NoteActions } from './NoteActions';
 import { useNoteToc } from '../use-note-toc';
 import { NodeList } from './NodeList';
 import { FastScroll } from './FastScroll';
-import { type NodeAction } from './Tree';
+import { NodeMenu, type NodeAction } from './Tree';
+import { LockedNote, useKeys } from './Encryption';
+import { isUnlocked } from '../keyring';
 import { AssistantPanel, type AssistantHandle } from './AssistantPanel';
 import type { AssistantMode } from './AssistantWindow';
 import { SelectionToolbar } from './SelectionToolbar';
@@ -48,6 +50,7 @@ import { AnnotationList, AnnotationPanel } from './AnnotationDialogs';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
 import { cachedNote } from '../offline-cache';
+import { reveal } from '../encryption';
 import { useTypeView } from '../note-types';
 
 const Editor = lazy(() => import('./Editor'));
@@ -249,11 +252,13 @@ export default function NotePane(props: Props) {
     // A note opened before shows at once from this device (a long paper takes
     // seconds to download); the server's copy then replaces it.
     if (noteRef.current?.id !== id)
-      void cachedNote(id).then((cached) => {
-        if (!live || answered || !cached) return;
-        setStale(true);
-        applyDetail(cached);
-      });
+      void cachedNote(id)
+        .then((cached) => cached && reveal(cached))
+        .then((cached) => {
+          if (!live || answered || !cached) return;
+          setStale(true);
+          applyDetail(cached);
+        });
     api<NoteDetail>(`/api/nodes/${id}`)
       .then((detail) => {
         answered = true;
@@ -274,6 +279,11 @@ export default function NotePane(props: Props) {
     // Reload only for a new note or refresh; applyDetail is recreated each render.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [id, props.refresh, editing, retry]);
+  // A note opened while its key was locked loads again once it is unlocked.
+  const keys = useKeys();
+  useEffect(() => {
+    if (note?.locked && isUnlocked(note.locked)) setRetry((count) => count + 1);
+  }, [keys, note?.locked]);
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
   const noteId = note?.id;
   const restorePosition = useCallback(() => {
@@ -489,6 +499,22 @@ export default function NotePane(props: Props) {
         ) : (
           <Spinner />
         )}
+      </div>
+    );
+  const lockedKey =
+    note.locked ?? (note.key_id && !isUnlocked(note.key_id) && !editing ? note.key_id : null);
+  if (lockedKey)
+    return (
+      <div className="note-pane">
+        <div className="note-toolbar">
+          {navigation}
+          <div className="note-actions is-short">
+            <NodeMenu node={note} onAction={props.onAction} />
+          </div>
+        </div>
+        <div className="note-scroll">
+          <LockedNote note={note} keyId={lockedKey} />
+        </div>
       </div>
     );
   // Wide windows keep the list open beside the text; narrow ones use a dialog.

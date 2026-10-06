@@ -13,6 +13,7 @@ import { deepseekReply, readApiKey } from './deepseek';
 import { AppError, asError, json, textValue } from './http';
 import { getNode } from './library';
 import { discardFile, readText, storeText } from './storage';
+import { keyedDigest, requireKey, sealFor } from './encryption';
 import type { BlobRow, Env } from './types';
 
 interface TranslationRow {
@@ -186,7 +187,9 @@ export async function translate(
   data: Record<string, unknown>,
   key: string,
 ): Promise<Response> {
-  await translationNode(env, nodeId);
+  const node = await translationNode(env, nodeId);
+  requireKey(env, node);
+  const keyId = node.key_id ?? null;
   const source = textValue(data.source, '选中文字', TRANSLATION_LIMIT)
     .replace(/\r\n?/g, '\n')
     .trim();
@@ -195,7 +198,10 @@ export async function translate(
   if (data.refresh !== undefined && typeof data.refresh !== 'boolean')
     throw new AppError(400, '重新翻译参数不正确。');
   const language = data.targetLanguage;
-  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source));
+  // An encrypted note's cache key is keyed, so it says nothing about the text.
+  const digest = keyId
+    ? await keyedDigest(env, keyId, source)
+    : await crypto.subtle.digest('SHA-256', new TextEncoder().encode(source));
   const hash = Array.from(new Uint8Array(digest), (byte) =>
     byte.toString(16).padStart(2, '0'),
   ).join('');
@@ -233,7 +239,14 @@ export async function translate(
   await env.DB.prepare(
     'INSERT OR IGNORE INTO translations(id,node_id,source_hash,target_language,excerpt,updated_at) VALUES(?,?,?,?,?,?)',
   )
-    .bind(crypto.randomUUID(), nodeId, hash, language, source.slice(0, 140), now)
+    .bind(
+      crypto.randomUUID(),
+      nodeId,
+      hash,
+      language,
+      await sealFor(env, keyId, source.slice(0, 140)),
+      now,
+    )
     .run();
   row = await find();
   if (!row) throw new AppError(409, '文件状态发生变化，请重新打开。');
@@ -293,7 +306,7 @@ export async function translate(
           }
           abort.signal.throwIfAborted();
           if (!content.trim()) throw new AppError(502, '未收到有效译文，请重试。');
-          stored = await storeText(env, JSON.stringify({ source, content, location }));
+          stored = await storeText(env, JSON.stringify({ source, content, location }), keyId);
           abort.signal.throwIfAborted();
           const savedAt = Date.now();
           const saved = await env.DB.prepare(

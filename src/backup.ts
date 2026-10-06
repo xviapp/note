@@ -198,18 +198,24 @@ export async function openBackup(file: File): Promise<OpenBackup> {
     throw error;
   }
 }
+// The restored folder, and when sealed text came along, the ID mapping a
+// device with the keys needs to rewrite it (see encryption-sync.ts).
+export interface RestoreResult {
+  rootId: string;
+  mapping?: Record<string, string>;
+}
 export async function restoreLibrary(
   backup: OpenBackup,
   progress: (message: string) => void,
   signal: AbortSignal,
-) {
+): Promise<RestoreResult> {
   const state = await api<{ id: string; rootId: string | null }>(
     '/api/backups/restore',
     'POST',
     backup.archive,
     backup.key,
   );
-  if (state.rootId) return state.rootId;
+  if (state.rootId) return api<RestoreResult>(`/api/backups/${state.id}/commit`, 'POST', {});
   for (const [index, file] of backup.archive.files.entries()) {
     signal.throwIfAborted();
     progress(`正在恢复 ${index + 1}/${backup.archive.files.length}：${file.name}`);
@@ -225,5 +231,5 @@ export async function restoreLibrary(
   }
   signal.throwIfAborted();
   progress('正在恢复目录和记录…');
-  return (await api<{ rootId: string }>(`/api/backups/${state.id}/commit`, 'POST', {})).rootId;
+  return api<RestoreResult>(`/api/backups/${state.id}/commit`, 'POST', {});
 }

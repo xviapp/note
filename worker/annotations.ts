@@ -7,9 +7,11 @@ import {
   type Annotation,
   type AnnotationList,
 } from '../shared/annotations';
-import { AppError } from './http';
+import { AppError, idValue } from './http';
 import { getNode } from './library';
-import { discardFile, readText, storeText } from './storage';
+import { discardFile, getBlob, MAX_TEXT_BYTES, readBody, storeText } from './storage';
+import { locked } from './encryption';
+import { sealedSize } from '../shared/encryption';
 import { sourceLocation } from './translation';
 import type { Env } from './types';
 
@@ -31,7 +33,10 @@ async function stored(env: Env, nodeId: string) {
     .bind(nodeId)
     .first<Row>();
   if (!row) return { row: null, annotations: [] as Annotation[] };
-  const data = JSON.parse(await readText(env, row.body_blob_id)) as { annotations?: Annotation[] };
+  // An encrypted list goes to the device as it is (see replaceAnnotations).
+  const body = await readBody(env, row.body_blob_id);
+  if (body.sealed) return { row, annotations: [] as Annotation[], sealed: body.sealed };
+  const data = JSON.parse(body.content) as { annotations?: Annotation[] };
   return { row, annotations: data.annotations ?? [] };
 }
 // Writes a changed list. Another tab may save meanwhile, so the change is
@@ -41,8 +46,10 @@ async function save(
   nodeId: string,
   change: (annotations: Annotation[]) => Annotation[],
 ): Promise<AnnotationList> {
+  const node = await getNode(env, nodeId);
   for (let attempt = 0; attempt < 4; attempt++) {
     const latest = await stored(env, nodeId);
+    if (latest.sealed) throw locked();
     const annotations = change(latest.annotations);
     const body = JSON.stringify({ annotations });
     const space = await env.DB.prepare(
@@ -50,28 +57,22 @@ async function save(
     ).first<{ available: number }>();
     if (!space || space.available < new TextEncoder().encode(body).length)
       throw new AppError(413, '空间不足，请清理后再保存批注。', 'QUOTA_EXCEEDED');
-    const blob = await storeText(env, body);
+    const blob = await storeText(env, body, node.key_id ?? null);
+    const search = node.key_id ? '' : annotationSearchText(annotations);
     const now = Date.now();
     const saved = latest.row
       ? await env.DB.prepare(
           `UPDATE annotations SET body_blob_id=?,updated_at=?,search_text=? WHERE node_id=? AND body_blob_id=?
            AND EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL) RETURNING node_id`,
         )
-          .bind(
-            blob.id,
-            now,
-            annotationSearchText(annotations),
-            nodeId,
-            latest.row.body_blob_id,
-            nodeId,
-          )
+          .bind(blob.id, now, search, nodeId, latest.row.body_blob_id, nodeId)
           .first()
       : await env.DB.prepare(
           `INSERT INTO annotations(node_id,body_blob_id,updated_at,search_text)
            SELECT ?,?,?,? WHERE EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL)
            ON CONFLICT DO NOTHING RETURNING node_id`,
         )
-          .bind(nodeId, blob.id, now, annotationSearchText(annotations), nodeId)
+          .bind(nodeId, blob.id, now, search, nodeId)
           .first();
     if (saved) {
       if (latest.row) await discardFile(env, latest.row.body_blob_id).catch(() => {});
@@ -85,8 +86,48 @@ async function save(
 
 export async function listAnnotations(env: Env, nodeId: string): Promise<AnnotationList> {
   await annotatedNode(env, nodeId);
-  const { row, annotations } = await stored(env, nodeId);
-  return { annotations, updatedAt: row?.updated_at ?? null };
+  const { row, annotations, sealed } = await stored(env, nodeId);
+  return {
+    annotations,
+    updatedAt: row?.updated_at ?? null,
+    ...(row ? { body: row.body_blob_id } : {}),
+    ...(sealed ? { sealed } : {}),
+  };
+}
+// An encrypted note's list, changed and sealed on the device. `previous` is
+// the list it changed, so a save from elsewhere in between is not lost.
+export async function replaceAnnotations(
+  env: Env,
+  nodeId: string,
+  data: Record<string, unknown>,
+): Promise<AnnotationList> {
+  const node = await annotatedNode(env, nodeId);
+  const blob = await getBlob(env, idValue(data.bodyBlobId));
+  if (!node.key_id || blob.key_id !== node.key_id)
+    throw new AppError(409, '这个文件的加密设置已变化，请刷新后重试。', 'ENCRYPTION_CHANGED');
+  if (blob.size > sealedSize(MAX_TEXT_BYTES)) throw new AppError(413, '批注内容过大。');
+  const previous = data.previous == null ? null : idValue(data.previous);
+  const now = Date.now();
+  const saved = previous
+    ? await env.DB.prepare(
+        `UPDATE annotations SET body_blob_id=?,updated_at=?,search_text='' WHERE node_id=? AND body_blob_id=?
+         AND EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL) RETURNING node_id`,
+      )
+        .bind(blob.id, now, nodeId, previous, nodeId)
+        .first()
+    : await env.DB.prepare(
+        `INSERT INTO annotations(node_id,body_blob_id,updated_at,search_text)
+         SELECT ?,?,?,'' WHERE EXISTS(SELECT 1 FROM nodes WHERE id=? AND trash_id IS NULL)
+         ON CONFLICT DO NOTHING RETURNING node_id`,
+      )
+        .bind(nodeId, blob.id, now, nodeId)
+        .first();
+  if (!saved) {
+    await discardFile(env, blob.id).catch(() => {});
+    throw new AppError(409, '批注已在别处更新，请重试。', 'ANNOTATIONS_CHANGED');
+  }
+  if (previous) await discardFile(env, previous).catch(() => {});
+  return { annotations: [], updatedAt: now, body: blob.id };
 }
 
 // Adds or replaces one annotation. The client picks the id, so a repeated

@@ -14,7 +14,17 @@ import type { BlobRow, Env } from './types';
 import { AppError, asError, idValue, textValue } from './http';
 import { createNode, getNode } from './library';
 import { assistantContext } from './assistant-context';
-import { discardFile, getBlob, storeChatBody, storeText, uploadFile } from './storage';
+import {
+  discardFile,
+  getBlob,
+  readBytes,
+  storeBytes,
+  storeChatBody,
+  storeText,
+  uploadFile,
+} from './storage';
+import { keyFor, requireKey } from './encryption';
+import { openBytes } from '../shared/encryption';
 import { aiSettings, deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
 import { CHAT_CONTEXT_IMAGE_LIMIT } from '../shared/chat-files';
 import { fileContext, validateChatFiles } from './chat-files';
@@ -41,18 +51,19 @@ interface MessageRow {
   error: string | null;
   created_at: number;
   body_key: string | null;
+  body_key_id: string | null;
   body_size: number | null;
   image_name: string | null;
   image_mime: string | null;
   image_size: number | null;
 }
-const MESSAGE_QUERY = `SELECT m.*,b.object_key body_key,b.size body_size,i.name image_name,i.mime image_mime,i.size image_size
+const MESSAGE_QUERY = `SELECT m.*,b.object_key body_key,b.key_id body_key_id,b.size body_size,i.name image_name,i.mime image_mime,i.size image_size
   FROM assistant_messages m LEFT JOIN blobs b ON b.id=m.body_blob_id LEFT JOIN blobs i ON i.id=m.image_blob_id`;
 export async function assistantNode(
   env: Env,
   id: string,
-): Promise<Pick<NoteNode, 'id' | 'title' | 'kind'>> {
-  if (id === GLOBAL_ASSISTANT_ID) return { id, title: '全局对话', kind: 'text' };
+): Promise<Pick<NoteNode, 'id' | 'title' | 'kind' | 'key_id'>> {
+  if (id === GLOBAL_ASSISTANT_ID) return { id, title: '全局对话', kind: 'text', key_id: null };
   const node = await getNode(env, id);
   if (node.kind === 'folder') throw new AppError(400, '请打开一个文件与青藜对话。');
   return node;
@@ -62,9 +73,11 @@ async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
     content: '',
   };
   if (row.body_key) {
+    const key = row.body_key_id ? keyFor(env, row.body_key_id) : null;
     const object = await env.FILES.get(row.body_key);
     if (!object) throw new AppError(503, '会话内容暂时无法读取，请稍后重试。');
-    body = await object.json();
+    const bytes = new Uint8Array(await object.arrayBuffer());
+    body = JSON.parse(new TextDecoder().decode(key ? await openBytes(key, bytes) : bytes));
   }
   return {
     id: row.id,
@@ -106,7 +119,7 @@ async function expireRequests(env: Env, id: string): Promise<void> {
     .run();
 }
 export async function chatHistory(env: Env, id: string, before: number): Promise<ChatHistory> {
-  await assistantNode(env, id);
+  requireKey(env, await assistantNode(env, id));
   await expireRequests(env, id);
   const rows = await env.DB.prepare(
     `${MESSAGE_QUERY} WHERE m.node_id=? AND m.sequence<? ORDER BY m.sequence DESC LIMIT 21`,
@@ -132,7 +145,7 @@ export async function chatHistory(env: Env, id: string, before: number): Promise
     busy: (thread?.locked_until ?? 0) > Date.now(),
   };
 }
-async function screenshot(env: Env, data: unknown): Promise<BlobRow | null> {
+async function screenshot(env: Env, data: unknown, keyId: string | null): Promise<BlobRow | null> {
   if (data == null) return null;
   if (typeof data !== 'string' || data.length > Math.ceil(AI_IMAGE_LIMIT / 3) * 4 + 40)
     throw new AppError(413, '截图最多 1 MiB，请缩小选区。');
@@ -145,6 +158,14 @@ async function screenshot(env: Env, data: unknown): Promise<BlobRow | null> {
     throw new AppError(400, '截图格式不正确，请重新截图。');
   }
   if (bytes.byteLength > AI_IMAGE_LIMIT) throw new AppError(413, '截图最多 1 MiB，请缩小选区。');
+  if (keyId) {
+    const mime = `image/${match[1]}`;
+    const png = bytes[0] === 137 && bytes[1] === 80 && bytes[2] === 78 && bytes[3] === 71;
+    const jpeg = bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255;
+    if (mime === 'image/png' ? !png : !jpeg)
+      throw new AppError(400, '截图内容与格式不符，请重新截图。');
+    return storeBytes(env, bytes, `screenshot.${match[1] === 'jpeg' ? 'jpg' : 'png'}`, mime, keyId);
+  }
   const file = await uploadFile(
     env,
     new Request(
@@ -301,9 +322,7 @@ async function context(
     const parts: Exclude<ProviderMessage['content'], string> = [{ type: 'text', text: value.text }];
     for (const attachment of value.attachments) {
       const file = await getBlob(env, attachment.file.id);
-      const object = await env.FILES.get(file.object_key);
-      if (!object) throw new AppError(503, '附件图片暂时无法读取，请稍后重试。');
-      const url = `data:${file.mime};base64,${toBase64(new Uint8Array(await object.arrayBuffer()))}`;
+      const url = `data:${file.mime};base64,${toBase64(await readBytes(env, file))}`;
       if (attachment.label !== '引用截图')
         parts.push({ type: 'text', text: `附件图片：${attachment.label}` });
       parts.push({ type: 'image_url', image_url: { url } });
@@ -321,6 +340,8 @@ export async function sendChat(
   key: string,
 ): Promise<Response> {
   const node = await assistantNode(env, id);
+  requireKey(env, node);
+  const keyId = node.key_id ?? null;
   const prompt = textValue(data.content, '问题', AI_PROMPT_LIMIT).trim();
   const quote = data.quote == null ? '' : textValue(data.quote, '引用文字', AI_QUOTE_LIMIT, true);
   const apiKey = await readApiKey(env);
@@ -381,7 +402,7 @@ export async function sendChat(
     image: BlobRow | null = null;
   let prepared: Awaited<ReturnType<typeof context>>;
   try {
-    image = await screenshot(env, data.image);
+    image = await screenshot(env, data.image, keyId);
     prepared = await context(
       env,
       node,
@@ -412,6 +433,7 @@ export async function sendChat(
         ...(annotations ? { annotations } : {}),
         ...(attachments.files.length ? { files: attachments.files } : {}),
       }),
+      keyId,
     );
     await env.DB.batch([
       env.DB.prepare(
@@ -483,7 +505,7 @@ export async function sendChat(
         }
         let stored: BlobRow | null = null;
         try {
-          if (content) stored = await storeText(env, JSON.stringify({ content }));
+          if (content) stored = await storeText(env, JSON.stringify({ content }), keyId);
           await env.DB.prepare(
             "UPDATE assistant_messages SET status=?,body_blob_id=?,error=? WHERE id=? AND status='pending'",
           )

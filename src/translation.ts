@@ -5,7 +5,7 @@ import {
   type TranslationLanguage,
 } from '../shared/translation';
 import { sseData } from '../shared/sse';
-import { parse } from './api';
+import { keyHeaders, parse } from './api';
 
 export interface TranslationLaunch {
   source?: string;
@@ -42,7 +42,11 @@ export async function translateText(
     method: 'POST',
     credentials: 'same-origin',
     signal,
-    headers: { 'content-type': 'application/json', 'x-idempotency-key': crypto.randomUUID() },
+    headers: {
+      'content-type': 'application/json',
+      'x-idempotency-key': crypto.randomUUID(),
+      ...(await keyHeaders(`/api/nodes/${nodeId}/translations`)),
+    },
     body: JSON.stringify({ source, targetLanguage, refresh, location }),
   });
   if (!response.ok) await parse(response);

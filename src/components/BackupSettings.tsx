@@ -1,10 +1,32 @@
 import { useEffect, useRef, useState } from 'react';
 import { Archive, Download, Upload } from 'lucide-react';
 import { exportLibrary, openBackup, restoreLibrary, type OpenBackup } from '../backup';
+import { repairRestored, type SyncResult } from '../encryption-sync';
+import { UnlockForm } from './Encryption';
 import { api, formatBytes } from '../api';
 import { useOffline } from '../connectivity';
 import type { Confirm } from './Primitives';
 
+interface PendingRepair {
+  rootId: string;
+  mapping: Record<string, string>;
+}
+const REPAIR_KEY = 'note:restore-repair';
+function pendingRepair(): PendingRepair | null {
+  try {
+    return JSON.parse(localStorage.getItem(REPAIR_KEY) || 'null');
+  } catch {
+    return null;
+  }
+}
+function savePendingRepair(value: PendingRepair | null) {
+  try {
+    if (value) localStorage.setItem(REPAIR_KEY, JSON.stringify(value));
+    else localStorage.removeItem(REPAIR_KEY);
+  } catch {
+    /* Without storage the repair is offered only until the page closes. */
+  }
+}
 export function BackupSettings({
   confirm,
   onChanged,
@@ -18,6 +40,8 @@ export function BackupSettings({
   const controller = useRef<AbortController | null>(null),
     active = useRef<OpenBackup | null>(null);
   const offline = useOffline();
+  const [repair, setRepair] = useState(pendingRepair),
+    [repairResult, setRepairResult] = useState<SyncResult | null>(null);
   active.current = backup;
   useEffect(
     () => () => {
@@ -55,13 +79,27 @@ export function BackupSettings({
       controller.current = null;
     }
   };
+  // Sealed text in a restored backup still names the archive's IDs until a
+  // device holding its keys rewrites it.
+  async function runRepair(target: PendingRepair) {
+    setMessage('正在修复加密内容中的附件和链接…');
+    const result = await repairRestored(target.rootId, target.mapping);
+    setRepairResult(result);
+    if (!result.locked.length && !result.failed.length) {
+      savePendingRepair(null);
+      setRepair(null);
+      setMessage('已恢复，加密内容中的附件和链接已修复。');
+    } else setMessage('');
+  }
   return (
     <section className="settings-section">
       <h2>
         <Archive size={19} />
         备份与恢复
       </h2>
-      <p className="field-hint">包含笔记、附件、历史版本、收藏、阅读位置、青藜对话和翻译记录。</p>
+      <p className="field-hint">
+        包含笔记、附件、历史版本、收藏、阅读位置、青藜对话和翻译记录。加密内容以密文备份，恢复后需要原密码。
+      </p>
       <div className="backup-actions">
         <button
           className="button"
@@ -127,16 +165,42 @@ export function BackupSettings({
               )
                 return;
               await perform(async (signal) => {
-                await restoreLibrary(backup, setMessage, signal);
+                const restored = await restoreLibrary(backup, setMessage, signal);
                 await backup.reader.close();
                 await api(`/api/backups/${backup.key}`, 'DELETE').catch(() => {});
                 setBackup(null);
                 onChanged();
                 setMessage('已恢复，可在全部笔记中打开新的备份目录。');
+                if (restored.mapping) {
+                  const next = { rootId: restored.rootId, mapping: restored.mapping };
+                  savePendingRepair(next);
+                  setRepair(next);
+                  await runRepair(next);
+                }
               });
             }}
           >
             恢复到新目录
+          </button>
+        </div>
+      )}
+      {repair && !busy && (
+        <div className="backup-preview">
+          <p>恢复的备份中有加密内容，需要用密码修复其中的附件和链接。</p>
+          {repairResult?.locked.map((keyId) => (
+            <UnlockForm key={keyId} keyId={keyId} />
+          ))}
+          {!!repairResult?.failed.length && (
+            <p className="inline-error" role="alert">
+              {repairResult.failed.slice(0, 3).join('；')}
+            </p>
+          )}
+          <button
+            className="button"
+            disabled={offline}
+            onClick={() => void perform(() => runRepair(repair))}
+          >
+            修复加密内容
           </button>
         </div>
       )}
