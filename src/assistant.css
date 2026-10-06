@@ -631,11 +631,19 @@
   }
 }
 
-/* What a book page's discussion already carries along. */
+/* What a book page's discussion already carries along, and organizing it. */
 .assistant-context {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   margin: 0;
   padding: 6px 14px;
   font-size: 12px;
   color: var(--muted);
   border-bottom: 1px solid var(--line);
+}
+.assistant-context .text-button {
+  flex: none;
+  font-size: 13px;
 }

@@ -1649,6 +1649,16 @@ button.node-list-toggle:focus-visible {
   display: flex;
   gap: 2px;
 }
+.book-pager {
+  display: flex;
+  justify-content: space-between;
+  margin-top: 24px;
+}
+@media (max-width: 760px) {
+  .book-page-nav {
+    display: none;
+  }
+}
 .page-insights {
   display: grid;
   gap: 18px;

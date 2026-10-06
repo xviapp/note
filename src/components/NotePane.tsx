@@ -606,7 +606,9 @@ export default function NotePane(props: Props) {
           onBook={() => setBookOpen(true)}
           onAction={props.onAction}
         />
-        {bookPage && !editing && <BookPageNav info={bookPage} onNavigate={props.onNavigate} />}
+        {bookPage && !editing && (
+          <BookPageNav info={bookPage} onNavigate={props.onNavigate} toolbar />
+        )}
       </div>
       {editing && (
         <EditToolbar
@@ -734,6 +736,9 @@ export default function NotePane(props: Props) {
                       onError={props.onError}
                     />
                   )}
+                  {bookPage && !editing && (
+                    <BookPageNav info={bookPage} onNavigate={props.onNavigate} />
+                  )}
                   {/* A book page's only attachment is its photo, shown above the text. */}
                   {TEXT_KINDS.includes(note.kind) && !(bookPage && !editing) && (
                     <Attachments
@@ -838,20 +843,13 @@ export default function NotePane(props: Props) {
                       : note,
                     title: current?.title ?? '新讨论',
                     fileNode: note,
-                    context: `已带上：《${note.book!.title}》${note.book!.role_prompt ? ' · 书籍角色' : ''} · ${note.title}原文${bookPage.summary ? '与摘要' : ''}`,
-                    initialPrompt: discussion?.initial,
-                    initialQuote: discussion?.quote,
-                    onDraftSend: discussion?.id
-                      ? undefined
-                      : (content: string, quote: string) =>
-                          void askPage(content, quote || undefined),
-                    headerActions: (
+                    context: (
                       <>
-                        <DiscussionMenu
-                          info={bookPage}
-                          current={discussion?.id ?? null}
-                          onPick={(pick) => openDiscussion({ id: pick })}
-                        />
+                        <span>
+                          已带上：《{note.book!.title}》
+                          {note.book!.role_prompt ? ' · 书籍角色' : ''} · {note.title}原文
+                          {bookPage.summary ? '与摘要' : ''}
+                        </span>
                         {discussion?.id && (
                           <button
                             className="text-button"
@@ -863,6 +861,20 @@ export default function NotePane(props: Props) {
                         )}
                       </>
                     ),
+                    onReplied: () => setRetry((count) => count + 1),
+                    initialPrompt: discussion?.initial,
+                    initialQuote: discussion?.quote,
+                    onDraftSend: discussion?.id
+                      ? undefined
+                      : (content: string, quote: string) =>
+                          void askPage(content, quote || undefined),
+                    headerActions: (
+                      <DiscussionMenu
+                        info={bookPage}
+                        current={discussion?.id ?? null}
+                        onPick={(pick) => openDiscussion({ id: pick })}
+                      />
+                    ),
                   };
                 })()
               : { node: note })}
@@ -871,7 +883,8 @@ export default function NotePane(props: Props) {
             showLauncher={!bookPage}
             visible={assistantOpen && !editing}
             enabled={!editing && !props.globalAssistantOpen}
-            onGlobal={() => props.onGlobalAssistant(selection)}
+            // A page's discussions have their own switcher instead.
+            onGlobal={bookPage ? undefined : () => props.onGlobalAssistant(selection)}
             // Docked beside the article has no place in a full-screen view.
             mode={
               (compareOpen || splitOpen) && assistantMode === 'docked' ? 'floating' : assistantMode

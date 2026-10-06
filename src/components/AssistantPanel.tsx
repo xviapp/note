@@ -78,7 +78,10 @@ interface Props {
   // titled after it, while "attach current file" offers the page itself.
   title?: string;
   fileNode?: NoteDetail;
-  context?: string;
+  // What the conversation carries along, with an action beside it.
+  context?: ReactNode;
+  // A reply finished (the page's discussion list counts replies).
+  onReplied?: () => void;
   headerActions?: ReactNode;
   // Sent once the conversation has loaded (a question asked from the page).
   initialPrompt?: { content: string; quote?: string };
@@ -268,6 +271,7 @@ export function AssistantPanel(props: Props) {
           if (event.message)
             setMessages((old) => old.map((m) => (m.id === event.message!.id ? event.message! : m)));
           if (event.type === 'error') setError(event.error);
+          else props.onReplied?.();
           requestKey.current = null;
         }
       });
@@ -412,7 +416,7 @@ export function AssistantPanel(props: Props) {
             </button>
           </div>
         )}
-        {props.context && <p className="assistant-context">{props.context}</p>}
+        {props.context && <div className="assistant-context">{props.context}</div>}
         <div
           className="assistant-messages"
           data-selection-owner={scopeId}

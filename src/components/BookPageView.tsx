@@ -8,10 +8,34 @@ import { NodeIcon, Spinner } from './Primitives';
 export function BookPageNav({
   info,
   onNavigate,
+  toolbar = false,
 }: {
   info: BookPageInfo;
   onNavigate: (id: string) => void;
+  // Arrows in the toolbar on wide screens; a pager below the page otherwise.
+  toolbar?: boolean;
 }) {
+  if (!toolbar)
+    return (
+      <nav className="book-pager" aria-label="翻页">
+        <button
+          className="button compact"
+          disabled={!info.prev}
+          onClick={() => info.prev && onNavigate(info.prev)}
+        >
+          <ChevronLeft size={16} />
+          <span>上一页</span>
+        </button>
+        <button
+          className="button compact"
+          disabled={!info.next}
+          onClick={() => info.next && onNavigate(info.next)}
+        >
+          <span>下一页</span>
+          <ChevronRight size={16} />
+        </button>
+      </nav>
+    );
   return (
     <div className="book-page-nav">
       <button
