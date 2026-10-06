@@ -15,7 +15,11 @@ export function AppUpdates() {
     build: number;
     certificate: string;
   }>();
-  const [proxyInfo, setProxyInfo] = useState<{ sourceVersion: string; sourceCommit: string; coreVersion: string }>();
+  const [proxyInfo, setProxyInfo] = useState<{
+    sourceVersion: string;
+    sourceCommit: string;
+    coreVersion: string;
+  }>();
   const [release, setRelease] = useState<AndroidRelease | null>(null);
   const [checked, setChecked] = useState(false);
   const [busy, setBusy] = useState(false);
@@ -26,7 +30,11 @@ export function AppUpdates() {
         .then(({ device }) => device.getBuildInfo())
         .then(setInstalled)
         .catch(() => setMessage('无法读取安装版本，请重新打开应用。'));
-    if (android) void nativeProxy.getInfo().then(setProxyInfo).catch(() => {});
+    if (android)
+      void nativeProxy
+        .getInfo()
+        .then(setProxyInfo)
+        .catch(() => {});
   }, [android]);
   const newer = android && release && installed && release.build > installed.build;
   const compatible = !release || installed?.certificate === release.certificate;
@@ -111,10 +119,21 @@ export function AppUpdates() {
         <div className="setting-row">
           <div>
             <strong>内置网络代理</strong>
-            <p>{proxyInfo ? `v2rayNG ${proxyInfo.sourceVersion} · ${proxyInfo.coreVersion}` : 'v2rayNG · Xray'}</p>
+            <p>
+              {proxyInfo
+                ? `v2rayNG ${proxyInfo.sourceVersion} · ${proxyInfo.coreVersion}`
+                : 'v2rayNG · Xray'}
+            </p>
             <p>随页间更新；来源与许可证保留。</p>
           </div>
-          <button className="button" onClick={() => void nativeProxy.openLicenses().catch(() => setMessage('无法打开开源许可，请重试。'))}>开源许可</button>
+          <button
+            className="button"
+            onClick={() =>
+              void nativeProxy.openLicenses().catch(() => setMessage('无法打开开源许可，请重试。'))
+            }
+          >
+            开源许可
+          </button>
         </div>
       )}
       {message && (

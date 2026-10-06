@@ -10,9 +10,6 @@ object AppConfig {
     /** Directory names used in the app's file system. */
     const val DIR_ASSETS = "assets"
 
-    const val WEBDAV_BACKUP_DIR = "backups"
-    const val WEBDAV_BACKUP_FILE_NAME = "backup_ng.zip"
-
     // Default subscription ID for ungrouped servers
     const val DEFAULT_SUBSCRIPTION_ID = "__default_subscription__"
 
@@ -215,9 +212,7 @@ object AppConfig {
     )
 
     val GEO_FILES_SOURCES = arrayListOf(
-        "Loyalsoldier/v2ray-rules-dat",
-        "runetfreedom/russia-v2ray-rules-dat",
-        "Chocolate4U/Iran-v2ray-rules"
+        "Loyalsoldier/v2ray-rules-dat"
     )
 
     val BUILTIN_OUTBOUND_TAGS = setOf(

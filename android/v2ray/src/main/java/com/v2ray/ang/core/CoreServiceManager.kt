@@ -10,12 +10,10 @@ import android.net.ConnectivityManager
 import android.os.Build
 import androidx.core.content.ContextCompat
 import com.v2ray.ang.AppConfig
-import com.v2ray.ang.contracts.IDialerService
 import com.v2ray.ang.contracts.ServiceControl
 import com.v2ray.ang.dto.ConnectionTestResult
 import com.v2ray.ang.dto.OutboundTrafficStat
 import com.v2ray.ang.dto.entities.ProfileItem
-import com.v2ray.ang.enums.BrowserDialerMode
 import com.v2ray.ang.extension.delay
 import com.v2ray.ang.extension.isNotNullEmpty
 import com.v2ray.ang.handler.MmkvManager
@@ -23,8 +21,6 @@ import com.v2ray.ang.handler.NotificationManager
 import com.v2ray.ang.handler.SettingsManager
 import com.v2ray.ang.handler.SpeedtestManager
 import com.v2ray.ang.helper.MessageHelper
-import com.v2ray.ang.service.DialerNativeService
-import com.v2ray.ang.service.DialerWebviewService
 import com.v2ray.ang.service.NetworkMonitor
 import com.v2ray.ang.util.LogUtil
 import com.v2ray.ang.util.Utils
@@ -46,7 +42,6 @@ object CoreServiceManager {
     private val mMsgReceive = ReceiveMessageHandler()
     private var receiverRegistered = false
     private var currentConfig: ProfileItem? = null
-    private var browserDialer: IDialerService? = null
     private var networkMonitor: NetworkMonitor? = null
     private val connectionTestScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
 
@@ -127,40 +122,11 @@ object CoreServiceManager {
         }
 
         currentConfig = config
-        val dialerMode = BrowserDialerMode.from(config.browserDialerMode)
-        val dialerAddr = if (dialerMode != null) {
-            "127.0.0.1:${Utils.findRandomFreePort()}"
-        } else {
-            ""
-        }
-
-
         NotificationManager.showNotification(currentConfig)
-        if (dialerAddr.isNotNullEmpty()) {
-            CoreNativeManager.reconcileBrowserDialer(dialerAddr)
-        }
         coreController.startLoop(com.v2ray.ang.embedded.EmbeddedProxy.runtimeConfig(result.content), 0)
 
         if (!isRunning()) {
             error("Core failed to start")
-        }
-
-        if (browserDialer != null) {
-            browserDialer!!.stop()
-            browserDialer = null
-        }
-        when (dialerMode) {
-            BrowserDialerMode.OKHTTP -> {
-                browserDialer = DialerNativeService()
-                browserDialer!!.start(service, dialerAddr)
-            }
-
-            BrowserDialerMode.WEBVIEW -> {
-                browserDialer = DialerWebviewService()
-                browserDialer!!.start(service, dialerAddr)
-            }
-
-            else -> {}
         }
 
         if (!isReload) {
@@ -189,13 +155,6 @@ object CoreServiceManager {
             } catch (e: Exception) {
                 LogUtil.e(AppConfig.TAG, "StartCore-Manager: Failed to stop V2Ray loop", e)
             }
-        }
-
-        // Close existing browser dialer
-        CoreNativeManager.reconcileBrowserDialer("")
-        if (browserDialer != null) {
-            browserDialer!!.stop()
-            browserDialer = null
         }
 
         MessageHelper.sendMsg2UI(service, AppConfig.MSG_STATE_STOP_SUCCESS, "")

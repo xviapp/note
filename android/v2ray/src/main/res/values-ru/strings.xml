@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">Сохранить профиль</string>
 
-    <string name="menu_item_import_config_qrcode">Импорт из QR-кода</string>
     <string name="menu_item_import_config_clipboard">Импорт из буфера обмена</string>
     <string name="menu_item_import_config_local">Импорт из файла</string>
     <string name="menu_item_import_config_policy_group">Добавить политику группы</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">Проверять сертификат узла по имени</string>
     <string name="server_lab_pinned_ca256">Отпечаток сертификата (SHA-256)</string>
-    <string name="server_lab_browser_dialer">Использовать Browser Dialer</string>
 
     <string name="pinned_ca256_action_fetch">Получить отпечаток сертификата</string>
     <string name="toast_fetch_cert_sha256_success">Отпечаток сертификата успешно получен</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">Добавить файлы</string>
     <string name="menu_item_add_url">Добавить URL</string>
-    <string name="menu_item_scan_qrcode">Сканировать QR-код</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">Добавить URL ресурса</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">Сортировать по результатам теста</string>
     
     <string name="filter_config_all">Все</string>
-    <string name="summary_scan_qrcode">Нажмите на экран, чтобы открыть камеру для сканирования</string>
     <string name="title_del_duplicate_config_count">Удалено дубликатов профилей: %d</string>
     <string name="title_del_config_count">Удалено профилей: %d</string>
     <string name="title_import_config_count">Импортировано профилей: %d</string>
@@ -269,7 +265,6 @@
     <string name="routing_settings_import_predefined_rulesets">Импорт набора правил</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">Импорт правил из буфера обмена</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">Импорт правил из QR-кода</string>
     <string name="routing_settings_export_rulesets_to_clipboard">Экспорт правил в буфер обмена</string>
     <string name="routing_settings_locked">Постоянное (сохранится при импорте правил)</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -330,12 +325,6 @@
     <string name="toast_profile_storage_cleanup">Удалено неиспользуемых профилей: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">Не удалось достоверно определить неиспользуемые данные профилей. Ничего не удалено.</string>
     <string name="title_configuration_share">Поделиться конфигурацией</string>
-    <string name="title_webdav_config_setting">Настройки WebDAV</string>
-    <string name="title_webdav_config_setting_unknown">Необходимо настроить WebDAV</string>
-    <string name="title_webdav_url">URL сервера</string>
-    <string name="title_webdav_user">Пользователь</string>
-    <string name="title_webdav_pass">Пароль</string>
-    <string name="title_webdav_remote_path">Удалённый путь (необязательно)</string>
 
     <string name="share_method_qrcode">QR-код</string>
     <string name="share_method_clipboard">Копировать ссылку профиля</string>
@@ -350,8 +339,6 @@
     <string name="routing_preset_china_whitelist">Белый список Китая</string>
     <string name="routing_preset_china_blacklist">Чёрный список Китая</string>
     <string name="routing_preset_global">Общие</string>
-    <string name="routing_preset_iran_whitelist">Белый список Ирана</string>
-    <string name="routing_preset_russia_whitelist">Белый список России</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>Не определять</item>
@@ -366,8 +353,6 @@
         <item>Циклический выбор (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">Локально</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">Обновить журнал</string>
     <string name="toast_permission_denied_for">Нет разрешения: %1$s</string>
@@ -401,7 +386,6 @@
     <string name="acc_save">Сохранить</string>
     <string name="acc_update_subscriptions">Обновить подписки</string>
     
-    <string name="permission_camera">Камера</string>
 
     <string name="subscription_update_updating">Обновление подписки: %1$s</string>
     <string name="subscription_update_progress">Тестирование %2$s: %1$s</string>

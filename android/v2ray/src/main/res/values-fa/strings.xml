@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">ذخیره کانفیگ</string>
 
-    <string name="menu_item_import_config_qrcode">کانفیگ را از کد QR وارد کنید</string>
     <string name="menu_item_import_config_clipboard">کانفیگ را از کلیپ ‌بورد وارد کنید</string>
     <string name="menu_item_import_config_local">کانفیگ را از محلی وارد کنید</string>
     <string name="menu_item_import_config_policy_group">افزودن [گروه خط‌‌ مشی]</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">تأیید گواهی همتا بر اساس نام</string>
     <string name="server_lab_pinned_ca256">اثر انگشت گواهی (SHA-256)</string>
-    <string name="server_lab_browser_dialer">فعال‌سازی Browser Dialer</string>
 
     <string name="pinned_ca256_action_fetch">دریافت اثر انگشت گواهی</string>
     <string name="toast_fetch_cert_sha256_success">اثر انگشت گواهی با موفقیت دریافت شد</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">افزودن فایل ‌ها</string>
     <string name="menu_item_add_url">افزودن URL</string>
-    <string name="menu_item_scan_qrcode">اسکن کد QR</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">افزودن URL منبع</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">مرتب‌سازی بر اساس نتایج آزمایش</string>
     
     <string name="filter_config_all">همه</string>
-    <string name="summary_scan_qrcode">برای باز کردن دوربین و اسکن، روی صفحه بزنید</string>
     <string name="title_del_duplicate_config_count">حذف %d کانفیگ تکراری</string>
     <string name="title_del_config_count">حذف %d کانفیگ</string>
     <string name="title_import_config_count">وارد کردن %d کانفیگ</string>
@@ -265,7 +261,6 @@
     <string name="routing_settings_import_predefined_rulesets">وارد کردن مجموعه قوانین از پیش تعریف شده</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">وارد کردن مجموعه قوانین از کلیپ بورد</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">وارد کردن مجموعه قوانین از کد QR</string>
     <string name="routing_settings_export_rulesets_to_clipboard">صادر کردن مجموعه قوانین به کلیپ بورد</string>
     <string name="routing_settings_locked">قفل است، این قانون را هنگام وارد کردن از پیش تنظیم‌ ها حفظ کنید</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -326,12 +321,6 @@
     <string name="toast_profile_storage_cleanup">پروفایل‌های بلااستفاده حذف شدند: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">امکان تشخیص مطمئن داده‌های پروفایل بلااستفاده وجود نداشت. هیچ موردی حذف نشد.</string>
     <string name="title_configuration_share">اشتراک گذاری پیکربندی</string>
-    <string name="title_webdav_config_setting">تنظیمات WebDAV</string>
-    <string name="title_webdav_config_setting_unknown">لطفاً ابتدا WebDAV را پیکربندی کنید.</string>
-    <string name="title_webdav_url">URL سرور WebDAV</string>
-    <string name="title_webdav_user">نام کاربری</string>
-    <string name="title_webdav_pass">رمز عبور</string>
-    <string name="title_webdav_remote_path">دایرکتوری راه دور (اختیاری)</string>
 
     <string name="share_method_qrcode">کد QR</string>
     <string name="share_method_clipboard">کپی لینک کانفیگ</string>
@@ -346,8 +335,6 @@
     <string name="routing_preset_china_whitelist">لیست سفید چین ( دور زدن سرزمین اصلی )</string>
     <string name="routing_preset_china_blacklist">لیست سیاه چین</string>
     <string name="routing_preset_global">جهانی (Global)</string>
-    <string name="routing_preset_iran_whitelist">فهرست سفید ایران</string>
-    <string name="routing_preset_russia_whitelist">لیست سفید روسیه</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>نام‌گشایی نشود</item>
@@ -362,8 +349,6 @@
         <item>چرخشی (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">محلی</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">تازه‌سازی گزارش</string>
     <string name="toast_permission_denied_for">مجوز %1$s داده نشد</string>
@@ -397,7 +382,6 @@
     <string name="acc_save">ذخیره</string>
     <string name="acc_update_subscriptions">به‌روزرسانی اشتراک‌ها</string>
     
-    <string name="permission_camera">دوربین</string>
 
     <string name="subscription_update_updating">در حال به‌روزرسانی اشتراک: %1$s</string>
     <string name="subscription_update_progress">در حال آزمایش %2$s: %1$s</string>

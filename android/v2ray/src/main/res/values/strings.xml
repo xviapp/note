@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">Save config</string>
 
-    <string name="menu_item_import_config_qrcode">Import from QR code</string>
     <string name="menu_item_import_config_clipboard">Import from Clipboard</string>
     <string name="menu_item_import_config_local">Import from a local file</string>
     <string name="menu_item_import_config_policy_group">Add [Policy group]</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">Verify peer certificate by name</string>
     <string name="server_lab_pinned_ca256">Certificate fingerprint (SHA-256)</string>
-    <string name="server_lab_browser_dialer">Enable Browser Dialer</string>
 
     <string name="pinned_ca256_action_fetch">Fetch certificate fingerprint</string>
     <string name="toast_fetch_cert_sha256_success">Certificate fingerprint fetched successfully</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">Add files</string>
     <string name="menu_item_add_url">Add URL</string>
-    <string name="menu_item_scan_qrcode">Scan QR code</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">Add asset URL</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">Sort by test results</string>
     
     <string name="filter_config_all">All</string>
-    <string name="summary_scan_qrcode">Tap the screen to open the camera and scan</string>
     <string name="title_del_duplicate_config_count">Delete %d duplicate configs</string>
     <string name="title_del_config_count">Delete %d configs</string>
     <string name="title_import_config_count">Import %d configs</string>
@@ -265,7 +261,6 @@
     <string name="routing_settings_import_predefined_rulesets">Import predefined rulesets</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">Import ruleset from clipboard</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">Import ruleset from QR code</string>
     <string name="routing_settings_export_rulesets_to_clipboard">Export ruleset to clipboard</string>
     <string name="routing_settings_locked">Locked; keep this rule when importing presets</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -326,12 +321,6 @@
     <string name="toast_profile_storage_cleanup">Unused profiles removed: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">Profile storage could not be safely classified. Nothing was removed.</string>
     <string name="title_configuration_share">Share config</string>
-    <string name="title_webdav_config_setting">WebDAV Settings</string>
-    <string name="title_webdav_config_setting_unknown">Please configure WebDAV first.</string>
-    <string name="title_webdav_url">WebDAV server URL</string>
-    <string name="title_webdav_user">Username</string>
-    <string name="title_webdav_pass">Password</string>
-    <string name="title_webdav_remote_path">Remote directory (optional)</string>
 
     <string name="share_method_qrcode">QR code</string>
     <string name="share_method_clipboard">Copy profile link</string>
@@ -346,8 +335,6 @@
     <string name="routing_preset_china_whitelist">China Whitelist</string>
     <string name="routing_preset_china_blacklist">China Blacklist</string>
     <string name="routing_preset_global">Global</string>
-    <string name="routing_preset_iran_whitelist">Iran Whitelist</string>
-    <string name="routing_preset_russia_whitelist">Russia Whitelist</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>Do not resolve</item>
@@ -362,8 +349,6 @@
         <item>Round Robin</item>
     </string-array>
 
-    <string name="backup_location_local">Local</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">Refresh log</string>
     <string name="toast_permission_denied_for">%1$s permission denied</string>
@@ -397,7 +382,6 @@
     <string name="acc_save">Save</string>
     <string name="acc_update_subscriptions">Update subscriptions</string>
     
-    <string name="permission_camera">Camera</string>
 
     <string name="subscription_update_updating">Updating subscription: %1$s</string>
     <string name="subscription_update_progress">Testing %2$s: %1$s</string>

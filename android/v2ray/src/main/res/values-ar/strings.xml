@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">حفظ التكوين</string>
 
-    <string name="menu_item_import_config_qrcode">استيراد التكوين من رمز QR</string>
     <string name="menu_item_import_config_clipboard">استيراد التكوين من الحافظة</string>
     <string name="menu_item_import_config_local">استيراد التكوين من الجهاز</string>
     <string name="menu_item_import_config_policy_group">إضافة [مجموعة سياسات]</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">التحقق من شهادة النظير بالاسم</string>
     <string name="server_lab_pinned_ca256">بصمة الشهادة (SHA-256)</string>
-    <string name="server_lab_browser_dialer">تمكين Browser Dialer</string>
 
     <string name="pinned_ca256_action_fetch">جلب بصمة الشهادة</string>
     <string name="toast_fetch_cert_sha256_success">تم جلب بصمة الشهادة بنجاح</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">إضافة ملفات</string>
     <string name="menu_item_add_url">إضافة URL</string>
-    <string name="menu_item_scan_qrcode">مسح رمز QR</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">إضافة عنوان URL للأصل</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">الفرز حسب نتائج الاختبار</string>
     
     <string name="filter_config_all">الكل</string>
-    <string name="summary_scan_qrcode">انقر على الشاشة لفتح الكاميرا والمسح</string>
     <string name="title_del_duplicate_config_count">حذف %d من الإعدادات المكررة</string>
     <string name="title_del_config_count">حذف %d من التكوينات</string>
     <string name="title_import_config_count">استيراد %d من التكوينات</string>
@@ -273,7 +269,6 @@
     <string name="routing_settings_import_predefined_rulesets">استيراد مجموعات قواعد محددة مسبقاً</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">استيراد مجموعة قواعد من الحافظة</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">استيراد مجموعة قواعد من رمز الاستجابة السريعة</string>
     <string name="routing_settings_export_rulesets_to_clipboard">تصدير مجموعة القواعد إلى الحافظة</string>
     <string name="routing_settings_locked">مقفلة؛ احتفظ بهذه القاعدة عند استيراد الإعدادات المسبقة</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -334,12 +329,6 @@
     <string name="toast_profile_storage_cleanup">تم حذف ملفات التعريف غير المستخدمة: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">تعذّر تحديد بيانات ملفات التعريف غير المستخدمة بأمان. لم يُحذف أي شيء.</string>
     <string name="title_configuration_share">مشاركة التكوين</string>
-    <string name="title_webdav_config_setting">إعدادات WebDAV</string>
-    <string name="title_webdav_config_setting_unknown">يرجى إعداد WebDAV أولاً.</string>
-    <string name="title_webdav_url">عنوان URL لخادم WebDAV</string>
-    <string name="title_webdav_user">اسم المستخدم</string>
-    <string name="title_webdav_pass">كلمة المرور</string>
-    <string name="title_webdav_remote_path">الدليل البعيد (اختياري)</string>
 
     <string name="share_method_qrcode">رمز QR</string>
     <string name="share_method_clipboard">نسخ رابط التكوين</string>
@@ -354,8 +343,6 @@
     <string name="routing_preset_china_whitelist">القائمة البيضاء للصين</string>
     <string name="routing_preset_china_blacklist">القائمة السوداء للصين</string>
     <string name="routing_preset_global">عالمي</string>
-    <string name="routing_preset_iran_whitelist">القائمة البيضاء لإيران</string>
-    <string name="routing_preset_russia_whitelist">القائمة البيضاء لروسيا</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>عدم الحل</item>
@@ -370,8 +357,6 @@
         <item>تناوب دائري (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">محلي</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">تحديث السجل</string>
     <string name="toast_permission_denied_for">تم رفض إذن %1$s</string>
@@ -405,7 +390,6 @@
     <string name="acc_save">حفظ</string>
     <string name="acc_update_subscriptions">تحديث الاشتراكات</string>
     
-    <string name="permission_camera">الكاميرا</string>
 
     <string name="subscription_update_updating">جارٍ تحديث الاشتراك: %1$s</string>
     <string name="subscription_update_progress">جارٍ اختبار %2$s: %1$s</string>

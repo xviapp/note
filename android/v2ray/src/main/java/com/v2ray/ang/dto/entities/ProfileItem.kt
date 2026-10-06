@@ -73,6 +73,7 @@ data class ProfileItem(
     var policyGroupFallbackTag: String? = null,
     var proxyChainProfiles: String? = null,
 
+    // Browser Dialer was removed; kept so older backups still parse.
     var browserDialerMode: String? = null,
 ) {
 

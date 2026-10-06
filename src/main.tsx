@@ -11,9 +11,14 @@ import { prepareOfflineShell } from './offline-shell';
 async function start() {
   if (import.meta.env.MODE === 'android') {
     (await import('./mobile')).installMobile();
-    await prepareProxy();
+    void prepareProxy();
   }
-  createRoot(document.getElementById('root')!).render(<><App /><ProxyStatus /></>);
+  createRoot(document.getElementById('root')!).render(
+    <>
+      <App />
+      <ProxyStatus />
+    </>,
+  );
   void prepareOfflineShell().catch(() => {});
 }
 void start();

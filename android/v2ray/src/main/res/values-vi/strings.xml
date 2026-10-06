@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">Lưu cấu hình</string>
 
-    <string name="menu_item_import_config_qrcode">Nhập cấu hình từ mã QR</string>
     <string name="menu_item_import_config_clipboard">Nhập cấu hình từ bảng tạm</string>
     <string name="menu_item_import_config_local">Nhập cấu hình từ thiết bị</string>
     <string name="menu_item_import_config_policy_group">Thêm [Nhóm chính sách]</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">Xác minh chứng chỉ ngang hàng theo tên</string>
     <string name="server_lab_pinned_ca256">Dấu vân tay chứng chỉ (SHA-256)</string>
-    <string name="server_lab_browser_dialer">Bật Browser Dialer</string>
 
     <string name="pinned_ca256_action_fetch">Lấy dấu vân tay chứng chỉ</string>
     <string name="toast_fetch_cert_sha256_success">Đã lấy dấu vân tay chứng chỉ thành công</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">Thêm tệp</string>
     <string name="menu_item_add_url">Thêm URL</string>
-    <string name="menu_item_scan_qrcode">Quét mã QR</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">Thêm URL tài nguyên</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">Sắp xếp theo kết quả kiểm tra</string>
     
     <string name="filter_config_all">Tất cả</string>
-    <string name="summary_scan_qrcode">Chạm vào màn hình để mở camera và quét</string>
     <string name="title_del_duplicate_config_count">Xoá %d cấu hình trùng lặp</string>
     <string name="title_del_config_count">Xóa %d cấu hình</string>
     <string name="title_import_config_count">Nhập %d cấu hình</string>
@@ -263,7 +259,6 @@
     <string name="routing_settings_import_predefined_rulesets">Nhập các bộ quy tắc được xác định trước</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">Nhập bộ quy tắc từ bảng tạm</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">Nhập bộ quy tắc từ mã QR</string>
     <string name="routing_settings_export_rulesets_to_clipboard">Xuất bộ quy tắc vào bảng tạm</string>
     <string name="routing_settings_locked">Đã khóa; giữ quy tắc này khi nhập cài đặt sẵn</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -324,12 +319,6 @@
     <string name="toast_profile_storage_cleanup">Đã xóa cấu hình không dùng: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">Không thể xác định chắc chắn dữ liệu cấu hình không còn được sử dụng. Không có dữ liệu nào bị xóa.</string>
     <string name="title_configuration_share">Chia sẻ cấu hình</string>
-    <string name="title_webdav_config_setting">Cài đặt WebDAV</string>
-    <string name="title_webdav_config_setting_unknown">Vui lòng cấu hình WebDAV trước.</string>
-    <string name="title_webdav_url">URL máy chủ WebDAV</string>
-    <string name="title_webdav_user">Tên người dùng</string>
-    <string name="title_webdav_pass">Mật khẩu</string>
-    <string name="title_webdav_remote_path">Thư mục từ xa (không bắt buộc)</string>
 
     <string name="share_method_qrcode">Mã QR</string>
     <string name="share_method_clipboard">Sao chép liên kết cấu hình</string>
@@ -344,8 +333,6 @@
     <string name="routing_preset_china_whitelist">Danh sách trắng Trung Quốc</string>
     <string name="routing_preset_china_blacklist">Danh sách đen Trung Quốc</string>
     <string name="routing_preset_global">Toàn cầu</string>
-    <string name="routing_preset_iran_whitelist">Danh sách trắng Iran</string>
-    <string name="routing_preset_russia_whitelist">Danh sách trắng Nga</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>Không phân giải</item>
@@ -360,8 +347,6 @@
         <item>Luân phiên (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">Cục bộ</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">Làm mới nhật ký</string>
     <string name="toast_permission_denied_for">Chưa cấp quyền: %1$s</string>
@@ -395,7 +380,6 @@
     <string name="acc_save">Lưu</string>
     <string name="acc_update_subscriptions">Cập nhật các gói đăng ký</string>
     
-    <string name="permission_camera">Máy ảnh</string>
 
     <string name="subscription_update_updating">Đang cập nhật gói đăng ký: %1$s</string>
     <string name="subscription_update_progress">Đang kiểm tra %2$s: %1$s</string>

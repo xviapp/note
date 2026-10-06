@@ -26,7 +26,6 @@ import com.v2ray.ang.dto.entities.RulesetItem
 import com.v2ray.ang.dto.entities.ServerAffiliationInfo
 import com.v2ray.ang.dto.entities.SubscriptionCache
 import com.v2ray.ang.dto.entities.SubscriptionItem
-import com.v2ray.ang.dto.entities.WebDavConfig
 import com.v2ray.ang.util.JsonUtil
 import com.v2ray.ang.util.Utils
 import kotlinx.coroutines.flow.collectLatest
@@ -50,7 +49,6 @@ object MmkvManager {
     private const val KEY_ANG_CONFIGS = "ANG_CONFIGS"
     private const val KEY_SUB_SERVER_PREFIX = "SUB_SERVERS_"
     private const val KEY_SUB_IDS = "SUB_IDS"
-    private const val KEY_WEBDAV_CONFIG = "WEBDAV_CONFIG"
 
     private val recoveryHandler = object : MMKVHandler {
         override fun onMMKVCRCCheckFail(mmapID: String) =
@@ -960,25 +958,6 @@ object MmkvManager {
         return settingsStorage.decodeStringSet(key)
     }
 
-
-    //endregion
-
-    //region WebDAV
-
-    /**
-     * Encodes the WebDAV config as JSON into storage.
-     */
-    fun encodeWebDavConfig(config: WebDavConfig): Boolean {
-        return mainStorage.encode(KEY_WEBDAV_CONFIG, JsonUtil.toJson(config))
-    }
-
-    /**
-     * Decodes the WebDAV config from storage.
-     */
-    fun decodeWebDavConfig(): WebDavConfig? {
-        val json = mainStorage.decodeString(KEY_WEBDAV_CONFIG) ?: return null
-        return JsonUtil.fromJsonSafe(json, WebDavConfig::class.java)
-    }
 
     //endregion
 

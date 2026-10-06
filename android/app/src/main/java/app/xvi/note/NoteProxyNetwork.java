@@ -1,6 +1,7 @@
 package app.xvi.note;
 
 import android.app.Activity;
+import android.app.Application;
 import android.content.BroadcastReceiver;
 import android.content.Context;
 import android.content.Intent;
@@ -42,6 +43,9 @@ final class NoteProxyNetwork {
     private boolean suspended;
     private boolean applying;
     private long deadline;
+    // Activities currently started; the daemon is polled only while the app is on screen.
+    private int visible;
+    private final Runnable beat = this::heartbeat;
 
     private NoteProxyNetwork(Context context) {
         this.context = context;
@@ -62,7 +66,21 @@ final class NoteProxyNetwork {
                 }
             }
         }, new IntentFilter(AppConfig.BROADCAST_ACTION_ACTIVITY), ContextCompat.RECEIVER_NOT_EXPORTED);
-        main.postDelayed(this::heartbeat, 3000);
+        ((Application) context).registerActivityLifecycleCallbacks(new Application.ActivityLifecycleCallbacks() {
+            @Override public void onActivityStarted(Activity activity) {
+                // Back on screen: check at once, then keep polling.
+                if (visible++ == 0) { main.removeCallbacks(beat); main.post(beat); }
+            }
+            @Override public void onActivityStopped(Activity activity) {
+                if (--visible == 0) main.removeCallbacks(beat);
+            }
+            @Override public void onActivityCreated(Activity activity, Bundle state) {}
+            @Override public void onActivityResumed(Activity activity) {}
+            @Override public void onActivityPaused(Activity activity) {}
+            @Override public void onActivitySaveInstanceState(Activity activity, Bundle state) {}
+            @Override public void onActivityDestroyed(Activity activity) {}
+        });
+        main.postDelayed(beat, 3000);
     }
 
     void prepare(Consumer<JSObject> done) {
@@ -133,7 +151,8 @@ final class NoteProxyNetwork {
                 else if (phase.equals("running")) fail(context.getString(R.string.proxy_stopped));
             });
         }
-        main.postDelayed(this::heartbeat, 3000);
+        main.removeCallbacks(beat);
+        if (visible > 0) main.postDelayed(beat, 3000);
     }
     private void selectProxy(int port) {
         if (port < 1024 || port > 65535) { fail(context.getString(R.string.proxy_start_failed)); return; }

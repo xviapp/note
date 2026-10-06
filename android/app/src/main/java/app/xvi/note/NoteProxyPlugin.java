@@ -21,8 +21,8 @@ public class NoteProxyPlugin extends Plugin {
     @PluginMethod public void setEnabled(PluginCall call) { network.setEnabled(call.getBoolean("enabled", false), call::resolve); }
     @PluginMethod public void retry(PluginCall call) { network.setEnabled(true, call::resolve); }
     @PluginMethod public void getInfo(PluginCall call) {
-        call.resolve(new JSObject().put("sourceVersion", "2.3.10")
-            .put("sourceCommit", "a4dd3d08de80958701247b00a8a979131192d1b4")
+        call.resolve(new JSObject().put("sourceVersion", com.v2ray.ang.BuildConfig.SOURCE_VERSION)
+            .put("sourceCommit", com.v2ray.ang.BuildConfig.SOURCE_COMMIT)
             .put("coreVersion", com.v2ray.ang.core.CoreNativeManager.INSTANCE.getLibVersion()));
     }
     @PluginMethod public void openLicenses(PluginCall call) {

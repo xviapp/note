@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">儲存設定</string>
 
-    <string name="menu_item_import_config_qrcode">從 QR Code 匯入設定</string>
     <string name="menu_item_import_config_clipboard">從剪貼簿匯入設定</string>
     <string name="menu_item_import_config_local">從本機匯入</string>
     <string name="menu_item_import_config_policy_group">新增 [策略組]</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">Verify peer cert by name</string>
     <string name="server_lab_pinned_ca256">憑證指紋 (SHA-256)</string>
-    <string name="server_lab_browser_dialer">啟用 Browser Dialer</string>
 
     <string name="pinned_ca256_action_fetch">取得憑證指紋</string>
     <string name="toast_fetch_cert_sha256_success">已成功取得憑證指紋</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">新增檔案</string>
     <string name="menu_item_add_url">新增 URL</string>
-    <string name="menu_item_scan_qrcode">掃描 QR Code</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">新增資源 URL</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">依測試結果排序</string>
     
     <string name="filter_config_all">所有</string>
-    <string name="summary_scan_qrcode">點一下螢幕以開啟相機並掃描</string>
     <string name="title_del_duplicate_config_count">刪除 %d 個重複設定</string>
     <string name="title_del_config_count">刪除 %d 個設定</string>
     <string name="title_import_config_count">匯入 %d 個設定</string>
@@ -263,7 +259,6 @@
     <string name="routing_settings_import_predefined_rulesets">匯入預先定義的規則集</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">從剪貼簿匯入規則集</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">從 QR Code 匯入規則集</string>
     <string name="routing_settings_export_rulesets_to_clipboard">匯出規則集至剪貼簿</string>
     <string name="routing_settings_locked">鎖定中，匯入預設時不刪除此規則</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -324,12 +319,6 @@
     <string name="toast_profile_storage_cleanup">已刪除未使用的設定檔：%1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">無法安全判定哪些設定檔資料未被使用。未刪除任何資料。</string>
     <string name="title_configuration_share">分享設定</string>
-    <string name="title_webdav_config_setting">WebDAV 設定</string>
-    <string name="title_webdav_config_setting_unknown">請先設定 WebDAV</string>
-    <string name="title_webdav_url">WebDAV 伺服器 URL</string>
-    <string name="title_webdav_user">使用者名稱</string>
-    <string name="title_webdav_pass">密碼</string>
-    <string name="title_webdav_remote_path">遠端目錄（可選）</string>
 
     <string name="share_method_qrcode">QR Code</string>
     <string name="share_method_clipboard">複製設定連結</string>
@@ -344,8 +333,6 @@
     <string name="routing_preset_china_whitelist">中國大陸白名單</string>
     <string name="routing_preset_china_blacklist">中國大陸黑名單</string>
     <string name="routing_preset_global">全域</string>
-    <string name="routing_preset_iran_whitelist">伊朗白名單</string>
-    <string name="routing_preset_russia_whitelist">俄羅斯白名單</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>不解析</item>
@@ -360,8 +347,6 @@
         <item>輪詢 (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">本機</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">重新整理日誌</string>
     <string name="toast_permission_denied_for">未授予 %1$s 權限</string>
@@ -395,7 +380,6 @@
     <string name="acc_save">儲存</string>
     <string name="acc_update_subscriptions">更新訂閱</string>
     
-    <string name="permission_camera">相機</string>
 
     <string name="subscription_update_updating">正在更新訂閱：%1$s</string>
     <string name="subscription_update_progress">正在測試 %2$s：%1$s</string>

@@ -38,10 +38,6 @@ import com.v2ray.ang.util.Utils
 import java.io.File
 
 class UserAssetUrlActivity : BaseComponentActivity() {
-    companion object {
-        const val ASSET_URL_QRCODE = "ASSET_URL_QRCODE"
-    }
-
     private val extDir by lazy { File(Utils.userAssetPath(this)) }
     private val editAssetId by lazy { intent.getStringExtra("assetId").orEmpty() }
     private lateinit var initialRemarks: String
@@ -51,18 +47,11 @@ class UserAssetUrlActivity : BaseComponentActivity() {
         super.onCreate(savedInstanceState)
 
         val assetItem = MmkvManager.decodeAsset(editAssetId)
-        val assetUrlQrcode = intent.getStringExtra(ASSET_URL_QRCODE)
-        val assetNameQrcode = File(assetUrlQrcode.toString()).name
 
         when {
             assetItem != null -> {
                 initialRemarks = assetItem.remarks
                 initialUrl = assetItem.url
-            }
-
-            assetUrlQrcode != null -> {
-                initialRemarks = assetNameQrcode
-                initialUrl = assetUrlQrcode
             }
 
             else -> {

@@ -8,7 +8,7 @@ import androidx.work.ExistingPeriodicWorkPolicy
 import androidx.work.NetworkType
 import androidx.work.PeriodicWorkRequestBuilder
 import androidx.work.WorkerParameters
-import androidx.work.multiprocess.RemoteWorkManager
+import androidx.work.WorkManager
 import androidx.work.workDataOf
 import com.v2ray.ang.AngApplication
 import com.v2ray.ang.AppConfig
@@ -74,7 +74,7 @@ object SubscriptionUpdater {
      * Call from: when a subscription is deleted.
      */
     fun cancelOne(context: Context = AngApplication.application, subId: String) {
-        RemoteWorkManager.getInstance(context)
+        WorkManager.getInstance(context)
             .cancelUniqueWork(taskName(subId))
     }
 
@@ -101,7 +101,7 @@ object SubscriptionUpdater {
         existingWorkPolicy: ExistingPeriodicWorkPolicy
     ) {
         val subItem = MmkvManager.decodeSubscription(subId) ?: return
-        val rw = RemoteWorkManager.getInstance(context)
+        val rw = WorkManager.getInstance(context)
         if (!subItem.autoUpdate) {
             cancelOne(context, subId)
             LogUtil.d(AppConfig.TAG, "SubscriptionUpdater: cancelled task for ${subItem.remarks}")

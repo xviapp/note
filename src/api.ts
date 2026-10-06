@@ -8,6 +8,7 @@ import {
   removeCachedNote,
 } from './offline-cache';
 import { isOffline, setOffline } from './connectivity';
+import { proxyReady } from './proxy';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -30,6 +31,7 @@ export async function api<T = Record<string, unknown>>(
   data?: unknown,
   key?: string,
 ): Promise<T> {
+  await proxyReady();
   const epoch = cacheEpoch();
   const authProbe = path === '/api/auth/status';
   if (isOffline() && !authProbe) {
@@ -128,6 +130,7 @@ export async function unlockNote(id: string) {
   noteTokens.set(id, result.token);
 }
 export async function upload(file: File): Promise<FileInfo> {
+  await proxyReady();
   const response = await fetch(
     `/api/files?name=${encodeURIComponent(file.name)}&size=${file.size}`,
     {

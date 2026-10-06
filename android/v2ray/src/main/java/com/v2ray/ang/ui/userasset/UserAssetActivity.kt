@@ -74,8 +74,7 @@ import java.util.Date
 
 private enum class AddAssetMenuAction(@StringRes val labelRes: Int) {
     File(R.string.menu_item_add_file),
-    Url(R.string.menu_item_add_url),
-    QRCode(R.string.menu_item_scan_qrcode)
+    Url(R.string.menu_item_add_url)
 }
 
 private data class AssetDeleteTarget(val guid: String, val name: String)
@@ -110,7 +109,6 @@ class UserAssetActivity : HelperBaseComponentActivity() {
             },
             onAddFileClick = { showFileChooser() },
             onAddUrlClick = { startActivity(Intent(this, UserAssetUrlActivity::class.java)) },
-            onAddQrcodeClick = { importAssetFromQRcode() },
             onDownloadClick = { downloadGeoFiles() },
             onEditAsset = { guid ->
                 startActivity(Intent(this, UserAssetUrlActivity::class.java).putExtra("assetId", guid))
@@ -183,32 +181,6 @@ class UserAssetActivity : HelperBaseComponentActivity() {
         null
     }
 
-    private fun importAssetFromQRcode(): Boolean {
-        launchQRCodeScanner { scanResult ->
-            if (scanResult != null) {
-                importAsset(scanResult)
-            }
-        }
-        return true
-    }
-
-    private fun importAsset(url: String?): Boolean {
-        try {
-            if (!Utils.isValidUrl(url)) {
-                toast(R.string.toast_invalid_url)
-                return false
-            }
-            startActivity(
-                Intent(this, UserAssetUrlActivity::class.java)
-                    .putExtra(UserAssetUrlActivity.ASSET_URL_QRCODE, url)
-            )
-        } catch (e: Exception) {
-            LogUtil.e(AppConfig.TAG, "Failed to import asset from URL", e)
-            return false
-        }
-        return true
-    }
-
     private fun downloadGeoFiles() {
         isLoadingState.value = true
         toast(R.string.msg_downloading_content)
@@ -258,7 +230,6 @@ internal fun UserAssetScreen(
     onGeoSourceSelected: (String) -> Unit,
     onAddFileClick: () -> Unit,
     onAddUrlClick: () -> Unit,
-    onAddQrcodeClick: () -> Unit,
     onDownloadClick: () -> Unit,
     onEditAsset: (String) -> Unit,
     onRemoveAsset: (String, String) -> Unit
@@ -291,7 +262,6 @@ internal fun UserAssetScreen(
                                 when (action) {
                                     AddAssetMenuAction.File -> onAddFileClick()
                                     AddAssetMenuAction.Url -> onAddUrlClick()
-                                    AddAssetMenuAction.QRCode -> onAddQrcodeClick()
                                 }
                             }
                         }

@@ -83,8 +83,7 @@ abstract class BaseServerActivity : BaseComponentActivity() {
             xhttpModeOptions = stringArrayResource(R.array.xhttp_mode).toList(),
             streamSecurityOptions = stringArrayResource(R.array.streamsecurityxs).toList(),
             uTlsOptions = stringArrayResource(R.array.streamsecurity_utls).toList(),
-            alpnOptions = stringArrayResource(R.array.streamsecurity_alpn).toList(),
-            browserDialerOptions = stringArrayResource(R.array.browser_dialer_mode_value).toList()
+            alpnOptions = stringArrayResource(R.array.streamsecurity_alpn).toList()
         )
 
     data class FieldOptions(
@@ -95,8 +94,7 @@ abstract class BaseServerActivity : BaseComponentActivity() {
         val xhttpModeOptions: List<String>,
         val streamSecurityOptions: List<String>,
         val uTlsOptions: List<String>,
-        val alpnOptions: List<String>,
-        val browserDialerOptions: List<String>
+        val alpnOptions: List<String>
     )
 
     @Composable
@@ -236,14 +234,6 @@ abstract class BaseServerActivity : BaseComponentActivity() {
                 state.finalMask,
                 { state.finalMask = it }
             )
-            if (state.network == NetworkType.WS.type || state.network == NetworkType.XHTTP.type) {
-                FormDropdownField(
-                    stringResource(R.string.server_lab_browser_dialer),
-                    state.browserDialerMode,
-                    options.browserDialerOptions,
-                    { state.browserDialerMode = it }
-                )
-            }
         }
     }
 

@@ -73,16 +73,13 @@ import sh.calvin.reorderable.rememberReorderableLazyListState
 private enum class RoutingMenuAction(@StringRes val labelRes: Int) {
     ImportPredefined(R.string.routing_settings_import_predefined_rulesets),
     ImportClipboard(R.string.routing_settings_import_rulesets_from_clipboard),
-    ImportQRCode(R.string.routing_settings_import_rulesets_from_qrcode),
     ExportClipboard(R.string.routing_settings_export_rulesets_to_clipboard)
 }
 
 private enum class RoutingPreset(val type: RoutingType, @StringRes val labelRes: Int) {
     ChinaWhitelist(RoutingType.WHITE, R.string.routing_preset_china_whitelist),
     ChinaBlacklist(RoutingType.BLACK, R.string.routing_preset_china_blacklist),
-    Global(RoutingType.GLOBAL, R.string.routing_preset_global),
-    IranWhitelist(RoutingType.WHITE_IRAN, R.string.routing_preset_iran_whitelist),
-    RussiaWhitelist(RoutingType.WHITE_RUSSIA, R.string.routing_preset_russia_whitelist)
+    Global(RoutingType.GLOBAL, R.string.routing_preset_global)
 }
 
 class RoutingSettingActivity : HelperBaseComponentActivity() {
@@ -110,7 +107,6 @@ class RoutingSettingActivity : HelperBaseComponentActivity() {
             },
             onImportPredefined = { type -> importPredefined(type) },
             onImportClipboard = { importFromClipboard() },
-            onImportQRcode = { importQRcode() },
             onExportClipboard = { export2Clipboard() }
         )
     }
@@ -159,24 +155,6 @@ class RoutingSettingActivity : HelperBaseComponentActivity() {
         }
     }
 
-    private fun importQRcode() {
-        launchQRCodeScanner { scanResult ->
-            if (scanResult != null) {
-                lifecycleScope.launch(Dispatchers.IO) {
-                    val result = SettingsManager.resetRoutingRulesets(scanResult)
-                    withContext(Dispatchers.Main) {
-                        if (result) {
-                            viewModel.reload()
-                            toastSuccess(R.string.toast_success)
-                        } else {
-                            toastError(R.string.toast_failure)
-                        }
-                    }
-                }
-            }
-        }
-    }
-
     private fun export2Clipboard() {
         val rulesetList = MmkvManager.decodeRoutingRulesets()
         if (rulesetList.isNullOrEmpty()) {
@@ -198,7 +176,6 @@ fun RoutingSettingScreen(
     onDomainStrategySelected: (String) -> Unit,
     onImportPredefined: (RoutingType) -> Unit,
     onImportClipboard: () -> Unit,
-    onImportQRcode: () -> Unit,
     onExportClipboard: () -> Unit
 ) {
     val rulesets by viewModel.rulesetsFlow.collectAsStateWithLifecycle()
@@ -245,7 +222,6 @@ fun RoutingSettingScreen(
                                 when (action) {
                                     RoutingMenuAction.ImportPredefined -> showPresetDialog = true
                                     RoutingMenuAction.ImportClipboard -> onImportClipboard()
-                                    RoutingMenuAction.ImportQRCode -> onImportQRcode()
                                     RoutingMenuAction.ExportClipboard -> onExportClipboard()
                                 }
                             }

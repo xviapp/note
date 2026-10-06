@@ -22,6 +22,8 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    // The UI is Simplified Chinese; drop the embedded proxy's and libraries' other translations.
+    androidResources { localeFilters += ['zh-rCN'] }
     splits {
         abi {
             enable true
@@ -69,7 +71,7 @@ dependencies {
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
     implementation project(':v2ray')
-    implementation files('../v2ray/libs/libv2ray.aar').builtBy(':v2ray:prepareXray')
+    implementation files('../v2ray/libs/libv2ray-core.aar').builtBy(':v2ray:prepareXray')
     implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     testImplementation "junit:junit:$junitVersion"

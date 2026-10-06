@@ -46,7 +46,6 @@ sealed interface MainAction {
     data object UpdateSubscriptions : MainAction
     data object ExportAll : MainAction
 
-    data object ImportQRcode : MainAction
     data object ImportClipboard : MainAction
     data object ImportConfigLocal : MainAction
     data class ImportManually(val type: Int) : MainAction

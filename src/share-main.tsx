@@ -19,8 +19,13 @@ if (Capacitor.isNativePlatform())
     const event = new CustomEvent('note:native-back', { cancelable: true });
     if (window.dispatchEvent(event)) void device.closeShare({}).catch(() => {});
   }).catch(() => {});
-async function start() {
-  await prepareProxy();
-  createRoot(document.getElementById('root')!).render(<><ShareWindow /><ProxyStatus /></>);
+function start() {
+  void prepareProxy();
+  createRoot(document.getElementById('root')!).render(
+    <>
+      <ShareWindow />
+      <ProxyStatus />
+    </>,
+  );
 }
 void start();

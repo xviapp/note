@@ -93,7 +93,6 @@ class MainActivity : HelperBaseComponentActivity() {
             onAction = { action ->
                 when (action) {
                     MainAction.TestCurrentServer -> handleLayoutTestClick()
-                    MainAction.ImportQRcode -> importQRcode()
                     MainAction.ImportClipboard -> importClipboard()
                     MainAction.ImportConfigLocal -> importConfigLocal()
                     is MainAction.ImportManually -> importManually(action.type)
@@ -160,14 +159,6 @@ class MainActivity : HelperBaseComponentActivity() {
             putExtra("subscriptionId", mainViewModel.uiState.value.selectedGroupId)
         }
         profileEditorLauncher.launch(intent)
-    }
-
-    private fun importQRcode() {
-        launchQRCodeScanner { scanResult ->
-            if (scanResult != null) {
-                mainViewModel.onAction(MainAction.ImportBatchConfig(scanResult))
-            }
-        }
     }
 
     private fun importClipboard() {

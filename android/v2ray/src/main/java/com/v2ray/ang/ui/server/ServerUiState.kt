@@ -50,7 +50,6 @@ class ServerUiState(
     seed: String = "",
     kcpMtu: String = "",
     kcpTti: String = "",
-    browserDialerMode: String = "",
     streamSecurity: String = "",
     sni: String = "",
     allowInsecure: Boolean = false,
@@ -99,7 +98,6 @@ class ServerUiState(
     var seed by mutableStateOf(seed)
     var kcpMtu by mutableStateOf(kcpMtu)
     var kcpTti by mutableStateOf(kcpTti)
-    var browserDialerMode by mutableStateOf(browserDialerMode)
     var streamSecurity by mutableStateOf(streamSecurity)
     var sni by mutableStateOf(sni)
     var allowInsecure by mutableStateOf(allowInsecure)
@@ -169,11 +167,8 @@ class ServerUiState(
             seed = seed.nullIfBlank(),
             kcpMtu = kcpMtu.toIntOrNull(),
             kcpTti = kcpTti.toIntOrNull(),
-            browserDialerMode = if (network in listOf(NetworkType.WS.type, NetworkType.XHTTP.type)) {
-                browserDialerMode.nullIfBlank()
-            } else {
-                null
-            },
+            // Browser Dialer was removed; saving a profile clears the old setting.
+            browserDialerMode = null,
             security = streamSecurity,
             sni = sni,
             insecure = allowInsecure,
@@ -227,7 +222,6 @@ class ServerUiState(
                 seed = initialConfig.seed ?: "",
                 kcpMtu = initialConfig.kcpMtu?.toString() ?: "",
                 kcpTti = initialConfig.kcpTti?.toString() ?: "",
-                browserDialerMode = initialConfig.browserDialerMode ?: "",
                 streamSecurity = initialConfig.security ?: "",
                 sni = initialConfig.sni ?: "",
                 allowInsecure = initialConfig.insecure == true,

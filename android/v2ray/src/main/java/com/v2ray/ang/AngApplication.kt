@@ -4,7 +4,6 @@ import android.app.Application
 import android.content.Context
 import androidx.work.Configuration
 import androidx.work.WorkManager
-import com.v2ray.ang.AppConfig.ANG_PACKAGE
 import com.v2ray.ang.handler.MmkvManager
 import com.v2ray.ang.handler.SettingsManager
 
@@ -22,10 +21,6 @@ class AngApplication : Application() {
         application = this
     }
 
-    private val workManagerConfiguration: Configuration = Configuration.Builder()
-        .setDefaultProcessName("${ANG_PACKAGE}:bg")
-        .build()
-
     /**
      * Initializes the application.
      */
@@ -35,8 +30,8 @@ class AngApplication : Application() {
         MmkvManager.initialize(this)
 
 
-        // Initialize WorkManager with the custom configuration
-        WorkManager.initialize(this, workManagerConfiguration)
+        // Subscription updates run in the app process; no separate WorkManager process.
+        WorkManager.initialize(this, Configuration.Builder().build())
 
         // Ensure critical preference defaults are present in MMKV early
         SettingsManager.initApp(this)

@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">কনফিগারেশন সংরক্ষণ করুন</string>
 
-    <string name="menu_item_import_config_qrcode">QR কোড থেকে কনফিগারেশন আমদানি করুন</string>
     <string name="menu_item_import_config_clipboard">ক্লিপবোর্ড থেকে কনফিগারেশন আমদানি করুন</string>
     <string name="menu_item_import_config_local">ডিভাইস থেকে কনফিগ আমদানি করুন</string>
     <string name="menu_item_import_config_policy_group">[নীতি গ্রুপ] যোগ করুন</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">নাম দিয়ে পিয়ার সার্টিফিকেট যাচাই করুন</string>
     <string name="server_lab_pinned_ca256">সার্টিফিকেট ফিঙ্গারপ্রিন্ট (SHA-256)</string>
-    <string name="server_lab_browser_dialer">Browser Dialer চালু করুন</string>
 
     <string name="pinned_ca256_action_fetch">সার্টিফিকেট ফিঙ্গারপ্রিন্ট আনুন</string>
     <string name="toast_fetch_cert_sha256_success">সার্টিফিকেট ফিঙ্গারপ্রিন্ট সফলভাবে আনা হয়েছে</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">ফাইল যোগ করুন</string>
     <string name="menu_item_add_url">URL যোগ করুন</string>
-    <string name="menu_item_scan_qrcode">QR কোড স্ক্যান করুন</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">অ্যাসেট URL যোগ করুন</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">টেস্ট ফলাফল দ্বারা সাজানো</string>
     
     <string name="filter_config_all">সব</string>
-    <string name="summary_scan_qrcode">ক্যামেরা স্ক্যান খুলতে পর্দায় ট্যাপ করুন</string>
     <string name="title_del_duplicate_config_count">%d ডুপ্লিকেট কনফিগারেশন মুছে ফেলুন</string>
     <string name="title_del_config_count">%dটি কনফিগারেশন মুছুন</string>
     <string name="title_import_config_count">%dটি কনফিগারেশন আমদানি করুন</string>
@@ -265,7 +261,6 @@
     <string name="routing_settings_import_predefined_rulesets">পূর্বনির্ধারিত নিয়মাবলী আমদানি করুন</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">ক্লিপবোর্ড থেকে নিয়মসমূহ আমদানি করুন</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">QR কোড থেকে রুলসেট আমদানি করুন</string>
     <string name="routing_settings_export_rulesets_to_clipboard">নিয়মসমূহ ক্লিপবোর্ডে রপ্তানি করুন</string>
     <string name="routing_settings_locked">লক করা; প্রিসেট আমদানির সময় এই নিয়মটি রাখুন</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -326,12 +321,6 @@
     <string name="toast_profile_storage_cleanup">অব্যবহৃত প্রোফাইল মুছে ফেলা হয়েছে: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">কোন প্রোফাইল ডেটা অব্যবহৃত তা নিরাপদে নির্ধারণ করা যায়নি। কিছুই মুছে ফেলা হয়নি।</string>
     <string name="title_configuration_share">কনফিগারেশন শেয়ার করুন</string>
-    <string name="title_webdav_config_setting">WebDAV সেটিংস</string>
-    <string name="title_webdav_config_setting_unknown">প্রথমে WebDAV কনফিগার করুন।</string>
-    <string name="title_webdav_url">WebDAV সার্ভারের URL</string>
-    <string name="title_webdav_user">ব্যবহারকারীর নাম</string>
-    <string name="title_webdav_pass">পাসওয়ার্ড</string>
-    <string name="title_webdav_remote_path">দূরবর্তী ডিরেক্টরি (ঐচ্ছিক)</string>
 
     <string name="share_method_qrcode">QR কোড</string>
     <string name="share_method_clipboard">প্রোফাইল লিংক কপি করুন</string>
@@ -346,8 +335,6 @@
     <string name="routing_preset_china_whitelist">চায়না হোয়াইটলিস্ট</string>
     <string name="routing_preset_china_blacklist">চায়না ব্ল্যাকলিস্ট</string>
     <string name="routing_preset_global">গ্লোবাল</string>
-    <string name="routing_preset_iran_whitelist">ইরান হোয়াইটলিস্ট</string>
-    <string name="routing_preset_russia_whitelist">রাশিয়া হোয়াইটলিস্ট</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>রেজলভ করবেন না</item>
@@ -362,8 +349,6 @@
         <item>রাউন্ড রবিন (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">স্থানীয়</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">লগ রিফ্রেশ করুন</string>
     <string name="toast_permission_denied_for">%1$s ব্যবহারের অনুমতি দেওয়া হয়নি</string>
@@ -397,7 +382,6 @@
     <string name="acc_save">সংরক্ষণ করুন</string>
     <string name="acc_update_subscriptions">সাবস্ক্রিপশন আপডেট করুন</string>
     
-    <string name="permission_camera">ক্যামেরা</string>
 
     <string name="subscription_update_updating">সাবস্ক্রিপশন আপডেট করা হচ্ছে: %1$s</string>
     <string name="subscription_update_progress">%2$s পরীক্ষা করা হচ্ছে: %1$s</string>

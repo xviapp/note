@@ -295,7 +295,6 @@ class MainViewModel(
             }
 
             MainAction.TestCurrentServer,
-            MainAction.ImportQRcode,
             MainAction.ImportClipboard,
             MainAction.ImportConfigLocal,
             is MainAction.ImportManually,

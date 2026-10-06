@@ -15,7 +15,6 @@
     
     <string name="menu_item_save_config">زفت کردن کانفیگ</string>
 
-    <string name="menu_item_import_config_qrcode">و من ٱووردن کانفیگ ز کود QR</string>
     <string name="menu_item_import_config_clipboard">و من ٱووردن کانفیگ ز کلیپ بورد</string>
     <string name="menu_item_import_config_local">و من ٱووردن کانفیگ ز ویرگه مهلی</string>
     <string name="menu_item_import_config_policy_group">ٱووردن [بونکۊ سیاست]</string>
@@ -108,7 +107,6 @@
     <string name="server_lab_ech_config_list" translatable="false">echConfigList</string>
     <string name="server_lab_verify_peer_cert_by_name">تئیڌ گوواهی هومتا و ری نوم</string>
     <string name="server_lab_pinned_ca256">جا کلک گوواهی (SHA-256)</string>
-    <string name="server_lab_browser_dialer">Browser Dialer ره وندن</string>
 
     <string name="pinned_ca256_action_fetch">گرؽڌن وو پور کردن جا کلک گوواهی</string>
     <string name="toast_fetch_cert_sha256_success">جا کلک گوواهی وا مووفقیت گرؽڌه وابی</string>
@@ -119,7 +117,6 @@
     
     <string name="menu_item_add_file">ٱووردن فایل</string>
     <string name="menu_item_add_url">ٱووردن لینگ</string>
-    <string name="menu_item_scan_qrcode">اسکن کود QR</string>
     <string name="title_url" translatable="false">URL</string>
     
     <string name="title_user_asset_add_url">نشۊوی اینترنتی بونچک ن ازاف کۊنین</string>
@@ -236,7 +233,6 @@
     <string name="title_sort_by_test_results">ترتیب و ری نتیجه یل پینگ</string>
     
     <string name="filter_config_all">پوی</string>
-    <string name="summary_scan_qrcode">سی گۊشیڌن شؽواتگر وو اسکن، و ری بلگه بزنین</string>
     <string name="title_del_duplicate_config_count">پاک کردن %d کانفیگ تکراری</string>
     <string name="title_del_config_count">پاک کردن %d کانفیگ</string>
     <string name="title_import_config_count">و من ٱووردن %d کانفیگ</string>
@@ -265,7 +261,6 @@
     <string name="routing_settings_import_predefined_rulesets">و من ٱووردن قانووا</string>
     
     <string name="routing_settings_import_rulesets_from_clipboard">و من ٱووردن قانووا ز کلیپ بورد</string>
-    <string name="routing_settings_import_rulesets_from_qrcode">و من ٱووردن قانووا ز کود QR</string>
     <string name="routing_settings_export_rulesets_to_clipboard">و در کشیڌن قانووا وو زفت کردن من کلیپ بورد</string>
     <string name="routing_settings_locked">چفت هڌ، ای قانووݩ ن مجال و من ٱووردن ز پؽش سامووا زفت کۊنین</string>
     <string name="routing_settings_domain" translatable="false">domain</string>
@@ -326,12 +321,6 @@
     <string name="toast_profile_storage_cleanup">پوروفایلایی ک دی و کار گرؽڌه نؽبۊن پاک وابیڌن: %1$d</string>
     <string name="toast_profile_storage_cleanup_skipped">نترست وا موتمعنی بفهمه ک کۊیکی ز داده یل پوروفایلا دی و کار گرؽڌه نؽبۊن. هیچ داده ای پاک نوابی.</string>
     <string name="title_configuration_share">یک رسۊوی کانفیگ</string>
-    <string name="title_webdav_config_setting">WebDAV سامووا</string>
-    <string name="title_webdav_config_setting_unknown">ٱول WebDAV ن کانفیگ کۊنین</string>
-    <string name="title_webdav_url">WebDAV نشۊوی اینترنتی سرور</string>
-    <string name="title_webdav_user">نوم منتوری</string>
-    <string name="title_webdav_pass">رزم</string>
-    <string name="title_webdav_remote_path">دایرکتوری ره دیر (اختیاری)</string>
 
     <string name="share_method_qrcode">کود QR</string>
     <string name="share_method_clipboard">لف گیری لینگ کانفیگ</string>
@@ -346,8 +335,6 @@
     <string name="routing_preset_china_whitelist">نومگه اسبؽڌ چین</string>
     <string name="routing_preset_china_blacklist">نومگه شه چین</string>
     <string name="routing_preset_global">جهۊوی (Global)</string>
-    <string name="routing_preset_iran_whitelist">نومگه اسبؽڌ ایران</string>
-    <string name="routing_preset_russia_whitelist">نومگه اسبؽڌ رۊسیه</string>
 
     <string-array name="outbound_domain_resolve_method">
         <item>هل وو فسل مکۊنین</item>
@@ -362,8 +349,6 @@
         <item>گردشی (roundRobin)</item>
     </string-array>
 
-    <string name="backup_location_local">مهلی</string>
-    <string name="backup_location_webdav" translatable="false">WebDAV</string>
 
     <string name="acc_refresh">وانۊ کردن گوزارش</string>
     <string name="toast_permission_denied_for">گرؽڌن موجوز مومکن نؽڌ: %1$s</string>
@@ -397,7 +382,6 @@
     <string name="acc_save">زفت کردن</string>
     <string name="acc_update_subscriptions">ورۊ کردن اشتراکا</string>
     
-    <string name="permission_camera">شؽواتگر</string>
 
     <string name="subscription_update_updating">اشتراک %1$s هونی ورۊ ابۊ</string>
     <string name="subscription_update_progress">%2$s هونی آزمایش ابۊ: %1$s</string>

@@ -56,10 +56,7 @@ import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import coil3.compose.AsyncImage
-import coil3.request.ImageRequest
 import com.v2ray.ang.R
-import com.v2ray.ang.util.AppIconFetcher
 import sh.calvin.reorderable.ReorderableCollectionItemScope
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -155,68 +152,6 @@ private fun SearchInputField(
                 Icon(painterResource(android.R.drawable.ic_menu_close_clear_cancel), "Clear")
             }
         }
-    }
-}
-
-@Composable
-fun AppListItem(
-    appName: String,
-    packageName: String,
-    icon: Any?,
-    checked: Boolean,
-    onCheckedChange: (Boolean) -> Unit,
-    modifier: Modifier = Modifier
-) {
-    val context = LocalContext.current
-    Row(
-        modifier = modifier
-            .fillMaxWidth()
-            .clickable { onCheckedChange(!checked) }
-            .padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically
-    ) {
-        val model = remember(icon, packageName) {
-            if (icon != null) {
-                icon
-            } else {
-                val data = "appicon:$packageName"
-                ImageRequest.Builder(context)
-                    .data(data)
-                    .fetcherFactory(AppIconFetcher.Factory(context))
-                    .build()
-            }
-        }
-
-        AsyncImage(
-            model = model,
-            contentDescription = null,
-            modifier = Modifier.size(40.dp),
-            contentScale = ContentScale.Fit,
-            error = painterResource(R.drawable.ic_image_24dp),
-            fallback = painterResource(R.drawable.ic_image_24dp)
-        )
-        Spacer(modifier = Modifier.width(16.dp))
-        Column(modifier = Modifier.weight(1f)) {
-            Text(
-                text = appName,
-                style = MaterialTheme.typography.bodyLarge,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-            Spacer(modifier = Modifier.height(2.dp))
-            Text(
-                text = packageName,
-                style = MaterialTheme.typography.bodySmall,
-                color = MaterialTheme.colorScheme.onSurfaceVariant,
-                maxLines = 1,
-                overflow = TextOverflow.Ellipsis
-            )
-        }
-        Checkbox(
-            checked = checked,
-            onCheckedChange = onCheckedChange,
-            colors = CheckboxDefaults.colors(checkedColor = MaterialTheme.colorScheme.secondary)
-        )
     }
 }
 
