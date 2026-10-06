@@ -587,8 +587,17 @@ test('continuous PDF fills the reading pane, renders nearby pages and preserves 
       );
     });
   const beforeZoom = await offset(page);
+  // The page is repainted in the theme: its paper corner takes the dark page colour.
+  const corner = () =>
+    sheet(31)
+      .locator('canvas')
+      .evaluate((canvas: HTMLCanvasElement) => [
+        ...canvas.getContext('2d')!.getImageData(2, 2, 1, 1).data.slice(0, 3),
+      ]);
+  expect(Math.min(...(await corner()))).toBeGreaterThan(200);
   await selectTheme(page, 'dark');
   await expect(pageNumber).toHaveValue('31');
+  await expect.poll(async () => Math.max(...(await corner()))).toBeLessThan(60);
   await expect.poll(async () => Math.abs((await offset(page)) - beforeZoom)).toBeLessThan(0.04);
   await viewer.getByRole('button', { name: '放大 PDF', exact: true }).click();
   await expect(viewer.getByRole('button', { name: 'PDF 适应宽度' })).toHaveText('120%');

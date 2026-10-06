@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import { TextLayer, type PDFDocumentProxy, type PDFPageProxy, type RenderTask } from 'pdfjs-dist';
 import { Spinner } from './Primitives';
 import type { PdfSourceRect } from '../../shared/translation';
+import { useTheme } from '../theme';
+import { currentPdfTint, tintPdfCanvas } from '../pdf-tint';
 
 export function PdfPage({
   document,
@@ -28,6 +30,7 @@ export function PdfPage({
   const active = useRef<RenderTask | null>(null);
   const [rendering, setRendering] = useState(true);
   const [error, setError] = useState('');
+  const { theme } = useTheme();
 
   useEffect(() => {
     let live = true;
@@ -64,10 +67,13 @@ export function PdfPage({
         canvasContext: element.getContext('2d')!,
         viewport,
         transform: ratio !== 1 ? [ratio, 0, 0, ratio, 0, 0] : undefined,
+        recordImages: true,
       });
       active.current = task;
       await task.promise;
       if (!live) return;
+      const tint = currentPdfTint();
+      if (tint) tintPdfCanvas(element, tint, page.imageCoordinates);
       setRendering(false);
       textElement.style.setProperty(
         '--total-scale-factor',
@@ -101,7 +107,8 @@ export function PdfPage({
           }
         });
     };
-  }, [document, number, width, onMeasure]);
+    // The theme is read inside through its CSS tokens; a change repaints the page.
+  }, [document, number, width, onMeasure, theme]);
 
   return (
     <div
