@@ -4146,3 +4146,12 @@ button.node-list-toggle:focus-visible {
 .unlocked-keys small {
   color: var(--muted);
 }
+.lock-badge {
+  flex: none;
+  margin-left: 4px;
+  vertical-align: -1px;
+  color: var(--muted);
+}
+.lock-badge.is-open {
+  color: var(--blue);
+}

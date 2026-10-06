@@ -6,6 +6,7 @@ import { Empty, NodeIcon, Spinner } from './Primitives';
 import { NodeMenu, type NodeAction } from './Tree';
 import { useNodeListing } from '../use-node-listing';
 import { typeLabel } from '../note-types/registry';
+import { LockBadge } from './LockBadge';
 
 type NodeListProps = {
   refresh: number;
@@ -102,7 +103,10 @@ function NodeRows({
               <button className="node-list-main" onClick={() => props.onOpen(node)}>
                 <NodeIcon node={node} size={20} />
                 <span>
-                  <strong>{node.title}</strong>
+                  <strong>
+                    {node.title}
+                    <LockBadge keyId={node.key_id} />
+                  </strong>
                   <small>
                     {node.arxiv_id
                       ? `arXiv 论文 · ${node.arxiv_id}`

@@ -19,6 +19,8 @@ import { useNodeListing, type NodeListing as Listing } from '../use-node-listing
 import { useOffline } from '../connectivity';
 import { ghostTransform, ROOT_TARGET, useTreeDrag, type TreeDrag } from '../use-tree-drag';
 import { noteType } from '../note-types/registry';
+import { LockBadge, useKeys } from './LockBadge';
+import { isUnlocked, lock } from '../keyring';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon' | 'encryption';
 export interface TreeProps {
@@ -56,6 +58,7 @@ export function NodeMenu({
   // Extra items, e.g. toolbar actions that move into the menu on phones.
   children?: ReactNode;
 }) {
+  useKeys();
   return (
     <details className="node-menu" name="node-actions">
       <summary role="button" className="icon-button" aria-label={`管理 ${node.title}`}>
@@ -72,9 +75,10 @@ export function NodeMenu({
           <button onClick={() => onAction('icon', node)}>更换图标</button>
         )}
         <button onClick={() => onAction('move', node)}>移动到…</button>
-        <button onClick={() => onAction('encryption', node)}>
-          本地加密{node.key_id ? '（已加密）' : ''}
-        </button>
+        <button onClick={() => onAction('encryption', node)}>本地加密</button>
+        {node.key_id && isUnlocked(node.key_id) && (
+          <button onClick={() => lock(node.key_id!)}>立即锁定</button>
+        )}
         <button className="danger-text" onClick={() => onAction('delete', node)}>
           移到回收站
         </button>
@@ -230,6 +234,7 @@ function Branch({
                 >
                   <NodeIcon node={node} />
                   <span>{node.title}</span>
+                  <LockBadge keyId={node.key_id} />
                 </button>
                 <NodeMenu node={node} onAction={props.onAction} />
               </div>

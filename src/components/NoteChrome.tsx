@@ -13,6 +13,7 @@ import { formatDate } from '../api';
 import type { NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
 import { noteType, typeLabel } from '../note-types/registry';
+import { LockBadge } from './LockBadge';
 
 // The parts of a note page around its body: location, heading, edit bar.
 
@@ -77,7 +78,10 @@ export function NoteHeading({
 }) {
   return (
     <header className="document-heading">
-      <h1>{note.project_category && note.metadata_title ? note.metadata_title : note.title}</h1>
+      <h1>
+        {note.project_category && note.metadata_title ? note.metadata_title : note.title}
+        <LockBadge keyId={note.key_id} size={18} />
+      </h1>
       {/* Kind, date and New share one ruled row to keep the page top short. */}
       <div className="document-meta">
         <span className="document-kind">

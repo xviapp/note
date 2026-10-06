@@ -1,5 +1,5 @@
-import { useState, useSyncExternalStore, type FormEvent } from 'react';
-import { KeyRound, Lock, LockKeyhole } from 'lucide-react';
+import { useState, type FormEvent } from 'react';
+import { KeyRound, LockKeyhole } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { MIN_ENCRYPTION_PASSWORD } from '../../shared/encryption';
 import type { Crumb, NoteDetail } from '../../shared/types';
@@ -8,25 +8,22 @@ import {
   defaultPolicy,
   isUnlocked,
   KEEP_OPTIONS,
-  keysVersion,
   lock,
   lockAll,
   policyKey,
   policyLabel,
   rewrap,
   setDefaultPolicy,
-  subscribeKeys,
   unlock,
   unlockedEntries,
   type KeepPolicy,
 } from '../keyring';
 import { syncEncryption, type SyncResult } from '../encryption-sync';
 import { Modal } from './Primitives';
+import { LockBadge, useKeys } from './LockBadge';
 
 // Re-renders when a key is unlocked, locked or expires.
-export function useKeys() {
-  return useSyncExternalStore(subscribeKeys, keysVersion);
-}
+export { useKeys };
 
 function KeepSelect({
   value,
@@ -249,24 +246,22 @@ export function EncryptionDialog({
     });
   };
   const status = ownKey
-    ? '此条目设有独立密码，下级条目默认使用同一密码。'
+    ? '已加密，下级条目使用同一密码。'
     : own === 'none'
-      ? `此条目及下级不加密${parentKey ? `（不使用「${inherited!.title}」的密码）` : ''}。`
+      ? '此条目及下级不加密。'
       : parentKey
-        ? `继承「${inherited!.title}」的密码。`
+        ? `已加密，使用「${inherited!.title}」的密码。`
         : '未加密。';
   return (
     <Modal title="本地加密" onClose={() => !busy && onClose()}>
       <div className="form-stack encryption-dialog">
         <p className="encryption-status">
-          {current.key_id ? <Lock size={16} /> : <KeyRound size={16} />}
+          {current.key_id ? <LockBadge keyId={current.key_id} size={16} /> : <KeyRound size={16} />}
           {status}
         </p>
         {step === 'overview' && (
           <>
-            <p className="field-hint">
-              加密在本设备上进行，上传到云端的正文、文件、批注、翻译和对话都是密文；标题和目录结构不加密。使用青藜、翻译和书籍功能时，本次请求会临时带上内容密钥，服务器只在内存中使用。
-            </p>
+            <p className="field-hint">内容在本设备加密后再上传，标题不加密。密码不会上传。</p>
             <div className="encryption-choices">
               {!ownKey && (
                 <button className="button primary" disabled={!!busy} onClick={() => setStep('set')}>
@@ -291,6 +286,11 @@ export function EncryptionDialog({
               {own === 'none' && (
                 <button className="button" disabled={!!busy} onClick={() => setting(null)}>
                   恢复继承上级
+                </button>
+              )}
+              {current.key_id && isUnlocked(current.key_id) && (
+                <button className="button" disabled={!!busy} onClick={() => lock(current.key_id!)}>
+                  立即锁定
                 </button>
               )}
               <button className="button" disabled={!!busy} onClick={sync}>
@@ -339,8 +339,8 @@ export function EncryptionDialog({
             {step === 'set' && <KeepSelect value={policy} onChange={setPolicy} />}
             <p className="field-hint">
               {step === 'set'
-                ? `至少 ${MIN_ENCRYPTION_PASSWORD} 个字符。忘记密码将无法恢复内容；之前创建的备份仍包含未加密的旧内容。`
-                : '修改后，其他设备上记住的密码会失效，需要用新密码重新解锁。'}
+                ? `至少 ${MIN_ENCRYPTION_PASSWORD} 个字符。忘记密码将无法恢复内容。`
+                : '其他设备需要用新密码重新解锁。'}
             </p>
             <div className="dialog-actions">
               <button
@@ -396,10 +396,7 @@ export function EncryptionSettings() {
         <LockKeyhole size={19} />
         本地加密
       </h2>
-      <p className="field-hint">
-        在笔记的 ⋯
-        菜单中选择「本地加密」为条目设置密码。密码只在本设备上使用，不会上传；忘记密码将无法恢复内容。
-      </p>
+      <p className="field-hint">在条目的 ⋯ 菜单中选择「本地加密」设置密码。</p>
       <div className="form-stack">
         <KeepSelect
           value={policy}
@@ -408,7 +405,7 @@ export function EncryptionSettings() {
             setDefaultPolicy(next);
           }}
         />
-        <p className="field-hint">解锁时的默认选项。退出登录或修改密码后，记住的密码都会失效。</p>
+        <p className="field-hint">解锁时的默认选项。</p>
       </div>
       <h3>本设备已解锁 {entries.length}</h3>
       {entries.length ? (
