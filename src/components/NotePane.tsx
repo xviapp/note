@@ -47,7 +47,6 @@ import { useAnnotationLayer } from '../use-annotation-layer';
 import { AnnotationList, AnnotationPanel } from './AnnotationDialogs';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
-import { useAutoHideChrome } from '../use-auto-hide-chrome';
 
 const Editor = lazy(() => import('./Editor'));
 const CompareView = lazy(() => import('./CompareView'));
@@ -136,7 +135,6 @@ export default function NotePane(props: Props) {
     restored = useRef(false),
     touched = useRef(false);
   const readingRoot = useRef<HTMLDivElement>(null);
-  const pane = useRef<HTMLDivElement>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('floating');
   const [selection, setSelection] = useState('');
@@ -366,7 +364,6 @@ export default function NotePane(props: Props) {
     },
   });
   const markdownReady = useMarkdownReady(note?.kind === 'markdown');
-  const chromeHidden = useAutoHideChrome(pane, note?.kind === 'pdf' && !editing ? id : null);
 
   // Highlights and notes on the rendered text (Markdown, plain text, papers).
   const annotatable =
@@ -481,10 +478,7 @@ export default function NotePane(props: Props) {
     onClose: () => setAnnotationsOpen(false),
   };
   return (
-    <div
-      ref={pane}
-      className={`note-pane ${editing ? 'is-editing' : ''}${chromeHidden ? ' chrome-hidden' : ''}`}
-    >
+    <div className={`note-pane ${editing ? 'is-editing' : ''}`}>
       <div className="note-toolbar">
         {navigation}
         <NoteActions

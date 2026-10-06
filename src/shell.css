@@ -371,16 +371,6 @@ button:active:not(:disabled) {
     flex-wrap: wrap;
     gap: 0;
   }
-  /* Reading a PDF, both toolbars slide up together while scrolling down. */
-  .note-pane:has(.pdf-view) {
-    overflow: hidden;
-  }
-  .note-pane:has(.pdf-view) > .note-toolbar {
-    transition: margin-top 0.18s ease;
-  }
-  .note-pane.chrome-hidden > .note-toolbar {
-    margin-top: calc(-1 * var(--chrome-height, 0px));
-  }
   .note-location {
     flex-basis: 100%;
     gap: 4px;
@@ -510,9 +500,6 @@ button:active:not(:disabled) {
   .main-content.page-back,
   .activity-dots > span {
     animation: none;
-  }
-  .note-pane:has(.pdf-view) > .note-toolbar {
-    transition: none;
   }
 }
 
