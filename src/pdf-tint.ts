@@ -43,6 +43,65 @@ export function tintPdfCanvas(
     backup.height = height;
     backup.getContext('2d')!.drawImage(canvas, 0, 0);
   }
+  context.save();
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  if (!tint.dark || typeof context.filter === 'string') blendTint(context, tint);
+  // Safari before 18 has no canvas filter to keep hues; recolor pixel by pixel.
+  else tintPixels(context, tint);
+  context.restore();
+  if (!backup || !images) return;
+  context.save();
+  context.setTransform(1, 0, 0, 1, 0, 0);
+  context.beginPath();
+  for (let i = 0; i + 5 < images.length; i += 6) {
+    const x0 = images[i] * width,
+      y0 = images[i + 1] * height,
+      x1 = images[i + 2] * width,
+      y1 = images[i + 3] * height,
+      x2 = images[i + 4] * width,
+      y2 = images[i + 5] * height;
+    context.moveTo(x0, y0);
+    context.lineTo(x1, y1);
+    context.lineTo(x1 + x2 - x0, y1 + y2 - y0);
+    context.lineTo(x2, y2);
+    context.closePath();
+  }
+  context.clip();
+  context.drawImage(backup, 0, 0);
+  context.restore();
+  backup.width = backup.height = 0;
+}
+
+const css = ([r, g, b]: Rgb) => `rgb(${r} ${g} ${b})`;
+
+// Blend modes run on the GPU and never read pixels back to script. White ends
+// near the paper colour and black near the ink, within a few levels of the
+// exact mapping in tintPixels.
+function blendTint(context: CanvasRenderingContext2D, tint: PdfTint) {
+  const { width, height } = context.canvas;
+  const fill = (operation: GlobalCompositeOperation, color: string) => {
+    context.globalCompositeOperation = operation;
+    context.fillStyle = color;
+    context.fillRect(0, 0, width, height);
+  };
+  if (tint.dark) {
+    // Invert, then turn hues back half a circle so red type stays red.
+    fill('difference', '#fff');
+    context.globalCompositeOperation = 'copy';
+    context.filter = 'hue-rotate(180deg)';
+    context.drawImage(context.canvas, 0, 0);
+    context.filter = 'none';
+    // Now black is the paper and white the type.
+    fill('multiply', css(tint.ink));
+    fill('screen', css(tint.paper));
+  } else {
+    fill('multiply', css(tint.paper));
+    fill('screen', css(tint.ink));
+  }
+}
+
+function tintPixels(context: CanvasRenderingContext2D, tint: PdfTint) {
+  const { width, height } = context.canvas;
   const data = context.getImageData(0, 0, width, height);
   const pixels = data.data;
   const [pr, pg, pb] = tint.paper;
@@ -69,25 +128,4 @@ export function tintPdfCanvas(
     pixels[i + 2] = ib + b * db;
   }
   context.putImageData(data, 0, 0);
-  if (!backup || !images) return;
-  context.save();
-  context.setTransform(1, 0, 0, 1, 0, 0);
-  context.beginPath();
-  for (let i = 0; i + 5 < images.length; i += 6) {
-    const x0 = images[i] * width,
-      y0 = images[i + 1] * height,
-      x1 = images[i + 2] * width,
-      y1 = images[i + 3] * height,
-      x2 = images[i + 4] * width,
-      y2 = images[i + 5] * height;
-    context.moveTo(x0, y0);
-    context.lineTo(x1, y1);
-    context.lineTo(x1 + x2 - x0, y1 + y2 - y0);
-    context.lineTo(x2, y2);
-    context.closePath();
-  }
-  context.clip();
-  context.drawImage(backup, 0, 0);
-  context.restore();
-  backup.width = backup.height = 0;
 }
