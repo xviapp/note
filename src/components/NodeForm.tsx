@@ -2,7 +2,6 @@ import { useRef, useState, type FormEvent } from 'react';
 import { api, upload } from '../api';
 import { importPaper } from '../arxiv-import';
 import {
-  BOOK_ROLE_LIMIT,
   KIND_LABELS,
   UNTITLED_NAMES,
   type ArxivImportProgress,
@@ -10,6 +9,7 @@ import {
   type NodeKind,
   type NoteNode,
 } from '../../shared/types';
+import { BookRoleField } from './BookRoleField';
 import { Modal, NodeIcon } from './Primitives';
 import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
@@ -242,18 +242,14 @@ export function NodeForm({
                 disabled={working}
               />
             </label>
-            <label>
-              青藜角色
-              <textarea
-                rows={4}
-                maxLength={BOOK_ROLE_LIMIT}
-                value={role}
-                placeholder="例如：你是这本书的导读老师，先讲清作者的论证，再提出值得追问的问题。"
-                onChange={(e) => setRole(e.target.value)}
-                disabled={working}
-              />
-              <span className="field-hint">书中所有页面和讨论与青藜对话时都会使用这个角色。</span>
-            </label>
+            <BookRoleField
+              value={role}
+              onChange={setRole}
+              title={title}
+              author={author}
+              disabled={working}
+              rows={4}
+            />
           </>
         )}
         {folderLike && (

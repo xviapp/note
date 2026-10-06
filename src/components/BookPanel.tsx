@@ -3,13 +3,13 @@ import { BookText, Camera, Settings2 } from 'lucide-react';
 import { api } from '../api';
 import { addBookPage } from '../books';
 import {
-  BOOK_ROLE_LIMIT,
   BOOK_STATUS_LABELS,
   type BookInfo,
   type BookStatus,
   type NoteDetail,
   type NoteNode,
 } from '../../shared/types';
+import { BookRoleField } from './BookRoleField';
 import { Modal } from './Primitives';
 
 // The top of a book's page: its details, and adding pages or discussions.
@@ -280,18 +280,14 @@ export function BookForm({
             />
           </label>
         </div>
-        <label>
-          青藜角色
-          <textarea
-            rows={5}
-            maxLength={BOOK_ROLE_LIMIT}
-            value={role}
-            placeholder="例如：你是这本书的导读老师，先讲清作者的论证，再提出值得追问的问题。"
-            onChange={(e) => setRole(e.target.value)}
-            disabled={busy}
-          />
-          <span className="field-hint">书中所有页面和讨论与青藜对话时都会使用这个角色。</span>
-        </label>
+        <BookRoleField
+          value={role}
+          onChange={setRole}
+          title={note.title}
+          author={author}
+          disabled={busy}
+          rows={5}
+        />
         {error && (
           <p className="inline-error" role="alert">
             {error}

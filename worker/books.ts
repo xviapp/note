@@ -567,6 +567,44 @@ export async function collectBookNote(
   return { note, pages: parts.length };
 }
 
+// A reading guide for one book, written by 青藜 to serve as its role prompt.
+export async function generateRolePrompt(env: Env, data: Record<string, unknown>) {
+  const title = textValue(data.title, '书名', 200).trim();
+  const author = textValue(data.author ?? '', '作者', 200, true).trim();
+  const role = textValue(data.role ?? '', '阅读角色', BOOK_ROLE_LIMIT, true).trim();
+  const text = await generate(
+    env,
+    [
+      {
+        role: 'system',
+        content: [
+          '你是一位资深的阅读引导专家，专门为一本具体的书写一段“本书专属阅读指引”。这段指引会原样作为 AI 阅读伙伴讨论这本书时的角色设定。',
+          '请只输出一段中文指引，并严格遵守：',
+          '1. 直接给出指引本身，不要标题、标签、引号、Markdown 或代码块。',
+          '2. 用对阅读伙伴说话的口吻（“你是……”“你应……”），而不是对书的客观介绍。',
+          '3. 按题材确定阅读角度：文学作品侧重人物、叙事、主题、风格与时代背景；非虚构或学术著作侧重核心论点、论证结构、证据与上下文。',
+          '4. 指出这本书值得重点关注的 2 到 3 个方面，并说明回应应有的分寸（如先证据后观点、鼓励批判性追问）。',
+          '5. 只使用给出的信息，不编造作者、年代、事件或书评；信息不足时保持通用但贴近已知事实。',
+          '6. 控制在 80 到 160 个汉字。',
+        ].join('\n'),
+      },
+      {
+        role: 'user',
+        content: `书名：${title}\n作者：${author || '未知'}\n已选阅读角色：${role || '通用阅读伙伴'}`,
+      },
+    ],
+    1024,
+  );
+  const prompt = text
+    .replace(/^```[^\n]*\n?/, '')
+    .replace(/\n?```$/, '')
+    .replace(/^["“「]|["”」]$/g, '')
+    .trim()
+    .slice(0, BOOK_ROLE_LIMIT);
+  if (!prompt) throw new AppError(502, '青藜没有给出指引，请重试。', 'AI_PROVIDER_ERROR');
+  return { prompt };
+}
+
 // What 青藜 is told about a note inside a book: the book, its role, how to
 // discuss, and for a discussion below a page, that page's text and summary.
 export async function bookPrompt(env: Env, node: NoteNode): Promise<string> {

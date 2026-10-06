@@ -45,6 +45,7 @@ import {
   bookPages,
   collectBookNote,
   createDiscussion,
+  generateRolePrompt,
   organizeDiscussion,
   pageInsights,
   saveBook,
@@ -122,6 +123,8 @@ export default {
       if (path === '/api/cleanup' && method === 'POST') {
         return json(await cleanup(env));
       }
+      if (path === '/api/books/role-prompt' && method === 'POST')
+        return json(await generateRolePrompt(env, await body(request)));
       if (path === '/api/nodes' && method === 'GET') return json(await listNodes(env, url));
       if (path === '/api/search' && method === 'GET') return json(await searchNodes(env, url));
       if (path === '/api/nodes' && method === 'POST') {

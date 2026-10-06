@@ -79,6 +79,8 @@ beforeEach(async () => {
   contexts = [];
   cookie = '';
   await bindings.DB.batch([
+    // A backup export holds its files until the job is gone.
+    bindings.DB.prepare('DELETE FROM backup_jobs'),
     bindings.DB.prepare('DELETE FROM assistant_threads'),
     bindings.DB.prepare('DELETE FROM nodes'),
     bindings.DB.prepare('DELETE FROM trash_batches'),
@@ -362,5 +364,18 @@ describe('books', () => {
       expect.objectContaining({ discussion_id: discussion.id, note_id: organized.note.id }),
     ]);
     expect(validateBackup(structuredClone(exported.archive)).tables.book_pages).toHaveLength(2);
+  });
+
+  it('writes a reading guide for a book as its role prompt', async () => {
+    const fetch = vi
+      .spyOn(globalThis, 'fetch')
+      .mockImplementation(async () => provider('「你是一位历史研究者，关注时代背景。」'));
+    expect(
+      await ok('/api/books/role-prompt', 'POST', { title: '人类简史', author: '赫拉利', role: '' }),
+    ).toEqual({ prompt: '你是一位历史研究者，关注时代背景。' });
+    const user = JSON.parse(String(fetch.mock.calls[0][1]!.body)).messages[1].content;
+    expect(user).toContain('书名：人类简史');
+    expect(user).toContain('作者：赫拉利');
+    expect((await request('/api/books/role-prompt', 'POST', { title: '' })).status).toBe(400);
   });
 });

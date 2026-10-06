@@ -17,7 +17,9 @@ const mock = createServer((request, response) => {
   request.on('end', () => {
     const body = JSON.parse(raw);
     const system = String(body.messages[0]?.content ?? '');
-    const reply = system.includes('书页文字识别')
+    const reply = system.includes('阅读指引')
+      ? '你是一位历史研究者，陪读者看清本书的核心论点与证据。'
+      : system.includes('书页文字识别')
       ? '作者认为，农业革命让食物增多，却让多数人更辛苦。\n\n与其说人类驯化了小麦，不如说小麦驯化了人类。'
       : system.includes('读书笔记')
         ? JSON.stringify({

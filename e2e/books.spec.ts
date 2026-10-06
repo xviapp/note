@@ -38,6 +38,15 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
   await form.getByLabel('标题').fill('人类简史');
   await form.getByLabel('作者').fill('赫拉利');
   await form.getByLabel('总页数').fill('400');
+  // A preset fills the role; 青藜 can also write a guide for this book.
+  await form
+    .getByLabel('阅读角色预设')
+    .selectOption({ label: '历史研究者 · 历史、传记与纪实作品' });
+  await expect(form.getByLabel('青藜角色')).toHaveValue(/历史研究者/);
+  await form.getByRole('button', { name: '让青藜生成' }).click();
+  await expect(form.getByLabel('青藜角色')).toHaveValue(
+    '你是一位历史研究者，陪读者看清本书的核心论点与证据。',
+  );
   await form.getByRole('button', { name: '创建' }).click();
   await expect(page.locator('.document-kind')).toHaveText('书籍');
 
