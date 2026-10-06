@@ -9,6 +9,11 @@ import { AppError, integer, textValue } from './http';
 import type { Env } from './types';
 
 const BASE_URL = 'https://api.deepseek.com';
+let baseUrl = BASE_URL;
+// Called per request; end-to-end tests use a local stand-in for DeepSeek.
+export function configureProvider(env: Env) {
+  baseUrl = env.DEEPSEEK_BASE_URL || BASE_URL;
+}
 export function toBase64(bytes: Uint8Array): string {
   let value = '';
   for (let i = 0; i < bytes.length; i += 8192)
@@ -92,7 +97,7 @@ async function providerFetch(
 ): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(`${BASE_URL}${path}`, {
+    response = await fetch(`${baseUrl}${path}`, {
       method: data ? 'POST' : 'GET',
       headers: { authorization: `Bearer ${key}`, 'content-type': 'application/json' },
       body: data ? JSON.stringify(data) : undefined,

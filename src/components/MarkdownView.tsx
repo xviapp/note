@@ -10,6 +10,7 @@ import { mathOptions, rehypeMathCompatibility } from '../math';
 import 'katex/dist/katex.min.css';
 import '../math.css';
 import { CachedImage } from './CachedImage';
+import { markdownFrontMatter } from '../../shared/projects';
 
 // Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
 // https://github.com/rehypejs/rehype-sanitize#example-math
@@ -39,6 +40,13 @@ export const MarkdownView = memo(function MarkdownView({
   safeImages?: boolean;
 }) {
   const ref = useRef<HTMLDivElement>(null);
+  const rendered = useMemo(() => {
+    const front = markdownFrontMatter(content);
+    // Keep original offsets for heading IDs, links and reading positions.
+    return front && /^(title|status):/m.test(front[1])
+      ? front[0].replace(/[^\r\n]/g, ' ') + content.slice(front[0].length)
+      : content;
+  }, [content]);
   useEffect(() => {
     onHeadings?.(
       Array.from(ref.current?.querySelectorAll('h1,h2,h3,h4,h5,h6') ?? []).map((h) => ({
@@ -145,7 +153,7 @@ export const MarkdownView = memo(function MarkdownView({
         skipHtml
         components={components}
       >
-        {content}
+        {rendered}
       </ReactMarkdown>
     </div>
   );

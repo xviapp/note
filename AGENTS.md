@@ -12,6 +12,10 @@ Use Node.js 22.12+ and install with `npm ci` (pnpm also works).
 - `pnpm run deploy`: build, migrate production D1, deploy. Keep `run`; bare `pnpm deploy` is a different command. Deploying the site does not update installed APKs.
 - Android (JDK 21, Android SDK 37): `npm run android:apk`, `pnpm install:android`, `node scripts/android.mjs testDebugUnitTest`, `node scripts/android.mjs lintDebug`.
 
+## Source ownership
+
+All application source and assets are maintained in this repository. Edit local files directly; do not restore cross-project synchronization or filesystem dependencies. Theme tokens originate in `scripts/theme/brand-theme.ts`; run `npm run theme:sync` after editing it and `npm run theme:check` to verify the generated CSS.
+
 ## Conventions
 
 - User-facing text, error messages, README and `docs/` are Simplified Chinese; code comments and commits are English.

@@ -1,7 +1,7 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { Camera, MessagesSquare, Settings2 } from 'lucide-react';
+import { BookText, Camera, Settings2 } from 'lucide-react';
 import { api } from '../api';
-import { addBookPage, createDiscussion } from '../books';
+import { addBookPage } from '../books';
 import {
   BOOK_ROLE_LIMIT,
   BOOK_STATUS_LABELS,
@@ -30,7 +30,21 @@ export function BookCard({
 }) {
   const input = useRef<HTMLInputElement>(null);
   const [photos, setPhotos] = useState<File[]>([]);
-  const [progress, setProgress] = useState('');
+  const [progress, setProgress] = useState(''),
+    [collecting, setCollecting] = useState(false);
+  // Every page's reading note in page order, as one note in the book.
+  const collect = async () => {
+    setCollecting(true);
+    try {
+      const result = await api<{ note: NoteNode }>(`/api/nodes/${book.id}/book-note`, 'POST', {});
+      onChanged();
+      onOpen(result.note);
+    } catch (error) {
+      onError(error);
+    } finally {
+      setCollecting(false);
+    }
+  };
   const percent = book.page_count
     ? Math.min(100, Math.round((book.pages_read / book.page_count) * 100))
     : 0;
@@ -41,8 +55,11 @@ export function BookCard({
     try {
       for (const [index, file] of files.entries()) {
         setProgress(`正在识别 ${index + 1}/${files.length}…`);
-        await addBookPage(book.id, file, start ? start + index : null);
+        const page = await addBookPage(book.id, file, start ? start + index : null);
         done++;
+        // The summary and questions can be made again from the page if this fails.
+        setProgress(`正在生成摘要 ${index + 1}/${files.length}…`);
+        await api(`/api/nodes/${page.id}/insights`, 'POST', {}).catch(() => {});
       }
     } catch (error) {
       onError(error);
@@ -86,18 +103,11 @@ export function BookCard({
         </button>
         <button
           className="button compact"
-          disabled={offline}
-          onClick={() =>
-            void createDiscussion(book)
-              .then((node) => {
-                onChanged();
-                onOpen(node);
-              })
-              .catch(onError)
-          }
+          disabled={offline || collecting}
+          onClick={() => void collect()}
         >
-          <MessagesSquare size={15} />
-          <span>新建讨论</span>
+          <BookText size={15} />
+          <span>{collecting ? '正在汇总…' : '汇总读书笔记'}</span>
         </button>
         <button className="button compact" disabled={offline} onClick={onEdit}>
           <Settings2 size={15} />

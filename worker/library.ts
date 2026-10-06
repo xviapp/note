@@ -3,12 +3,21 @@ import type { FileInfo, NoteDetail, NoteNode, NodeKind, VersionInfo } from '../s
 import { PARENT_KINDS, TEXT_KINDS, UNTITLED_NAMES } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
 import { discardFile, getBlob, readText, storePaper, storeText } from './storage';
-import { bookFields, bookOf, insertBook } from './books';
+import { bookFields, bookOf, insertBook, isDiscussion, pageInfo } from './books';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
+import { insertProject, metadataStatement, PROJECT_CATEGORY_SQL } from './projects';
 
-export const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL) child_count,
+// Discussions below a book page live in the page, not in the tree or lists.
+export const NOT_DISCUSSION = (alias: string) =>
+  `NOT EXISTS(SELECT 1 FROM book_discussions d WHERE d.node_id=${alias}.id)`;
+export const NODE_COLUMNS = `n.*,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL AND ${NOT_DISCUSSION('c')}) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite,
-  EXISTS(SELECT 1 FROM books b WHERE b.node_id=n.id) is_book`;
+  EXISTS(SELECT 1 FROM books b WHERE b.node_id=n.id) is_book,
+  EXISTS(SELECT 1 FROM projects p WHERE p.node_id=n.id) is_project,
+  EXISTS(SELECT 1 FROM node_references r WHERE r.node_id=n.id) is_reference,
+  (SELECT target_id FROM node_references r WHERE r.node_id=n.id) reference_target_id,
+  (SELECT t.kind FROM node_references r JOIN nodes t ON t.id=r.target_id WHERE r.node_id=n.id AND t.trash_id IS NULL) reference_kind,
+  ${PROJECT_CATEGORY_SQL} project_category`;
 export async function getNode(env: Env, id: string, includeTrash = false): Promise<NoteNode> {
   const node = await env.DB.prepare(`SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.id=?`)
     .bind(idValue(id))
@@ -35,7 +44,7 @@ export async function listNodes(
   } else {
     const parent = url.searchParams.get('parent') || null;
     if (parent) await getNode(env, parent);
-    query = `SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.trash_id IS NULL AND n.parent_id IS ? ORDER BY n.position,n.id LIMIT ? OFFSET ?`;
+    query = `SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.trash_id IS NULL AND n.parent_id IS ? AND ${NOT_DISCUSSION('n')} ORDER BY n.position,n.id LIMIT ? OFFSET ?`;
     params = [parent, limit + 1, offset];
   }
   const result = await env.DB.prepare(query)
@@ -78,6 +87,20 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   }
   const file = node.file_blob_id ? await getBlob(env, node.file_blob_id) : undefined;
   const book = await bookOf(env, id);
+  const page = book ? await pageInfo(env, node) : undefined;
+  const discussion = book && node.parent_id && (await isDiscussion(env, id));
+  let reference: NoteDetail['reference'];
+  if (node.is_reference) {
+    let target: NoteNode | null = null;
+    if (node.reference_target_id) {
+      try {
+        target = await getNode(env, node.reference_target_id);
+      } catch (error) {
+        if (!(error instanceof AppError) || ![404, 410].includes(error.status)) throw error;
+      }
+    }
+    reference = { target };
+  }
   return {
     ...node,
     content,
@@ -85,6 +108,9 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
     file: file ? { id: file.id, name: file.name, mime: file.mime, size: file.size } : undefined,
     breadcrumbs: await nodePath(env, id),
     ...(book ? { book } : {}),
+    ...(page ? { book_page: page } : {}),
+    ...(discussion ? { discussion_page: node.parent_id! } : {}),
+    ...(reference ? { reference } : {}),
   };
 }
 export function operationKey(request: Request): string {
@@ -154,6 +180,8 @@ export async function createNode(
   data: Record<string, unknown>,
   key: string,
   paper?: { arxivId: string; html: string; assets: string[] },
+  // Rows created with the node in the same batch (book pages, discussions).
+  extra?: (id: string, now: number) => D1PreparedStatement[],
 ): Promise<NoteNode> {
   const operation = paper ? 'import-arxiv' : 'create';
   const previous = await priorOperation(env, key, operation);
@@ -162,7 +190,29 @@ export async function createNode(
   if (!['folder', 'markdown', 'text', 'pdf', 'image', 'link'].includes(kind))
     throw new AppError(400, '节点类型不正确。');
   const suppliedTitle = textValue(data.title ?? '', '标题', 200, true).trim();
-  let title = suppliedTitle || (data.book !== undefined ? '未命名书籍' : UNTITLED_NAMES[kind]);
+  const project = data.project !== undefined;
+  if (
+    project &&
+    (data.project !== true ||
+      kind !== 'folder' ||
+      data.book !== undefined ||
+      data.referenceId !== undefined ||
+      paper)
+  )
+    throw new AppError(400, '项目需要使用独立的文件夹。');
+  const reference =
+    data.referenceId === undefined ? null : await getNode(env, idValue(data.referenceId));
+  if (reference && (kind !== 'folder' || data.book !== undefined || paper))
+    throw new AppError(400, '引用不能同时创建其他内容。');
+  let title =
+    suppliedTitle ||
+    (project
+      ? '未命名项目'
+      : reference
+        ? reference.title
+        : data.book !== undefined
+          ? '未命名书籍'
+          : UNTITLED_NAMES[kind]);
   const icon = await folderIcon(env, kind, data.icon);
   // A book is a folder created together with its details.
   if (data.book !== undefined && (kind !== 'folder' || paper))
@@ -178,7 +228,8 @@ export async function createNode(
   const parent = data.parentId == null ? null : idValue(data.parentId);
   if (parent) {
     const p = await getNode(env, parent);
-    if (!PARENT_KINDS.includes(p.kind)) throw new AppError(400, '这个节点不能包含子节点。');
+    if (!PARENT_KINDS.includes(p.kind) || p.is_reference)
+      throw new AppError(400, '这个节点不能包含子节点，请打开引用的原目录。');
   }
   const url = kind === 'link' ? validUrl(data.url) : null;
   let fileId: string | null = null;
@@ -228,6 +279,15 @@ export async function createNode(
     ),
   ];
   if (book) statements.push(insertBook(env, id, book));
+  if (project) statements.push(...insertProject(env, id, now));
+  if (reference)
+    statements.push(
+      env.DB.prepare('INSERT INTO node_references(node_id,target_id) VALUES(?,?)').bind(
+        id,
+        reference.id,
+      ),
+    );
+  if (extra) statements.push(...extra(id, now));
   if (blob)
     statements.push(
       env.DB.prepare(
@@ -240,6 +300,7 @@ export async function createNode(
         version,
         id,
       ),
+      ...(kind === 'markdown' ? [metadataStatement(env, id, version, content)] : []),
     );
   try {
     await env.DB.batch(statements);
@@ -291,6 +352,7 @@ export async function saveNote(
       env.DB.prepare(
         'UPDATE nodes SET current_version_id=?,revision=revision+1,updated_at=? WHERE id=?',
       ).bind(version, now, id),
+      ...(node.kind === 'markdown' ? [metadataStatement(env, id, version, content)] : []),
       env.DB.prepare(
         'DELETE FROM versions WHERE node_id=? AND id NOT IN (SELECT id FROM versions WHERE node_id=? ORDER BY sequence DESC LIMIT 6)',
       ).bind(id, id),
@@ -326,6 +388,8 @@ export async function updateNode(
     throw new AppError(400, '节点顺序不正确。');
   // Only write parent_id when moving; renaming must not depend on an unrelated parent update trigger.
   const moving = data.parentId !== undefined;
+  if (moving && parent && (await getNode(env, parent)).is_reference)
+    throw new AppError(400, '不能移入引用，请打开原目录后再移动。');
   const result = await env.DB.prepare(
     `UPDATE nodes SET title=?,url=?,icon_emoji=?,icon_blob_id=?,${moving ? 'parent_id=?,position=?,' : ''} revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id`,
   )

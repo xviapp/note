@@ -9,6 +9,11 @@ import {
   LoaderCircle,
   BookOpen,
   BookMarked,
+  BriefcaseBusiness,
+  ListTodo,
+  CircleAlert,
+  NotebookPen,
+  CornerUpRight,
 } from 'lucide-react';
 import type { NodeKind, NoteNode } from '../../shared/types';
 import { CachedImage } from './CachedImage';
@@ -19,10 +24,28 @@ export function NodeIcon({
   size = 17,
   node,
 }: {
-  kind: NodeKind | 'arxiv' | 'book';
+  kind: NodeKind | 'arxiv' | 'book' | 'project' | 'reference' | 'todo' | 'issue' | 'note';
   size?: number;
-  node?: Pick<NoteNode, 'icon_emoji' | 'icon_blob_id' | 'is_book'>;
+  node?: Pick<
+    NoteNode,
+    | 'icon_emoji'
+    | 'icon_blob_id'
+    | 'is_book'
+    | 'is_project'
+    | 'is_reference'
+    | 'reference_kind'
+    | 'project_category'
+  >;
 }) {
+  if (node?.is_reference)
+    return (
+      <span className="node-reference-icon" aria-hidden="true">
+        <NodeIcon kind={node.project_category || node.reference_kind || 'reference'} size={size} />
+        <CornerUpRight size={Math.max(10, size * 0.65)} className="reference-arrow" />
+      </span>
+    );
+  if (node?.is_project && kind === 'folder' && !node.icon_emoji && !node.icon_blob_id)
+    kind = 'project';
   if (kind === 'folder' && node?.is_book && !node.icon_emoji && !node.icon_blob_id) kind = 'book';
   if (kind === 'folder' && (node?.icon_emoji || node?.icon_blob_id))
     return (
@@ -36,6 +59,8 @@ export function NodeIcon({
         )}
       </span>
     );
+  if (node?.project_category && (kind === 'folder' || kind === 'markdown'))
+    kind = node.project_category;
   const Icon = {
     folder: Folder,
     markdown: FileText,
@@ -45,6 +70,11 @@ export function NodeIcon({
     link: Link,
     arxiv: BookOpen,
     book: BookMarked,
+    project: BriefcaseBusiness,
+    reference: CornerUpRight,
+    todo: ListTodo,
+    issue: CircleAlert,
+    note: NotebookPen,
   }[kind];
   return (
     <Icon size={size} strokeWidth={1.8} className={`node-icon kind-${kind}`} aria-hidden="true" />

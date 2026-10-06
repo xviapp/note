@@ -5,6 +5,8 @@ export interface Env {
   APP_SECRET: string;
   SETUP_TOKEN: string;
   APP_NAME?: string;
+  // Test servers point this at a local stand-in; production leaves it unset.
+  DEEPSEEK_BASE_URL?: string;
 }
 export interface Site {
   id: number;

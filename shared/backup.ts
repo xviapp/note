@@ -21,6 +21,10 @@ export const backupColumns = {
     'trash_id',
     'created_at',
     'updated_at',
+    'metadata_title',
+    'metadata_status',
+    'metadata_excerpt',
+    'metadata_version_id',
   ],
   versions: ['id', 'node_id', 'sequence', 'body_blob_id', 'created_at'],
   version_assets: ['version_id', 'blob_id'],
@@ -53,7 +57,29 @@ export const backupColumns = {
   ],
   paper_translations: ['node_id', 'target_language', 'body_blob_id', 'updated_at'],
   annotations: ['node_id', 'body_blob_id', 'updated_at', 'search_text'],
-  books: ['node_id', 'author', 'status', 'page_count', 'pages_read', 'role_prompt', 'updated_at'],
+  books: [
+    'node_id',
+    'author',
+    'status',
+    'page_count',
+    'pages_read',
+    'role_prompt',
+    'note_id',
+    'updated_at',
+  ],
+  book_pages: [
+    'node_id',
+    'page',
+    'summary',
+    'questions',
+    'source_version_id',
+    'note_id',
+    'updated_at',
+  ],
+  book_discussions: ['node_id', 'created_at'],
+  book_note_sections: ['discussion_id', 'note_id', 'hash', 'updated_at'],
+  projects: ['node_id'],
+  node_references: ['node_id', 'target_id'],
   trash_batches: [
     'id',
     'root_id',
@@ -139,18 +165,34 @@ export function validateBackup(input: unknown): LibraryBackup {
     // Or highlights and notes.
     if (table === 'annotations' && data.tables.annotations === undefined)
       data.tables.annotations = [];
-    // Or books.
-    if (table === 'books' && data.tables.books === undefined) data.tables.books = [];
+    // Or books and their pages.
+    for (const name of [
+      'books',
+      'book_pages',
+      'book_discussions',
+      'book_note_sections',
+      'projects',
+      'node_references',
+    ] as const)
+      if (table === name && data.tables[name] === undefined) data.tables[name] = [];
     const rows = data.tables[table as BackupTable];
     if (!Array.isArray(rows)) invalid(`缺少 ${table}。`);
     for (const row of rows) {
       if (!row || typeof row !== 'object' || Array.isArray(row)) invalid('记录格式错误。');
       // Or the annotation search index, which is rebuilt on the next save.
       if (table === 'annotations' && row.search_text === undefined) row.search_text = '';
+      if (table === 'books' && row.note_id === undefined) row.note_id = null;
       // Older v1 archives predate custom folder icons.
       if (table === 'nodes') {
         if (row.icon_emoji === undefined) row.icon_emoji = null;
         if (row.icon_blob_id === undefined) row.icon_blob_id = null;
+        for (const field of [
+          'metadata_title',
+          'metadata_status',
+          'metadata_excerpt',
+          'metadata_version_id',
+        ])
+          if (row[field] === undefined) row[field] = null;
       }
       for (const column of columns) {
         const value = row[column];
@@ -231,6 +273,10 @@ export function validateBackup(input: unknown): LibraryBackup {
     'paper_translations',
     'annotations',
     'books',
+    'book_pages',
+    'book_discussions',
+    'projects',
+    'node_references',
   ] as const)
     for (const row of data.tables[table]) {
       const global =
@@ -284,6 +330,53 @@ export function validateBackup(input: unknown): LibraryBackup {
     )
       invalid('书籍信息不正确。');
     books.add(row.node_id);
+    if (row.note_id !== null && !nodes.has(row.note_id)) invalid('书籍笔记缺失。');
+  }
+  for (const row of data.tables.book_pages) {
+    if (
+      (row.page !== null &&
+        (!Number.isSafeInteger(row.page) || Number(row.page) < 1 || Number(row.page) > 100_000)) ||
+      typeof row.summary !== 'string' ||
+      typeof row.questions !== 'string' ||
+      (row.note_id !== null && !nodes.has(row.note_id)) ||
+      (row.source_version_id !== null && !versions.has(row.source_version_id))
+    )
+      invalid('书页信息不正确。');
+  }
+  for (const row of data.tables.book_note_sections)
+    if (!nodes.has(row.discussion_id) || !nodes.has(row.note_id) || typeof row.hash !== 'string')
+      invalid('读书笔记信息不正确。');
+  const projects = new Set<unknown>();
+  for (const row of data.tables.projects) {
+    if (
+      projects.has(row.node_id) ||
+      nodes.get(row.node_id)!.kind !== 'folder' ||
+      books.has(row.node_id)
+    )
+      invalid('项目信息不正确。');
+    projects.add(row.node_id);
+  }
+  const references = new Set<unknown>();
+  for (const row of data.tables.node_references) {
+    if (
+      references.has(row.node_id) ||
+      nodes.get(row.node_id)!.kind !== 'folder' ||
+      projects.has(row.node_id) ||
+      books.has(row.node_id) ||
+      (row.target_id !== null && !nodes.has(row.target_id))
+    )
+      invalid('文件引用不正确。');
+    references.add(row.node_id);
+  }
+  if (data.tables.nodes.some((node) => references.has(node.parent_id)))
+    invalid('引用不能包含独立的下级笔记。');
+  // Summaries are derived from Markdown; never trust an imported cached status.
+  for (const node of data.tables.nodes) {
+    node.metadata_title =
+      node.metadata_status =
+      node.metadata_excerpt =
+      node.metadata_version_id =
+        null;
   }
   for (const row of data.tables.reading_states) {
     try {

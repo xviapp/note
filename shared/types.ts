@@ -1,4 +1,5 @@
 import type { PasswordParameters } from './password';
+import type { ProjectCategory } from './projects';
 
 export interface AuthStatus {
   initialized: boolean;
@@ -38,6 +39,15 @@ export interface NoteNode {
   favorite?: number;
   // A folder with book details.
   is_book?: number;
+  is_project?: number;
+  is_reference?: number;
+  reference_target_id?: string | null;
+  reference_kind?: NodeKind | null;
+  project_category?: ProjectCategory | null;
+  metadata_title?: string | null;
+  metadata_status?: string | null;
+  metadata_excerpt?: string | null;
+  metadata_version_id?: string | null;
 }
 export interface FileInfo {
   id: string;
@@ -71,13 +81,51 @@ export interface ShareSettings {
   breadcrumbs: { id: string; title: string }[];
 }
 export interface NoteDetail extends NoteNode {
+  reference?: { target: NoteNode | null };
   content: string;
   attachments: FileInfo[];
   file?: FileInfo;
   breadcrumbs: { id: string; title: string }[];
   // The nearest book containing this note, or the note itself when it is a book.
   book?: BookInfo;
+  // A photographed page of the book: its summary, questions and discussions.
+  book_page?: BookPageInfo;
+  // A discussion below a page (its 青藜 thread is the conversation).
+  discussion_page?: string;
 }
+export interface BookDiscussion {
+  id: string;
+  title: string;
+  replies: number;
+  // Summarized into the page's reading note.
+  noted: boolean;
+}
+export interface BookPageInfo {
+  page: number | null;
+  summary: string;
+  questions: string[];
+  // No summary yet, or written from an older version of the page.
+  stale: boolean;
+  note_id: string | null;
+  discussions: BookDiscussion[];
+  prev: string | null;
+  next: string | null;
+}
+export interface BookPageItem {
+  id: string;
+  title: string;
+  page: number | null;
+  summary: string;
+  discussions: number;
+  note_id: string | null;
+}
+export interface BookPages {
+  pages: BookPageItem[];
+  // Other notes kept directly in the book.
+  others: NoteNode[];
+}
+export const BOOK_SUMMARY_LIMIT = 400;
+export const BOOK_QUESTION_LIMIT = 120;
 export type BookStatus = 'want' | 'reading' | 'finished';
 export const BOOK_STATUS_LABELS: Record<BookStatus, string> = {
   want: '想读',
@@ -95,6 +143,8 @@ export interface BookInfo {
   pages_read: number;
   // Steers 青藜 for every note inside the book.
   role_prompt: string;
+  // The collected reading note of all pages.
+  note_id: string | null;
   updated_at: number;
 }
 export interface ReadingPosition {

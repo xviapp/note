@@ -5,6 +5,7 @@ import {
   useImperativeHandle,
   useRef,
   useState,
+  type ReactNode,
   type RefObject,
 } from 'react';
 import {
@@ -73,6 +74,19 @@ interface Props {
   onImage: (src: string, alt: string) => void;
   // How many highlights and notes the file has, to offer sending them along.
   annotationCount?: number;
+  // A book page's discussion: the conversation is the discussion note's thread,
+  // titled after it, while "attach current file" offers the page itself.
+  title?: string;
+  fileNode?: NoteDetail;
+  context?: string;
+  headerActions?: ReactNode;
+  // Sent once the conversation has loaded (a question asked from the page).
+  initialPrompt?: { content: string; quote?: string };
+  // A passage chosen on the page, quoted in the next question.
+  initialQuote?: string;
+  // A discussion not created yet: the first question creates it instead of
+  // being sent here.
+  onDraftSend?: (content: string, quote: string) => void;
 }
 export function AssistantPanel(props: Props) {
   const { node, visible } = props;
@@ -84,7 +98,7 @@ export function AssistantPanel(props: Props) {
     [sending, setSending] = useState(false),
     [remoteBusy, setRemoteBusy] = useState(false);
   const [prompt, setPrompt] = useState(''),
-    [quote, setQuote] = useState(''),
+    [quote, setQuote] = useState(props.initialQuote ?? ''),
     [image, setImage] = useState(''),
     [withNotes, setWithNotes] = useState(false);
   const [error, setError] = useState(''),
@@ -115,8 +129,13 @@ export function AssistantPanel(props: Props) {
   };
   useImperativeHandle(props.actionsRef, () => ({ addQuote }));
   const base = `/api/nodes/${scopeId}/assistant`;
+  const draft = !!props.onDraftSend;
   const load = useCallback(
     async (before?: number, quiet = false) => {
+      if (draft) {
+        setLoading(false);
+        return;
+      }
       if (!quiet) setError('');
       try {
         const history = await api<ChatHistory>(`${base}${before ? `?before=${before}` : ''}`);
@@ -144,7 +163,7 @@ export function AssistantPanel(props: Props) {
         if (mounted.current) setLoading(false);
       }
     },
-    [base],
+    [base, draft],
   );
   useEffect(() => {
     mounted.current = true;
@@ -164,6 +183,16 @@ export function AssistantPanel(props: Props) {
         if (mounted.current) setError(e.message);
       });
   }, [visible, load]);
+  // A question asked from the page goes out once the conversation is ready.
+  const initialSent = useRef(false);
+  useEffect(() => {
+    const initial = props.initialPrompt;
+    if (!initial || initialSent.current || loading || !settings?.configured || !visible) return;
+    initialSent.current = true;
+    void send(undefined, initial);
+    // send is recreated each render; this runs once the history and settings are in.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [props.initialPrompt, loading, settings, visible]);
   useEffect(() => {
     if (!remoteBusy || sending || !visible) return;
     const timer = setInterval(() => void load(undefined, true), 5000);
@@ -173,15 +202,15 @@ export function AssistantPanel(props: Props) {
     if (visible && follow.current) bottom.current?.scrollIntoView({ block: 'nearest' });
   }, [messages, visible, props.mode]);
 
-  const send = async (continueFrom?: string) => {
-    if (
-      abort.current ||
-      sending ||
-      remoteBusy ||
-      (!continueFrom && !prompt.trim()) ||
-      !settings?.configured
-    )
+  const send = async (continueFrom?: string, initial?: { content: string; quote?: string }) => {
+    const text = initial ? initial.content : prompt.trim(),
+      quoted = initial ? (initial.quote ?? '') : quote;
+    if (abort.current || sending || remoteBusy || (!continueFrom && !text) || !settings?.configured)
       return;
+    if (props.onDraftSend && !continueFrom) {
+      props.onDraftSend(text, quoted);
+      return;
+    }
     setSending(true);
     setError('');
     setContextNotice('');
@@ -199,8 +228,8 @@ export function AssistantPanel(props: Props) {
         for (const file of files)
           attached.push(await uploadPreparedFile(scopeId, file, controller.signal));
         data = {
-          content: prompt.trim(),
-          ...(quote ? { quote } : {}),
+          content: text,
+          ...(quoted ? { quote: quoted } : {}),
           ...(image ? { image } : {}),
           ...(withNotes && props.annotationCount ? { annotations: true } : {}),
           ...(attached.length ? { files: attached } : {}),
@@ -312,7 +341,7 @@ export function AssistantPanel(props: Props) {
   return (
     <>
       <AssistantWindow
-        title={props.global ? '全局对话' : node!.title}
+        title={props.global ? '全局对话' : (props.title ?? node!.title)}
         showLauncher={props.showLauncher}
         label={props.global ? '全局青藜' : '青藜'}
         visible={visible}
@@ -325,6 +354,7 @@ export function AssistantPanel(props: Props) {
         onClose={props.onClose}
         actions={
           <>
+            {props.headerActions}
             {props.onGlobal && (
               <button className="text-button" onClick={props.onGlobal}>
                 全局对话
@@ -382,6 +412,7 @@ export function AssistantPanel(props: Props) {
             </button>
           </div>
         )}
+        {props.context && <p className="assistant-context">{props.context}</p>}
         <div
           className="assistant-messages"
           data-selection-owner={scopeId}
@@ -633,7 +664,7 @@ export function AssistantPanel(props: Props) {
                 type="button"
                 className="text-button"
                 disabled={sending || files.length >= CHAT_FILE_LIMIT}
-                onClick={() => setFileSource({ type: 'note', note: node })}
+                onClick={() => setFileSource({ type: 'note', note: props.fileNode ?? node })}
               >
                 <FileText size={15} />
                 附上当前文件

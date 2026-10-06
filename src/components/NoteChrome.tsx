@@ -12,6 +12,7 @@ import {
 import { formatDate } from '../api';
 import { KIND_LABELS, PARENT_KINDS, type NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
+import { PROJECT_LABELS } from '../../shared/projects';
 
 // The parts of a note page around its body: location, heading, edit bar.
 
@@ -76,7 +77,7 @@ export function NoteHeading({
 }) {
   return (
     <header className="document-heading">
-      <h1>{note.title}</h1>
+      <h1>{note.project_category && note.metadata_title ? note.metadata_title : note.title}</h1>
       {/* Kind, date and New share one ruled row to keep the page top short. */}
       <div className="document-meta">
         <span className="document-kind">
@@ -85,7 +86,13 @@ export function NoteHeading({
             ? 'arXiv 论文'
             : note.book?.id === note.id
               ? '书籍'
-              : KIND_LABELS[note.kind]}
+              : note.is_project
+                ? '项目'
+                : note.is_reference
+                  ? '文件／文件夹引用'
+                  : note.project_category && note.kind === 'markdown'
+                    ? PROJECT_LABELS[note.project_category]
+                    : KIND_LABELS[note.kind]}
         </span>
         {note.arxiv_id ? (
           <a className="paper-source" href={note.url!} target="_blank" rel="noopener noreferrer">
@@ -95,7 +102,7 @@ export function NoteHeading({
         ) : (
           <span>更新于 {formatDate(note.updated_at)}</span>
         )}
-        {PARENT_KINDS.includes(note.kind) && !editing && (
+        {PARENT_KINDS.includes(note.kind) && !note.is_reference && !editing && (
           <button className="text-button" onClick={onNew}>
             <Plus size={14} />
             新建

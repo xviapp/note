@@ -340,6 +340,10 @@ export async function finishRestore(env: Env, jobId: string) {
     trash_id: null,
     created_at: now,
     updated_at: now,
+    metadata_title: null,
+    metadata_status: null,
+    metadata_excerpt: null,
+    metadata_version_id: null,
   });
   const restoredNodes: BackupRow[] = nodes.map((node) => ({
     ...rewrite(node),
@@ -387,6 +391,11 @@ export async function finishRestore(env: Env, jobId: string) {
     paper_translations: archive.tables.paper_translations.map(rewrite),
     annotations: archive.tables.annotations.map(rewrite),
     books: archive.tables.books.map(rewrite),
+    book_pages: archive.tables.book_pages.map(rewrite),
+    book_discussions: archive.tables.book_discussions.map(rewrite),
+    book_note_sections: archive.tables.book_note_sections.map(rewrite),
+    projects: archive.tables.projects.map(rewrite),
+    node_references: archive.tables.node_references.map(rewrite),
     trash_batches: [],
   };
   const statements = [

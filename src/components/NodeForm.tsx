@@ -13,6 +13,7 @@ import {
 import { Modal, NodeIcon } from './Primitives';
 import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
+import { NodePicker } from './Tree';
 
 export function NodeForm({
   node,
@@ -29,12 +30,13 @@ export function NodeForm({
   onClose: () => void;
   onSaved: (node: NoteNode) => void;
 }) {
-  const [kind, setKind] = useState<NodeKind | 'arxiv' | 'book'>(
+  const [kind, setKind] = useState<NodeKind | 'arxiv' | 'book' | 'project' | 'reference'>(
     node?.kind ||
       (existingFile ? (existingFile.mime === 'application/pdf' ? 'pdf' : 'image') : 'markdown'),
   );
   const [title, setTitle] = useState(node?.title || existingFile?.name || ''),
     [url, setUrl] = useState(node?.url || '');
+  const [reference, setReference] = useState<{ id: string; title: string } | null>(null);
   const [file, setFile] = useState<File | null>(null),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
@@ -51,7 +53,8 @@ export function NodeForm({
     [pageCount, setPageCount] = useState(''),
     [role, setRole] = useState('');
   // A book is a folder created with its reading details.
-  const folderLike = kind === 'folder' || kind === 'book';
+  const folderLike =
+    !node?.is_reference && (kind === 'folder' || kind === 'book' || kind === 'project');
   const [preparingIcon, setPreparingIcon] = useState(false);
   const uploadedIcon = useRef<{ source: File; info: FileInfo } | null>(null);
   const working = busy || preparingIcon;
@@ -70,6 +73,7 @@ export function NodeForm({
     setError('');
     try {
       let iconData;
+      if (kind === 'reference' && !reference) throw new Error('请先选择要引用的文件或文件夹。');
       if (folderLike) {
         if (icon.emoji && !isFolderEmoji(icon.emoji)) throw new Error('请输入一个 Emoji。');
         if (icon.file && uploadedIcon.current?.source !== icon.file) {
@@ -100,12 +104,14 @@ export function NodeForm({
               '/api/nodes',
               'POST',
               {
-                kind: kind === 'book' ? 'folder' : kind,
+                kind: ['book', 'project', 'reference'].includes(kind) ? 'folder' : kind,
                 title,
                 parentId: parent,
                 url,
                 fileId: uploaded.current?.id,
                 content: '',
+                ...(kind === 'project' ? { project: true } : {}),
+                ...(kind === 'reference' ? { referenceId: reference!.id } : {}),
                 ...(folderLike ? { icon: iconData } : {}),
                 ...(kind === 'book'
                   ? { book: { author, pageCount: Number(pageCount) || 0, rolePrompt: role } }
@@ -140,7 +146,16 @@ export function NodeForm({
           <fieldset className="kind-choices">
             <legend>内容类型</legend>
             {Object.entries(KIND_LABELS)
-              .flatMap((entry) => (entry[0] === 'folder' ? [entry, ['book', '书籍']] : [entry]))
+              .flatMap((entry) =>
+                entry[0] === 'folder'
+                  ? [
+                      entry,
+                      ['book', '书籍'],
+                      ['project', '项目'],
+                      ['reference', '文件／文件夹引用'],
+                    ]
+                  : [entry],
+              )
               .concat([['arxiv', 'arXiv 论文']])
               .map(([value, label]) => (
                 <label key={value} className={kind === value ? 'selected' : ''}>
@@ -150,9 +165,9 @@ export function NodeForm({
                     value={value}
                     checked={kind === value}
                     disabled={working || !!uploaded.current}
-                    onChange={() => setKind(value as NodeKind | 'arxiv' | 'book')}
+                    onChange={() => setKind(value as typeof kind)}
                   />
-                  <NodeIcon kind={value as NodeKind | 'arxiv' | 'book'} />
+                  <NodeIcon kind={value as typeof kind} />
                   {label}
                 </label>
               ))}
@@ -171,7 +186,11 @@ export function NodeForm({
                     ? undefined
                     : kind === 'book'
                       ? '书名'
-                      : UNTITLED_NAMES[kind]
+                      : kind === 'project'
+                        ? '项目名称'
+                        : kind === 'reference'
+                          ? reference?.title || '留空使用原文件名称'
+                          : UNTITLED_NAMES[kind]
               }
               maxLength={200}
               value={title}
@@ -182,6 +201,23 @@ export function NodeForm({
               disabled={working}
             />
           </label>
+        )}
+        {kind === 'project' && !node && (
+          <p className="field-hint">
+            自动创建 todo、issue、note 目录，项目页汇总其中的 Markdown 文件。
+          </p>
+        )}
+        {kind === 'reference' && !node && (
+          <>
+            <p className="field-hint">选择原文件或文件夹，引用不会复制内容。删除引用保留原内容。</p>
+            <NodePicker
+              value={reference?.id || null}
+              label="选择引用内容"
+              onSelect={(id, name) => {
+                if (id) setReference({ id, title: name });
+              }}
+            />
+          </>
         )}
         {kind === 'book' && !node && (
           <>

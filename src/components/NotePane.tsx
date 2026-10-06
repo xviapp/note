@@ -46,7 +46,14 @@ import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
 import { AnnotationList, AnnotationPanel } from './AnnotationDialogs';
 import { BookCard, BookForm } from './BookPanel';
-import { createDiscussion, takeAssistantOnLoad } from '../books';
+import { ProjectPanel, ReferencePanel } from './ProjectPanel';
+import {
+  BookPageList,
+  BookPageNav,
+  DiscussionMenu,
+  PageAskBar,
+  PageInsights,
+} from './BookPageView';
 import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
 import { cachedNote } from '../offline-cache';
@@ -214,13 +221,65 @@ export default function NotePane(props: Props) {
     clearSourceHighlight();
     return clearSourceHighlight;
   }, [id, note?.content, editing]);
-  // A new discussion opens with 青藜 beside it.
-  useEffect(() => {
-    if (!loadedId || !takeAssistantOnLoad(loadedId)) return;
-    setAssistantMode('docked');
+  // On a book page 青藜 holds the page's discussions: one conversation each,
+  // or a draft until the first question creates one.
+  const bookPage = note?.book_page;
+  const [discussion, setDiscussion] = useState<{
+    id: string | null;
+    initial?: { content: string; quote?: string };
+    quote?: string;
+  } | null>(null);
+  useEffect(() => setDiscussion(null), [id]);
+  const openDiscussion = (next: NonNullable<typeof discussion>) => {
+    setDiscussion(next);
+    setTranslation(null);
+    setPdf(null);
+    if (window.matchMedia('(min-width: 761px)').matches) setAssistantMode('docked');
     setAssistantOpen(true);
-  }, [loadedId]);
+  };
+  const askPage = async (question: string, quote?: string) => {
+    try {
+      const created = await api<NoteNode>(`/api/nodes/${id}/discussions`, 'POST', {
+        title: question,
+      });
+      openDiscussion({ id: created.id, initial: { content: question, quote } });
+      setRetry((count) => count + 1);
+    } catch (error) {
+      props.onError(error);
+    }
+  };
+  const organize = async (discussionId: string, force = false): Promise<void> => {
+    try {
+      const result = await api<{ note: NoteNode; updated: boolean }>(
+        `/api/nodes/${discussionId}/organize`,
+        'POST',
+        { force },
+      );
+      props.onNotice?.(
+        `${result.updated ? '已更新' : '已追加到'}「${result.note.title}」${result.updated ? '中的这一节' : ''}`,
+      );
+      props.onChanged();
+      setRetry((count) => count + 1);
+    } catch (error) {
+      if (
+        error instanceof ApiError &&
+        error.code === 'BOOK_SECTION_EDITED' &&
+        (await question.confirm(
+          '这一节你修改过',
+          '再次整理会用新的结论替换你在读书笔记里对这一节的修改，旧内容可在版本历史中找回。',
+          '覆盖',
+        ))
+      )
+        return organize(discussionId, true);
+      if (!(error instanceof ApiError && error.code === 'BOOK_SECTION_EDITED'))
+        props.onError(error);
+    }
+  };
   const addQuote = (text: string) => {
+    if (bookPage) {
+      openDiscussion({ id: null, quote: text });
+      return;
+    }
     if (!assistantActions.current) return '青藜尚未就绪，请稍后重试。';
     const error = assistantActions.current.addQuote(text);
     if (error) return error;
@@ -545,16 +604,9 @@ export default function NotePane(props: Props) {
           onAnnotations={() => setAnnotationsOpen((open) => !(open && !toc.compact))}
           onEdit={() => void startEdit()}
           onBook={() => setBookOpen(true)}
-          onDiscuss={() =>
-            void createDiscussion(note)
-              .then((node) => {
-                props.onChanged();
-                props.onOpen(node);
-              })
-              .catch(props.onError)
-          }
           onAction={props.onAction}
         />
+        {bookPage && !editing && <BookPageNav info={bookPage} onNavigate={props.onNavigate} />}
       </div>
       {editing && (
         <EditToolbar
@@ -655,7 +707,7 @@ export default function NotePane(props: Props) {
                 }}
                 onClick={layer.onClick}
               >
-                <article className="note-article">
+                <article className={`note-article${bookPage ? ' book-page-view' : ''}`}>
                   <NoteHeading
                     note={note}
                     editing={editing}
@@ -670,7 +722,20 @@ export default function NotePane(props: Props) {
                     onHeadings={toc.onHeadings}
                   />
                   {!editing && layer.marks}
-                  {TEXT_KINDS.includes(note.kind) && (
+                  {bookPage && !editing && (
+                    <PageInsights
+                      id={id}
+                      info={bookPage}
+                      offline={offline || stale}
+                      onAsk={(question) => void askPage(question)}
+                      onOpenDiscussion={(discussionId) => openDiscussion({ id: discussionId })}
+                      onNavigate={props.onNavigate}
+                      onUpdated={() => setRetry((count) => count + 1)}
+                      onError={props.onError}
+                    />
+                  )}
+                  {/* A book page's only attachment is its photo, shown above the text. */}
+                  {TEXT_KINDS.includes(note.kind) && !(bookPage && !editing) && (
                     <Attachments
                       files={editing ? assets : note.attachments}
                       editing={editing}
@@ -680,7 +745,19 @@ export default function NotePane(props: Props) {
                     />
                   )}
                   {/* A folder is its list; other notes open their children from the toolbar. */}
-                  {note.kind === 'folder' && !editing && (
+                  {!!note.is_reference && !editing && (
+                    <ReferencePanel note={note} onOpen={props.onOpen} />
+                  )}
+                  {!!note.is_project && !editing && (
+                    <ProjectPanel
+                      id={id}
+                      refresh={props.treeRefresh + retry}
+                      offline={offline || stale}
+                      onChanged={props.onChanged}
+                      onNavigate={props.onNavigate}
+                    />
+                  )}
+                  {note.kind === 'folder' && !note.is_reference && !note.is_project && !editing && (
                     <section
                       className={`children-section${note.kind === 'folder' ? ' is-folder' : ''}`}
                       aria-label="下级笔记"
@@ -698,12 +775,21 @@ export default function NotePane(props: Props) {
                           onError={props.onError}
                         />
                       )}
-                      <NodeList
-                        parent={id}
-                        refresh={props.treeRefresh}
-                        onOpen={props.onOpen}
-                        onAction={props.onAction}
-                      />
+                      {note.book?.id === note.id ? (
+                        <BookPageList
+                          bookId={id}
+                          refresh={props.treeRefresh + retry}
+                          onOpen={props.onOpen}
+                          onNavigate={props.onNavigate}
+                        />
+                      ) : (
+                        <NodeList
+                          parent={id}
+                          refresh={props.treeRefresh}
+                          onOpen={props.onOpen}
+                          onAction={props.onAction}
+                        />
+                      )}
                     </section>
                   )}
                 </article>
@@ -740,8 +826,49 @@ export default function NotePane(props: Props) {
         </div>
         {note.kind !== 'folder' && (
           <AssistantPanel
+            {...(bookPage
+              ? (() => {
+                  const current = discussion?.id
+                    ? bookPage.discussions.find((item) => item.id === discussion.id)
+                    : undefined;
+                  return {
+                    key: discussion?.id ?? `draft:${discussion?.quote ?? ''}`,
+                    node: discussion?.id
+                      ? { ...note, id: discussion.id, title: current?.title ?? '讨论' }
+                      : note,
+                    title: current?.title ?? '新讨论',
+                    fileNode: note,
+                    context: `已带上：《${note.book!.title}》${note.book!.role_prompt ? ' · 书籍角色' : ''} · ${note.title}原文${bookPage.summary ? '与摘要' : ''}`,
+                    initialPrompt: discussion?.initial,
+                    initialQuote: discussion?.quote,
+                    onDraftSend: discussion?.id
+                      ? undefined
+                      : (content: string, quote: string) =>
+                          void askPage(content, quote || undefined),
+                    headerActions: (
+                      <>
+                        <DiscussionMenu
+                          info={bookPage}
+                          current={discussion?.id ?? null}
+                          onPick={(pick) => openDiscussion({ id: pick })}
+                        />
+                        {discussion?.id && (
+                          <button
+                            className="text-button"
+                            disabled={offline}
+                            onClick={() => void organize(discussion.id!)}
+                          >
+                            整理到笔记
+                          </button>
+                        )}
+                      </>
+                    ),
+                  };
+                })()
+              : { node: note })}
             actionsRef={assistantActions}
-            node={note}
+            // A book page asks from its questions, discussions and ask bar instead.
+            showLauncher={!bookPage}
             visible={assistantOpen && !editing}
             enabled={!editing && !props.globalAssistantOpen}
             onGlobal={() => props.onGlobalAssistant(selection)}
@@ -754,7 +881,10 @@ export default function NotePane(props: Props) {
             readingRoot={readingRoot}
             onClose={() => setAssistantOpen(false)}
             onOpen={() => setAssistantOpen(true)}
-            onChanged={props.onChanged}
+            onChanged={() => {
+              props.onChanged();
+              if (bookPage) setRetry((count) => count + 1);
+            }}
             onSettings={props.onSettings}
             onNavigate={props.onNavigate}
             onImage={showImage}
@@ -762,6 +892,9 @@ export default function NotePane(props: Props) {
           />
         )}
       </div>
+      {bookPage && !editing && !assistantOpen && (
+        <PageAskBar offline={offline || stale} onAsk={(question) => void askPage(question)} />
+      )}
       {!editing && note.kind !== 'folder' && (
         <SelectionToolbar
           owner={id}

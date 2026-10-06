@@ -27,7 +27,7 @@ import {
 import { discardFile, serveFile, storageInfo, uploadFile } from './storage';
 import { cleanup, deletePreview, listTrash, purgeTrash, restoreTrash, trashNode } from './recovery';
 import { favorite, openReading, readingState, saveReading } from './reading';
-import { aiSettings, saveAiSettings, testAiSettings } from './deepseek';
+import { aiSettings, configureProvider, saveAiSettings, testAiSettings } from './deepseek';
 import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
@@ -40,8 +40,17 @@ import {
   saveGlossary,
   translatePaperBlocks,
 } from './paper-translation';
-import { addPage, saveBook } from './books';
+import {
+  addPage,
+  bookPages,
+  collectBookNote,
+  createDiscussion,
+  organizeDiscussion,
+  pageInsights,
+  saveBook,
+} from './books';
 import { deleteAnnotation, listAnnotations, putAnnotation } from './annotations';
+import { createProjectItem, projectOverview, saveProjectStatus } from './projects';
 
 export default {
   async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
@@ -50,6 +59,7 @@ export default {
       return env.ASSETS
         ? env.ASSETS.fetch(request)
         : new Response('页间', { headers: { 'content-type': 'text/plain;charset=utf-8' } });
+    configureProvider(env);
     try {
       enforceOrigin(request);
       const publicResponse = await publicAuth(request, env, url.pathname);
@@ -162,6 +172,16 @@ export default {
         const id = note[1],
           action = note[2] || '';
         if (!action && method === 'GET') return json(await noteDetail(env, id));
+        if (action === 'project' && method === 'GET') return json(await projectOverview(env, id));
+        if (action === 'project/items' && method === 'POST')
+          return json(
+            await createProjectItem(env, id, await body(request), operationKey(request)),
+            201,
+          );
+        if (action === 'project-status' && method === 'PUT') {
+          await requireEdit(request, env, session, id);
+          return json(await saveProjectStatus(env, id, await body(request), operationKey(request)));
+        }
         if (action === 'paper-translation' && method === 'GET')
           return json(await getPaperTranslation(env, id, url));
         if (action === 'paper-translation' && method === 'POST')
@@ -174,6 +194,19 @@ export default {
           return json(await saveBook(env, id, await body(request)));
         if (action === 'pages' && method === 'POST')
           return json(await addPage(env, id, await body(request), operationKey(request)), 201);
+        if (action === 'pages' && method === 'GET') return json(await bookPages(env, id));
+        if (action === 'book-note' && method === 'POST')
+          return json(await collectBookNote(env, id, operationKey(request)));
+        if (action === 'insights' && method === 'POST') return json(await pageInsights(env, id));
+        if (action === 'discussions' && method === 'POST')
+          return json(
+            await createDiscussion(env, id, await body(request), operationKey(request)),
+            201,
+          );
+        if (action === 'organize' && method === 'POST')
+          return json(
+            await organizeDiscussion(env, id, await body(request), operationKey(request)),
+          );
         if (action === 'annotations' && method === 'GET')
           return json(await listAnnotations(env, id));
         const annotation = action.match(/^annotations\/([a-zA-Z0-9_-]+)$/);

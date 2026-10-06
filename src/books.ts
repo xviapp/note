@@ -42,19 +42,3 @@ export async function addBookPage(bookId: string, file: File, page: number | nul
     ...(page ? { page } : {}),
   });
 }
-
-// A discussion opens with 青藜 beside it; the request survives the navigation.
-const assistantOnLoad = new Set<string>();
-export async function createDiscussion(parent: Pick<NoteNode, 'id' | 'title'>) {
-  const node = await api<NoteNode>('/api/nodes', 'POST', {
-    kind: 'markdown',
-    parentId: parent.id,
-    title: `讨论：${parent.title}`.slice(0, 200),
-    content: `围绕 [${parent.title.replace(/[[\]]/g, '')}](/n/${parent.id}) 的讨论。\n`,
-  });
-  assistantOnLoad.add(node.id);
-  return node;
-}
-export function takeAssistantOnLoad(id: string): boolean {
-  return assistantOnLoad.delete(id);
-}

@@ -5,6 +5,7 @@ import { KIND_LABELS, type NoteNode } from '../../shared/types';
 import { Empty, NodeIcon, Spinner } from './Primitives';
 import { NodeMenu, type NodeAction } from './Tree';
 import { useNodeListing } from '../use-node-listing';
+import { PROJECT_LABELS } from '../../shared/projects';
 
 type NodeListProps = {
   refresh: number;
@@ -107,7 +108,13 @@ function NodeRows({
                       ? `arXiv 论文 · ${node.arxiv_id}`
                       : node.kind === 'link'
                         ? node.url
-                        : KIND_LABELS[node.kind]}
+                        : node.is_project
+                          ? '项目'
+                          : node.is_reference
+                            ? '文件／文件夹引用'
+                            : node.project_category
+                              ? PROJECT_LABELS[node.project_category]
+                              : KIND_LABELS[node.kind]}
                   </small>
                 </span>
                 {node.kind === 'link' && !node.arxiv_id ? (

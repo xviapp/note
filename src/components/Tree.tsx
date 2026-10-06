@@ -63,13 +63,15 @@ export function NodeMenu({
       <div className="menu-popup">
         {children}
         <OfflineSaveButton node={node} />
-        {PARENT_KINDS.includes(node.kind) && (
+        {PARENT_KINDS.includes(node.kind) && !node.is_reference && (
           <button onClick={() => onAction('new', node)}>新建笔记</button>
         )}
         <button onClick={() => onAction('rename', node)}>
           重命名{node.kind === 'link' && !node.arxiv_id ? ' / 修改链接' : ''}
         </button>
-        {node.kind === 'folder' && <button onClick={() => onAction('icon', node)}>更换图标</button>}
+        {node.kind === 'folder' && !node.is_reference && (
+          <button onClick={() => onAction('icon', node)}>更换图标</button>
+        )}
         <button onClick={() => onAction('move', node)}>移动到…</button>
         <button className="danger-text" onClick={() => onAction('delete', node)}>
           移到回收站
@@ -177,7 +179,7 @@ function Branch({
       >
         {listing.nodes.map((node) => {
           // Any container accepts a drop; only one with children shows an arrow.
-          const container = PARENT_KINDS.includes(node.kind),
+          const container = PARENT_KINDS.includes(node.kind) && !node.is_reference,
             hasChildren = container && (node.child_count ?? 0) > 0,
             open = expanded.has(node.id);
           return (
@@ -475,7 +477,11 @@ export function NodePicker({
       {error && <p className="inline-error">{error}</p>}
       {!listing && !error && <Spinner />}
       {listing?.nodes
-        .filter((node) => node.id !== exclude && (!parentsOnly || PARENT_KINDS.includes(node.kind)))
+        .filter(
+          (node) =>
+            node.id !== exclude &&
+            (!parentsOnly || (PARENT_KINDS.includes(node.kind) && !node.is_reference)),
+        )
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
             <button
@@ -491,7 +497,7 @@ export function NodePicker({
               <NodeIcon node={node} kind={node.arxiv_id ? 'arxiv' : node.kind} />
               <span>{node.title}</span>
             </button>
-            {PARENT_KINDS.includes(node.kind) && (
+            {PARENT_KINDS.includes(node.kind) && !node.is_reference && (
               <button
                 type="button"
                 className="icon-button"

@@ -409,7 +409,12 @@ function Notebook({
   const { moved, drop } = moves;
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
-    setForm({ parent: loaded && PARENT_KINDS.includes(loaded.kind) ? loaded.id : null });
+    setForm({
+      parent:
+        loaded && PARENT_KINDS.includes(loaded.kind) && !loaded.is_reference
+          ? loaded.id
+          : loaded?.parent_id || null,
+    });
   };
   shortcuts.current.newNode = () => void newNode();
   const logout = async (all = false) => {

@@ -8,7 +8,7 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/types';
-import type { BookInfo, FileInfo, NoteDetail, NoteNode } from '../shared/types';
+import type { BookInfo, BookPages, FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import { sseData } from '../shared/sse';
 import { validateBackup, type LibraryBackup } from '../shared/backup';
 
@@ -218,5 +218,149 @@ describe('books', () => {
     const broken = structuredClone(exported.archive);
     broken.tables.books[0].status = 'lost';
     expect(() => validateBackup(broken)).toThrow('书籍信息不正确');
+  });
+
+  it('pages carry a summary and questions, and hidden discussions summarized into a reading note', async () => {
+    const book = await newBook(),
+      first = await photo(),
+      second = await photo();
+    const replies: string[] = [];
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider(replies.shift()!));
+    replies.push('农业革命让食物增多，却让多数人更辛苦。', '小麦驯化了人类。');
+    const page12 = await ok<NoteNode>(
+      `/api/nodes/${book.id}/pages`,
+      'POST',
+      { fileId: first.id, page: 12 },
+      'p12',
+    );
+    const page11 = await ok<NoteNode>(
+      `/api/nodes/${book.id}/pages`,
+      'POST',
+      { fileId: second.id, page: 11 },
+      'p11',
+    );
+    // Pages list in page order, with neighbours for turning pages.
+    const list = await ok<BookPages>(`/api/nodes/${book.id}/pages`);
+    expect(list.pages.map((item) => item.page)).toEqual([11, 12]);
+    let detail = await ok<NoteDetail>(`/api/nodes/${page12.id}`);
+    expect(detail.book_page).toMatchObject({ page: 12, prev: page11.id, next: null, stale: true });
+
+    replies.push(
+      JSON.stringify({
+        summary: '作者质疑农业带来更好生活。',
+        questions: ['为什么说是骗局？', '证据是什么？'],
+      }),
+    );
+    const insights = await ok<NoteDetail['book_page']>(`/api/nodes/${page12.id}/insights`, 'POST');
+    expect(insights).toMatchObject({
+      summary: '作者质疑农业带来更好生活。',
+      questions: ['为什么说是骗局？', '证据是什么？'],
+      stale: false,
+    });
+
+    // A discussion is a hidden note below the page; the page lists it.
+    const discussion = await ok<NoteNode>(`/api/nodes/${page12.id}/discussions`, 'POST', {
+      title: '为什么说是骗局？',
+    });
+    expect((await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${page12.id}`)).nodes).toEqual([]);
+    expect((await ok<NoteDetail>(`/api/nodes/${page12.id}`)).child_count).toBe(0);
+    expect((await ok<NoteDetail>(`/api/nodes/${discussion.id}`)).discussion_page).toBe(page12.id);
+    expect((await request(`/api/nodes/${discussion.id}/organize`, 'POST', {})).status).toBe(400);
+    const fetch = vi.mocked(globalThis.fetch);
+    replies.push('先回答：个体生活变差了。');
+    const chat = await request(`/api/nodes/${discussion.id}/assistant`, 'POST', {
+      content: '为什么说是骗局？',
+    });
+    for await (const _ of sseData(chat.body!)) void _;
+    const system = JSON.parse(String(fetch.mock.calls.at(-1)![1]!.body)).messages[0].content;
+    expect(system).toContain('作者质疑农业带来更好生活。');
+    expect(system).toContain('先回应问题，再说明依据');
+    detail = await ok<NoteDetail>(`/api/nodes/${page12.id}`);
+    expect(detail.book_page!.discussions).toEqual([
+      { id: discussion.id, title: '为什么说是骗局？', replies: 1, noted: false },
+    ]);
+
+    const section = (conclusion: string) =>
+      JSON.stringify({ conclusion, basis: '第 12 页', other: '暂无', next: '证据是什么？' });
+    replies.push(section('多数人更辛苦。'));
+    const organized = await ok<{ note: NoteNode; updated: boolean }>(
+      `/api/nodes/${discussion.id}/organize`,
+      'POST',
+      {},
+    );
+    expect(organized.updated).toBe(false);
+    expect(organized.note).toMatchObject({ title: '第 12 页 · 读书笔记', parent_id: page12.id });
+    replies.push(section('剩余变成了人口和特权。'));
+    const again = await ok<{ note: NoteNode; updated: boolean }>(
+      `/api/nodes/${discussion.id}/organize`,
+      'POST',
+      {},
+    );
+    expect(again).toMatchObject({ updated: true, note: { id: organized.note.id } });
+    let note = await ok<NoteDetail>(`/api/nodes/${organized.note.id}`);
+    expect(note.content.match(/<!-- discussion:/g)).toHaveLength(1);
+    expect(note.content).toContain('剩余变成了人口和特权。');
+    expect(note.content).not.toContain('多数人更辛苦。');
+
+    // A section edited by hand is not replaced without asking.
+    const token = (await ok<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: note.id }))
+      .token;
+    const context = createExecutionContext();
+    contexts.push(context);
+    const edited = await worker.fetch(
+      new Request(`https://notes.test/api/nodes/${note.id}/content`, {
+        method: 'PUT',
+        headers: {
+          origin: 'https://notes.test',
+          'content-type': 'application/json',
+          cookie,
+          'x-note-edit': token,
+        },
+        body: JSON.stringify({
+          revision: note.revision,
+          content: note.content.replace('剩余变成了人口和特权。', '我的看法。'),
+          attachments: [],
+        }),
+      }),
+      bindings,
+      context,
+    );
+    expect(edited.ok, await edited.clone().text()).toBe(true);
+    const calls = fetch.mock.calls.length;
+    const refused = await request(`/api/nodes/${discussion.id}/organize`, 'POST', {});
+    expect(refused.status).toBe(409);
+    expect((await refused.json<{ code: string }>()).code).toBe('BOOK_SECTION_EDITED');
+    expect(fetch.mock.calls.length).toBe(calls);
+    replies.push(section('第三次。'));
+    await ok(`/api/nodes/${discussion.id}/organize`, 'POST', { force: true });
+    note = await ok<NoteDetail>(`/api/nodes/${organized.note.id}`);
+    expect(note.content).toContain('第三次。');
+    expect(note.content).not.toContain('我的看法。');
+
+    // The book's reading note collects the pages' notes in page order.
+    const collected = await ok<{ note: NoteNode; pages: number }>(
+      `/api/nodes/${book.id}/book-note`,
+      'POST',
+    );
+    expect(collected).toMatchObject({ pages: 1, note: { title: '《人类简史》读书笔记' } });
+    const book2 = await ok<NoteDetail>(`/api/nodes/${collected.note.id}`);
+    expect(book2.content).toContain('## 第 12 页');
+    expect(book2.content).not.toContain('<!-- discussion:');
+    const repeat = await ok<{ note: NoteNode }>(`/api/nodes/${book.id}/book-note`, 'POST');
+    expect(repeat.note.id).toBe(collected.note.id);
+    expect((await ok<BookPages>(`/api/nodes/${book.id}/pages`)).others.map((n) => n.id)).toEqual([
+      collected.note.id,
+    ]);
+
+    // All of it is kept in backups.
+    const exported = await ok<{ archive: LibraryBackup }>('/api/backups', 'POST');
+    expect(exported.archive.tables.book_pages).toHaveLength(2);
+    expect(exported.archive.tables.book_discussions).toEqual([
+      expect.objectContaining({ node_id: discussion.id }),
+    ]);
+    expect(exported.archive.tables.book_note_sections).toEqual([
+      expect.objectContaining({ discussion_id: discussion.id, note_id: organized.note.id }),
+    ]);
+    expect(validateBackup(structuredClone(exported.archive)).tables.book_pages).toHaveLength(2);
   });
 });

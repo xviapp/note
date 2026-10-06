@@ -1,6 +1,6 @@
 import { SEARCH_FIELD } from '../shared/annotations';
 import { SEARCH_LIMIT, type NoteNode, type SearchResult } from '../shared/types';
-import { NODE_COLUMNS } from './library';
+import { NODE_COLUMNS, NOT_DISCUSSION } from './library';
 import type { Env } from './types';
 
 // Title search for quick jumps, then highlights and notes. Every
@@ -17,7 +17,7 @@ export async function searchNodes(env: Env, url: URL): Promise<{ results: Search
   const pattern = (word: string) => `%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
   const [titles, annotated] = await env.DB.batch<NoteNode & { search_text?: string }>([
     env.DB.prepare(
-      `SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.trash_id IS NULL AND ${words
+      `SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.trash_id IS NULL AND ${NOT_DISCUSSION('n')} AND ${words
         .map(() => "n.title LIKE ? ESCAPE '\\'")
         .join(' AND ')} ORDER BY n.updated_at DESC,n.id LIMIT ?`,
     ).bind(...words.map(pattern), SEARCH_LIMIT),

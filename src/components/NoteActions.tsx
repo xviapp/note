@@ -40,7 +40,6 @@ export function NoteActions({
   onAnnotations,
   onEdit,
   onBook,
-  onDiscuss,
   onAction,
 }: {
   note: NoteDetail;
@@ -75,8 +74,6 @@ export function NoteActions({
   onEdit: () => void;
   // Edit the book's details.
   onBook: () => void;
-  // Start a discussion below a note inside a book.
-  onDiscuss: () => void;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
   const inBook = !!note.book && note.book.id !== note.id;
@@ -243,17 +240,6 @@ export function NoteActions({
               }}
             >
               书籍资料
-            </button>
-          )}
-          {inBook && note.kind !== 'folder' && (
-            <button
-              disabled={offline}
-              onClick={(event) => {
-                closeMenu(event.currentTarget);
-                onDiscuss();
-              }}
-            >
-              新建讨论
             </button>
           )}
           {/* Attachments also list under the body; this opens them without scrolling there. */}

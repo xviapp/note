@@ -630,3 +630,12 @@
     font-size: 12px;
   }
 }
+
+/* What a book page's discussion already carries along. */
+.assistant-context {
+  margin: 0;
+  padding: 6px 14px;
+  font-size: 12px;
+  color: var(--muted);
+  border-bottom: 1px solid var(--line);
+}
