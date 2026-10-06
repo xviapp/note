@@ -378,4 +378,24 @@ describe('books', () => {
     expect(user).toContain('作者：赫拉利');
     expect((await request('/api/books/role-prompt', 'POST', { title: '' })).status).toBe(400);
   });
+
+  it('adds a typed page without a photo or recognition', async () => {
+    const book = await newBook();
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const page = await ok<NoteNode>(`/api/nodes/${book.id}/pages`, 'POST', {
+      page: 30,
+      content: '  手动输入的一页。  ',
+    });
+    expect(fetch).not.toHaveBeenCalled();
+    const detail = await ok<NoteDetail>(`/api/nodes/${page.id}`);
+    expect(detail).toMatchObject({
+      title: '第 30 页',
+      content: '手动输入的一页。\n',
+      attachments: [],
+    });
+    expect(detail.book_page).toMatchObject({ page: 30, stale: true });
+    expect(
+      (await request(`/api/nodes/${book.id}/pages`, 'POST', { page: 31, content: ' ' })).status,
+    ).toBe(400);
+  });
 });

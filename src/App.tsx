@@ -648,7 +648,8 @@ function Notebook({
         actionsRef={globalActions}
         visible={globalOpen}
         enabled
-        showLauncher={!selected || loaded?.kind === 'folder'}
+        // Books talk to 青藜 through their pages' discussions.
+        showLauncher={(!selected || loaded?.kind === 'folder') && !loaded?.book}
         mode={globalMode}
         onModeChange={setGlobalMode}
         selection={globalSelection}

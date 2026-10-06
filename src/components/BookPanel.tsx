@@ -1,5 +1,5 @@
 import { useRef, useState, type FormEvent } from 'react';
-import { BookText, Camera, Settings2 } from 'lucide-react';
+import { BookText, Camera, PenLine, Settings2 } from 'lucide-react';
 import { api } from '../api';
 import { addBookPage } from '../books';
 import {
@@ -29,7 +29,8 @@ export function BookCard({
   onError: (error: unknown) => void;
 }) {
   const input = useRef<HTMLInputElement>(null);
-  const [photos, setPhotos] = useState<File[]>([]);
+  const [photos, setPhotos] = useState<File[]>([]),
+    [typing, setTyping] = useState(false);
   const [progress, setProgress] = useState(''),
     [collecting, setCollecting] = useState(false);
   // Every page's reading note in page order, as one note in the book.
@@ -103,6 +104,14 @@ export function BookCard({
         </button>
         <button
           className="button compact"
+          disabled={offline || !!progress}
+          onClick={() => setTyping(true)}
+        >
+          <PenLine size={15} />
+          <span>手动添加页面</span>
+        </button>
+        <button
+          className="button compact"
           disabled={offline || collecting}
           onClick={() => void collect()}
         >
@@ -125,6 +134,18 @@ export function BookCard({
           }}
         />
       </div>
+      {typing && (
+        <ManualPageDialog
+          bookId={book.id}
+          next={book.pages_read + 1}
+          onClose={() => setTyping(false)}
+          onSaved={(page) => {
+            setTyping(false);
+            onChanged();
+            onOpen(page);
+          }}
+        />
+      )}
       {photos.length > 0 && (
         <PageNumberDialog
           count={photos.length}
@@ -134,6 +155,90 @@ export function BookCard({
         />
       )}
     </section>
+  );
+}
+
+// A page typed in (or pasted) instead of photographed.
+function ManualPageDialog({
+  bookId,
+  next,
+  onClose,
+  onSaved,
+}: {
+  bookId: string;
+  next: number;
+  onClose: () => void;
+  onSaved: (page: NoteNode) => void;
+}) {
+  const [page, setPage] = useState(String(next)),
+    [text, setText] = useState(''),
+    [busy, setBusy] = useState(''),
+    [error, setError] = useState('');
+  const key = useRef(crypto.randomUUID());
+  const save = async (event: FormEvent) => {
+    event.preventDefault();
+    setBusy('正在保存…');
+    setError('');
+    try {
+      const created = await api<NoteNode>(
+        `/api/nodes/${bookId}/pages`,
+        'POST',
+        { content: text, ...(Number(page) ? { page: Number(page) } : {}) },
+        key.current,
+      );
+      // The summary and questions can be made again from the page if this fails.
+      setBusy('正在生成摘要…');
+      await api(`/api/nodes/${created.id}/insights`, 'POST', {}).catch(() => {});
+      onSaved(created);
+    } catch (e) {
+      setError((e as Error).message);
+      setBusy('');
+    }
+  };
+  return (
+    <Modal title="手动添加页面" onClose={() => !busy && onClose()}>
+      <form className="form-stack" onSubmit={(event) => void save(event)}>
+        <label>
+          页码
+          <input
+            type="number"
+            inputMode="numeric"
+            min={1}
+            max={100000}
+            value={page}
+            placeholder="留空则不记页码"
+            onChange={(event) => setPage(event.target.value)}
+            disabled={!!busy}
+          />
+        </label>
+        <label>
+          正文
+          <textarea
+            rows={10}
+            required
+            value={text}
+            placeholder="输入或粘贴这一页的文字，支持 Markdown。"
+            onChange={(event) => setText(event.target.value)}
+            disabled={!!busy}
+            autoFocus
+          />
+          <span className="field-hint">保存后青藜会为这一页生成摘要和值得追问的问题。</span>
+        </label>
+        {error && (
+          <p className="inline-error" role="alert">
+            {error}
+          </p>
+        )}
+        <div className="dialog-actions">
+          <button type="button" className="button" onClick={onClose} disabled={!!busy}>
+            取消
+          </button>
+          <button className="button primary" disabled={!!busy || !text.trim()}>
+            {busy || '保存页面'}
+          </button>
+        </div>
+      </form>
+    </Modal>
   );
 }
 

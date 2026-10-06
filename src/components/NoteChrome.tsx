@@ -102,12 +102,17 @@ export function NoteHeading({
         ) : (
           <span>更新于 {formatDate(note.updated_at)}</span>
         )}
-        {PARENT_KINDS.includes(note.kind) && !note.is_reference && !editing && (
-          <button className="text-button" onClick={onNew}>
-            <Plus size={14} />
-            新建
-          </button>
-        )}
+        {/* Books add pages from the book card; pages gather notes on their own. */}
+        {PARENT_KINDS.includes(note.kind) &&
+          !note.is_reference &&
+          !note.book_page &&
+          note.book?.id !== note.id &&
+          !editing && (
+            <button className="text-button" onClick={onNew}>
+              <Plus size={14} />
+              新建
+            </button>
+          )}
       </div>
     </header>
   );

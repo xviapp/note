@@ -195,7 +195,7 @@ async function recognize(env: Env, fileId: string): Promise<string> {
   if (!text) throw new AppError(422, '没有识别到文字，请换一张更清晰的照片。');
   return text;
 }
-// Recognize a photographed page and save it as a Markdown note in the book.
+// Add a page to the book: a photo recognized by DeepSeek, or text typed in.
 export async function addPage(
   env: Env,
   bookId: string,
@@ -206,20 +206,24 @@ export async function addPage(
   const previous = await priorOperation(env, key, 'create');
   if (previous) return previous;
   const info = await book(env, bookId);
-  const fileId = idValue(data.fileId);
+  const fileId = data.fileId == null ? null : idValue(data.fileId);
   const page = data.page == null ? null : integer(data.page, '页码', 1, 100_000);
   const title =
     textValue(data.title ?? '', '标题', 200, true).trim() ||
     (page ? `第 ${page} 页` : '未命名页面');
-  const text = await recognize(env, fileId);
+  const text = fileId
+    ? await recognize(env, fileId)
+    : textValue(data.content, '正文', 1_048_576).trim();
   const node = await createNode(
     env,
     {
       kind: 'markdown',
       parentId: bookId,
       title,
-      content: `![${title.replace(/[[\]]/g, '')}](/api/files/${fileId})\n\n${text}\n`,
-      attachments: [fileId],
+      content: fileId
+        ? `![${title.replace(/[[\]]/g, '')}](/api/files/${fileId})\n\n${text}\n`
+        : `${text}\n`,
+      attachments: fileId ? [fileId] : [],
     },
     key,
     undefined,

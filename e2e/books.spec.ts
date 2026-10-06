@@ -50,8 +50,22 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
   await form.getByRole('button', { name: '创建' }).click();
   await expect(page.locator('.document-kind')).toHaveText('书籍');
 
-  // Photograph page 12: recognized, then summarized with questions.
+  // A book adds pages from its card, not from "新建".
+  await expect(page.locator('.document-meta')).not.toContainText('新建');
+  // 青藜 is reached through a page's discussions, not a floating button.
+  await expect(page.locator('.assistant-launcher:visible')).toHaveCount(0);
   const card = page.getByRole('region', { name: '书籍资料' });
+  await card.getByRole('button', { name: '手动添加页面' }).click();
+  const typed = page.getByRole('dialog', { name: '手动添加页面' });
+  await typed.getByLabel('页码').fill('11');
+  await typed.getByLabel('正文').fill('农业出现之前，人类以采集为生。');
+  await typed.getByRole('button', { name: '保存页面' }).click();
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('第 11 页');
+  await expect(page.locator('.read-content')).toContainText('农业出现之前');
+  await expect(page.locator('.document-meta')).not.toContainText('新建');
+  await page.goBack();
+
+  // Photograph page 12: recognized, then summarized with questions.
   await card
     .locator('input[type=file]')
     .setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: photo });
