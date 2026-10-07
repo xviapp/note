@@ -95,6 +95,7 @@
   display: flex;
   align-items: center;
   gap: 8px;
+  white-space: nowrap;
   font-size: 14px;
   font-weight: 500;
 }
@@ -741,6 +742,22 @@
   order: 3;
   flex: 0 0 auto;
   margin: 0;
+}
+/* The narrowest phones keep the name on one line beside the header actions. */
+@media (max-width: 359px) {
+  .assistant-heading strong .qingli-icon {
+    display: none;
+  }
+}
+/* In a very short window (a landscape phone with its keyboard up) the composer
+   scrolls; its action row stays at the bottom so Send is always reachable. */
+.assistant-panel.assistant-sheet :is(.context-actions, .assistant-send) {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  align-self: stretch;
+  align-items: center;
+  background: var(--surface);
 }
 .assistant-panel.assistant-sheet .send-provider {
   display: none;
