@@ -169,21 +169,8 @@ export function ProjectPanel({
           </button>
         ))}
       </div>
+      {/* Filters on the left, actions on the right. */}
       <div className="project-controls">
-        <button
-          className="button compact primary"
-          disabled={offline || loading}
-          onClick={() => setCreating(true)}
-        >
-          <Plus size={16} />
-          新建{PROJECT_LABELS[category]}
-        </button>
-        {directory && (
-          <button className="text-button" aria-label="打开目录" title="打开目录" onClick={() => onNavigate(directory.id)}>
-            <FolderOpen size={16} />
-            <span className="project-open-label">打开目录</span>
-          </button>
-        )}
         {category !== 'note' && (
           <label className="project-filter">
             <input
@@ -194,6 +181,22 @@ export function ProjectPanel({
             {category === 'todo' ? '只看未完成' : '只看未关闭'}
           </label>
         )}
+        <div className="project-actions">
+          {directory && (
+            <button className="text-button" aria-label="打开目录" title="打开目录" onClick={() => onNavigate(directory.id)}>
+              <FolderOpen size={16} />
+              <span className="project-open-label">打开目录</span>
+            </button>
+          )}
+          <button
+            className="button compact primary"
+            disabled={offline || loading}
+            onClick={() => setCreating(true)}
+          >
+            <Plus size={16} />
+            新建{PROJECT_LABELS[category]}
+          </button>
+        </div>
       </div>
       {error && (
         <p className="inline-error" role="alert">

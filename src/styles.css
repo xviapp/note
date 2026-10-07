@@ -4191,13 +4191,18 @@ button.node-list-toggle:focus-visible {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  margin-left: auto;
   padding: 4px 12px;
   border: 1px solid var(--line);
   border-radius: 999px;
   color: var(--muted);
   font-size: 13px;
   cursor: pointer;
+}
+.project-actions {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-left: auto;
 }
 .project-filter:has(input:checked) {
   border-color: var(--blue);
@@ -4336,7 +4341,8 @@ select.status-select.status-unknown {
     gap: 6px;
     padding: 12px 8px;
   }
-  .project-controls {
+  .project-controls,
+  .project-actions {
     gap: 12px;
   }
   .project-open-label {
