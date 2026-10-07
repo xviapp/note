@@ -10,7 +10,7 @@ import {
   Plus,
 } from 'lucide-react';
 import { formatDate } from '../api';
-import type { NoteDetail } from '../../shared/types';
+import { variantOf, type NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
 import { noteType, typeLabel } from '../note-types/registry';
 import { LockBadge } from './LockBadge';
@@ -114,7 +114,8 @@ export function NoteHeading({
         ) : (
           <span>更新于 {formatDate(note.updated_at)}</span>
         )}
-        {noteType(note).newChild && !note.journal_entry && !editing && (
+        {/* A project creates its items from its own panel. */}
+        {noteType(note).newChild && variantOf(note) !== 'project' && !note.journal_entry && !editing && (
           <button className="text-button" onClick={onNew}>
             <Plus size={14} />
             新建

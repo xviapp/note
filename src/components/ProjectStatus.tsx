@@ -2,6 +2,7 @@ import { useRef, useState } from 'react';
 import { api, ApiError, lockNote, uncertainFailure, unlockNote } from '../api';
 import { CONCLUSION_LABELS, FINISHED_STATUSES, PROJECT_STATUSES, type ProjectContext } from '../../shared/projects';
 import { Modal } from './Primitives';
+import { StatusIcon } from './ProjectPanel';
 import type { NoteDetail } from '../../shared/types';
 
 export function ProjectStatus({ note, project, disabled, onBusy, onSaved, onRefresh }: {
@@ -52,7 +53,9 @@ export function ProjectStatus({ note, project, disabled, onBusy, onSaved, onRefr
   };
   return (
     <div className="project-entry-status">
-      <label>状态<select aria-label="条目状态" value={Object.hasOwn(states, status) ? status : ''}
+      <label><StatusIcon category={project.category} status={status || null} /><select aria-label="条目状态"
+        className={`status-select status-${Object.hasOwn(states, status) ? status : 'unknown'}`}
+        value={Object.hasOwn(states, status) ? status : ''}
         disabled={disabled || busy} onChange={(event) => {
           if (event.target.value === finished) setFinishing(true);
           else void change(event.target.value);

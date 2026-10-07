@@ -12,6 +12,7 @@ export function useProjectView(ctx: TypeContext): TypeView | null {
   const variant = variantOf(note);
   if (variant === 'project')
     return {
+      menu: <button onClick={ctx.refresh}>刷新项目</button>,
       children: !ctx.editing && (
         <ProjectPanel
           id={note.id}

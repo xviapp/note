@@ -4108,10 +4108,20 @@ button.node-list-toggle:focus-visible {
 }
 .project-summary {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
-  gap: 16px;
+  gap: 6px 24px;
   color: var(--muted);
   font-size: 13px;
+}
+.project-summary p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+}
+.project-summary progress {
+  margin-left: 4px;
 }
 .project-summary strong {
   color: var(--ink);
@@ -4133,9 +4143,6 @@ button.node-list-toggle:focus-visible {
 }
 .project-summary progress::-moz-progress-bar {
   background: var(--blue);
-}
-.project-summary .icon-button {
-  margin-left: auto;
 }
 .project-tabs {
   display: flex;
@@ -4184,8 +4191,22 @@ button.node-list-toggle:focus-visible {
   flex-direction: row;
   align-items: center;
   gap: 6px;
-  color: var(--muted);
   margin-left: auto;
+  padding: 4px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  color: var(--muted);
+  font-size: 13px;
+  cursor: pointer;
+}
+.project-filter:has(input:checked) {
+  border-color: var(--blue);
+  color: var(--blue);
+}
+.project-filter input {
+  width: 14px;
+  height: 14px;
+  margin: 0;
 }
 .project-items {
   margin-top: 8px;
@@ -4206,8 +4227,22 @@ button.node-list-toggle:focus-visible {
   min-width: 0;
   padding: 4px 0;
 }
-.project-item-main > .node-icon {
+.project-item-main > .node-icon,
+.project-item-main > .status-icon {
+  flex-shrink: 0;
   margin-top: 3px;
+}
+.status-icon {
+  color: var(--muted);
+}
+.status-icon.status-doing,
+.status-icon.status-done,
+.status-icon.status-closed {
+  color: var(--blue);
+}
+.status-icon.status-open,
+.status-icon.status-unknown {
+  color: var(--warning);
 }
 .project-item-main > span {
   min-width: 0;
@@ -4229,17 +4264,43 @@ button.node-list-toggle:focus-visible {
 }
 .project-item.is-complete .project-item-main strong {
   color: var(--muted);
+  text-decoration: line-through;
+  text-decoration-color: var(--line-strong);
 }
-.project-item > select {
-  width: 112px;
+/* A status reads as a tinted pill; it is still a native select. */
+select.status-select {
+  width: auto;
   flex-shrink: 0;
-  padding: 7px 8px;
+  padding: 4px 8px 4px 12px;
+  border-color: var(--line);
+  border-radius: 999px;
+  background-color: var(--surface-subtle);
+  color: var(--muted);
   font-size: 12px;
+}
+select.status-select.status-doing {
+  border-color: transparent;
+  background-color: var(--selected);
+  color: var(--blue);
+}
+select.status-select.status-open,
+select.status-select.status-unknown {
+  border-color: var(--warning-line);
+  background-color: var(--warning-bg);
+  color: var(--warning);
 }
 .project-empty {
   color: var(--muted);
   padding: 28px 0;
   font-size: 14px;
+}
+.project-empty p {
+  margin: 0;
+}
+.project-empty small {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
 }
 .project-warning {
   color: var(--warning);
@@ -4278,21 +4339,14 @@ button.node-list-toggle:focus-visible {
   .project-controls {
     gap: 12px;
   }
-  .project-filter {
-    width: 100%;
-    margin-left: 0;
+  .project-open-label {
+    display: none;
   }
   .project-item {
     gap: 10px;
   }
-  .project-item > select {
-    width: 94px;
-  }
-  .project-summary {
-    gap: 10px;
-  }
   .project-summary progress {
-    width: 80px;
+    width: 64px;
   }
 }
 
@@ -4379,22 +4433,46 @@ button.node-list-toggle:focus-visible {
 
 /* Journals */
 .journal-panel {
+  container-type: inline-size;
   margin-top: 24px;
+}
+/* Calendar and recent entries side by side when the column is wide enough. */
+.journal-layout {
+  display: grid;
+  gap: 8px 40px;
+}
+.journal-calendar-column {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}
+@container (min-width: 700px) {
+  .journal-layout {
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    align-items: start;
+  }
+  .journal-calendar-column {
+    margin-inline: 0;
+  }
 }
 .project-entry-status {
   flex: 0 0 auto;
   max-width: 180px;
-  color: var(--muted);
   font-size: 13px;
 }
 .project-entry-status label {
   display: flex;
+  flex-direction: row;
   align-items: center;
-  gap: 8px;
+  gap: 6px;
 }
 .project-entry-status select {
-  width: auto;
   max-width: 140px;
+}
+.journal-steps {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
 }
 .journal-heading-actions {
   display: flex;
@@ -4406,6 +4484,9 @@ button.node-list-toggle:focus-visible {
 .journal-draft > .muted {
   margin: 8px 0 16px;
   font-size: 13px;
+}
+.journal-draft-preview > .markdown-body > :first-child {
+  margin-top: 12px;
 }
 .journal-draft-preview {
   padding: 4px 16px;
@@ -4433,28 +4514,8 @@ button.node-list-toggle:focus-visible {
   align-items: center;
   gap: 8px;
   margin-bottom: 6px;
-  container-type: inline-size;
 }
 .quick-append-body {
-/* Calendar and recent entries side by side when the column is wide enough. */
-.journal-layout {
-  display: grid;
-  gap: 8px 40px;
-}
-.journal-calendar-column {
-  width: 100%;
-  max-width: 420px;
-  margin-inline: auto;
-}
-@container (min-width: 700px) {
-  .journal-layout {
-    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
-    align-items: start;
-  }
-  .journal-calendar-column {
-    margin-inline: 0;
-  }
-}
   position: relative;
   display: block;
 }
@@ -4469,14 +4530,18 @@ button.node-list-toggle:focus-visible {
 .quick-append-actions {
   display: flex;
   justify-content: flex-end;
-.journal-steps {
-  display: flex;
-  flex-shrink: 0;
-  gap: 2px;
-}
   align-items: center;
   gap: 8px;
   margin-top: 8px;
+}
+/* An idle composer is a single line; the title and Submit appear once it is in use. */
+.quick-append:not(.is-active) .quick-append-heading {
+  display: none;
+}
+.quick-append:not(.is-active) textarea {
+  height: 42px;
+  min-height: 0;
+  resize: none;
 }
 @container (min-width: 700px) {
   .quick-append {
@@ -4485,9 +4550,6 @@ button.node-list-toggle:focus-visible {
   .quick-append-actions {
     position: absolute;
     left: calc(100% + 12px);
-.journal-draft-preview > .markdown-body > :first-child {
-  margin-top: 12px;
-}
     bottom: 0;
     width: 116px;
     justify-content: flex-start;
@@ -4525,15 +4587,6 @@ button.node-list-toggle:focus-visible {
 }
 .quick-append small {
   color: var(--muted);
-}
-/* An idle composer is a single line; the title and Submit appear once it is in use. */
-.quick-append:not(.is-active) .quick-append-heading {
-  display: none;
-}
-.quick-append:not(.is-active) textarea {
-  height: 42px;
-  min-height: 0;
-  resize: none;
 }
 .quick-append .inline-error {
   margin: 6px 0 0;
@@ -4655,8 +4708,6 @@ button.node-list-toggle:focus-visible {
 .journal-recent h3 {
   margin: 20px 0 4px;
   color: var(--muted);
-  font-weight: 500;
-}
   font-size: 14px;
   font-weight: 500;
 }
@@ -4686,6 +4737,8 @@ button.node-list-toggle:focus-visible {
   display: block;
   color: var(--ink);
   font-size: 14px;
+  font-weight: 500;
+}
 .journal-recent-date small {
   color: var(--muted);
   font-size: 12px;

@@ -1,8 +1,9 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { FolderOpen, Plus, RefreshCw } from 'lucide-react';
+import { Circle, CircleAlert, CircleCheck, CircleDot, CircleQuestionMark, FolderOpen, Plus } from 'lucide-react';
 import { api, lockNote, unlockNote } from '../api';
 import type { NoteDetail, NoteNode } from '../../shared/types';
 import {
+  FINISHED_STATUSES,
   PROJECT_CATEGORIES,
   PROJECT_LABELS,
   PROJECT_STATUSES,
@@ -12,6 +13,26 @@ import {
   type ProjectContext,
 } from '../../shared/projects';
 import { Modal, NodeIcon, Spinner } from './Primitives';
+
+const STATUS_ICONS: Record<string, typeof Circle> = {
+  todo: Circle,
+  doing: CircleDot,
+  done: CircleCheck,
+  open: CircleAlert,
+  closed: CircleCheck,
+};
+// Work in progress first, then what is still open, unknown states, and what is finished.
+const RANK: Record<string, number> = { doing: 0, todo: 1, open: 1, done: 3, closed: 3 };
+const rank = (item: ProjectItem) => RANK[item.status ?? ''] ?? 2;
+const finished = (item: ProjectItem) => item.status !== null && item.status === FINISHED_STATUSES[item.category];
+
+// An item's state at a glance; the select beside it changes it.
+export function StatusIcon({ category, status }: { category: ProjectCategory; status: string | null }) {
+  if (category === 'note') return <NodeIcon kind="note" size={20} />;
+  const known = status !== null && Object.hasOwn(PROJECT_STATUSES[category], status);
+  const Icon = known ? STATUS_ICONS[status] : CircleQuestionMark;
+  return <Icon size={20} className={`status-icon status-${known ? status : 'unknown'}`} aria-hidden />;
+}
 
 export function ProjectPanel({
   id,
@@ -34,6 +55,8 @@ export function ProjectPanel({
   const [pending, setPending] = useState<string | null>(null);
   const [creating, setCreating] = useState(false);
   const [unfinished, setUnfinished] = useState(false);
+  // A refresh from the page menu starts over without the last error.
+  useEffect(() => setError(''), [refresh]);
   useEffect(() => {
     let live = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
@@ -80,36 +103,33 @@ export function ProjectPanel({
       setPending(null);
     }
   };
-  const items = overview?.items.filter((item) => item.category === category) ?? [];
-  const visible = unfinished
-    ? items.filter((item) => item.status !== 'done' && item.status !== 'closed')
-    : items;
+  const items = (overview?.items.filter((item) => item.category === category) ?? [])
+    .map((item, index) => ({ item, index }))
+    .sort((a, b) => rank(a.item) - rank(b.item) || a.index - b.index)
+    .map(({ item }) => item);
+  const visible = unfinished ? items.filter((item) => !finished(item)) : items;
   const todos = overview?.items.filter((item) => item.category === 'todo') ?? [];
-  const completed = todos.filter((item) => item.status === 'done').length;
+  const completed = todos.filter(finished).length;
   const percent = todos.length ? Math.round((completed / todos.length) * 100) : 0;
+  const openIssues = overview?.items.filter((item) => item.category === 'issue' && !finished(item)).length ?? 0;
   const directory = overview?.directories.find((item) => item.category === category);
   return (
     <section className="project-panel" aria-label="项目概览" aria-busy={loading}>
-      <div className="project-summary">
-        <p>
-          待办已完成{' '}
-          <strong>
-            {completed}/{todos.length}
-          </strong>
-        </p>
-        <progress aria-label="待办完成进度" max={100} value={percent} />
-        <button
-          className="icon-button"
-          aria-label="刷新项目"
-          disabled={loading}
-          onClick={() => {
-            setError('');
-            setRetry((value) => value + 1);
-          }}
-        >
-          <RefreshCw size={17} />
-        </button>
-      </div>
+      {overview && (todos.length > 0 || openIssues > 0) && (
+        <div className="project-summary">
+          {todos.length > 0 && (
+            <p>
+              待办 <strong>{completed}/{todos.length}</strong>
+              <progress aria-label="待办完成进度" max={100} value={percent} />
+            </p>
+          )}
+          {openIssues > 0 && (
+            <p>
+              问题 <strong>{openIssues}</strong> 未关闭
+            </p>
+          )}
+        </div>
+      )}
       <div className="project-tabs" role="tablist" aria-label="项目分类">
         {PROJECT_CATEGORIES.map((value) => (
           <button
@@ -128,8 +148,9 @@ export function ProjectPanel({
                 event.key === 'Home'
                   ? 0
                   : event.key === 'End'
-                    ? 2
-                    : (PROJECT_CATEGORIES.indexOf(value) + offset + 3) % 3;
+                    ? PROJECT_CATEGORIES.length - 1
+                    : (PROJECT_CATEGORIES.indexOf(value) + offset + PROJECT_CATEGORIES.length) %
+                      PROJECT_CATEGORIES.length;
               const next = PROJECT_CATEGORIES[index];
               setCategory(next);
               setUnfinished(false);
@@ -158,9 +179,9 @@ export function ProjectPanel({
           新建{PROJECT_LABELS[category]}
         </button>
         {directory && (
-          <button className="text-button" onClick={() => onNavigate(directory.id)}>
+          <button className="text-button" aria-label="打开目录" title="打开目录" onClick={() => onNavigate(directory.id)}>
             <FolderOpen size={16} />
-            打开目录
+            <span className="project-open-label">打开目录</span>
           </button>
         )}
         {category !== 'note' && (
@@ -198,12 +219,9 @@ export function ProjectPanel({
               const states = PROJECT_STATUSES[item.category];
               const known = item.status !== null && Object.hasOwn(states, item.status);
               return (
-                <div
-                  className={`project-item${item.status === 'done' || item.status === 'closed' ? ' is-complete' : ''}`}
-                  key={item.id}
-                >
+                <div className={`project-item${finished(item) ? ' is-complete' : ''}`} key={item.id}>
                   <button className="project-item-main" onClick={() => onNavigate(item.id, { id, category: item.category })}>
-                    <NodeIcon kind={item.category} size={20} />
+                    <StatusIcon category={item.category} status={item.status} />
                     <span>
                       <strong>{item.title}</strong>
                       {item.summary && <small>{item.summary}</small>}
@@ -211,6 +229,7 @@ export function ProjectPanel({
                   </button>
                   {item.category !== 'note' && (
                     <select
+                      className={`status-select status-${known ? item.status : 'unknown'}`}
                       aria-label={`${item.title}的状态`}
                       value={known ? item.status! : ''}
                       disabled={offline || loading || !!overview?.indexing || pending !== null}
@@ -234,13 +253,16 @@ export function ProjectPanel({
           </div>
         ) : (
           overview && (
-            <p className="project-empty">
-              {unfinished
-                ? category === 'todo'
-                  ? '所有待办均已完成。'
-                  : '所有问题均已关闭。'
-                : `暂无${PROJECT_LABELS[category]}。新建一条，或在 ${category} 目录中添加 Markdown 文件或引用。`}
-            </p>
+            <div className="project-empty">
+              {unfinished ? (
+                <p>{category === 'todo' ? '所有待办均已完成。' : '所有问题均已关闭。'}</p>
+              ) : (
+                <>
+                  <p>还没有{PROJECT_LABELS[category]}，点「新建{PROJECT_LABELS[category]}」添加第一条。</p>
+                  <small>放进「{directory?.title ?? category}」文件夹的 Markdown 笔记也会出现在这里。</small>
+                </>
+              )}
+            </div>
           )
         )}
       </div>

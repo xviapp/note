@@ -123,7 +123,8 @@ test('projects index Markdown and references, write status to source files and r
   await panel.getByLabel('共享任务的状态').selectOption('todo');
   await expect(panel.getByRole('alert')).toContainText('已在其他页面更新');
   await expect(panel.getByLabel('共享任务的状态')).toHaveValue('done');
-  await panel.getByRole('button', { name: '刷新项目' }).click();
+  await page.locator('.note-toolbar').getByRole('button', { name: '管理 页间开发', exact: true }).click();
+  await page.getByRole('button', { name: '刷新项目', exact: true }).click();
   await expect(panel.getByRole('alert')).toHaveCount(0);
 
   for (const [label, palette] of [
