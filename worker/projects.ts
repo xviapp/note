@@ -13,7 +13,6 @@ import {
 } from '../shared/projects';
 import { AppError, idValue, textValue } from './http';
 import { createNode, getNode, KEY_SQL, plainDetail, priorOperation, saveNote } from './library';
-import { recordTime } from '../shared/records';
 import { readText } from './storage';
 import { openFor, sealFor } from './encryption';
 import { sealedTextKeyId } from '../shared/encryption';
@@ -266,8 +265,9 @@ export async function saveProjectStatus(
   const offset = data.utcOffsetMinutes ?? 0;
   if (typeof offset !== 'number' || !Number.isInteger(offset) || Math.abs(offset) > 840)
     throw new AppError(400, '时区不正确。');
+  const conclusion = data.conclusion === undefined ? '' : textValue(data.conclusion, '结论', 20_000, true);
   try {
-    content = projectStatusContent(detail.content, category, data.status, recordTime(new Date(), offset));
+    content = projectStatusContent(detail.content, category, data.status, new Date(), offset, conclusion);
   } catch (error) {
     throw new AppError(400, error instanceof Error ? error.message : '无法修改文首状态。');
   }

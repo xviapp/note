@@ -2,6 +2,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import { QuickAppend } from './QuickAppend';
 import { DRAFT_PREFIX } from '../note-drafts';
+import { ApiError } from '../api';
 
 const { append } = vi.hoisted(() => ({ append: vi.fn() }));
 vi.mock('../append-note', () => ({ createNoteAppender: () => append }));
@@ -42,7 +43,7 @@ it('keeps offline input on the device and restores it on reopening', async () =>
 });
 
 it('keeps a failed submission intact until retry succeeds', async () => {
-  append.mockRejectedValueOnce(new Error('连接中断')).mockResolvedValueOnce(undefined);
+  append.mockRejectedValueOnce(new ApiError('连接已中断，请联网后重试。', 0, 'OFFLINE')).mockResolvedValueOnce(undefined);
   const saved = vi.fn();
   render(<QuickAppend id="day" disabled={false} onSaved={saved} />);
   await waitFor(() => expect((screen.getByLabelText('记录内容') as HTMLTextAreaElement).disabled).toBe(false));
@@ -55,6 +56,20 @@ it('keeps a failed submission intact until retry succeeds', async () => {
   await waitFor(() => expect(saved).toHaveBeenCalledTimes(1));
   expect((screen.getByLabelText('记录内容') as HTMLTextAreaElement).value).toBe('');
   expect(localStorage.getItem(`${DRAFT_PREFIX}append:day`)).toBeNull();
+});
+
+it('leaves the input editable after a definite failure', async () => {
+  append.mockRejectedValueOnce(new ApiError('请先解锁这篇笔记。', 403)).mockResolvedValueOnce(undefined);
+  render(<QuickAppend id="day" disabled={false} onSaved={() => {}} />);
+  const field = screen.getByLabelText('记录内容') as HTMLTextAreaElement;
+  await waitFor(() => expect(field.disabled).toBe(false));
+  fireEvent.change(field, { target: { value: '内容' } });
+  fireEvent.click(screen.getByRole('button', { name: '追加' }));
+  await screen.findByRole('alert');
+  expect(field.disabled).toBe(false);
+  fireEvent.change(field, { target: { value: '改过的内容' } });
+  fireEvent.click(screen.getByRole('button', { name: '追加' }));
+  await waitFor(() => expect(append).toHaveBeenLastCalledWith('', '改过的内容'));
 });
 
 it('uses Ctrl+Enter to submit and ignores IME composition', async () => {
@@ -70,7 +85,7 @@ it('uses Ctrl+Enter to submit and ignores IME composition', async () => {
 });
 
 it('restores the custom submission operation after an uncertain response and reopening', async () => {
-  const submit = vi.fn().mockRejectedValueOnce(new Error('连接中断')).mockResolvedValueOnce(undefined);
+  const submit = vi.fn().mockRejectedValueOnce(new ApiError('连接已中断，请联网后重试。', 0, 'OFFLINE')).mockResolvedValueOnce(undefined);
   const saved = vi.fn();
   const view = render(<QuickAppend id="journal:book:day" disabled={false} onAppend={submit} onSaved={saved} />);
   const field = screen.getByLabelText('记录内容');

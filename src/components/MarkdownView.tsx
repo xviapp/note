@@ -11,6 +11,7 @@ import 'katex/dist/katex.min.css';
 import '../math.css';
 import { CachedImage } from './CachedImage';
 import { markdownFrontMatter } from '../../shared/projects';
+import { rehypeRecords, type RecordStyle } from '../markdown-records';
 
 // Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
 // https://github.com/rehypejs/rehype-sanitize#example-math
@@ -32,12 +33,15 @@ export const MarkdownView = memo(function MarkdownView({
   onImage,
   onHeadings,
   safeImages = false,
+  records,
 }: {
   content: string;
   onNavigate: (id: string) => void;
   onImage: (src: string, alt: string) => void;
   onHeadings?: (headings: Heading[]) => void;
   safeImages?: boolean;
+  // Lay out appended records of this kind (issue thread, todo progress, journal day).
+  records?: RecordStyle;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const rendered = useMemo(() => {
@@ -47,9 +51,10 @@ export const MarkdownView = memo(function MarkdownView({
       ? front[0].replace(/[^\r\n]/g, ' ') + content.slice(front[0].length)
       : content;
   }, [content]);
+  // Appended records are listed by the page itself, so they stay out of the outline.
   useEffect(() => {
     onHeadings?.(
-      Array.from(ref.current?.querySelectorAll('h1,h2,h3,h4,h5,h6') ?? []).map((h) => ({
+      Array.from(ref.current?.querySelectorAll(':is(h1,h2,h3,h4,h5,h6):not(.record-heading)') ?? []).map((h) => ({
         id: h.id,
         title: h.textContent ?? '',
         level: Number(h.tagName[1]),
@@ -66,12 +71,17 @@ export const MarkdownView = memo(function MarkdownView({
       ({
         node,
         children,
+        className,
+        'data-label': label,
       }: {
         node?: { position?: { start: { offset?: number } } };
         children?: ReactNode;
+        className?: string;
+        // Set on record headings (see markdown-records.ts).
+        'data-label'?: string;
       }) => {
         const id = safeImages ? undefined : `heading-${node?.position?.start.offset ?? 0}`,
-          props = { id, children };
+          props = { id, children, className, 'data-label': label };
         switch (level) {
           case 1:
             return <h1 {...props} />;
@@ -142,11 +152,12 @@ export const MarkdownView = memo(function MarkdownView({
     };
   }, [safeImages]);
   return (
-    <div ref={ref} className="markdown-body">
+    <div ref={ref} className={`markdown-body${records ? ` records-${records}` : ''}`}>
       <ReactMarkdown
         remarkPlugins={[remarkGfm, remarkMath]}
         rehypePlugins={[
           [rehypeSanitize, markdownSchema],
+          [rehypeRecords, records],
           rehypeMathCompatibility,
           [rehypeKatex, mathOptions],
         ]}

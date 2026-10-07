@@ -48,6 +48,13 @@ export function writeDraft(id: string, draft: NoteDraft, keyId?: string | null) 
     if ((generations.get(id) ?? 0) === generation) store({ sealed });
   })().catch(() => {});
 }
+export function hasDraft(id: string) {
+  try {
+    return localStorage.getItem(DRAFT_PREFIX + id) !== null;
+  } catch {
+    return false;
+  }
+}
 export function removeDraft(id: string) {
   generations.set(id, (generations.get(id) ?? 0) + 1);
   try {

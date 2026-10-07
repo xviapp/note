@@ -26,11 +26,14 @@ describe('quick append', () => {
     expect(unlockNote).toHaveBeenCalledWith('day');
     expect(lockNote).toHaveBeenCalledWith('day');
   });
-  it('adds a submission timestamp for project records', async () => {
+  it('writes the record shape of the note kind', async () => {
     vi.mocked(api).mockResolvedValueOnce(source).mockResolvedValueOnce({});
-    await createNoteAppender('day', true)('进展', '完成第一步');
+    await createNoteAppender('day', 'todo')('阶段', '完成第一步');
     const payload = vi.mocked(api).mock.calls[1][2] as { content: string };
-    expect(payload.content).toMatch(/## 进展\n\n> \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} [+-]\d{2}:\d{2}\n\n完成第一步\n$/);
+    expect(payload.content).toMatch(/\n## 进展\n\n### \d{4}-\d{2}-\d{2} \d{2}:\d{2} · 阶段\n\n完成第一步\n$/);
+    vi.mocked(api).mockResolvedValueOnce({ ...source, kind: 'text', content: '纯文本' }).mockResolvedValueOnce({});
+    await createNoteAppender('plain', 'journal')('', '一行');
+    expect((vi.mocked(api).mock.calls[3][2] as { content: string }).content).toBe('纯文本\n\n一行\n');
   });
   it('retries an uncertain write with the same payload and idempotency key', async () => {
     vi.mocked(api).mockResolvedValueOnce(source).mockRejectedValueOnce(new ApiError('连接中断', 0)).mockResolvedValueOnce({});
@@ -40,6 +43,17 @@ describe('quick append', () => {
     await append('', '内容');
     expect(vi.mocked(api).mock.calls[2]).toEqual(first);
     expect(api).toHaveBeenCalledTimes(3);
+  });
+  it('builds a fresh request after a definite failure', async () => {
+    vi.mocked(api).mockResolvedValueOnce(source).mockRejectedValueOnce(new ApiError('内容过大', 413))
+      .mockResolvedValueOnce(source).mockResolvedValueOnce({});
+    const append = createNoteAppender('day');
+    await expect(append('', '很长的内容')).rejects.toThrow('内容过大');
+    await append('', '短内容');
+    expect(api).toHaveBeenLastCalledWith('/api/nodes/day/content', 'PUT', {
+      content: '# 今天\n\n原文\n\n短内容\n', attachments: ['image'], revision: 3,
+    }, expect.any(String));
+    expect(vi.mocked(api).mock.calls[3][3]).not.toBe(vi.mocked(api).mock.calls[1][3]);
   });
   it('after a conflict, appends against the fresh body on explicit retry', async () => {
     vi.mocked(api).mockResolvedValueOnce(source).mockRejectedValueOnce(new ApiError('冲突', 409, 'VERSION_CONFLICT'))

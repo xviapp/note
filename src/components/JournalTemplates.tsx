@@ -1,5 +1,5 @@
 import { lazy, Suspense, useRef, useState } from 'react';
-import { api, ApiError, lockNote, unlockNote } from '../api';
+import { api, lockNote, uncertainFailure, unlockNote } from '../api';
 import type { NoteDetail, NoteNode } from '../../shared/types';
 import { defaultEntry, fillTemplate, localDate, type JournalMonth } from '../../shared/journals';
 import { Modal, Spinner, useQuestion } from './Primitives';
@@ -91,7 +91,7 @@ export function JournalTemplates({ journalId, data, selected, offline, onSelect,
       setUncertain(false);
     } catch (reason) {
       setError((reason as Error).message);
-      setUncertain(reason instanceof ApiError && (reason.status === 0 || reason.status >= 500));
+      setUncertain(uncertainFailure(reason));
     }
     finally { setBusy(false); running.current = false; }
   };

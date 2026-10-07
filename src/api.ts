@@ -34,6 +34,10 @@ export class ApiError extends Error {
     super(message);
   }
 }
+// The request may have reached the server: a retry must reuse its idempotency key.
+export function uncertainFailure(error: unknown) {
+  return error instanceof ApiError && (error.status === 0 || error.status >= 500);
+}
 const noteTokens = new Map<string, string>();
 export function lockEdits() {
   noteTokens.clear();

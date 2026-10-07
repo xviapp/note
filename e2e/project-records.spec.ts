@@ -33,6 +33,12 @@ test('project entries append records, track states and write through references'
     await page.locator('.project-item-main').filter({ hasText: `${category}条目` }).click();
     await expect(page).toHaveURL(new RegExp(`category=${category}`));
     await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+    // Phones keep an idle composer to one line; the title appears once it is in use.
+    if (info.project.name === 'desktop') await expect(page.getByLabel('记录标题')).toBeVisible();
+    else {
+      await expect(page.getByLabel('记录标题')).toBeHidden();
+      expect((await page.getByLabel('记录内容').boundingBox())!.height).toBeLessThanOrEqual(44);
+    }
     await page.getByLabel('记录内容').focus();
     await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
     await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);
@@ -47,14 +53,22 @@ test('project entries append records, track states and write through references'
     expect(Math.round(layout.width)).toBeLessThanOrEqual(720);
     expect(layout.width).toBeLessThan(layout.footerWidth - 20);
     expect(layout.center).toBeLessThan(2);
-    expect(layout.equalWidth).toBeLessThan(1);
-    expect(layout.height).toBeGreaterThanOrEqual(104);
-    const placement = await page.locator('.quick-append-body').evaluate((element) => {
+    const placement = await page.locator('.quick-append').evaluate((element) => {
+      const title = element.querySelector('input')!.getBoundingClientRect();
       const text = element.querySelector('textarea')!.getBoundingClientRect();
       const button = element.querySelector('button')!.getBoundingClientRect();
-      return { right: button.left - text.right, below: button.top - text.bottom };
+      return { right: button.left - text.right, besideTitle: button.left - title.right, above: text.top - button.bottom };
     });
-    expect(info.project.name === 'desktop' ? placement.right : placement.below).toBeGreaterThanOrEqual(8);
+    if (info.project.name === 'desktop') {
+      expect(layout.equalWidth).toBeLessThan(1);
+      expect(layout.height).toBeGreaterThanOrEqual(104);
+      expect(placement.right).toBeGreaterThanOrEqual(8);
+    } else {
+      expect(layout.height).toBeGreaterThanOrEqual(64);
+      expect(layout.height).toBeLessThanOrEqual(90);
+      expect(placement.besideTitle).toBeGreaterThanOrEqual(7);
+      expect(placement.above).toBeGreaterThanOrEqual(0);
+    }
     await expect.poll(() => page.locator('.quick-append-footer').evaluate((element) =>
       element.getBoundingClientRect().top - document.querySelector('.assistant-launcher')!.getBoundingClientRect().bottom,
     )).toBeGreaterThanOrEqual(10);
@@ -81,11 +95,20 @@ test('project entries append records, track states and write through references'
         expect(offset).toBeLessThan(2);
       }
     }
-    await expect(page.locator('.read-content blockquote').first()).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
+    if (category === 'note') await expect(page.locator('.read-content .record')).toHaveCount(0);
+    else {
+      await expect(page.locator(`.records-${category} section.record`).last().locator('.record-time')).toHaveText(/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}$/);
+      await expect(page.locator('.read-content h2').filter({ hasText: category === 'issue' ? '讨论' : '进展' })).toHaveCount(1);
+    }
     if (finished) {
       await page.getByRole('combobox', { name: '条目状态' }).selectOption(finished);
+      const finish = page.getByRole('dialog', { name: category === 'issue' ? '关闭问题' : '完成待办', exact: true });
+      await finish.getByLabel(category === 'issue' ? '结论（可选）' : '完成结果（可选）').fill('按计划收尾');
+      await page.screenshot({ path: info.outputPath(`${category}-finish.png`) });
+      await finish.getByRole('button', { name: category === 'issue' ? '关闭问题' : '标记完成', exact: true }).click();
       await expect(page.getByRole('combobox', { name: '条目状态' })).toHaveValue(finished);
       await expect(page.getByText(category === 'todo' ? '待办 → 已完成' : '待处理 → 已关闭', { exact: true })).toBeVisible();
+      await expect(page.locator('section.record.is-conclusion')).toContainText('按计划收尾');
       await page.getByLabel('记录内容').fill('结束后补充复盘');
       await expect(page.getByRole('button', { name: label, exact: true })).toBeEnabled();
       await page.getByRole('button', { name: label, exact: true }).click();
@@ -97,7 +120,9 @@ test('project entries append records, track states and write through references'
     await expect(page.locator('.note-actions .node-menu').getByRole('button', { name: '编辑正文', exact: true })).toBeVisible();
     await expect(page.locator('.note-actions .node-menu').getByRole('button', { name: '版本历史', exact: true })).toBeVisible();
     await page.locator('.note-actions .node-menu > summary').click();
-    await page.getByLabel('记录内容').focus();
+    await expect(page.locator('.note-actions .node-menu[open]')).toHaveCount(0);
+    await page.getByLabel('记录内容').click();
+    await expect(page.getByLabel('记录内容')).toBeFocused();
     for (const theme of ['light', 'dark', 'starry']) {
       await page.evaluate((value) => { window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })); }, theme);
       await expect(page.getByRole('button', { name: label, exact: true })).toBeInViewport();
@@ -118,7 +143,10 @@ test('project entries append records, track states and write through references'
   await page.getByRole('button', { name: '补充讨论', exact: true }).click();
   await expect(page.getByText('引用页面中的讨论', { exact: true })).toBeVisible();
   await page.getByRole('combobox', { name: '条目状态' }).selectOption('closed');
+  // The conclusion is optional.
+  await page.getByRole('dialog', { name: '关闭问题', exact: true }).getByRole('button', { name: '关闭问题', exact: true }).click();
   await expect(page.getByText('待处理 → 已关闭', { exact: true })).toBeVisible();
+  await expect(page.locator('section.record.is-status').filter({ hasText: '待处理 → 已关闭' })).toHaveCount(1);
   const detail = await (await page.request.get(`/api/nodes/${source.id}`)).json();
   expect(detail.content).toContain('引用页面中的讨论');
   expect(detail.content).toContain('status: closed');

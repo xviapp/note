@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { ChevronLeft } from 'lucide-react';
 import { variantOf } from '../../shared/types';
 import { longDate, weekday } from '../../shared/journals';
 import { JournalPanel } from '../components/JournalPanel';
@@ -39,11 +40,12 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
           onSaved={() => setSaved(result.current!.node)} />
       ),
       children: !ctx.editing && (draft ? (
-        <section className="journal-draft">
-          <button className="text-button" disabled={ctx.appending} onClick={() => setPending(null)}>返回日历</button>
-          <p className="muted">首次追加后保存为当天日记，未提交的输入保留在本设备。</p>
-          <p className="muted">待记录 · {longDate(draft.date)} {weekday(draft.date)}</p>
-          <MarkdownView content={draft.content} onNavigate={ctx.onNavigate} onImage={() => {}} safeImages />
+        <section className="journal-draft" aria-label="待记录的日记">
+          <button className="text-button" disabled={ctx.appending} onClick={() => setPending(null)}><ChevronLeft size={15} />返回日历</button>
+          <p className="muted">{longDate(draft.date)}的日记尚未保存：在下方写下第一条记录后才会创建，未提交的输入保留在本设备。</p>
+          <div className="journal-draft-preview">
+            <MarkdownView content={draft.content} onNavigate={ctx.onNavigate} onImage={() => {}} safeImages />
+          </div>
         </section>
       ) : <JournalPanel
           id={note.id}
@@ -60,8 +62,9 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
     };
   if (note.journal_entry)
     return {
+      records: 'journal',
       footer: !ctx.editing && (
-        <QuickAppend id={note.id} keyId={note.key_id} disabled={ctx.offline}
+        <QuickAppend id={note.id} keyId={note.key_id} kind="journal" disabled={ctx.offline}
           onBusy={ctx.setAppending}
           onSaved={() => { ctx.onAppended(); ctx.onNotice?.('已追加到正文'); }} />
       ),

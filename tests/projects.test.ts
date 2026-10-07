@@ -263,7 +263,7 @@ describe('project folders and Markdown indexing', () => {
     );
     const updated = (await detail(source.id)).content;
     expect(updated.startsWith(content.replace('status: todo', 'status: done'))).toBe(true);
-    expect(updated).toMatch(/## 状态变更\n\n> \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+08:00\n\n待办 → 已完成\n$/);
+    expect(updated).toMatch(/## 进展\n\n### \d{4}-\d{2}-\d{2} \d{2}:\d{2} · 待办 → 已完成\n$/);
     expect((await ok<NoteNode>(`/api/nodes/${source.id}/project-status`, 'PUT', payload, operationHeaders)).revision).toBe(saved.revision);
     expect((await detail(source.id)).content).toBe(updated);
     expect((await detail(source.id)).attachments.map((file) => file.id)).toEqual([attachment.id]);
@@ -298,6 +298,10 @@ describe('project folders and Markdown indexing', () => {
       headers,
     );
     expect((await overview(project.id)).items[0].status).toBe('todo');
+    // Finishing again records the optional conclusion.
+    const reopened = await detail(source.id);
+    await ok(`/api/nodes/${source.id}/project-status`, 'PUT', { ...payload, revision: reopened.revision, conclusion: '验收通过' }, { ...headers, 'x-idempotency-key': crypto.randomUUID() });
+    expect((await detail(source.id)).content).toMatch(/### \d{4}-\d{2}-\d{2} \d{2}:\d{2} · 待办 → 已完成\n\n验收通过\n$/);
     const unrelated = await create({ kind: 'markdown', title: '不属于项目', content: '正文' });
     expect(
       (

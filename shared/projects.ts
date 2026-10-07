@@ -1,4 +1,4 @@
-import { appendContent } from './records';
+import { appendRecord } from './records';
 
 export const PROJECT_CATEGORIES = ['todo', 'issue', 'note'] as const;
 export interface ProjectContext { id: string; category: ProjectCategory }
@@ -143,10 +143,24 @@ export function projectMarkdown(category: ProjectCategory, title: string): strin
   return `---\ntitle: ${JSON.stringify(title)}\n${status ? `status: ${status}\n` : ''}---\n\n`;
 }
 
-export function projectStatusContent(content: string, category: ProjectCategory, status: string, time: string) {
+// Statuses that end an item; closing one may carry a conclusion.
+export const FINISHED_STATUSES: Partial<Record<ProjectCategory, string>> = { todo: 'done', issue: 'closed' };
+export const CONCLUSION_LABELS: Partial<Record<ProjectCategory, string>> = { todo: '完成结果', issue: '结论' };
+
+// The status line in the front matter, plus a record of the change in the
+// item's discussion or progress section.
+export function projectStatusContent(
+  content: string,
+  category: ProjectCategory,
+  status: string,
+  date: Date,
+  offset: number,
+  conclusion = '',
+) {
   const before = markdownMetadata(content).status;
   const updated = setMarkdownStatus(content, status);
-  if (before === status) return updated;
+  if (before === status || category === 'note') return updated;
   const states = PROJECT_STATUSES[category];
-  return appendContent(updated, '状态变更', `${states[before ?? ''] ?? before ?? '未设置'} → ${states[status]}`, true, time);
+  const change = `${states[before ?? ''] ?? before ?? '未设置'} → ${states[status]}`;
+  return appendRecord(updated, category, change, status === FINISHED_STATUSES[category] ? conclusion : '', date, offset);
 }

@@ -50,6 +50,18 @@
 .note-article .read-content .markdown-body li > p {
   margin-bottom: 0;
 }
+/* Appended records (see styles.css): headings sit close to the reading size,
+   status changes smaller, and a record ends without paragraph spacing. */
+.note-article .read-content .markdown-body .record > :last-child {
+  margin-bottom: 0;
+}
+.note-article .read-content .markdown-body .record-heading {
+  font-size: 1em;
+}
+.note-article .read-content .markdown-body .is-status .record-heading,
+.note-article .read-content .markdown-body .record-legacy-time {
+  font-size: 0.85em;
+}
 .reading-settings-toggle span {
   font:
     18px Georgia,

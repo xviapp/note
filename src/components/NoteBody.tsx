@@ -5,6 +5,7 @@ import { CachedImage } from './CachedImage';
 import { MarkdownView } from './LazyMarkdown';
 import type { Heading } from './MarkdownView';
 import { PaperView } from './PaperView';
+import type { RecordStyle } from '../markdown-records';
 
 // The readable body of a note, by kind. While editing, `content` is the draft.
 export function NoteBody({
@@ -14,6 +15,7 @@ export function NoteBody({
   onNavigate,
   onImage,
   onHeadings,
+  records,
 }: {
   note: NoteDetail;
   editing: boolean;
@@ -21,6 +23,7 @@ export function NoteBody({
   onNavigate: (id: string) => void;
   onImage: (src: string, alt: string) => void;
   onHeadings: (headings: Heading[]) => void;
+  records?: RecordStyle;
 }) {
   return (
     <div className="read-content" data-version-id={note.current_version_id}>
@@ -33,6 +36,7 @@ export function NoteBody({
             onNavigate={onNavigate}
             onImage={onImage}
             onHeadings={onHeadings}
+            records={records}
           />
         ) : (
           <p className="empty-body">暂无内容。点击「编辑正文」开始编辑。</p>

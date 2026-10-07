@@ -1,5 +1,6 @@
 import { api } from './api';
-import { appendContent, createNoteAppender } from './append-note';
+import { createNoteAppender } from './append-note';
+import { appendRecord } from '../shared/records';
 import type { NoteNode } from '../shared/types';
 
 // The first record and template are saved together. If another device wrote
@@ -10,11 +11,11 @@ export function createJournalRecorder(journalId: string, date: string, template:
     if (!text.trim()) throw new Error('请先输入内容。');
     const result = await api<{ node: NoteNode; created: boolean }>(
       `/api/nodes/${journalId}/journal/entries`, 'POST',
-      { date, content: appendContent(template, title, text) }, key,
+      { date, content: appendRecord(template, 'journal', title, text) }, key,
     );
     if (!result.created) {
       if (existing?.id !== result.node.id || existing.key !== key)
-        existing = { id: result.node.id, key, append: createNoteAppender(result.node.id, false, `${key}-append`) };
+        existing = { id: result.node.id, key, append: createNoteAppender(result.node.id, 'journal', `${key}-append`) };
       await existing.append(title, text);
     }
     return result;

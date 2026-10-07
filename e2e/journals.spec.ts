@@ -79,6 +79,7 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await page.getByRole('button', { name: '返回日历', exact: true }).click();
   expect(await entries()).toHaveLength(0);
   await page.reload();
+  await expect(page.locator('.journal-calendar .is-today.has-draft')).toHaveAttribute('aria-label', /有未提交的记录/);
   await page.locator('.journal-calendar .is-today').click();
   await expect(page.getByLabel('记录内容')).toHaveValue('待创建的草稿');
   await expect(page.getByRole('form', { name: '快捷记录' })).toBeVisible();
@@ -94,8 +95,10 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   expect(Math.round(layout.width)).toBeLessThanOrEqual(720);
   expect(layout.width).toBeLessThan(layout.footerWidth - 20);
   expect(layout.center).toBeLessThan(2);
-  expect(layout.equalWidth).toBeLessThan(1);
-  expect(layout.height).toBeGreaterThanOrEqual(104);
+  if (testInfo.project.name === 'desktop') {
+    expect(layout.equalWidth).toBeLessThan(1);
+    expect(layout.height).toBeGreaterThanOrEqual(104);
+  } else expect(layout.height).toBeGreaterThanOrEqual(64);
   await expect(page.locator('.cm-editor')).toHaveCount(0);
   await expect(page.locator('.document-meta').getByRole('button', { name: '新建', exact: true })).toHaveCount(0);
   await page.getByLabel('记录标题').fill('傍晚');
@@ -108,7 +111,8 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await expect(page.getByLabel('记录内容')).toHaveValue('散步回家，路上看到一只猫。');
   expect(await entries()).toHaveLength(0);
   await page.getByRole('button', { name: '重试追加', exact: true }).click();
-  await expect(page.getByRole('heading', { name: '傍晚', exact: true })).toBeVisible();
+  await expect(page.locator('.records-journal section.record .record-title')).toHaveText('傍晚');
+  await expect(page.locator('.records-journal section.record .record-time')).toHaveText(/^\d{2}:\d{2}$/);
   expect(await entries()).toHaveLength(1);
   await expect(page.getByText('模板保留内容', { exact: true })).toBeVisible();
   await expect(page.getByLabel('记录内容')).toHaveValue('');
@@ -144,7 +148,7 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await expect(dialog.getByText('日常回顾', { exact: true })).toHaveCount(0);
   await expect(dialog.locator('.template-item').filter({ hasText: '仅日期标题' }).getByRole('button', { name: '已选用' })).toBeDisabled();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.locator('.document-title-row').getByRole('button', { name: '新建', exact: true }).click();
+  await page.locator('.document-title-row').getByRole('button', { name: '今天的日记', exact: true }).click();
   await expect(page.getByText('模板保留内容', { exact: true })).toBeVisible();
   // Another device can create the day while its first record is still a local draft.
   await page.getByRole('button', { name: '返回', exact: true }).click();

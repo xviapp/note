@@ -16,7 +16,7 @@ it('does not create a note before a nonempty first record is submitted', async (
   vi.mocked(api).mockResolvedValue({ node: { id: 'entry' }, created: true });
   await record('晚上', '散步', 'operation');
   expect(api).toHaveBeenCalledExactlyOnceWith('/api/nodes/journal/journal/entries', 'POST', {
-    date: '2026-10-07', content: '# 今天\n\n## 晚上\n\n散步\n',
+    date: '2026-10-07', content: expect.stringMatching(/^# 今天\n\n### \d{2}:\d{2} · 晚上\n\n散步\n$/),
   }, 'operation');
 });
 
@@ -39,7 +39,7 @@ it('appends to a concurrently created entry and preserves the retry key and body
   await record('晚上', '我的记录', 'saved-key');
   expect(vi.mocked(api).mock.calls[2]).toEqual([
     '/api/nodes/entry/content', 'PUT',
-    { content: '其他设备的内容\n\n## 晚上\n\n我的记录\n', revision: 2, attachments: [] }, 'saved-key-append',
+    { content: expect.stringMatching(/^其他设备的内容\n\n### \d{2}:\d{2} · 晚上\n\n我的记录\n$/), revision: 2, attachments: [] }, 'saved-key-append',
   ]);
   expect(vi.mocked(api).mock.calls[4]).toEqual(vi.mocked(api).mock.calls[2]);
 });

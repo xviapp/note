@@ -189,7 +189,11 @@ export default function NotePane(props: Props) {
     noteRef,
     setNote,
     question,
-    setLeaveGuard: (guard) => props.setLeaveGuard(async () => !appending && await guard()),
+    setLeaveGuard: (guard) => props.setLeaveGuard(async () => {
+      if (!appending) return guard();
+      props.onNotice?.('正在保存，请稍候再离开。');
+      return false;
+    }),
     onStart: () => setTranslation(null),
     onChanged: props.onChanged,
     onError: props.onError,
@@ -732,6 +736,7 @@ export default function NotePane(props: Props) {
                     onNavigate={props.onNavigate}
                     onImage={showImage}
                     onHeadings={toc.onHeadings}
+                    records={typeView.records}
                   />
                   {!editing && layer.marks}
                   {typeView.below}

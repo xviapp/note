@@ -1,6 +1,6 @@
 import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
+import { ChevronLeft, ChevronRight, PenLine, Plus } from 'lucide-react';
 import { api } from '../api';
 import type { NoteDetail } from '../../shared/types';
 import {
@@ -12,7 +12,7 @@ import {
   type JournalEntry,
   type JournalMonth,
 } from '../../shared/journals';
-import { readDraft } from '../note-drafts';
+import { hasDraft, readDraft } from '../note-drafts';
 import { Spinner } from './Primitives';
 import { JournalTemplates } from './JournalTemplates';
 
@@ -114,8 +114,13 @@ export function JournalPanel({
       setBusy('');
     }
   };
+  // Unsent input kept on this device, before or after the day's entry exists.
+  const drafted = (date: string) => {
+    const entry = entries.get(date);
+    return hasDraft(`append:journal:${id}:${date}`) || (!!entry && hasDraft(`append:${entry.id}`));
+  };
   const label = (date: string, entry?: JournalEntry) =>
-    `${longDate(date)} ${weekday(date)}${entry ? '，已写' : date > today ? '' : '，未写'}`;
+    `${longDate(date)} ${weekday(date)}${entry ? '，已写' : date > today ? '' : '，未写'}${drafted(date) ? '，有未提交的记录' : ''}`;
   return (
     <section className="journal-panel">
       {headingActions && createPortal(
@@ -124,8 +129,7 @@ export function JournalPanel({
           disabled={!data || !!busy}
           onClick={() => void write(today)}
         >
-          <Plus size={15} />
-          新建
+          {entries.has(today) ? <><PenLine size={15} />今天的日记</> : <><Plus size={15} />新建</>}
         </button>,
         headingActions,
       )}
@@ -169,7 +173,7 @@ export function JournalPanel({
                 date ? (
                   <td key={date}>
                     <button
-                      className={[entries.has(date) && 'has-entry', date === today && 'is-today']
+                      className={[entries.has(date) && 'has-entry', drafted(date) && 'has-draft', date === today && 'is-today']
                         .filter(Boolean)
                         .join(' ')}
                       aria-label={label(date, entries.get(date))}

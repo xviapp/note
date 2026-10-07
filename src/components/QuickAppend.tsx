@@ -1,10 +1,12 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Send } from 'lucide-react';
+import { uncertainFailure } from '../api';
 import { createNoteAppender } from '../append-note';
+import type { RecordKind } from '../../shared/records';
 import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 
 // A reusable composer for adding a block to a text note without opening its editor.
-export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onAppend, actions, onBusy, timestamp = false, label = '追加', placeholder = '记下此刻，追加到正文…' }: {
+export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onAppend, actions, onBusy, kind, label = '追加', placeholder = '记下此刻，追加到正文…' }: {
   id: string;
   keyId?: string | null;
   disabled: boolean;
@@ -13,7 +15,7 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
   onAppend?: (title: string, text: string, operationKey: string) => Promise<void>;
   actions?: ReactNode;
   onBusy?: (busy: boolean) => void;
-  timestamp?: boolean;
+  kind?: RecordKind;
   label?: string;
   placeholder?: string;
 }) {
@@ -27,7 +29,7 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
   const running = useRef(false);
   const operation = useRef(crypto.randomUUID());
   const field = useRef<HTMLTextAreaElement>(null);
-  const append = useMemo(() => createNoteAppender(id, timestamp), [id, timestamp]);
+  const append = useMemo(() => createNoteAppender(id, kind), [id, kind]);
   const customAppend = !!onAppend;
   const draftId = `append:${id}`;
   useEffect(() => {
@@ -83,8 +85,9 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
       field.current?.focus();
     } catch (reason) {
       setError((reason as Error).message);
-      // Keep the submitted input intact until the uncertain request is resolved.
-      setRetrying(!(reason as Error).message.includes('正文已在其他页面更新'));
+      // Lock the input only while the request may have been applied; a definite
+      // failure (locked, deleted, too large, conflict) leaves it editable.
+      setRetrying(uncertainFailure(reason));
     } finally {
       running.current = false;
       onBusy?.(false);
@@ -93,7 +96,7 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
   };
   return (
     <div className="quick-append-footer">
-    <form className="quick-append" aria-label="快捷记录"
+    <form className={`quick-append${focused || title || text || busy || retrying || error ? ' is-active' : ''}`} aria-label="快捷记录"
       onFocusCapture={() => setFocused(true)}
       onBlurCapture={(event) => {
         if (!event.currentTarget.contains(event.relatedTarget)) setFocused(false);

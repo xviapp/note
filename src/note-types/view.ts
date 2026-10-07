@@ -1,6 +1,7 @@
 import type { ReactNode } from 'react';
 import type { NoteDetail, NoteNode } from '../../shared/types';
 import type { ProjectContext } from '../../shared/projects';
+import type { RecordStyle } from '../markdown-records';
 
 // What the note page lends every type module.
 export interface TypeContext {
@@ -53,6 +54,8 @@ export interface AssistantCustom {
 // anything left out falls back to the generic behaviour.
 export interface TypeView {
   headingActions?: ReactNode;
+  // How the body lays out records appended below it.
+  records?: RecordStyle;
   // Beside the note actions in the toolbar.
   toolbar?: ReactNode;
   // Extra items in the note's ⋯ menu.

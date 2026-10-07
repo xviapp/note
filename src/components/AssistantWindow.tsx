@@ -138,27 +138,41 @@ export function AssistantWindow({
   );
   const margin = compact ? 12 : 24;
   const [appendTop, setAppendTop] = useState<number | null>(null);
-  // The reading element can be replaced on navigation while its ref stays the same.
+  const appendWatch = useRef<{ root: HTMLElement; stop: () => void } | null>(null);
+  // The reading element can be replaced on navigation while its ref stays the
+  // same, so each render checks it, but observers are only rebuilt for a new one.
   useLayoutEffect(() => {
     const root = readingRoot.current;
+    if (appendWatch.current?.root === root) return;
+    appendWatch.current?.stop();
+    appendWatch.current = null;
     if (!root) return;
     let footer: Element | null = null;
     const measure = () => {
-      const next = root.querySelector('.quick-append-footer');
-      if (footer !== next) {
-        if (footer) resize.unobserve(footer);
-        footer = next;
-        if (footer) resize.observe(footer);
-      }
       setAppendTop(footer?.getClientRects().length ? footer.getBoundingClientRect().top : null);
+    };
+    const track = () => {
+      const next = root.querySelector('.quick-append-footer');
+      if (footer === next) return;
+      if (footer) resize.unobserve(footer);
+      footer = next;
+      if (footer) resize.observe(footer);
+      measure();
     };
     const resize = new ResizeObserver(measure);
     resize.observe(root);
-    const mutations = new MutationObserver(measure);
+    // Streaming replies mutate the page often; only a new or removed composer needs a layout read.
+    const mutations = new MutationObserver(track);
     mutations.observe(root, { childList: true, subtree: true });
-    measure();
-    return () => { resize.disconnect(); mutations.disconnect(); };
+    track();
+    // A new page without a composer clears the previous one's position.
+    if (!footer) measure();
+    appendWatch.current = { root, stop: () => { resize.disconnect(); mutations.disconnect(); } };
   });
+  useEffect(() => () => {
+    appendWatch.current?.stop();
+    appendWatch.current = null;
+  }, []);
   const width = Math.max(1, Math.min(440, viewport.width - margin * 2));
   const height = Math.max(
     1,

@@ -26,11 +26,12 @@ export function useProjectView(ctx: TypeContext): TypeView | null {
     return { children: !ctx.editing && <ReferencePanel note={note} onOpen={ctx.onOpen} /> };
   if (note.project_category && variant === 'markdown')
     return {
+      records: note.project_category === 'note' ? undefined : note.project_category,
       headingActions: !ctx.editing && ctx.projectContext && (
         <ProjectStatus note={note} project={ctx.projectContext} disabled={ctx.offline || ctx.appending}
           onBusy={ctx.setAppending} onSaved={ctx.onAppended} onRefresh={ctx.refresh} />
       ),
-      footer: !ctx.editing && <QuickAppend id={note.id} keyId={note.key_id} timestamp disabled={ctx.offline} blocked={ctx.appending}
+      footer: !ctx.editing && <QuickAppend id={note.id} keyId={note.key_id} kind={note.project_category} disabled={ctx.offline} blocked={ctx.appending}
         label={note.project_category === 'issue' ? '补充讨论' : note.project_category === 'todo' ? '记录进展' : '追加笔记'}
         placeholder={note.project_category === 'issue' ? '补充分析、讨论或解决结果…' : note.project_category === 'todo' ? '记录进展、遇到的阻碍或完成结果…' : '补充想法或笔记内容…'}
         onBusy={ctx.setAppending} onSaved={ctx.onAppended} />,
