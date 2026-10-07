@@ -676,7 +676,7 @@ export function AssistantPanel(props: Props) {
                 onClick={() => setFileSource({ type: 'note', note: props.fileNode ?? node })}
               >
                 <FileText size={15} />
-                附上当前文件
+                <span className="action-label">附上当前文件</span>
               </button>
             )}
             <button
@@ -686,7 +686,7 @@ export function AssistantPanel(props: Props) {
               onClick={() => fileInput.current?.click()}
             >
               <Paperclip size={15} />
-              另选文件
+              <span className="action-label">另选文件</span>
             </button>
             <input
               ref={fileInput}
@@ -711,7 +711,9 @@ export function AssistantPanel(props: Props) {
               }}
             >
               <Quote size={15} />
-              {props.selection ? '引用选中文字' : '选中正文后可引用'}
+              <span className="action-label">
+                {props.selection ? '引用选中文字' : '选中正文后可引用'}
+              </span>
             </button>
             {!!props.annotationCount && !withNotes && (
               <button
@@ -721,7 +723,7 @@ export function AssistantPanel(props: Props) {
                 onClick={() => setWithNotes(true)}
               >
                 <MessageSquareQuote size={15} />
-                附上我的批注
+                <span className="action-label">附上我的批注</span>
               </button>
             )}
             <button
@@ -731,7 +733,7 @@ export function AssistantPanel(props: Props) {
               onClick={() => void capture()}
             >
               <Camera size={15} />
-              框选截图
+              <span className="action-label">框选截图</span>
             </button>
           </div>
           <textarea
@@ -767,7 +769,7 @@ export function AssistantPanel(props: Props) {
             </p>
           )}
           <div className="assistant-send">
-            <span>
+            <span className={uploading || (remoteBusy && !sending) ? undefined : 'send-provider'}>
               {uploading
                 ? '正在上传附件…'
                 : remoteBusy && !sending

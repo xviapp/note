@@ -1649,8 +1649,7 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
     await page.screenshot({ path: `test-results/assistant-docked-${info.project.name}.png` });
 
     await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
-  }
-  // (On phones typing the question already filled the screen.)
+  } else await panel.getByRole('button', { name: '青藜全屏', exact: true }).click();
   await expect
     .poll(async () => (await panel.boundingBox())!.height)
     .toBe(page.viewportSize()!.height);

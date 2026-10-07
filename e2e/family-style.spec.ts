@@ -145,7 +145,7 @@ test('back restores the originating list and cancelled edits preserve browser hi
     await expect(panel).not.toHaveClass(/assistant-maximized/);
     const half = (await panel.boundingBox())!;
     expect(half.width).toBe(page.viewportSize()!.width);
-    expect(half.y).toBeGreaterThan(page.viewportSize()!.height * 0.4);
+    expect(half.y).toBeGreaterThan(page.viewportSize()!.height * 0.25);
     await page.screenshot({ path: 'test-results/family-chat-sheet-mobile.png' });
     await panel.getByRole('button', { name: '青藜全屏', exact: true }).click();
     await expect(panel).toHaveClass(/assistant-maximized/);

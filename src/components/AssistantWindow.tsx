@@ -13,11 +13,12 @@ import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react
 import { QingliIcon } from './QingliIcon';
 
 export type AssistantMode = 'floating' | 'docked' | 'maximized';
-// On phones a note's 青藜 is a bottom sheet: half height over the page, or
-// full screen. The global conversation stays full screen.
+// On phones 青藜 is a bottom sheet: most of the screen with the page still
+// showing above it, or full screen.
 type SheetSize = 'half' | 'full';
 const SHEET_KEY = 'assistant-sheet';
-const HALF = 0.55;
+const HALF = 0.7;
+const tallest = { width: 0, height: 0 };
 function savedSheet(): SheetSize {
   try {
     return localStorage.getItem(SHEET_KEY) === 'full' ? 'full' : 'half';
@@ -94,7 +95,7 @@ export function AssistantWindow({
   const restoreMode = useRef<AssistantMode>('floating');
   const [viewport, setViewport] = useState(viewportBounds);
   const compact = viewport.width <= 760;
-  const sheet = compact && label !== '全局青藜';
+  const sheet = compact;
   const [sheetSize, setSheetSizeState] = useState<SheetSize>(savedSheet);
   // Only switching size animates; resizing the window or the keyboard does not.
   const [animating, setAnimating] = useState(false);
@@ -111,7 +112,21 @@ export function AssistantWindow({
     }
   };
   const [pull, setPull] = useState<{ id: number; startY: number; offset: number } | null>(null);
-  const fullscreen = compact ? !sheet || sheetSize === 'full' : mode === 'maximized';
+  // The keyboard leaves too little of a part-height sheet, so while it shows
+  // the sheet fills the screen, and returns to its size once it is put away.
+  // The keyboard shrinks the visual viewport below the tallest height seen.
+  // (Kept for the page, not the panel: the layout can remount it meanwhile.)
+  if (tallest.width !== Math.round(viewport.width)) {
+    tallest.width = Math.round(viewport.width);
+    tallest.height = 0;
+  }
+  tallest.height = Math.max(tallest.height, viewport.height);
+  const keyboard = sheet && tallest.height - viewport.height > 120;
+  const keyboardSeen = useRef(0);
+  useEffect(() => {
+    if (keyboard) return () => void (keyboardSeen.current = Date.now());
+  }, [keyboard]);
+  const fullscreen = compact ? !sheet || sheetSize === 'full' || keyboard : mode === 'maximized';
   const [dockBounds, setDockBounds] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -258,6 +273,10 @@ export function AssistantWindow({
             event.preventDefault();
             event.stopPropagation();
             if (fullscreen && !compact) toggleMaximized();
+            // Android also hands Back to the page when it puts the keyboard
+            // away: that Back only ends typing.
+            else if (sheet && (keyboard || Date.now() - keyboardSeen.current < 800))
+              (document.activeElement as HTMLElement | null)?.blur();
             else if (sheet && fullscreen) {
               (document.activeElement as HTMLElement | null)?.blur();
               setSheetSize('half');
@@ -287,12 +306,6 @@ export function AssistantWindow({
             }
           }
         }}
-        onFocus={(event) => {
-          // The keyboard leaves too little of a half sheet; it stays full until
-          // dragged down or Back.
-          if (sheet && !fullscreen && event.target.matches('textarea, input:not([type=checkbox])'))
-            setSheetSize('full');
-        }}
       >
         {sheet && (
           <div
@@ -300,7 +313,7 @@ export function AssistantWindow({
             role="button"
             // Touch and screen readers use it; Tab stays on the panel's controls.
             tabIndex={-1}
-            aria-label={fullscreen ? '青藜半屏' : '青藜全屏'}
+            aria-label="调整青藜高度"
             onClick={(event) => {
               // Pointer taps are handled on release; this is assistive technology.
               if (event.detail === 0) setSheetSize(fullscreen ? 'half' : 'full');
@@ -388,6 +401,18 @@ export function AssistantWindow({
             onClick={() => onModeChange(mode === 'docked' ? 'floating' : 'docked')}
           >
             {mode === 'docked' ? <PanelsTopLeft size={16} /> : <PanelRight size={16} />}
+          </button>
+          <button
+            className="icon-button"
+            hidden={!sheet}
+            aria-label={fullscreen ? '青藜半屏' : '青藜全屏'}
+            title={fullscreen ? '半屏' : '全屏'}
+            onClick={() => {
+              if (fullscreen) (document.activeElement as HTMLElement | null)?.blur();
+              setSheetSize(fullscreen ? 'half' : 'full');
+            }}
+          >
+            {fullscreen ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
           </button>
           <button
             className="icon-button"

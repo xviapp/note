@@ -689,3 +689,59 @@
   z-index: 49;
   background: rgb(0 0 0 / 0.12);
 }
+/* A compact composer in the sheet: the question, then one row of icon
+   actions with Send at its end. */
+.assistant-panel.assistant-sheet .assistant-compose {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 4px;
+  padding: 8px 12px max(8px, env(safe-area-inset-bottom));
+}
+.assistant-panel.assistant-sheet .assistant-compose > * {
+  flex: 1 1 100%;
+  min-width: 0;
+}
+.assistant-panel.assistant-sheet .assistant-compose textarea,
+.assistant-panel.assistant-sheet .assistant-compose .inline-error,
+.assistant-panel.assistant-sheet .assistant-compose .field-hint {
+  order: 1;
+  margin: 0;
+}
+.assistant-panel.assistant-sheet .assistant-compose textarea {
+  height: 46px;
+  min-height: 46px;
+  max-height: 120px;
+  padding: 10px 12px;
+  line-height: 1.6;
+}
+.assistant-panel.assistant-sheet .context-actions {
+  order: 2;
+  flex: 1 1 auto;
+  display: flex;
+  flex-wrap: nowrap;
+  gap: 2px;
+  margin: 0;
+}
+.assistant-panel.assistant-sheet .context-actions .text-button {
+  justify-content: center;
+  width: 40px;
+  min-height: 40px;
+  padding: 0;
+}
+.assistant-panel.assistant-sheet .action-label {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.assistant-panel.assistant-sheet .assistant-send {
+  order: 3;
+  flex: 0 0 auto;
+  margin: 0;
+}
+.assistant-panel.assistant-sheet .send-provider {
+  display: none;
+}
