@@ -537,13 +537,9 @@ function ClipRow({
         // The image is a small thumbnail beside the text.
         <div className="clip-body">
           {item.text && (
-            <button
-              className={`clip-text${open ? ' is-open' : ''}`}
-              title="点击复制"
-              onClick={onCopy}
-            >
+            <p className={`clip-text${open ? ' is-open' : ''}`}>
               {item.text}
-            </button>
+            </p>
           )}
           {item.file && (
             <button className="clip-image" title="查看大图" onClick={onView}>
@@ -568,6 +564,12 @@ function ClipRow({
             <span className="clip-waiting">{offline ? '联网后保存' : '正在保存'}</span>
           ))}
         <span className="clip-actions">
+          {item.text && !sealed && (
+            <button className="text-button clip-copy" title="复制文字" onClick={onCopy}>
+              <Copy size={15} aria-hidden="true" />
+              复制
+            </button>
+          )}
           {item.text.length > LONG && !sealed && (
             <button className="text-button" aria-expanded={open} onClick={() => setOpen(!open)}>
               {open ? '收起' : '展开'}

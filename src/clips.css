@@ -86,6 +86,7 @@
 .clip-text {
   display: -webkit-box;
   width: 100%;
+  margin: 0;
   padding: 6px 8px;
   border-radius: var(--radius-control);
   overflow: hidden;
@@ -102,9 +103,6 @@
 }
 .clip-text.is-open {
   display: block;
-}
-.clip-text:hover:not(:disabled) {
-  background: var(--hover);
 }
 .clip-item.is-pending .clip-text {
   color: var(--muted);
@@ -147,6 +145,11 @@
   width: 30px;
   height: 30px;
   color: var(--muted);
+}
+.clip-actions .clip-copy {
+  min-height: 30px;
+  padding: 4px 2px;
+  white-space: nowrap;
 }
 .clips-empty {
   margin: 24px 0 8px;

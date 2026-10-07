@@ -62,8 +62,10 @@ test('随手记 keeps, copies, pins and deletes clips from any page', async ({ p
     await page.screenshot({ path: testInfo.outputPath(`clips-${theme}.png`) });
   }
 
-  // Clicking a clip copies it.
+  // Reading a clip is passive; copying is an explicit action.
   await dialog.locator('.clip-text').filter({ hasText: '第二条' }).click();
+  await expect(dialog.getByText('已复制')).toHaveCount(0);
+  await dialog.locator('.clip-item').filter({ hasText: '第二条' }).getByRole('button', { name: '复制', exact: true }).click();
   await expect(dialog.getByText('已复制')).toBeVisible();
   if (testInfo.project.name === 'desktop')
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第二条：从笔记里记下');
