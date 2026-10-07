@@ -1829,6 +1829,67 @@ button.node-list-toggle:focus-visible {
   font-size: 13px;
   color: var(--muted);
 }
+.book-details {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.book-description {
+  flex: 1;
+  min-width: 0;
+  display: grid;
+  gap: 10px;
+}
+.book-cover {
+  width: 88px;
+  height: 124px;
+  flex: 0 0 auto;
+  object-fit: contain;
+  background: var(--surface-subtle);
+  border: 1px solid var(--line);
+  border-radius: 4px;
+}
+.book-cover-field {
+  display: grid;
+  gap: 8px;
+  font-size: 13px;
+  font-weight: 500;
+}
+.book-cover-controls {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+}
+.book-cover-controls > .form-stack {
+  flex: 1;
+  min-width: 0;
+}
+.book-cover-controls input {
+  width: 100%;
+  min-width: 0;
+}
+.book-cover-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.book-contents-title {
+  margin: 0 0 12px;
+  font-family: var(--font-book);
+}
+.book-contents-list {
+  max-height: min(55vh, 480px);
+  overflow-y: auto;
+}
+.book-contents-list [aria-current='page'] {
+  background: var(--selected);
+  color: var(--ink);
+}
 .book-status {
   color: var(--ink);
   font-weight: 500;
@@ -4160,6 +4221,19 @@ button.node-list-toggle:focus-visible {
 .journal-panel {
   margin-top: 24px;
 }
+.project-entry-status {
+  margin: 0 0 20px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.project-entry-status label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.project-entry-status select {
+  width: auto;
+}
 .journal-header {
   display: flex;
   flex-wrap: wrap;
@@ -4172,6 +4246,79 @@ button.node-list-toggle:focus-visible {
   gap: 8px;
   color: var(--muted);
   font-size: 13px;
+}
+.quick-append {
+  flex-shrink: 0;
+  padding: 10px 24px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.quick-append input {
+  flex: 1;
+  min-width: 0;
+}
+.quick-append-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.quick-append-body {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.quick-append textarea {
+  flex: 1;
+  min-width: 0;
+  max-height: 160px;
+  resize: vertical;
+}
+.quick-append small {
+  color: var(--muted);
+}
+.quick-append .inline-error {
+  margin: 6px 0 0;
+}
+.template-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 8px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.template-item strong {
+  overflow-wrap: anywhere;
+}
+.template-item > div, .template-tokens {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+}
+.template-tokens {
+  font-size: 13px;
+  color: var(--muted);
+}
+.template-editor {
+  min-height: 240px;
+  max-height: 45dvh;
+  overflow: auto;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+}
+.template-editor .cm-editor {
+  min-height: 240px;
+}
+.template-editor > .markdown-body {
+  padding: 12px;
+}
+@media (max-width: 760px) {
+  .quick-append {
+    padding-inline: 12px;
+  }
 }
 .journal-month {
   display: flex;

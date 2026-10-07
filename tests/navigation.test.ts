@@ -2,6 +2,15 @@ import { describe, expect, it } from 'vitest';
 import { parseRoute, routePath, settingsTitles } from '../src/navigation';
 
 describe('notebook routes', () => {
+  it('keeps project category context through reloadable note links', () => {
+    for (const category of ['todo', 'issue', 'note']) {
+      const path = `/n/source?project=project_id&category=${category}`;
+      expect(routePath(parseRoute(path))).toBe(path);
+    }
+    expect(routePath(parseRoute('/n/source?project=bad/id&category=todo'))).toBe('/n/source');
+    expect(routePath(parseRoute('/n/source?project=id&category=unknown'))).toBe('/n/source');
+    expect(parseRoute('/n/source').project).toBeUndefined();
+  });
   it('preserves note and collection deep links', () => {
     for (const path of [
       '/',

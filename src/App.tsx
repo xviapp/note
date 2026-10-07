@@ -48,7 +48,8 @@ import { SearchDialog } from './components/SearchDialog';
 import { AuthScreen } from './components/AuthScreen';
 import { translationWindowId } from './screen-link';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
-import { useNotebookNavigation, type SettingsSection, type View } from './navigation';
+import { routePath, useNotebookNavigation, type SettingsSection, type View } from './navigation';
+import type { ProjectContext } from '../shared/projects';
 import { noteType } from './note-types/registry';
 // The translation window for a second screen loads only what it shows.
 const TranslationScreen = lazy(() => import('./components/TranslationScreen'));
@@ -257,12 +258,13 @@ function Notebook({
   const setRoute = (id: string | null, replace = false) => {
     void navigation.go(id ? `/n/${id}` : '/', replace, false);
   };
-  const navigate = async (id: string) => {
-    if (id === selected && view === 'tree') {
+  const navigate = async (id: string, project?: ProjectContext) => {
+    const path = routePath({ id: id || null, view: 'tree', section: null, project });
+    if (path === navigation.path) {
       setMobileOpen(false);
       return;
     }
-    await navigation.go(id ? `/n/${id}` : '/');
+    await navigation.go(path);
   };
   const openNode = (node: NoteNode) => {
     if (node.kind === 'link' && !node.arxiv_id && node.url) {
@@ -436,7 +438,7 @@ function Notebook({
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
     setForm({
-      parent: loaded && noteType(loaded).container ? loaded.id : loaded?.parent_id || null,
+      parent: loaded && noteType(loaded).container && !(loaded.kind === 'markdown' && (loaded.project_category || navigation.route.project)) ? loaded.id : loaded?.parent_id || null,
     });
   };
   shortcuts.current.newNode = () => void newNode();
@@ -552,6 +554,7 @@ function Notebook({
                 <NotePane
                   key={selected}
                   id={selected}
+                  projectContext={navigation.route.project}
                   refresh={detailRevision}
                   treeRefresh={revision}
                   showSidebar={!android}

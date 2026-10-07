@@ -22,7 +22,7 @@ import {
   priorOperation,
   saveNote,
 } from './library';
-import { getBlob, readBytes, readText } from './storage';
+import { discardFile, getBlob, readBytes, readText } from './storage';
 import { openFor, requireKey, sealFor } from './encryption';
 import { deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
 import { chatHistory } from './assistant';
@@ -39,7 +39,7 @@ export async function bookOf(env: Env, id: string): Promise<BookInfo | null> {
     `WITH RECURSIVE parents(id,parent_id,depth) AS (
       SELECT id,parent_id,0 FROM nodes WHERE id=?
       UNION ALL SELECT n.id,n.parent_id,p.depth+1 FROM nodes n JOIN parents p ON p.parent_id=n.id WHERE p.depth<200
-    ) SELECT b.node_id id,n.title,b.author,b.status,b.page_count,b.pages_read,b.role_prompt,b.note_id,b.updated_at
+    ) SELECT b.node_id id,n.title,b.author,b.status,b.page_count,b.pages_read,b.role_prompt,b.note_id,b.cover_blob_id,b.updated_at
     FROM parents p JOIN books b ON b.node_id=p.id JOIN nodes n ON n.id=p.id ORDER BY p.depth LIMIT 1`,
   )
     .bind(id)
@@ -100,21 +100,43 @@ export async function saveBook(
   id: string,
   data: Record<string, unknown>,
 ): Promise<BookInfo> {
-  await getNode(env, id);
-  const fields = bookFields(data, await book(env, id));
-  await env.DB.prepare(
-    'UPDATE books SET author=?,status=?,page_count=?,pages_read=?,role_prompt=?,updated_at=? WHERE node_id=?',
-  )
-    .bind(
+  const node = await getNode(env, id);
+  const current = await book(env, id);
+  const fields = bookFields(data, current);
+  const revision = data.revision === undefined ? node.revision : integer(data.revision, '版本号');
+  const title = data.title === undefined ? node.title : textValue(data.title, '书名', 200).trim();
+  if (!title) throw new AppError(400, '请输入书名。');
+  const cover = data.coverId === undefined ? current.cover_blob_id : data.coverId === null ? null : idValue(data.coverId);
+  if (cover) {
+    const file = await getBlob(env, cover);
+    if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(file.mime) || file.size > BOOK_PAGE_IMAGE_LIMIT)
+      throw new AppError(400, '封面需要使用不超过 5 MiB 的图片。');
+    if ((file.key_id ?? null) !== (node.key_id ?? null))
+      throw new AppError(400, '封面的加密设置与书籍不同，请重新上传。');
+  }
+  const now = Date.now();
+  const results = await env.DB.batch([
+    env.DB.prepare(
+      'UPDATE books SET author=?,status=?,page_count=?,pages_read=?,role_prompt=?,cover_blob_id=?,updated_at=? WHERE node_id=? AND EXISTS(SELECT 1 FROM nodes WHERE id=? AND revision=? AND trash_id IS NULL)',
+    ).bind(
       fields.author,
       fields.status,
       fields.pageCount,
       fields.pagesRead,
       fields.role,
-      Date.now(),
+      cover,
+      now,
       id,
-    )
-    .run();
+      id,
+      revision,
+    ),
+    env.DB.prepare('UPDATE nodes SET title=?,revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id')
+      .bind(title, now, id, revision),
+  ]);
+  if (!results[1].results.length)
+    throw new AppError(409, '书籍已在其他页面更新，请刷新后重试。', 'VERSION_CONFLICT');
+  if (current.cover_blob_id && current.cover_blob_id !== cover)
+    await discardFile(env, current.cover_blob_id).catch(() => {});
   return book(env, id);
 }
 
@@ -374,7 +396,7 @@ export async function pageInsights(env: Env, id: string): Promise<BookPageInfo> 
   const result = await generateJson(
     env,
     '你是一位严谨、平实的阅读伙伴。只根据提供的书籍信息和原文工作；不确定时明确说明。只输出 JSON。',
-    `书籍：${info.title}\n作者：${info.author || '未知'}\n阅读角色：${info.role_prompt || '通用阅读伙伴'}\n\n原文（${node.title}）：\n${clip(text, SOURCE_TEXT_LIMIT)}\n\n请返回 {"summary":"不超过180字的纯文本摘要","questions":["3到5个值得追问的问题"]}。摘要和问题都不要使用 Markdown、列表、标题或公式。`,
+    `书籍：${info.title}\n作者：${info.author || '未知'}\n阅读角色：${info.role_prompt || '通用阅读伙伴'}\n\n原文（${node.title}）：\n${clip(text, SOURCE_TEXT_LIMIT)}\n\n请返回 {"summary":"不超过180字的纯文本摘要","questions":["3到5个值得追问的问题"]}。questions 必须采用读者向青藜提问的口吻，点击后可直接请青藜回答。围绕本页实际出现的概念、论证、依据或应用提出具体知识问题，不要根据书名猜测未提供的内容，不要询问读者的学习偏好、理解程度或想从哪个方向入手。例如使用“这一概念的物理含义是什么？”或“这里的数学推导与物理解释如何对应？”，不要使用“你更关心数学推导还是物理解释？”或“你希望先厘清哪个概念？”。摘要和问题都不要使用 Markdown、列表、标题或公式。`,
   );
   const summary = plain(result.summary, BOOK_SUMMARY_LIMIT);
   const questions = (Array.isArray(result.questions) ? result.questions : [])

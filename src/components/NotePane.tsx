@@ -52,6 +52,7 @@ import { useOffline } from '../connectivity';
 import { cachedNote } from '../offline-cache';
 import { reveal } from '../encryption';
 import { useTypeView } from '../note-types';
+import type { ProjectContext } from '../../shared/projects';
 
 const Editor = lazy(() => import('./Editor'));
 const SplitView = lazy(() => import('./SplitView'));
@@ -81,6 +82,7 @@ function restoreTextPosition(area: HTMLElement, position: ReadingPosition) {
 
 interface Props {
   id: string;
+  projectContext?: ProjectContext;
   refresh: number;
   treeRefresh: number;
   showSidebar: boolean;
@@ -89,7 +91,7 @@ interface Props {
   sidebarOpen: boolean;
   onOpenSidebar: () => void;
   onBack: () => void;
-  onNavigate: (id: string) => void;
+  onNavigate: (id: string, project?: ProjectContext) => void;
   // A note created from this page (e.g. a journal entry), opened for writing.
   onCreated: (node: NoteNode) => void;
   onOpen: (node: NoteNode) => void;
@@ -119,6 +121,7 @@ export default function NotePane(props: Props) {
   // Showing this device's copy while the server's answer is on its way. Editing
   // and other changes wait for the fresh copy, so they never start from old text.
   const [stale, setStale] = useState(false);
+  const [appending, setAppending] = useState(false);
   const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
@@ -129,6 +132,16 @@ export default function NotePane(props: Props) {
     [linkOpen, setLinkOpen] = useState(false);
   const question = useQuestion(),
     scroll = useRef<HTMLDivElement>(null);
+  const revealAppend = useRef(false);
+  useLayoutEffect(() => {
+    if (!revealAppend.current || !note) return;
+    revealAppend.current = false;
+    touched.current = restored.current = true;
+    requestAnimationFrame(() => {
+      const area = scroll.current;
+      if (area) area.scrollTop = area.scrollHeight;
+    });
+  }, [note]);
   const toc = useNoteToc({
     scroll,
     beforeSideToggle: () => {
@@ -176,7 +189,7 @@ export default function NotePane(props: Props) {
     noteRef,
     setNote,
     question,
-    setLeaveGuard: props.setLeaveGuard,
+    setLeaveGuard: (guard) => props.setLeaveGuard(async () => !appending && await guard()),
     onStart: () => setTranslation(null),
     onChanged: props.onChanged,
     onError: props.onError,
@@ -196,7 +209,7 @@ export default function NotePane(props: Props) {
   // The E shortcut, sent by the notebook when no field has focus.
   const editShortcut = useRef(() => {});
   editShortcut.current = () => {
-    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline && !stale) void startEdit();
+    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline && !stale && !appending) void startEdit();
   };
   useEffect(() => {
     const edit = () => editShortcut.current();
@@ -205,7 +218,7 @@ export default function NotePane(props: Props) {
   }, []);
   const { autoEdit, onAutoEdit } = props;
   useEffect(() => {
-    // A new journal entry starts from its template, so it is not empty.
+    // A new journal entry opens with its composer instead of the full editor.
     if (
       !autoEdit ||
       !note ||
@@ -215,6 +228,7 @@ export default function NotePane(props: Props) {
     )
       return;
     onAutoEdit?.();
+    if (note.journal_entry) return;
     void startEdit(false);
     // startEdit is recreated each render; this runs once the new note has loaded.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
@@ -453,13 +467,25 @@ export default function NotePane(props: Props) {
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [annotationList, id]);
   // The type's own parts of the page: book, book page, project, paper (see note-types).
+  const projectContext = props.projectContext ?? (note?.project_id && note.project_category
+    ? { id: note.project_id, category: note.project_category } : undefined);
+  const displayNote = note && projectContext && note.kind === 'markdown'
+    ? { ...note, project_category: projectContext.category } : note;
   const typeView = useTypeView(
     {
-      note,
+      note: displayNote,
+      projectContext,
       editing,
       offline: offline || stale,
       refreshKey: props.treeRefresh + retry,
       refresh: () => setRetry((count) => count + 1),
+      onAppended: () => {
+        revealAppend.current = true;
+        setRetry((count) => count + 1);
+        props.onChanged();
+      },
+      setAppending,
+      appending,
       assistantOpen,
       openAssistant: () => {
         setTranslation(null);
@@ -561,9 +587,9 @@ export default function NotePane(props: Props) {
       <div className="note-toolbar">
         {navigation}
         <NoteActions
-          note={note}
+          note={displayNote!}
           editing={editing}
-          offline={offline || stale}
+          offline={offline || stale || appending}
           translating={!!translation}
           toc={{
             available: toc.headings.length > 0,
@@ -695,10 +721,11 @@ export default function NotePane(props: Props) {
               >
                 <article className={`note-article variant-${variantOf(note)}`}>
                   <NoteHeading
-                    note={note}
+                    note={displayNote!}
                     editing={editing}
                     onNew={() => props.onAction('new', note)}
                   />
+                  {typeView.heading}
                   <NoteBody
                     note={note}
                     editing={editing}

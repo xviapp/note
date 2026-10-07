@@ -9,6 +9,7 @@ import {
   type ProjectCategory,
   type ProjectItem,
   type ProjectOverview,
+  type ProjectContext,
 } from '../../shared/projects';
 import { Modal, NodeIcon, Spinner } from './Primitives';
 
@@ -23,7 +24,7 @@ export function ProjectPanel({
   refresh: number;
   offline: boolean;
   onChanged: () => void;
-  onNavigate: (id: string) => void;
+  onNavigate: (id: string, project?: ProjectContext) => void;
 }) {
   const [overview, setOverview] = useState<ProjectOverview | null>(null);
   const [category, setCategory] = useState<ProjectCategory>('todo');
@@ -67,6 +68,7 @@ export function ProjectPanel({
         category: item.category,
         status,
         revision: item.revision,
+        utcOffsetMinutes: -new Date().getTimezoneOffset(),
       });
       onChanged();
       setRetry((value) => value + 1);
@@ -200,7 +202,7 @@ export function ProjectPanel({
                   className={`project-item${item.status === 'done' || item.status === 'closed' ? ' is-complete' : ''}`}
                   key={item.id}
                 >
-                  <button className="project-item-main" onClick={() => onNavigate(item.id)}>
+                  <button className="project-item-main" onClick={() => onNavigate(item.id, { id, category: item.category })}>
                     <NodeIcon kind={item.category} size={20} />
                     <span>
                       <strong>{item.title}</strong>

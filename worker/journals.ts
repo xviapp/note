@@ -49,7 +49,7 @@ export async function journalMonth(env: Env, id: string, url: URL): Promise<Jour
   await requireJournal(env, id);
   const month = url.searchParams.get('month') || '';
   if (!isJournalMonth(month)) throw new AppError(400, '月份不正确。');
-  const [entries, recent, templates] = await env.DB.batch<Record<string, unknown>>([
+  const [entries, recent, templates, templateFolders] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(
       `${BELOW} SELECT ${ENTRY_COLUMNS} WHERE e.journal_id=? AND e.date LIKE ? ORDER BY e.date`,
     ).bind(id, id, `${month}-%`),
@@ -61,12 +61,17 @@ export async function journalMonth(env: Env, id: string, url: URL): Promise<Jour
        WHERE f.parent_id=? AND f.kind='folder' AND f.trash_id IS NULL AND lower(trim(f.title))=?
        AND t.kind='markdown' AND t.trash_id IS NULL ORDER BY t.position,t.id`,
     ).bind(id, TEMPLATES_FOLDER),
+    env.DB.prepare(
+      `SELECT id FROM nodes WHERE parent_id=? AND kind='folder' AND trash_id IS NULL
+       AND lower(trim(title))=? ORDER BY position,id LIMIT 1`,
+    ).bind(id, TEMPLATES_FOLDER),
   ]);
   return {
     month,
     entries: entries.results as unknown as JournalEntry[],
     recent: recent.results as unknown as JournalEntry[],
     templates: templates.results as unknown as JournalTemplate[],
+    templateFolderId: (templateFolders.results[0]?.id as string | undefined) ?? null,
   };
 }
 

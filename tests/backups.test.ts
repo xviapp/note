@@ -86,6 +86,23 @@ async function uploadArchive(job: string, archive: LibraryBackup) {
     expect(response.ok, await response.clone().text()).toBe(true);
   }
 }
+it('restores a book cover with its remapped file reference', async () => {
+  const book = await create({ kind: 'folder', title: '量子力学', book: {} });
+  const bytes = Uint8Array.from([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1]);
+  const cover = await uploadFile(bindings, new Request(`https://notes.test/api/files?name=cover.png&size=${bytes.length}`, { method: 'POST', body: bytes }));
+  await ok(`/api/nodes/${book.id}/book`, 'PUT', { coverId: cover.id });
+  const snapshot = await ok<{ archive: LibraryBackup }>('/api/backups', 'POST', {});
+  const stage = await ok<{ id: string }>('/api/backups/restore', 'POST', snapshot.archive);
+  await uploadArchive(stage.id, snapshot.archive);
+  const { rootId } = await ok<{ rootId: string }>(`/api/backups/${stage.id}/commit`, 'POST', {});
+  const restored = (await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${rootId}`)).nodes.find((node) => node.title === '量子力学')!;
+  const detail = await ok<NoteDetail>(`/api/nodes/${restored.id}`);
+  expect(detail.book!.cover_blob_id).toBeTruthy();
+  expect(detail.book!.cover_blob_id).not.toBe(cover.id);
+  const image = await request(`/api/files/${detail.book!.cover_blob_id}`);
+  expect(image.headers.get('content-type')).toBe('image/png');
+  expect(new Uint8Array(await image.arrayBuffer())).toEqual(bytes);
+});
 it('round-trips the whole library, versions, paper assets, chats and translation anchors into a new tree', async () => {
   const folder = await create({ kind: 'folder', title: '论文', icon: { emoji: '📚' } });
   const iconBytes = Uint8Array.from([

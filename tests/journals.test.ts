@@ -143,6 +143,7 @@ describe('journals', () => {
     });
     const month = await ok<JournalMonth>(`/api/nodes/${book.id}/journal?month=2026-09`);
     expect(month.templates.map((item) => item.title)).toEqual(['每日.md']);
+    expect(month.templateFolderId).toBe(templates.id);
     expect(fillTemplate('# {{日期}} {{星期}} {{unknown}}', '2026-10-07')).toBe(
       '# 2026年10月7日 星期三 {{unknown}}',
     );

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { projectCategory, type ProjectContext } from '../shared/projects';
 
 export const settingsTitles = {
   theme: '外观',
@@ -16,11 +17,20 @@ export const settingsTitles = {
 } as const;
 export type SettingsSection = keyof typeof settingsTitles;
 export type View = 'tree' | 'favorites' | 'recent' | 'offline' | 'trash' | 'settings';
-export type NotebookRoute = { view: View; id: string | null; section: SettingsSection | null };
+export type NotebookRoute = { view: View; id: string | null; section: SettingsSection | null; project?: ProjectContext };
 
 export function parseRoute(path: string): NotebookRoute {
+  const [pathname, query] = path.split('?');
+  path = pathname;
   const note = path.match(/^\/n\/([a-zA-Z0-9_-]+)$/);
-  if (note) return { view: 'tree', id: note[1], section: null };
+  if (note) {
+    const params = new URLSearchParams(query);
+    const id = params.get('project') || '';
+    const category = projectCategory(params.get('category'));
+    return { view: 'tree', id: note[1], section: null,
+      ...(category && /^[a-zA-Z0-9_-]+$/.test(id) ? { project: { id, category } } : {}),
+    };
+  }
   const section = path.match(/^\/settings\/([^/]+)$/)?.[1];
   if (path === '/settings' || (section && Object.hasOwn(settingsTitles, section)))
     return { view: 'settings', id: null, section: (section as SettingsSection) || null };
@@ -33,7 +43,7 @@ export function parseRoute(path: string): NotebookRoute {
 }
 
 export function routePath(route: NotebookRoute): string {
-  if (route.id) return `/n/${route.id}`;
+  if (route.id) return `/n/${route.id}${route.project ? `?project=${route.project.id}&category=${route.project.category}` : ''}`;
   if (route.view === 'settings' && route.section) return `/settings/${route.section}`;
   return route.view === 'tree' ? '/' : `/${route.view}`;
 }
@@ -46,7 +56,7 @@ function entry(path: string, index: number): Entry {
 // Each history entry owns its list position. Reading positions remain managed by useReading.
 export function useNotebookNavigation(guard: { current: () => Promise<boolean> }) {
   const [current, setCurrent] = useState(() => {
-    const path = routePath(parseRoute(location.pathname));
+    const path = routePath(parseRoute(location.pathname + location.search));
     const saved = history.state?.notebook as Entry | undefined;
     const initial = saved?.path === path ? saved : entry(path, 0);
     history.replaceState({ ...history.state, notebook: initial }, '', path);
@@ -90,7 +100,7 @@ export function useNotebookNavigation(guard: { current: () => Promise<boolean> }
   useEffect(() => {
     const pop = async (event: PopStateEvent) => {
       const previous = active.current;
-      const next: Entry = event.state?.notebook || entry(location.pathname, 0);
+      const next: Entry = event.state?.notebook || entry(location.pathname + location.search, 0);
       if (restore.current?.key === next.key) {
         const { done } = restore.current;
         restore.current = null;

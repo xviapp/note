@@ -20,6 +20,7 @@ export interface JournalMonth {
   entries: JournalEntry[];
   recent: JournalEntry[];
   templates: JournalTemplate[];
+  templateFolderId: string | null;
 }
 
 const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];

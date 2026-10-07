@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
+import type { NoteDetail, NoteNode } from '../shared/types';
 
 // A 2×2 PNG: enough for the browser to decode, shrink and re-encode as JPEG.
 const photo = Buffer.from(
@@ -25,6 +26,66 @@ async function login(page: Page, baseURL: string) {
     data: { apiKey: 'sk-e2e-placeholder-key' },
   });
 }
+
+test('book details edit the title and cover, and pages expose the book contents', async ({ page, baseURL }, info) => {
+  test.setTimeout(60_000);
+  await login(page, baseURL!);
+  const headers = { origin: new URL(baseURL!).origin };
+  const book: NoteNode = await (await page.request.post('/api/nodes', { headers, data: { kind: 'folder', title: '量子力学', book: { author: '教材作者', pageCount: 100 } } })).json();
+  const pages: NoteNode[] = [];
+  for (const number of [1, 2]) pages.push(await (await page.request.post(`/api/nodes/${book.id}/pages`, { headers, data: { page: number, content: `## 波函数与测量\n\n这是第 ${number} 页。` } })).json());
+  await page.goto(`/n/${book.id}`);
+  const card = page.getByRole('region', { name: '书籍资料' });
+  await card.getByRole('button', { name: '书籍资料', exact: true }).click();
+  const form = page.getByRole('dialog', { name: '书籍资料' });
+  await form.getByLabel('书名', { exact: true }).fill('量子力学入门');
+  await form.getByLabel('上传封面', { exact: true }).setInputFiles({ name: 'cover.png', mimeType: 'image/png', buffer: photo });
+  await expect(form.getByAltText('待保存的封面')).toBeVisible();
+  let failed = false;
+  await page.route(`**/api/nodes/${book.id}/book`, async (route) => {
+    if (route.request().method() === 'PUT' && !failed) {
+      failed = true;
+      return route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '暂时无法保存' }) });
+    }
+    await route.continue();
+  });
+  await form.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(form.getByRole('alert')).toContainText('暂时无法保存');
+  await expect(form.getByLabel('书名', { exact: true })).toHaveValue('量子力学入门');
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })), theme);
+    await page.screenshot({ path: info.outputPath(`book-form-${theme}.png`) });
+  }
+  await form.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('量子力学入门');
+  await expect(card.getByAltText('《量子力学入门》封面')).toBeVisible();
+  const detail: NoteDetail = await (await page.request.get(`/api/nodes/${book.id}`)).json();
+  expect(detail.book!.cover_blob_id).toBeTruthy();
+  await page.reload();
+  await expect(card.getByAltText('《量子力学入门》封面')).toBeVisible();
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })), theme);
+    await page.screenshot({ path: info.outputPath(`book-cover-${theme}.png`) });
+  }
+  await page.locator('.book-page-row', { hasText: '第 1 页' }).click();
+  await page.getByRole('button', { name: '书内目录', exact: true }).click();
+  const contents = page.getByRole('dialog', { name: '书内目录' });
+  await expect(contents.getByRole('button', { name: /第 1 页/ })).toHaveAttribute('aria-current', 'page');
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })), theme);
+    await page.screenshot({ path: info.outputPath(`book-contents-${theme}.png`) });
+  }
+  await contents.getByRole('button', { name: /第 2 页/ }).click();
+  await expect(page).toHaveURL(new RegExp(`/n/${pages[1].id}$`));
+  await expect(page.getByRole('heading', { level: 1 })).toHaveText('第 2 页');
+  await page.goto(`/n/${book.id}`);
+  await card.getByRole('button', { name: '书籍资料', exact: true }).click();
+  await form.getByRole('button', { name: '移除封面' }).click();
+  await form.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(form).toHaveCount(0);
+  await expect(card.locator('.book-cover')).toHaveCount(0);
+});
 
 test('a photographed page is read, discussed in 青藜 and summarized into reading notes', async ({
   page,

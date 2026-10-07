@@ -90,8 +90,10 @@ export const CREATABLE_TYPES = Object.values(NOTE_TYPES)
   .filter((item) => item.create)
   .sort((a, b) => a.create!.order - b.create!.order);
 
-export function noteType(node: Parameters<typeof variantOf>[0]): NoteType {
-  return NOTE_TYPES[variantOf(node)];
+export function noteType(node: Parameters<typeof variantOf>[0] & Partial<Pick<NoteNode, 'project_category'>>): NoteType {
+  const variant = variantOf(node);
+  const result = NOTE_TYPES[variant];
+  return variant === 'markdown' && node.project_category ? { ...result, newChild: false } : result;
 }
 
 // Items in a project's todo, issue and note folders show as such.

@@ -249,6 +249,8 @@ function noteFiles(note: NoteDetail): FileInfo[] {
   if (note.file) files.set(note.file.id, note.file);
   if (note.icon_blob_id)
     files.set(note.icon_blob_id, { id: note.icon_blob_id, name: '', mime: '', size: 0 });
+  if (note.book?.cover_blob_id)
+    files.set(note.book.cover_blob_id, { id: note.book.cover_blob_id, name: '', mime: '', size: 0 });
   // Uploaded images can also be referenced by another note's Markdown.
   for (const match of note.content.matchAll(/\/api\/files\/([a-zA-Z0-9_-]+)/g))
     if (!files.has(match[1])) files.set(match[1], { id: match[1], name: '', mime: '', size: 0 });

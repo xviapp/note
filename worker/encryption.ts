@@ -188,6 +188,7 @@ const REFS = [
   `'file',a.blob_id,0,NULL FROM sub s JOIN versions v ON v.node_id=s.id JOIN version_assets a ON a.version_id=v.id JOIN blobs b ON b.id=a.blob_id`,
   `'file',n.file_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.file_blob_id`,
   `'file',n.icon_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.icon_blob_id`,
+  `'file',k.cover_blob_id,0,NULL FROM sub s JOIN books k ON k.node_id=s.id JOIN blobs b ON b.id=k.cover_blob_id`,
   `'chat',m.body_blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN blobs b ON b.id=m.body_blob_id`,
   `'file',m.image_blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN blobs b ON b.id=m.image_blob_id`,
   `'file',f.blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN assistant_message_files f ON f.message_id=m.id JOIN blobs b ON b.id=f.blob_id`,

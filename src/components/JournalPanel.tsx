@@ -12,6 +12,7 @@ import {
   type JournalMonth,
 } from '../../shared/journals';
 import { Spinner } from './Primitives';
+import { JournalTemplates } from './JournalTemplates';
 
 const WEEK = ['一', '二', '三', '四', '五', '六', '日'];
 const shift = (month: string, by: number) => {
@@ -46,12 +47,14 @@ export function JournalPanel({
   offline,
   onNavigate,
   onCreated,
+  onChanged,
 }: {
   id: string;
   refresh: number;
   offline: boolean;
   onNavigate: (id: string) => void;
   onCreated: (node: NoteNode) => void;
+  onChanged: () => void;
 }) {
   const today = localDate();
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -59,6 +62,12 @@ export function JournalPanel({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [template, setTemplate] = useState(() => savedTemplate(id));
+  const [managing, setManaging] = useState(false);
+  const selectTemplate = (value: string) => {
+    setTemplate(value);
+    try { localStorage.setItem(templateKey(id), value); }
+    catch { /* Optional preference. */ }
+  };
   useEffect(() => {
     let live = true;
     setError('');
@@ -116,29 +125,24 @@ export function JournalPanel({
           <PenLine size={15} />
           {entries.has(today) ? '打开今天的日记' : '写今天的日记'}
         </button>
-        {!!data?.templates.length && (
+        <>
           <label className="journal-template">
             模板
             <select
               value={chosen?.id ?? ''}
-              onChange={(event) => {
-                setTemplate(event.target.value);
-                try {
-                  localStorage.setItem(templateKey(id), event.target.value);
-                } catch {
-                  /* Optional preference. */
-                }
-              }}
+              disabled={!data || !!busy}
+              onChange={(event) => selectTemplate(event.target.value)}
             >
-              <option value="">默认</option>
-              {data.templates.map((item) => (
+              <option value="">仅日期标题</option>
+              {data?.templates.map((item) => (
                 <option key={item.id} value={item.id}>
                   {item.title.replace(/\.md$/i, '')}
                 </option>
               ))}
             </select>
           </label>
-        )}
+          <button className="text-button" disabled={!data || !!busy} onClick={() => setManaging(true)}>管理模板</button>
+        </>
       </div>
       <div className="journal-month">
         <button
@@ -225,6 +229,12 @@ export function JournalPanel({
           </div>
         </>
       )}
+      {managing && data && <JournalTemplates journalId={id} data={data} selected={chosen?.id ?? ''}
+        offline={offline} onSelect={selectTemplate} onClose={() => setManaging(false)}
+        onChanged={async () => {
+          setData(await api<JournalMonth>(`/api/nodes/${id}/journal?month=${month}`));
+          onChanged();
+        }} />}
     </section>
   );
 }

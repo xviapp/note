@@ -248,18 +248,24 @@ describe('project folders and Markdown indexing', () => {
       category: 'todo',
       status: 'done',
       revision: source.revision,
+      utcOffsetMinutes: 480,
     };
     expect((await request(`/api/nodes/${source.id}/project-status`, 'PUT', payload)).status).toBe(
       403,
     );
     const headers = await unlock(source.id);
+    const operationHeaders = { ...headers, 'x-idempotency-key': crypto.randomUUID() };
     const saved = await ok<NoteNode>(
       `/api/nodes/${source.id}/project-status`,
       'PUT',
       payload,
-      headers,
+      operationHeaders,
     );
-    expect((await detail(source.id)).content).toBe(content.replace('status: todo', 'status: done'));
+    const updated = (await detail(source.id)).content;
+    expect(updated.startsWith(content.replace('status: todo', 'status: done'))).toBe(true);
+    expect(updated).toMatch(/## 状态变更\n\n> \d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2} \+08:00\n\n待办 → 已完成\n$/);
+    expect((await ok<NoteNode>(`/api/nodes/${source.id}/project-status`, 'PUT', payload, operationHeaders)).revision).toBe(saved.revision);
+    expect((await detail(source.id)).content).toBe(updated);
     expect((await detail(source.id)).attachments.map((file) => file.id)).toEqual([attachment.id]);
     expect((await overview(project.id)).items[0].status).toBe('done');
     expect(

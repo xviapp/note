@@ -1,6 +1,6 @@
 import { GLOBAL_ASSISTANT_ID } from './assistant';
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folder-icons';
-import { BOOK_ROLE_LIMIT } from './types';
+import { BOOK_PAGE_IMAGE_LIMIT, BOOK_ROLE_LIMIT } from './types';
 import { KEY_ID } from './encryption';
 import { isJournalDate } from './journals';
 
@@ -64,6 +64,7 @@ export const backupColumns = {
   annotations: ['node_id', 'body_blob_id', 'updated_at', 'search_text'],
   books: [
     'node_id',
+    'cover_blob_id',
     'author',
     'status',
     'page_count',
@@ -214,6 +215,7 @@ export function validateBackup(input: unknown): LibraryBackup {
       // Or the annotation search index, which is rebuilt on the next save.
       if (table === 'annotations' && row.search_text === undefined) row.search_text = '';
       if (table === 'books' && row.note_id === undefined) row.note_id = null;
+      if (table === 'books' && row.cover_blob_id === undefined) row.cover_blob_id = null;
       // Older v1 archives predate custom folder icons.
       if (table === 'nodes') {
         if (row.icon_emoji === undefined) row.icon_emoji = null;
@@ -369,6 +371,12 @@ export function validateBackup(input: unknown): LibraryBackup {
     )
       invalid('书籍信息不正确。');
     books.add(row.node_id);
+    hasFile(row.cover_blob_id, true);
+    if (row.cover_blob_id !== null) {
+      const cover = files.get(String(row.cover_blob_id))!;
+      if (!/^image\/(png|jpeg|webp|gif|avif)$/.test(cover.mime) || cover.size > BOOK_PAGE_IMAGE_LIMIT)
+        invalid('书籍封面不正确。');
+    }
     if (row.note_id !== null && !nodes.has(row.note_id)) invalid('书籍笔记缺失。');
   }
   for (const row of data.tables.book_pages) {

@@ -15,6 +15,7 @@ import { bookFields, bookOf, insertBook, isDiscussion, pageInfo } from './books'
 import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from '../shared/folder-icons';
 import {
   insertProject,
+  projectOf,
   metadataStatement,
   PROJECT_CATEGORY_SQL,
   sealedMetadataStatement,
@@ -122,6 +123,7 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   const page = book ? await pageInfo(env, node) : undefined;
   const discussion = book && node.parent_id && (await isDiscussion(env, id));
   const entry = node.kind === 'markdown' ? await journalEntryOf(env, id) : null;
+  const project = node.project_category && node.kind === 'markdown' ? await projectOf(env, id) : null;
   let reference: NoteDetail['reference'];
   if (node.variant === 'reference') {
     let target: NoteNode | null = null;
@@ -147,6 +149,7 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
     ...(discussion ? { discussion_page: node.parent_id! } : {}),
     ...(reference ? { reference } : {}),
     ...(entry ? { journal_entry: entry } : {}),
+    ...(project ? { project_id: project.id } : {}),
   };
 }
 // A note's detail with its text, for the Worker's own use (books, projects):

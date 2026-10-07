@@ -79,6 +79,7 @@ export function NoteActions({
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
   const attachments = TEXT_KINDS.includes(note.kind) ? note.attachments.length : 0;
   const canSplit = splittable(note);
+  const projectItem = note.kind === 'markdown' && !!note.project_category;
   return (
     // A folder, PDF, image, plain link or an open editor leaves only a couple of
     // buttons; they then share the location row instead of taking one of their own.
@@ -88,7 +89,7 @@ export function NoteActions({
       {!editing && (TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
         <ReadingSettingsButton beforeChange={onReadingChange} />
       )}
-      {note.kind !== 'folder' && !editing && (
+      {note.kind !== 'folder' && !editing && !projectItem && (
         <button
           className="icon-button toolbar-secondary"
           aria-label="翻译记录"
@@ -109,7 +110,7 @@ export function NoteActions({
       >
         <Star size={18} fill={note.favorite ? 'currentColor' : 'none'} />
       </button>
-      {TEXT_KINDS.includes(note.kind) && (
+      {TEXT_KINDS.includes(note.kind) && !projectItem && (
         <button
           className="icon-button toolbar-secondary"
           aria-label="版本历史"
@@ -122,7 +123,7 @@ export function NoteActions({
       )}
       {/* A folder lists its children on the page; other notes open them here,
           before the outline. */}
-      {!editing && hasChildren && (
+      {!editing && hasChildren && !projectItem && (
         <button
           className="icon-button has-badge"
           aria-label={`下级笔记（${note.child_count}）`}
@@ -136,7 +137,7 @@ export function NoteActions({
           </span>
         </button>
       )}
-      {!editing && annotationCount > 0 && (
+      {!editing && annotationCount > 0 && !projectItem && (
         <button
           className="icon-button has-badge toolbar-secondary"
           aria-label={`批注（${annotationCount}）`}
@@ -180,7 +181,7 @@ export function NoteActions({
           <List size={18} />
         </button>
       )}
-      {!editing && TEXT_KINDS.includes(note.kind) && (
+      {!editing && TEXT_KINDS.includes(note.kind) && !projectItem && (
         <button
           className="button compact edit-note-button"
           aria-label="编辑正文"
@@ -194,10 +195,12 @@ export function NoteActions({
       )}
       {!editing && (
         <NodeMenu node={note} onAction={onAction}>
+          {projectItem && <button disabled={offline} onClick={(event) => { closeMenu(event.currentTarget); onEdit(); }}>编辑正文</button>}
+          {projectItem && hasChildren && <button onClick={(event) => { closeMenu(event.currentTarget); onChildren(); }}>下级笔记（{note.child_count}）</button>}
           {/* On phones these leave the toolbar so it stays on one row. */}
           {note.kind !== 'folder' && (
             <button
-              className="menu-compact-only"
+              className={projectItem ? undefined : 'menu-compact-only'}
               disabled={offline}
               onClick={(event) => {
                 closeMenu(event.currentTarget);
@@ -209,7 +212,7 @@ export function NoteActions({
           )}
           {TEXT_KINDS.includes(note.kind) && (
             <button
-              className="menu-compact-only"
+              className={projectItem ? undefined : 'menu-compact-only'}
               disabled={offline}
               onClick={(event) => {
                 closeMenu(event.currentTarget);
@@ -221,7 +224,7 @@ export function NoteActions({
           )}
           {annotationCount > 0 && (
             <button
-              className="menu-compact-only"
+              className={projectItem ? undefined : 'menu-compact-only'}
               onClick={(event) => {
                 closeMenu(event.currentTarget);
                 onAnnotations();

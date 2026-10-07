@@ -11,6 +11,7 @@ import type { Env } from '../worker/types';
 import type { BookInfo, BookPages, FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import { sseData } from '../shared/sse';
 import { validateBackup, type LibraryBackup } from '../shared/backup';
+import { discardFile, storageInfo } from '../worker/storage';
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -105,6 +106,32 @@ afterEach(async () => {
 });
 
 describe('books', () => {
+  it('saves the title and cover together, retains the cover and rejects stale or invalid edits', async () => {
+    const book = await newBook();
+    const file = await photo();
+    const saved = await ok<BookInfo>(`/api/nodes/${book.id}/book`, 'PUT', {
+      title: '量子力学入门', author: '新作者', coverId: file.id, revision: book.revision,
+    });
+    expect(saved).toMatchObject({ title: '量子力学入门', author: '新作者', cover_blob_id: file.id });
+    expect((await ok<NoteDetail>(`/api/nodes/${book.id}`)).title).toBe(saved.title);
+    expect(await discardFile(bindings, file.id)).toBe(false);
+    expect(await bindings.DB.prepare('SELECT draft_until FROM blobs WHERE id=?').bind(file.id).first()).toEqual({ draft_until: null });
+    expect((await storageInfo(bindings)).currentBytes).toBe(file.size);
+    expect((await request(`/api/nodes/${book.id}/book`, 'PUT', {
+      title: '过期书名', author: '过期作者', coverId: null, revision: book.revision,
+    })).status).toBe(409);
+    expect(await ok<BookInfo>(`/api/nodes/${book.id}/book`, 'PUT', { status: 'finished' })).toMatchObject({ title: saved.title, author: saved.author, cover_blob_id: file.id });
+    expect((await request(`/api/nodes/${book.id}/book`, 'PUT', { title: ' ' })).status).toBe(400);
+    expect((await request(`/api/nodes/${book.id}/book`, 'PUT', { coverId: 'missing' })).status).toBe(404);
+    const second = await photo();
+    await bindings.DB.prepare('UPDATE blobs SET mime=? WHERE id=?').bind('text/plain; charset=utf-8', second.id).run();
+    expect((await request(`/api/nodes/${book.id}/book`, 'PUT', { coverId: second.id })).status).toBe(400);
+    const replacement = await photo();
+    await ok(`/api/nodes/${book.id}/book`, 'PUT', { coverId: replacement.id });
+    expect(await bindings.DB.prepare('SELECT id FROM blobs WHERE id=?').bind(file.id).first()).toBeNull();
+    await ok(`/api/nodes/${book.id}/book`, 'PUT', { coverId: null });
+    expect(await bindings.DB.prepare('SELECT id FROM blobs WHERE id=?').bind(replacement.id).first()).toBeNull();
+  });
   it('creates a book that its notes report, and edits only books', async () => {
     const book = await newBook();
     expect(book.variant).toBe('book');
@@ -210,10 +237,20 @@ describe('books', () => {
 
   it('keeps book details in backups', async () => {
     const book = await newBook();
+    const cover = await photo();
+    await ok(`/api/nodes/${book.id}/book`, 'PUT', { coverId: cover.id });
     const exported = await ok<{ id: string; archive: LibraryBackup }>('/api/backups', 'POST');
     expect(exported.archive.tables.books).toEqual([
-      expect.objectContaining({ node_id: book.id, author: '赫拉利', page_count: 400 }),
+      expect.objectContaining({ node_id: book.id, author: '赫拉利', page_count: 400, cover_blob_id: cover.id }),
     ]);
+    expect(exported.archive.files.map((file) => file.id)).toContain(cover.id);
+    expect(validateBackup(exported.archive).tables.books[0].cover_blob_id).toBe(cover.id);
+    const withoutCover = structuredClone(exported.archive);
+    delete withoutCover.tables.books[0].cover_blob_id;
+    expect(validateBackup(withoutCover).tables.books[0].cover_blob_id).toBeNull();
+    const missingCover = structuredClone(exported.archive);
+    missingCover.tables.books[0].cover_blob_id = 'missing';
+    expect(() => validateBackup(missingCover)).toThrow();
     const older = structuredClone(exported.archive) as Partial<LibraryBackup>;
     delete (older.tables as Partial<LibraryBackup['tables']>).books;
     expect(validateBackup(older).tables.books).toEqual([]);
@@ -254,6 +291,9 @@ describe('books', () => {
       }),
     );
     const insights = await ok<NoteDetail['book_page']>(`/api/nodes/${page12.id}/insights`, 'POST');
+    const insightsPrompt = JSON.parse(String(vi.mocked(globalThis.fetch).mock.calls.at(-1)![1]!.body)).messages[1].content;
+    expect(insightsPrompt).toContain('读者向青藜提问');
+    expect(insightsPrompt).toContain('不要询问读者的学习偏好');
     expect(insights).toMatchObject({
       summary: '作者质疑农业带来更好生活。',
       questions: ['为什么说是骗局？', '证据是什么？'],

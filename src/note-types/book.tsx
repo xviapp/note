@@ -4,6 +4,7 @@ import { variantOf, type NoteNode } from '../../shared/types';
 import { BookCard, BookForm } from '../components/BookPanel';
 import {
   BookPageList,
+  BookContents,
   BookPageNav,
   DiscussionMenu,
   PageAskBar,
@@ -75,12 +76,12 @@ export function useBookPageView(ctx: TypeContext): TypeView | null {
     setDiscussion(next);
     ctx.openAssistant();
   };
-  const ask = async (question: string, quote?: string) => {
+  const ask = async (question: string, quote?: string, content = question) => {
     try {
       const created = await api<NoteNode>(`/api/nodes/${note.id}/discussions`, 'POST', {
         title: question,
       });
-      open({ id: created.id, initial: { content: question, quote } });
+      open({ id: created.id, initial: { content, quote } });
       ctx.refresh();
     } catch (error) {
       ctx.onError(error);
@@ -117,14 +118,21 @@ export function useBookPageView(ctx: TypeContext): TypeView | null {
     ? info.discussions.find((item) => item.id === discussion.id)
     : undefined;
   return {
-    toolbar: !ctx.editing && <BookPageNav info={info} onNavigate={ctx.onNavigate} toolbar />,
+    toolbar: !ctx.editing && <>
+      <BookPageNav info={info} onNavigate={ctx.onNavigate} toolbar />
+      <BookContents bookId={note.book.id} title={note.book.title} current={note.id} refresh={ctx.refreshKey} onNavigate={ctx.onNavigate} />
+    </>,
     below: !ctx.editing && (
       <>
         <PageInsights
           id={note.id}
           info={info}
           offline={ctx.offline}
-          onAsk={(question) => void ask(question)}
+          onAsk={(question) => void ask(
+            question,
+            undefined,
+            `请结合本页原文讲解以下追问涉及的知识：\n\n${question}\n\n如果追问中包含学习偏好或方向选择，请直接解释并比较这些方向，不要反问我的偏好。`,
+          )}
           onOpenDiscussion={(id) => open({ id })}
           onNavigate={ctx.onNavigate}
           onUpdated={ctx.refresh}

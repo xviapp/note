@@ -1,8 +1,51 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { ChevronLeft, ChevronRight, FileText, MessagesSquare, RefreshCw, Send } from 'lucide-react';
+import { ChevronLeft, ChevronRight, FileText, List, MessagesSquare, RefreshCw, Send } from 'lucide-react';
 import { api } from '../api';
 import type { BookPageInfo, BookPages, NoteNode } from '../../shared/types';
-import { NodeIcon, Spinner } from './Primitives';
+import { Modal, NodeIcon, Spinner } from './Primitives';
+
+// The book's saved pages, reachable from any page without returning to its folder.
+export function BookContents({ bookId, title, current, refresh, onNavigate }: {
+  bookId: string;
+  title: string;
+  current: string;
+  refresh: number;
+  onNavigate: (id: string) => void;
+}) {
+  const [open, setOpen] = useState(false);
+  const [list, setList] = useState<BookPages | null>(null);
+  const [error, setError] = useState('');
+  const [retry, setRetry] = useState(0);
+  useEffect(() => {
+    if (!open) return;
+    let live = true;
+    setList(null);
+    setError('');
+    void api<BookPages>(`/api/nodes/${bookId}/pages`).then((value) => {
+      if (live) setList(value);
+    }).catch((cause: unknown) => {
+      if (live) setError(cause instanceof Error ? cause.message : String(cause));
+    });
+    return () => { live = false; };
+  }, [open, bookId, refresh, retry]);
+  const navigate = (id: string) => { setOpen(false); onNavigate(id); };
+  return <>
+    <button className="text-button" onClick={() => setOpen(true)} aria-label="书内目录"><List size={16} /><span>书内目录</span></button>
+    {open && <Modal title="书内目录" onClose={() => setOpen(false)}>
+      <p className="book-contents-title">《{title}》</p>
+      {error ? <div className="form-stack"><p className="inline-error" role="alert">{error}</p><button className="button compact" onClick={() => setRetry((value) => value + 1)}>重试加载目录</button></div>
+        : !list ? <Spinner label="正在读取目录…" />
+        : <nav className="book-contents-list" aria-label="书籍页面">
+          {!list.pages.length && <p className="muted-text">还没有书页，可返回书籍添加页面。</p>}
+          {list.pages.map((item) => <button key={item.id} className="book-page-row" aria-current={item.id === current ? 'page' : undefined} onClick={() => navigate(item.id)}>
+            <span className="book-page-number">{item.page ?? '·'}</span>
+            <span><strong>{item.title}</strong>{item.id === current && <small>当前页</small>}</span>
+          </button>)}
+        </nav>}
+      <div className="dialog-actions"><button className="button" onClick={() => navigate(bookId)}>返回书籍</button><button className="button primary" onClick={() => setOpen(false)}>关闭</button></div>
+    </Modal>}
+  </>;
+}
 
 // Turning pages within the book.
 export function BookPageNav({

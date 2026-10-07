@@ -96,7 +96,7 @@ export function NoteHeading({
         ) : (
           <span>更新于 {formatDate(note.updated_at)}</span>
         )}
-        {noteType(note).newChild && !editing && (
+        {noteType(note).newChild && !note.journal_entry && !editing && (
           <button className="text-button" onClick={onNew}>
             <Plus size={14} />
             新建

@@ -113,6 +113,7 @@ export interface ShareSettings {
   breadcrumbs: { id: string; title: string }[];
 }
 export interface NoteDetail extends NoteNode {
+  project_id?: string;
   reference?: { target: NoteNode | null };
   content: string;
   // The body sealed with a key the request did not carry (base64url); the
@@ -242,6 +243,7 @@ export const BOOK_PAGE_IMAGE_LIMIT = 5 * 1_048_576;
 export interface BookInfo {
   id: string;
   title: string;
+  cover_blob_id: string | null;
   author: string;
   status: BookStatus;
   page_count: number;

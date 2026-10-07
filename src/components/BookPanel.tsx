@@ -1,7 +1,7 @@
-import { useRef, useState, type FormEvent } from 'react';
+import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { BookText, Camera, PenLine, Settings2 } from 'lucide-react';
-import { api } from '../api';
-import { addBookPage } from '../books';
+import { api, fileUrl, upload } from '../api';
+import { addBookPage, pagePhoto } from '../books';
 import {
   BOOK_STATUS_LABELS,
   type BookInfo,
@@ -11,6 +11,7 @@ import {
 } from '../../shared/types';
 import { BookRoleField } from './BookRoleField';
 import { Modal } from './Primitives';
+import { CachedImage } from './CachedImage';
 
 // The top of a book's page: its details, and adding pages or discussions.
 export function BookCard({
@@ -71,6 +72,9 @@ export function BookCard({
   };
   return (
     <section className="book-card" aria-label="书籍资料">
+      <div className="book-details">
+      {book.cover_blob_id && <CachedImage className="book-cover" src={fileUrl(book.cover_blob_id)} alt={`《${book.title}》封面`} />}
+      <div className="book-description">
       <div className="book-facts">
         <span className="book-status">{BOOK_STATUS_LABELS[book.status]}</span>
         {book.author && <span>{book.author}</span>}
@@ -93,6 +97,8 @@ export function BookCard({
         </div>
       )}
       {book.role_prompt && <p className="book-role">青藜角色：{book.role_prompt}</p>}
+      </div>
+      </div>
       <div className="book-actions">
         <button
           className="button compact primary"
@@ -301,6 +307,17 @@ export function BookForm({
   onSaved: () => void;
 }) {
   const current = note.book!;
+  const [title, setTitle] = useState(current.title);
+  const [coverId, setCoverId] = useState(current.cover_blob_id);
+  const [coverFile, setCoverFile] = useState<File | null>(null);
+  const [preview, setPreview] = useState('');
+  const uploadedCover = useRef<{ file: File; id: string } | null>(null);
+  useEffect(() => {
+    if (!coverFile) { setPreview(''); return; }
+    const url = URL.createObjectURL(coverFile);
+    setPreview(url);
+    return () => URL.revokeObjectURL(url);
+  }, [coverFile]);
   const [author, setAuthor] = useState(current.author);
   const [status, setStatus] = useState<BookStatus>(current.status);
   const [pageCount, setPageCount] = useState(String(current.page_count || ''));
@@ -323,19 +340,52 @@ export function BookForm({
   };
   const save = (event: FormEvent) => {
     event.preventDefault();
-    void run(() =>
-      api(`/api/nodes/${note.id}/book`, 'PUT', {
+    void run(async () => {
+      let savedCover = coverId;
+      if (coverFile) {
+        if (uploadedCover.current?.file !== coverFile) {
+          const file = await upload(await pagePhoto(coverFile), note.id);
+          uploadedCover.current = { file: coverFile, id: file.id };
+        }
+        savedCover = uploadedCover.current.id;
+      }
+      return api(`/api/nodes/${note.id}/book`, 'PUT', {
+        title,
+        revision: note.revision,
+        coverId: savedCover,
         author,
         status,
         pageCount: Number(pageCount) || 0,
         pagesRead: Number(pagesRead) || 0,
         rolePrompt: role,
-      }),
-    );
+      });
+    });
   };
   return (
-    <Modal title="书籍资料" onClose={onClose}>
+    <Modal title="书籍资料" onClose={() => !busy && onClose()}>
       <form className="form-stack" onSubmit={save}>
+        <label>
+          书名
+          <input required maxLength={200} value={title} onChange={(event) => setTitle(event.target.value)} disabled={busy} />
+        </label>
+        <div className="book-cover-field">
+          <span>封面</span>
+          <div className="book-cover-controls">
+            {preview ? <img className="book-cover" src={preview} alt="待保存的封面" /> : coverId ? <CachedImage className="book-cover" src={fileUrl(coverId)} alt={`《${title}》封面`} /> : <div className="book-cover book-cover-empty"><BookText size={28} /><span>暂无封面</span></div>}
+            <div className="form-stack">
+              <label>
+                上传封面
+                <input type="file" accept="image/*" aria-label="上传封面" disabled={busy} onChange={(event) => {
+                  const file = event.target.files?.[0];
+                  if (file) { setCoverFile(file); uploadedCover.current = null; }
+                  event.target.value = '';
+                }} />
+              </label>
+              <span className="field-hint">选择图片或拍摄封面，保存时自动压缩。</span>
+              {(coverId || coverFile) && <button type="button" className="text-button" disabled={busy} onClick={() => { setCoverId(null); setCoverFile(null); uploadedCover.current = null; }}>移除封面</button>}
+            </div>
+          </div>
+        </div>
         <label>
           作者
           <input
@@ -388,7 +438,7 @@ export function BookForm({
         <BookRoleField
           value={role}
           onChange={setRole}
-          title={note.title}
+          title={title}
           author={author}
           disabled={busy}
           rows={5}

@@ -1,0 +1,100 @@
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { Send } from 'lucide-react';
+import { createNoteAppender } from '../append-note';
+import { readDraft, removeDraft, writeDraft } from '../note-drafts';
+
+// A reusable composer for adding a block to a text note without opening its editor.
+export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, actions, onBusy, timestamp = false, label = '追加', placeholder = '记下此刻，追加到正文…' }: {
+  id: string;
+  keyId?: string | null;
+  disabled: boolean;
+  blocked?: boolean;
+  onSaved: () => void;
+  actions?: ReactNode;
+  onBusy?: (busy: boolean) => void;
+  timestamp?: boolean;
+  label?: string;
+  placeholder?: string;
+}) {
+  const [title, setTitle] = useState('');
+  const [text, setText] = useState('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [ready, setReady] = useState(false);
+  const [retrying, setRetrying] = useState(false);
+  const running = useRef(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const append = useMemo(() => createNoteAppender(id, timestamp), [id, timestamp]);
+  const draftId = `append:${id}`;
+  useEffect(() => {
+    let live = true;
+    void readDraft(draftId).then((draft) => {
+      if (!live) return;
+      if (draft) {
+        try {
+          const saved = JSON.parse(draft.content);
+          if (typeof saved.title === 'string' && typeof saved.text === 'string') {
+            setTitle(saved.title);
+            setText(saved.text);
+          }
+        } catch { /* Ignore an invalid draft. */ }
+      }
+      setReady(true);
+    });
+    return () => { live = false; };
+  }, [draftId]);
+  useEffect(() => {
+    if (!ready) return;
+    if (!title && !text) removeDraft(draftId);
+    else writeDraft(draftId, {
+      content: JSON.stringify({ title, text }), attachments: [], revision: 0, savedAt: Date.now(),
+    }, keyId);
+  }, [draftId, keyId, ready, title, text]);
+  const save = async () => {
+    if (running.current || disabled || blocked || !ready || !text.trim()) return;
+    running.current = true;
+    onBusy?.(true);
+    setBusy(true);
+    setError('');
+    try {
+      await append(title, text);
+      setTitle('');
+      setText('');
+      setRetrying(false);
+      removeDraft(draftId);
+      onSaved();
+      field.current?.focus();
+    } catch (reason) {
+      setError((reason as Error).message);
+      // Keep the submitted input intact until the uncertain request is resolved.
+      setRetrying(!(reason as Error).message.includes('正文已在其他页面更新'));
+    } finally {
+      running.current = false;
+      onBusy?.(false);
+      setBusy(false);
+    }
+  };
+  return (
+    <form className="quick-append" aria-label="快捷记录" onSubmit={(event) => { event.preventDefault(); void save(); }}>
+      <div className="quick-append-heading">
+      <input aria-label="记录标题" placeholder="标题（可选）" value={title}
+        disabled={busy || !ready || retrying} onChange={(event) => setTitle(event.target.value)} />
+      {actions}
+      </div>
+      <div className="quick-append-body">
+        <textarea ref={field} aria-label="记录内容" placeholder={placeholder} rows={2} value={text}
+          disabled={busy || !ready || retrying} onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+              event.preventDefault(); void save();
+            }
+          }} />
+        <button className="button primary compact" type="submit" disabled={disabled || blocked || busy || !ready || !text.trim()}>
+          <Send size={15} />{busy ? '正在追加…' : retrying ? '重试追加' : label}
+        </button>
+      </div>
+      {disabled && <small>联网后可追加内容</small>}
+      {error && <p className="inline-error" role="alert">{error}</p>}
+    </form>
+  );
+}

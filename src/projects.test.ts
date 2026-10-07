@@ -1,7 +1,17 @@
 import { describe, expect, it } from 'vitest';
-import { markdownMetadata, projectMarkdown, setMarkdownStatus } from '../shared/projects';
+import { markdownMetadata, projectMarkdown, projectStatusContent, setMarkdownStatus } from '../shared/projects';
+import { recordTime } from '../shared/records';
 
 describe('project Markdown metadata', () => {
+  it('records status transitions once while preserving the original body', () => {
+    const time = recordTime(new Date('2026-10-07T03:00:00Z'), 480);
+    expect(time).toBe('2026-10-07 11:00:00 +08:00');
+    const original = projectMarkdown('todo', '任务') + '原文';
+    const next = projectStatusContent(original, 'todo', 'doing', time);
+    expect(next).toBe(original.replace('status: todo', 'status: doing') + '\n\n## 状态变更\n\n> 2026-10-07 11:00:00 +08:00\n\n待办 → 进行中\n');
+    expect(projectStatusContent(next, 'todo', 'doing', time)).toBe(next);
+    expect(recordTime(new Date('2026-10-07T03:00:00Z'), -330)).toBe('2026-10-06 21:30:00 -05:30');
+  });
   it('handles large whitespace runs and unclosed code fences without treating code as a title', () => {
     expect(markdownMetadata('\n'.repeat(60_000) + '# C#\n\n正文')).toMatchObject({
       title: 'C#',

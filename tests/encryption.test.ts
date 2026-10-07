@@ -360,4 +360,18 @@ describe('encrypted notes', () => {
     expect(site!.allocated_bytes).toBe(blobs!.size);
     expect((await bindings.FILES.list()).objects).toHaveLength(1);
   });
+  it('includes book covers in encryption plans and accepts covers sealed for the book', async () => {
+    const book = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '加密书籍', book: {} });
+    const other = await newKey();
+    const cover = await uploadSealed(other.key, other.id, 'unused', 'image/jpeg');
+    // A cover belonging to another key cannot be attached to this book.
+    expect((await request(`/api/nodes/${book.id}/book`, 'PUT', { coverId: cover.id })).status).toBe(400);
+    const key = await newKey();
+    await ok(`/api/nodes/${book.id}/encryption`, 'PUT', { encryption: key.id });
+    const correct = await uploadSealed(key.key, key.id, 'sealed-cover', 'image/jpeg');
+    await ok(`/api/nodes/${book.id}/book`, 'PUT', { coverId: correct.id });
+    await ok(`/api/nodes/${book.id}/encryption`, 'PUT', { encryption: 'none' });
+    const plan = await ok<EncryptionPlan>(`/api/nodes/${book.id}/encryption/plan`);
+    expect(plan.objects).toEqual([expect.objectContaining({ id: correct.id, kind: 'file', key_id: key.id, target: null })]);
+  });
 });

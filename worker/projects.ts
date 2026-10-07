@@ -7,12 +7,13 @@ import {
   PROJECT_STATUSES,
   projectCategory,
   projectMarkdown,
-  setMarkdownStatus,
+  projectStatusContent,
   type ProjectCategory,
   type ProjectOverview,
 } from '../shared/projects';
 import { AppError, idValue, textValue } from './http';
-import { createNode, getNode, KEY_SQL, plainDetail, saveNote } from './library';
+import { createNode, getNode, KEY_SQL, plainDetail, priorOperation, saveNote } from './library';
+import { recordTime } from '../shared/records';
 import { readText } from './storage';
 import { openFor, sealFor } from './encryption';
 import { sealedTextKeyId } from '../shared/encryption';
@@ -168,16 +169,19 @@ export async function projectOverview(env: Env, id: string): Promise<ProjectOver
 }
 // What 青藜 is told about a note inside a project: the project and its open
 // work. Only summaries already indexed are used; a chat never re-indexes.
-export async function projectPrompt(env: Env, node: NoteNode): Promise<string> {
-  const project = await env.DB.prepare(
+export async function projectOf(env: Env, id: string) {
+  return env.DB.prepare(
     `WITH RECURSIVE parents(id,parent_id,depth) AS (
       SELECT id,parent_id,0 FROM nodes WHERE id=?
       UNION ALL SELECT n.id,n.parent_id,p.depth+1 FROM nodes n JOIN parents p ON p.parent_id=n.id WHERE p.depth<200
     ) SELECT n.id,n.title FROM parents p JOIN projects j ON j.node_id=p.id JOIN nodes n ON n.id=p.id
     ORDER BY p.depth LIMIT 1`,
   )
-    .bind(node.id)
+    .bind(id)
     .first<{ id: string; title: string }>();
+}
+export async function projectPrompt(env: Env, node: NoteNode): Promise<string> {
+  const project = await projectOf(env, node.id);
   if (!project) return '';
   const open = new Map<string, string>();
   for (const row of await projectRows(env, project.id)) {
@@ -241,6 +245,8 @@ export async function saveProjectStatus(
   data: Record<string, unknown>,
   key: string,
 ) {
+  const previous = await priorOperation(env, key, `save:${id}`);
+  if (previous) return previous;
   const projectId = idValue(data.projectId);
   await requireProject(env, projectId);
   const category = projectCategory(data.category);
@@ -257,8 +263,11 @@ export async function saveProjectStatus(
   const detail = await plainDetail(env, id);
   if (detail.kind !== 'markdown') throw new AppError(400, '只有 Markdown 文件支持项目状态。');
   let content: string;
+  const offset = data.utcOffsetMinutes ?? 0;
+  if (typeof offset !== 'number' || !Number.isInteger(offset) || Math.abs(offset) > 840)
+    throw new AppError(400, '时区不正确。');
   try {
-    content = setMarkdownStatus(detail.content, data.status);
+    content = projectStatusContent(detail.content, category, data.status, recordTime(new Date(), offset));
   } catch (error) {
     throw new AppError(400, error instanceof Error ? error.message : '无法修改文首状态。');
   }

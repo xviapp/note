@@ -1,5 +1,6 @@
 import type { ReactNode } from 'react';
 import type { NoteDetail, NoteNode } from '../../shared/types';
+import type { ProjectContext } from '../../shared/projects';
 
 // What the note page lends every type module.
 export interface TypeContext {
@@ -11,11 +12,16 @@ export interface TypeContext {
   // Bumps when the tree or this note's own data should be read again.
   refreshKey: number;
   refresh: () => void;
+  // A block was appended: reload and reveal the end of the body.
+  onAppended: () => void;
+  setAppending: (busy: boolean) => void;
+  appending: boolean;
   assistantOpen: boolean;
   // Open 青藜 beside the page (docked on wide screens).
   openAssistant: () => void;
   onOpen: (node: NoteNode) => void;
-  onNavigate: (id: string) => void;
+  onNavigate: (id: string, project?: ProjectContext) => void;
+  projectContext?: ProjectContext;
   // A note the type just created: opened for writing.
   onCreated: (node: NoteNode) => void;
   onChanged: () => void;
@@ -46,6 +52,7 @@ export interface AssistantCustom {
 // What a type adds to the note page. The page lays these out in fixed places;
 // anything left out falls back to the generic behaviour.
 export interface TypeView {
+  heading?: ReactNode;
   // Beside the note actions in the toolbar.
   toolbar?: ReactNode;
   // Extra items in the note's ⋯ menu.

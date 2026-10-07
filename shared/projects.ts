@@ -1,4 +1,7 @@
+import { appendContent } from './records';
+
 export const PROJECT_CATEGORIES = ['todo', 'issue', 'note'] as const;
+export interface ProjectContext { id: string; category: ProjectCategory }
 export type ProjectCategory = (typeof PROJECT_CATEGORIES)[number];
 export const PROJECT_LABELS: Record<ProjectCategory, string> = {
   todo: '待办',
@@ -138,4 +141,12 @@ export function setMarkdownStatus(content: string, status: string): string {
 export function projectMarkdown(category: ProjectCategory, title: string): string {
   const status = category === 'todo' ? 'todo' : category === 'issue' ? 'open' : null;
   return `---\ntitle: ${JSON.stringify(title)}\n${status ? `status: ${status}\n` : ''}---\n\n`;
+}
+
+export function projectStatusContent(content: string, category: ProjectCategory, status: string, time: string) {
+  const before = markdownMetadata(content).status;
+  const updated = setMarkdownStatus(content, status);
+  if (before === status) return updated;
+  const states = PROJECT_STATUSES[category];
+  return appendContent(updated, '状态变更', `${states[before ?? ''] ?? before ?? '未设置'} → ${states[status]}`, true, time);
 }
