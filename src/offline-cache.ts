@@ -374,6 +374,7 @@ export async function cachedNote(id: string): Promise<NoteDetail | undefined> {
 export const cacheablePath = (path: string) =>
   path === '/api/auth/status' ||
   path === '/api/storage' ||
+  path === '/api/storage/usage' ||
   /^\/api\/nodes(?:\?.*)?$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/annotations$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/pages$/.test(path) ||

@@ -21,6 +21,7 @@ import {
   type NoteDetail,
   type NoteNode,
   type StorageInfo,
+  type StorageUsage,
 } from '../shared/types';
 import { Modal, Spinner, useQuestion } from './components/Primitives';
 import { Tree, type NodeAction } from './components/Tree';
@@ -182,6 +183,7 @@ function Notebook({
   const [revision, setRevision] = useState(0),
     [detailRevision, setDetailRevision] = useState(0),
     [storage, setStorage] = useState<StorageInfo | null>(null),
+    [usage, setUsage] = useState<StorageUsage | null>(null),
     [notice, setNotice] = useState('');
   const [form, setForm] = useState<{
       node?: NoteNode;
@@ -244,7 +246,22 @@ function Notebook({
       live = false;
     };
   }, [offline]);
+  // Every change refreshes the quota warning, which reads one row. The full
+  // breakdown scans all files, so it loads only while its settings page is open.
   useEffect(() => {
+    let live = true;
+    api<StorageUsage>('/api/storage/usage')
+      .then((data) => {
+        if (live) setUsage(data);
+      })
+      .catch(report);
+    return () => {
+      live = false;
+    };
+  }, [revision, report]);
+  const storageOpen = view === 'settings' && settingsSection === 'storage';
+  useEffect(() => {
+    if (!storageOpen) return;
     let live = true;
     api<StorageInfo>('/api/storage')
       .then((data) => {
@@ -254,7 +271,7 @@ function Notebook({
     return () => {
       live = false;
     };
-  }, [revision, report]);
+  }, [storageOpen, revision, report]);
   const setRoute = (id: string | null, replace = false) => {
     void navigation.go(id ? `/n/${id}` : '/', replace, false);
   };
@@ -521,9 +538,9 @@ function Notebook({
             </button>
           </div>
         )}
-        {storage && storage.allocatedBytes >= storage.quotaBytes * 0.8 && (
+        {usage && usage.allocatedBytes >= usage.quotaBytes * 0.8 && (
           <div className="capacity-warning">
-            空间已使用 {Math.round((storage.allocatedBytes / storage.quotaBytes) * 100)}
+            空间已使用 {Math.round((usage.allocatedBytes / usage.quotaBytes) * 100)}
             %。可在设置中查看历史和回收站占用。
             <button className="text-button" onClick={() => openSettings('storage')}>
               管理空间

@@ -1,7 +1,7 @@
 import { GLOBAL_ASSISTANT_ID } from '../shared/assistant';
 import type { BlobRow, Env } from './types';
 import { AppError, idValue } from './http';
-import type { StorageInfo } from '../shared/types';
+import type { StorageInfo, StorageUsage } from '../shared/types';
 import { sanitizeSvg, SVG_LIMIT, SVG_MIME } from '../shared/svg';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import {
@@ -387,6 +387,15 @@ export async function discardFile(env: Env, id: string): Promise<boolean> {
   await env.DB.prepare("DELETE FROM blobs WHERE id=? AND state='deleting'").bind(id).run();
   return true;
 }
+export async function storageUsage(env: Env): Promise<StorageUsage> {
+  const site = await env.DB.prepare('SELECT quota_bytes,allocated_bytes FROM site WHERE id=1').first<{
+    quota_bytes: number;
+    allocated_bytes: number;
+  }>();
+  return { quotaBytes: site!.quota_bytes, allocatedBytes: site!.allocated_bytes };
+}
+// The breakdown scans every blob against each table that can reference it, so it
+// is read only by the storage settings page, never after each change.
 export async function storageInfo(env: Env): Promise<StorageInfo> {
   const siteQuery = env.DB.prepare('SELECT quota_bytes,allocated_bytes FROM site WHERE id=1');
   const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t JOIN nodes n ON n.id=t.node_id WHERE n.trash_id IS NULL AND t.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM paper_translations p JOIN nodes n ON n.id=p.node_id WHERE n.trash_id IS NULL AND p.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM annotations x JOIN nodes n ON n.id=x.node_id WHERE n.trash_id IS NULL AND x.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM books k JOIN nodes n ON n.id=k.node_id WHERE n.trash_id IS NULL AND k.cover_blob_id=b.id))`;

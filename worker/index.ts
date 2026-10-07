@@ -24,7 +24,7 @@ import {
   versionDetail,
   versionsList,
 } from './library';
-import { discardFile, serveFile, storageInfo, uploadFile } from './storage';
+import { discardFile, serveFile, storageInfo, storageUsage, uploadFile } from './storage';
 import { cleanup, deletePreview, listTrash, purgeTrash, restoreTrash, trashNode } from './recovery';
 import { favorite, openReading, readingState, saveReading } from './reading';
 import { aiSettings, configureProvider, saveAiSettings, testAiSettings } from './deepseek';
@@ -121,6 +121,7 @@ export default {
         return json({ token: await editToken(env, session, nodeId) });
       }
       if (path === '/api/storage' && method === 'GET') return json(await storageInfo(env));
+      if (path === '/api/storage/usage' && method === 'GET') return json(await storageUsage(env));
       if (path === '/api/encryption/keys' && method === 'GET') return json(await listKeys(env));
       if (path === '/api/encryption/keys' && method === 'POST')
         return json(await createKey(env, await body(request)), 201);

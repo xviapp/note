@@ -282,9 +282,12 @@ export interface TrashBatch {
   purging: number;
   node_count: number;
 }
-export interface StorageInfo {
+// What the notebook checks after every change: a single row, unlike the breakdown.
+export interface StorageUsage {
   quotaBytes: number;
   allocatedBytes: number;
+}
+export interface StorageInfo extends StorageUsage {
   reservedBytes: number;
   currentBytes: number;
   historyBytes: number;

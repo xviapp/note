@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Palette, HardDrive, LogOut, RotateCcw, ShieldCheck, Type } from 'lucide-react';
 import { api, formatBytes } from '../api';
 import { type AuthStatus, type StorageInfo } from '../../shared/types';
@@ -38,6 +38,15 @@ export function Settings({
   const [quota, setQuota] = useState(String((storage?.quotaBytes || 8e9) / 1e9)),
     [busy, setBusy] = useState(false),
     [passwordOpen, setPasswordOpen] = useState(false);
+  // The breakdown loads after the page opens; fill the field once, so a later
+  // refresh never replaces what is being typed.
+  const loadedQuota = storage?.quotaBytes;
+  const quotaFilled = useRef(false);
+  useEffect(() => {
+    if (!loadedQuota || quotaFilled.current) return;
+    quotaFilled.current = true;
+    setQuota(String(loadedQuota / 1e9));
+  }, [loadedQuota]);
   const [oldPassword, setOldPassword] = useState(''),
     [newPassword, setNewPassword] = useState(''),
     [repeat, setRepeat] = useState(''),

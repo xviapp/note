@@ -253,6 +253,12 @@ describe('private library behavior', () => {
       currentBytes: image.size,
       orphanBytes: 0,
     });
+    // The quota check reads the same totals without the per-file breakdown.
+    const full = await ok<StorageInfo>('/api/storage');
+    expect(await ok('/api/storage/usage')).toEqual({
+      quotaBytes: full.quotaBytes,
+      allocatedBytes: full.allocatedBytes,
+    });
     const batch = await trash(pictured);
     expect(await ok<StorageInfo>('/api/storage')).toMatchObject({
       currentBytes: 0,
