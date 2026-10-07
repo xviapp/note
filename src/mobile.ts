@@ -5,10 +5,11 @@ import { fileBlob } from './offline-cache';
 import { sealedFileId } from './sealed-download';
 
 export const device = registerPlugin<{
+  pendingWidgetClips(): Promise<{ items: { id: string; text: string; createdAt: number }[] }>;
+  removeWidgetClip(options: { id: string }): Promise<void>;
+  clearWidgetClips(): Promise<void>;
   getPendingShare(): Promise<{ share: import('./shared-import').IncomingShare | null }>;
   discardShare(options: { id: string }): Promise<void>;
-  // What a launcher shortcut asked for, once ('clips' opens 随手记).
-  takeLaunchAction(): Promise<{ action: string | null }>;
   // The share window only: discard its share and close, with a toast once saved,
   // or hand over to the full app.
   closeShare(options: { saved?: boolean; openApp?: boolean }): Promise<void>;

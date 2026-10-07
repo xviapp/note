@@ -53,18 +53,32 @@ public class NoteDevicePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void pendingWidgetClips(PluginCall call) {
+        try {
+            ClipUploadJob.schedule(getContext());
+            call.resolve(new JSObject().put("items", ClipInbox.list(getContext(), ServerConfig.host(getContext()))));
+        } catch (Exception error) { call.reject("无法读取待发送的随手记。", error); }
+    }
+
+    @PluginMethod
+    public void removeWidgetClip(PluginCall call) {
+        String id = call.getString("id");
+        if (id == null) { call.reject("缺少随手记标识。"); return; }
+        try { ClipInbox.remove(getContext(), ServerConfig.host(getContext()), id); call.resolve(); }
+        catch (Exception error) { call.reject("无法更新待发送的随手记。", error); }
+    }
+
+    @PluginMethod
+    public void clearWidgetClips(PluginCall call) {
+        try { ClipInbox.remove(getContext(), ServerConfig.host(getContext()), null); call.resolve(); }
+        catch (Exception error) { call.reject("无法清除待发送的随手记。", error); }
+    }
+
+    @PluginMethod
     public void getPendingShare(PluginCall call) {
         try { call.resolve(new JSObject().put("share", java.util.Objects.requireNonNullElse(
             host().pendingShare(), org.json.JSONObject.NULL))); }
         catch (Exception error) { call.reject("无法读取待导入内容。", error); }
-    }
-
-    @PluginMethod
-    public void takeLaunchAction(PluginCall call) {
-        NoteBridgeActivity host = host();
-        String action = host.launchAction;
-        host.launchAction = null;
-        call.resolve(new JSObject().put("action", action == null ? org.json.JSONObject.NULL : action));
     }
 
     @PluginMethod

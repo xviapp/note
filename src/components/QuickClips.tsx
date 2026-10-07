@@ -127,7 +127,13 @@ export function QuickClips({
   }, []);
   useEffect(() => {
     void flushClips();
-    return onClipsSent(() => void load());
+    const reload = () => void load();
+    const unsubscribe = onClipsSent(reload);
+    window.addEventListener('note:widget-clips-sent', reload);
+    return () => {
+      unsubscribe();
+      window.removeEventListener('note:widget-clips-sent', reload);
+    };
   }, [load]);
   // The copy kept on this device shows first, then the server's answer.
   useEffect(() => {

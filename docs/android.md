@@ -22,8 +22,6 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`，共用�
 
 独立的透明 `ShareActivity` 接收文字、Markdown、PDF、图片的 `ACTION_SEND`，PDF 与图片的 `ACTION_SEND_MULTIPLE`，以及 PDF、图片、Markdown 的 `ACTION_VIEW`，浮在发送方应用上，加载单独打包的 `share.html`。后台线程把临时授权的 `content://` 内容复制到应用私有暂存区，网页只通过 `/__share/` 地址读取，不使用外部传入的路径。
 
-长按桌面图标的「随手记」快捷方式（`res/xml/shortcuts.xml`）以 `app.xvi.note.action.CLIPS` 打开 `MainActivity`；原生端先记下请求，网页启动后由 `NoteDevice.takeLaunchAction` 取走并打开[随手记](quick-clips.md)，应用已在运行时另发 `note:launch` 事件。
-
 窗口按内容显示 arXiv 论文（服务端只向 arXiv 官方 API 读取标题、作者、摘要，可导入全文或只存链接）、网页链接、Markdown、纯文本、PDF（本地读取首页缩略图与页数）、图片和混合文件；`.md`、`.txt` 读入正文而不上传。保存到设置中的默认目录（账号设置，跨设备共用，被删除后回到根目录），每次可临时更改。未登录时可转到页间登录，内容留在暂存区。文字、链接和单张图片也可以「存入随手记」；文字离线同样可用，打开页间时发送，图片需要联网。一次最多 10 个文件、合计 100 MiB，单文件沿用服务端 50 MB 上限，文本最多 1 MiB；未处理内容保留 7 天。
 
 ## 目录与手势
@@ -74,3 +72,9 @@ pnpm test:android-startup --device emulator-5560 --theme system
 ```
 
 脚本拒绝真机，录下 6 秒冷启动，检测夜间 Splash 之后的浅色亮帧和全白/全黑空帧，并确认启动画面退出；录屏和像素数据保存在 `.wrangler/startup-*`。
+
+## 随手记桌面组件
+
+桌面小组件列表中的「随手记」占 1×1，只显示页间图标和小加号。点击由 `ClipWidget` 直接打开原生 `ClipCaptureActivity`，不启动 `MainActivity` 或 WebView；仅提供文字输入、取消和保存。输入窗口跟随应用的白天、夜间或星空主题。
+
+保存先由 `ClipInbox` 使用 Android Keystore 加密并原子写入私有存储，再关闭窗口。`ClipUploadJob` 使用系统网络约束和退避重试，任务可跨重启恢复；使用当前站点登录会话及固定条目标识，成功后删除本机副本。没有登录、需要内容密钥或启用了应用代理时不直接上传，待应用下次打开、恢复连接或解锁时由 `src/widget-clips.ts` 同步。切换站点不会把旧站点的记录发给新站点。

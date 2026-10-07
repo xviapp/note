@@ -18,8 +18,6 @@ import org.json.JSONObject;
  * the share inbox, and the WebView's routing between local assets, /api and links. */
 abstract class NoteBridgeActivity extends BridgeActivity {
     ShareInbox shareInbox;
-    /** What a launcher shortcut asked the page to open, until the page takes it. */
-    volatile String launchAction;
     private final ExecutorService shareExecutor = Executors.newSingleThreadExecutor();
 
     /** Registers plugins; call before super.onCreate. */

@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<appwidget-provider xmlns:android="http://schemas.android.com/apk/res/android"
+    android:minWidth="40dp" android:minHeight="40dp" android:targetCellWidth="1" android:targetCellHeight="1"
+    android:updatePeriodMillis="0" android:initialLayout="@layout/clip_widget" android:previewLayout="@layout/clip_widget"
+    android:description="@string/clip_widget_description" android:resizeMode="none" android:widgetCategory="home_screen" />

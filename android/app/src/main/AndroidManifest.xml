@@ -3,6 +3,9 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+
     <application
         android:name="com.v2ray.ang.AngApplication"
         android:allowBackup="false"
@@ -28,9 +31,6 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
-            <meta-data
-                android:name="android.app.shortcuts"
-                android:resource="@xml/shortcuts" />
         </activity>
 
         <!-- Shares and "open with" land in a window over the sending app. -->
@@ -68,6 +68,16 @@
                 <data android:mimeType="text/markdown" />
             </intent-filter>
         </activity>
+
+        <activity android:name=".ClipCaptureActivity" android:theme="@style/ClipCaptureTheme"
+            android:label="@string/clip_widget_label" android:exported="false"
+            android:excludeFromRecents="true" android:taskAffinity="app.xvi.note.capture"
+            android:windowSoftInputMode="adjustResize" />
+        <receiver android:name=".ClipWidget" android:exported="false" android:label="@string/clip_widget_label">
+            <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/clip_widget" />
+        </receiver>
+        <service android:name=".ClipUploadJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
 
         <provider
             android:name="androidx.core.content.FileProvider"

@@ -44,6 +44,7 @@ import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
 import { QuickClips } from './components/QuickClips';
 import { flushClips } from './clips';
+import { watchWidgetClips } from './widget-clips';
 import { BootScreen } from './components/BootScreen';
 import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
@@ -320,19 +321,12 @@ function Notebook({
   useEffect(() => {
     // Clips kept offline, or from the share window, go out once the notebook opens.
     void flushClips();
+    const stopWidgetClips = android ? watchWidgetClips() : () => {};
     const open = () => setClipsOpen(true);
-    // The Android launcher shortcut, held natively until the notebook is up.
-    const launch = () =>
-      void import('./mobile')
-        .then(({ device }) => device.takeLaunchAction())
-        .then(({ action }) => action === 'clips' && open())
-        .catch(() => {});
-    if (android) launch();
     window.addEventListener('note:clips', open);
-    window.addEventListener('note:launch', launch);
     return () => {
+      stopWidgetClips();
       window.removeEventListener('note:clips', open);
-      window.removeEventListener('note:launch', launch);
     };
   }, [android]);
   useEffect(() => {
@@ -487,6 +481,7 @@ function Notebook({
   const logout = async (all = false) => {
     if (!(await leaveGuard.current())) return;
     try {
+      if (android) await (await import('./mobile')).device.clearWidgetClips();
       await api(`/api/auth/${all ? 'logout-all' : 'logout'}`, 'POST', {});
       lockEdits();
       await onCheckSession();

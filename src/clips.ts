@@ -233,7 +233,7 @@ function mark(id: string, error: string) {
   writeOutbox(outbox.map((entry) => (entry.id === id ? { ...entry, error } : entry)));
 }
 window.addEventListener('note:reconnected', () => void flushClips());
-// Any page's button, the Q shortcut and the Android launcher shortcut open the panel.
+// Any page's button and the Q shortcut open the panel.
 export const openClips = () => window.dispatchEvent(new Event('note:clips'));
 
 async function writeImage(id: string, bytes: Uint8Array) {
