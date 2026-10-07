@@ -26,7 +26,7 @@ export interface SyncResult {
 }
 type Progress = (done: number) => void;
 
-async function readObject(id: string): Promise<Bytes> {
+export async function readObject(id: string): Promise<Bytes> {
   await proxyReady();
   const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
     credentials: 'same-origin',
@@ -37,7 +37,7 @@ async function readObject(id: string): Promise<Bytes> {
   }
   return new Uint8Array(await response.arrayBuffer());
 }
-async function plainOf(bytes: Bytes): Promise<Bytes> {
+export async function plainOf(bytes: Bytes): Promise<Bytes> {
   const keyId = sealedKeyId(bytes);
   return keyId ? openBytes(await keyOrThrow(keyId), bytes) : bytes;
 }

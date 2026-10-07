@@ -231,7 +231,7 @@ export function useNoteEditor({
       onError(e);
     }
   };
-  const addFiles = async (files: FileList | null) => {
+  const addFiles = async (files: FileList | File[] | null) => {
     if (!files?.length) return;
     setUploading(true);
     setSaveError('');

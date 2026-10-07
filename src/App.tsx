@@ -42,6 +42,8 @@ import { isOffline, useOffline } from './connectivity';
 import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
+import { QuickClips } from './components/QuickClips';
+import { flushClips } from './clips';
 import { BootScreen } from './components/BootScreen';
 import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
@@ -173,6 +175,7 @@ function Notebook({
   const [globalSelection, setGlobalSelection] = useState('');
   const [globalMode, setGlobalMode] = useState<AssistantMode>('floating');
   const [globalImage, setGlobalImage] = useState<{ src: string; alt: string } | null>(null);
+  const [clipsOpen, setClipsOpen] = useState(false);
   const globalActions = useRef<AssistantHandle | null>(null);
   const offline = useOffline();
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
@@ -315,6 +318,24 @@ function Notebook({
     }
   };
   useEffect(() => {
+    // Clips kept offline, or from the share window, go out once the notebook opens.
+    void flushClips();
+    const open = () => setClipsOpen(true);
+    // The Android launcher shortcut, held natively until the notebook is up.
+    const launch = () =>
+      void import('./mobile')
+        .then(({ device }) => device.takeLaunchAction())
+        .then(({ action }) => action === 'clips' && open())
+        .catch(() => {});
+    if (android) launch();
+    window.addEventListener('note:clips', open);
+    window.addEventListener('note:launch', launch);
+    return () => {
+      window.removeEventListener('note:clips', open);
+      window.removeEventListener('note:launch', launch);
+    };
+  }, [android]);
+  useEffect(() => {
     const back = (event: Event) => nativeBack.current(event);
     window.addEventListener('note:native-back', back);
     return () => window.removeEventListener('note:native-back', back);
@@ -386,6 +407,10 @@ function Notebook({
         event.preventDefault();
         shortcuts.current.newNode();
       } else if (letter === 'e') window.dispatchEvent(new Event('note:edit-shortcut'));
+      else if (letter === 'q') {
+        event.preventDefault();
+        setClipsOpen(true);
+      }
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
@@ -480,6 +505,7 @@ function Notebook({
           const first = nodes.find((node) => node.kind !== 'link');
           if (first) void navigate(first.id);
         }}
+        onClipped={() => toast.show('已存入随手记')}
       />
       {!android && (
         <>
@@ -744,6 +770,7 @@ function Notebook({
               ['Ctrl K 或 /', '按标题搜索笔记'],
               ['N', '新建笔记'],
               ['E', '编辑当前笔记'],
+              ['Q', '打开随手记'],
               ['Ctrl S', '编辑时保存并继续编辑'],
               ['Esc', '关闭弹窗、菜单或全屏视图'],
               ['?', '显示这份列表'],
@@ -758,6 +785,22 @@ function Notebook({
           </dl>
           <p className="shortcut-note">在输入框或编辑器里打字时，单键快捷键不会触发。</p>
         </Modal>
+      )}
+      {clipsOpen && (
+        <QuickClips
+          source={
+            view === 'tree' && selected && loaded?.id === selected
+              ? { id: loaded.id, title: loaded.title }
+              : null
+          }
+          onClose={() => setClipsOpen(false)}
+          onNavigate={(id) => void navigate(id)}
+          onCreated={(node) => {
+            changed();
+            toast.show('已转为笔记');
+            void navigate(node.id);
+          }}
+        />
       )}
       {searchOpen && (
         <SearchDialog

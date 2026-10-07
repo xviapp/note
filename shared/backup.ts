@@ -3,6 +3,7 @@ import { FOLDER_ICON_MAX_BYTES, FOLDER_ICON_MIMES, isFolderEmoji } from './folde
 import { BOOK_PAGE_IMAGE_LIMIT, BOOK_ROLE_LIMIT } from './types';
 import { KEY_ID } from './encryption';
 import { isJournalDate } from './journals';
+import { CLIP_CHARS, CLIP_SEALED_CHARS } from './clips';
 
 export const BACKUP_FORMAT = 'yejian-library';
 export const BACKUP_METADATA_LIMIT = 16 * 1024 * 1024;
@@ -88,6 +89,7 @@ export const backupColumns = {
   journals: ['node_id'],
   journal_entries: ['node_id', 'journal_id', 'date', 'created_at'],
   node_references: ['node_id', 'target_id'],
+  clips: ['id', 'text', 'key_id', 'source_id', 'pinned', 'created_at', 'blob_id'],
   trash_batches: [
     'id',
     'root_id',
@@ -206,6 +208,7 @@ export function validateBackup(input: unknown): LibraryBackup {
       'node_references',
       'journals',
       'journal_entries',
+      'clips',
     ] as const)
       if (table === name && data.tables[name] === undefined) data.tables[name] = [];
     const rows = data.tables[table as BackupTable];
@@ -216,6 +219,7 @@ export function validateBackup(input: unknown): LibraryBackup {
       if (table === 'annotations' && row.search_text === undefined) row.search_text = '';
       if (table === 'books' && row.note_id === undefined) row.note_id = null;
       if (table === 'books' && row.cover_blob_id === undefined) row.cover_blob_id = null;
+      if (table === 'clips' && row.blob_id === undefined) row.blob_id = null;
       // Older v1 archives predate custom folder icons.
       if (table === 'nodes') {
         if (row.icon_emoji === undefined) row.icon_emoji = null;
@@ -443,6 +447,21 @@ export function validateBackup(input: unknown): LibraryBackup {
   }
   if (data.tables.nodes.some((node) => references.has(node.parent_id)))
     invalid('引用不能包含独立的下级笔记。');
+  for (const row of data.tables.clips) {
+    hasFile(row.blob_id, true);
+    if (
+      typeof row.text !== 'string' ||
+      (!row.text && row.blob_id === null) ||
+      (row.blob_id !== null &&
+        !/^image\//.test(files.get(String(row.blob_id))!.mime)) ||
+      row.text.length > (row.key_id === null ? CLIP_CHARS : CLIP_SEALED_CHARS) ||
+      (row.key_id !== null && !keys.has(String(row.key_id))) ||
+      (row.source_id !== null && !id(row.source_id)) ||
+      (row.pinned !== 0 && row.pinned !== 1) ||
+      !Number.isSafeInteger(row.created_at)
+    )
+      invalid('随手记信息不正确。');
+  }
   // Summaries are derived from Markdown; never trust an imported cached status.
   for (const node of data.tables.nodes) {
     node.metadata_title =

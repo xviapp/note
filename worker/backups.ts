@@ -286,8 +286,8 @@ function inserts(env: Env, table: string, columns: readonly string[], rows: Back
     if (!chunk.length) return;
     statements.push(
       env.DB.prepare(
-        // A key may already be here (restoring into the same library).
-        `INSERT ${table === 'encryption_keys' ? 'OR IGNORE ' : ''}INTO ${table}(${columns.join(',')}) SELECT ${columns.map((column) => `json_extract(value,'$.${column}')`).join(',')} FROM json_each(?) ORDER BY CAST(key AS INTEGER)`,
+        // A key or clip may already be here (restoring into the same library).
+        `INSERT ${table === 'encryption_keys' || table === 'clips' ? 'OR IGNORE ' : ''}INTO ${table}(${columns.join(',')}) SELECT ${columns.map((column) => `json_extract(value,'$.${column}')`).join(',')} FROM json_each(?) ORDER BY CAST(key AS INTEGER)`,
       ).bind(`[${chunk.join(',')}]`),
     );
     chunk = [];
@@ -419,6 +419,13 @@ export async function finishRestore(env: Env, jobId: string) {
     journals: archive.tables.journals.map(rewrite),
     journal_entries: archive.tables.journal_entries.map(rewrite),
     node_references: archive.tables.node_references.map(rewrite),
+    // Clips keep their IDs, so restoring into the same library adds none twice.
+    // A source outside the archive would name an unrelated page here.
+    clips: archive.tables.clips.map((row) => ({
+      ...row,
+      source_id: originals.has(row.source_id) ? mapped(row.source_id) : null,
+      blob_id: mapped(row.blob_id),
+    })),
     trash_batches: [],
   };
   const statements = [

@@ -16,6 +16,8 @@
 
 **Journals.** A journal is a folder with a `journals` row (`POST /api/nodes` with `journal`, which also creates its `templates` folder). `journal_entries` maps each entry note to its day; `worker/journals.ts` files new entries in year/month folders and returns an existing day instead of a duplicate. The device fills the template (`shared/journals.ts`) and sends the body, so encrypted journals seal it like any note. Details in `docs/journals.md`.
 
+**Clips.** 随手记 is a persistent clipboard outside the node tree: rows in `clips` (text inline, sealed-text prefix when encrypted; an optional image in `blob_id`; `site.clip_key_id` is the key for new ones), API in `worker/clips.ts`. The note being edited registers in `src/note-insert.ts` so clips can be inserted at its cursor. Devices pick clip IDs and queue new clips in a localStorage outbox (`src/clips.ts`) that is sent when online; the panel is `QuickClips`, opened by the `note:clips` window event. Details in `docs/quick-clips.md`.
+
 **Encryption.** Any node can be encrypted with a password (`nodes.encryption`: NULL inherits, `'none'`, or a key ID; the effective key is `key_id` from `KEY_SQL`). Content keys live wrapped in `encryption_keys`; sealed objects carry their key in `blobs.key_id` and the `XVE1` header (`shared/encryption.ts`), short D1 fields use the sealed-text prefix. Devices seal bodies, files and annotations themselves (`sealWrite` in `src/api.ts`) and decrypt responses in `reveal()` (`src/encryption.ts`); keys unlocked on a device are in `src/keyring.ts`. Only Worker-processed features (青藜, translation, books, projects) receive keys, via `x-note-keys` → `withKeys()` in `worker/encryption.ts`; any new server-side read of content must go through `readText`/`readBytes` and any new write through `storeText(…, keyId)`. Re-encryption replaces objects in place under the same ID (`syncEncryption`). Details in `docs/encryption.md`.
 
 **Shared contracts.** `shared/` is imported by both `src/` and `worker/`: API types, limits, SVG sanitizer, SSE parsing, assistant token budgeting (`shared/ai-context.ts`) and the backup format. Change limits and types there. New tables need entries in `shared/backup.ts` and restore in `worker/backups.ts`.
@@ -49,7 +51,7 @@ All application source and assets are maintained in this repository. Edit local 
 - User-facing text, error messages, README and `docs/` are Simplified Chinese; code comments and commits are English.
 - Match surrounding code. Base styles live in `src/styles.css`; `src/shell.css` only adds family-specific rules.
 - Docs describe current behavior. Do not add dated validation logs or version histories; release notes go in `docs/releases/<version>.txt`.
-- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
+- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
 
 ## Testing
 

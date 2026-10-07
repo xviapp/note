@@ -15,6 +15,7 @@ import type { ArxivPreview, AuthStatus, NodeKind, ShareSettings } from '../../sh
 import { NodeIcon } from './Primitives';
 import { NodePicker } from './Tree';
 import { shareDestinationLabel } from './ShareSettings';
+import { addClip, flushClips } from '../clips';
 
 const MarkdownView = lazy(() =>
   import('./MarkdownView').then((module) => ({ default: module.MarkdownView })),
@@ -182,6 +183,30 @@ export default function ShareWindow() {
           ? '登录已失效，请打开页间重新登录。'
           : (error as Error).message,
       );
+      setBusy(false);
+    }
+  }
+
+  // Text, links and a single image can go to 随手记 instead. Text works
+  // offline too (the notebook sends it later); an image is uploaded now.
+  async function clip() {
+    if (!share || !kind || busy) return;
+    setBusy(true);
+    setMessage('');
+    try {
+      const link = kind.kind === 'arxiv' || kind.kind === 'link';
+      const heading = title.trim() || paper?.title || '';
+      if (kind.kind === 'image') {
+        const file = share.files[0]!;
+        const response = await fetch(incomingShareFilePath(share, file));
+        if (!response.ok) throw new Error('无法读取分享的图片，请重新分享。');
+        const image = Object.assign(await response.blob(), { name: file.name });
+        await addClip(text, null, undefined, image);
+      } else await addClip(link ? (heading ? `${heading}\n${kind.url}` : kind.url!) : text);
+      if (!offline) await flushClips();
+      close({ saved: true });
+    } catch (error) {
+      setMessage((error as Error).message);
       setBusy(false);
     }
   }
@@ -407,6 +432,16 @@ export default function ShareWindow() {
           <button type="button" className="button" disabled={busy} onClick={cancel}>
             取消
           </button>
+          {ready && !share.error && auth === 'in' && kind.kind !== 'files' && kind.kind !== 'pdf' && (kind.kind !== 'image' || share.files.length === 1) && (
+            <button
+              type="button"
+              className="button"
+              disabled={busy || (textual && !text.trim())}
+              onClick={() => void clip()}
+            >
+              存入随手记
+            </button>
+          )}
           <button type="submit" className="button primary" disabled={!canSave || busy}>
             {busy ? '保存中…' : kind?.kind === 'arxiv' && paperMode === 'import' ? '导入' : '保存'}
           </button>

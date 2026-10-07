@@ -1,0 +1,256 @@
+/* 随手记: a persistent clipboard in a dialog (a bottom sheet on phones). */
+.modal.clips-modal {
+  width: 520px;
+  display: flex;
+  flex-direction: column;
+}
+.clips-compose {
+  display: grid;
+  gap: 8px;
+}
+.clips-compose textarea {
+  width: 100%;
+  min-height: 76px;
+  resize: vertical;
+}
+.clips-compose-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 12px;
+}
+.clips-source-toggle {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  font-weight: 400;
+  gap: 6px;
+  min-width: 0;
+  margin-right: auto;
+  color: var(--muted);
+  font-size: 13px;
+}
+.clips-source-toggle input {
+  flex-shrink: 0;
+  margin: 0;
+}
+.clips-source-toggle span {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.clips-filter {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-top: 16px;
+  padding: 0 10px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  color: var(--muted);
+}
+.clips-filter input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  padding: 8px 0;
+  background: transparent;
+  box-shadow: none;
+}
+.clips-filter:focus-within {
+  border-color: var(--focus);
+}
+.clips-group {
+  margin: 0 0 4px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.clips-list {
+  display: grid;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.clips-modal section {
+  margin-top: 14px;
+}
+.clip-item {
+  padding: 8px 0;
+  border-bottom: 1px solid var(--line);
+}
+.clip-item:last-child {
+  border-bottom: 0;
+}
+.clip-text {
+  display: -webkit-box;
+  width: 100%;
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  overflow: hidden;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 6;
+  line-clamp: 6;
+  color: var(--ink);
+  line-height: 1.6;
+  text-align: left;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  -webkit-user-select: text;
+}
+.clip-text.is-open {
+  display: block;
+}
+.clip-text:hover:not(:disabled) {
+  background: var(--hover);
+}
+.clip-item.is-pending .clip-text {
+  color: var(--muted);
+}
+.clip-sealed {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--muted);
+}
+.clip-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 2px 10px;
+  padding: 0 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.clip-source {
+  max-width: 14em;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+}
+.clip-waiting {
+  color: var(--warning);
+}
+.clip-error {
+  color: var(--danger);
+}
+.clip-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+}
+.clip-actions .icon-button {
+  width: 30px;
+  height: 30px;
+  color: var(--muted);
+}
+.clips-empty {
+  margin: 24px 0 8px;
+  color: var(--muted);
+  text-align: center;
+}
+.clips-more {
+  align-self: center;
+  margin-top: 10px;
+}
+.clips-locked {
+  margin-bottom: 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+}
+.clips-locked p {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0 0 10px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.clips-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: 16px;
+  padding-top: 12px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 12px;
+}
+@media (pointer: coarse) {
+  .clip-actions .icon-button {
+    width: 40px;
+    height: 40px;
+  }
+}
+.clips-image-button {
+  position: relative;
+  flex-shrink: 0;
+  color: var(--muted);
+  cursor: pointer;
+}
+.clips-image-button input {
+  position: absolute;
+  inset: 0;
+  opacity: 0;
+  cursor: pointer;
+}
+.clips-image-button.is-disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.clips-image-draft {
+  position: relative;
+  justify-self: start;
+}
+.clips-image-draft img {
+  display: block;
+  max-width: 160px;
+  max-height: 120px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  object-fit: contain;
+}
+.clips-image-draft .icon-button {
+  position: absolute;
+  top: -10px;
+  right: -10px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.clip-image {
+  display: block;
+  margin: 0 8px 6px;
+  padding: 0;
+  border-radius: var(--radius-control);
+  overflow: hidden;
+}
+.clip-image img {
+  display: block;
+  max-width: 100%;
+  max-height: 180px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  object-fit: contain;
+}
+.clips-insert-hint {
+  margin: 12px 0 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.clips-encryption-actions {
+  display: flex;
+  gap: 16px;
+}
+.clips-convert fieldset {
+  border: 0;
+  min-width: 0;
+}

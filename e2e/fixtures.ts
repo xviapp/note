@@ -32,6 +32,14 @@ async function emptyLibrary() {
     const { batches } = await (await api.get('/api/trash')).json();
     for (const batch of batches) await api.delete(`/api/trash/${batch.id}`, { headers });
     await api.delete('/api/ai/settings', { headers });
+    // 随手记 lives outside the tree.
+    for (;;) {
+      const clips = await (await api.get('/api/clips')).json();
+      const all = [...clips.pinned, ...clips.items];
+      if (!all.length) break;
+      for (const clip of all) await api.delete(`/api/clips/${clip.id}`, { headers });
+    }
+    await api.put('/api/clips/encryption', { headers, data: { keyId: null, items: [] } });
   } finally {
     await api.dispose();
   }

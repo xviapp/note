@@ -8,9 +8,11 @@ import {
   Search,
   Settings2,
   Star,
+  StickyNote,
   Trash2,
   X,
 } from 'lucide-react';
+import { openClips } from '../clips';
 import { settingsTitles, type SettingsSection, type View } from '../navigation';
 import { Brand } from './Brand';
 import { ThemeSwitcher } from './ThemePicker';
@@ -148,6 +150,14 @@ export function AppHeader({
           {view === 'settings' ? (section ? settingsTitles[section] : '设置') : titles[view]}
         </span>
       </div>
+      <button
+        className="icon-button header-clips"
+        aria-label="随手记"
+        title="随手记（Q）"
+        onClick={openClips}
+      >
+        <StickyNote size={19} />
+      </button>
       <button
         className="icon-button header-search"
         aria-label="搜索笔记"

@@ -16,6 +16,7 @@ public class MainActivity extends NoteBridgeActivity {
     private static final String APPEARANCE_PREFS = "note-appearance";
     // Longest the splash waits for the UI; past this the page's own loading shows.
     private static final long BOOT_TIMEOUT_MS = 5000;
+    private static final String CLIPS_ACTION = "app.xvi.note.action.CLIPS";
     private ColorDrawable themeBackground;
     private volatile boolean booting = true;
 
@@ -33,13 +34,26 @@ public class MainActivity extends NoteBridgeActivity {
         // every native surface now so the splash never reveals a light canvas.
         restoreThemeBackground();
         installWebView();
-        if (savedInstanceState == null) receiveShare(getIntent());
+        if (savedInstanceState == null) {
+            receiveShare(getIntent());
+            receiveLaunch(getIntent());
+        }
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         receiveShare(intent);
+        receiveLaunch(intent);
+    }
+
+    // The launcher shortcut. A cold start keeps it until the page asks for it
+    // (takeLaunchAction); a running page is told at once.
+    private void receiveLaunch(Intent intent) {
+        if (intent == null || !CLIPS_ACTION.equals(intent.getAction())) return;
+        launchAction = "clips";
+        if (bridge != null)
+            bridge.getWebView().evaluateJavascript("window.dispatchEvent(new Event('note:launch'))", null);
     }
 
     // Shares open in ShareActivity; an older launcher shortcut or task may still

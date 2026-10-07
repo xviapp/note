@@ -12,8 +12,15 @@ import { useOffline } from '../connectivity';
 import type { NoteNode, ShareSettings } from '../../shared/types';
 import { api } from '../api';
 import { shareDestinationLabel } from './ShareSettings';
+import { addClip } from '../clips';
 
-export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) => void }) {
+export function ShareImport({
+  onImported,
+  onClipped,
+}: {
+  onImported: (nodes: NoteNode[]) => void;
+  onClipped: () => void;
+}) {
   const [share, setShare] = useState<IncomingShare | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -219,6 +226,34 @@ export function ShareImport({ onImported }: { onImported: (nodes: NoteNode[]) =>
           >
             取消
           </button>
+          {/* Plain text can be kept as a clip instead, offline too. */}
+          {!share.error && !share.files.length && (
+            <button
+              type="button"
+              className="button"
+              disabled={busy || !text.trim()}
+              onClick={async () => {
+                if (operating.current) return;
+                operating.current = true;
+                setBusy(true);
+                setMessage('');
+                try {
+                  await addClip(text);
+                  const { device } = await import('../mobile');
+                  await device.discardShare({ id: share.id });
+                  onClipped();
+                  await load();
+                } catch (error) {
+                  setMessage((error as Error).message);
+                } finally {
+                  operating.current = false;
+                  setBusy(false);
+                }
+              }}
+            >
+              存入随手记
+            </button>
+          )}
           <button
             className="button primary"
             disabled={

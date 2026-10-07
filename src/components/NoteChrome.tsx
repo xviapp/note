@@ -8,7 +8,9 @@ import {
   Paperclip,
   Pencil,
   Plus,
+  StickyNote,
 } from 'lucide-react';
+import { openClips } from '../clips';
 import { formatDate } from '../api';
 import { variantOf, type NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
@@ -64,6 +66,14 @@ export function NoteLocation({
           </span>
         ))}
       </div>
+      <button
+        className="icon-button location-clips"
+        aria-label="随手记"
+        title="随手记（Q）"
+        onClick={openClips}
+      >
+        <StickyNote size={18} />
+      </button>
     </div>
   );
 }
@@ -187,6 +197,15 @@ export function EditToolbar({
           <Link2 size={17} />
         </button>
       )}
+      <button
+        className="icon-button"
+        aria-label="插入随手记"
+        title="插入随手记"
+        disabled={busy || uploading}
+        onClick={openClips}
+      >
+        <StickyNote size={17} />
+      </button>
       <span className="toolbar-spacer" />
       <button className="button compact" disabled={busy || uploading} onClick={onCancel}>
         取消

@@ -60,6 +60,14 @@ public class NoteDevicePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void takeLaunchAction(PluginCall call) {
+        NoteBridgeActivity host = host();
+        String action = host.launchAction;
+        host.launchAction = null;
+        call.resolve(new JSObject().put("action", action == null ? org.json.JSONObject.NULL : action));
+    }
+
+    @PluginMethod
     public void discardShare(PluginCall call) {
         host().shareInbox.discard(call.getString("id"));
         call.resolve();

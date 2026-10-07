@@ -319,6 +319,25 @@ export async function replaceObject(
     .first<BlobRow>();
   if (!file) throw new AppError(404, '文件不存在或已被清理。', 'FILE_UNAVAILABLE');
   const { target, kind, node_id } = await objectTarget(env, root, file.id);
+  // Encrypted highlights leave the search index; decrypted ones return on the next save.
+  return swapObject(
+    env,
+    request,
+    file,
+    target,
+    kind === 'annotation' && target
+      ? [env.DB.prepare("UPDATE annotations SET search_text='' WHERE node_id=?").bind(node_id)]
+      : [],
+  );
+}
+// Puts the request's bytes, sealed for `target` (or plain), in place of the object.
+export async function swapObject(
+  env: Env,
+  request: Request,
+  file: BlobRow,
+  target: string | null,
+  also: D1PreparedStatement[] = [],
+): Promise<{ id: string; key_id: string | null; size: number }> {
   let bytes = await readAll(request, sealedSize(MAX_FILE_BYTES));
   if (sealedKeyId(bytes) !== target)
     throw new AppError(409, '加密设置已变化，请重新开始。', 'ENCRYPTION_CHANGED');
@@ -342,17 +361,12 @@ export async function replaceObject(
     await env.FILES.put(objectKey, bytes, {
       httpMetadata: { contentType: target ? 'application/octet-stream' : file.mime },
     });
-    const statements = [
+    const [changed] = await env.DB.batch([
       env.DB.prepare(
         "UPDATE blobs SET object_key=?,key_id=?,size=? WHERE id=? AND object_key=? AND state='ready' RETURNING id",
       ).bind(objectKey, target, bytes.byteLength, file.id, file.object_key),
-    ];
-    // Encrypted highlights leave the search index; decrypted ones return on the next save.
-    if (kind === 'annotation' && target)
-      statements.push(
-        env.DB.prepare("UPDATE annotations SET search_text='' WHERE node_id=?").bind(node_id),
-      );
-    const [changed] = await env.DB.batch(statements);
+      ...also,
+    ]);
     if (!changed.results.length) throw new AppError(409, '文件已在别处更新，请重新开始。');
   } catch (error) {
     await env.FILES.delete(objectKey).catch(() => {});

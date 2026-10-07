@@ -69,6 +69,14 @@ import {
 } from './encryption';
 import { createProjectItem, projectOverview, saveProjectStatus } from './projects';
 import { journalEntry, journalMonth } from './journals';
+import {
+  createClip,
+  deleteClip,
+  listClips,
+  replaceClipImage,
+  setClipEncryption,
+  updateClip,
+} from './clips';
 
 export default {
   async fetch(request: Request, baseEnv: Env, execution: ExecutionContext): Promise<Response> {
@@ -148,6 +156,17 @@ export default {
       if (path === '/api/cleanup' && method === 'POST') {
         return json(await cleanup(env));
       }
+      if (path === '/api/clips' && method === 'GET') return json(await listClips(env, url));
+      if (path === '/api/clips' && method === 'POST')
+        return json(await createClip(env, await body(request)), 201);
+      if (path === '/api/clips/encryption' && method === 'PUT')
+        return json(await setClipEncryption(env, await body(request)));
+      const clipImage = path.match(/^\/api\/clips\/objects\/([a-zA-Z0-9_-]{1,80})$/);
+      if (clipImage && method === 'PUT')
+        return json(await replaceClipImage(env, request, clipImage[1]));
+      const clip = path.match(/^\/api\/clips\/([a-zA-Z0-9_-]{1,80})$/);
+      if (clip && method === 'PATCH') return json(await updateClip(env, clip[1], await body(request)));
+      if (clip && method === 'DELETE') return json(await deleteClip(env, clip[1]));
       if (path === '/api/books/role-prompt' && method === 'POST')
         return json(await generateRolePrompt(env, await body(request)));
       if (path === '/api/nodes' && method === 'GET') return json(await listNodes(env, url));

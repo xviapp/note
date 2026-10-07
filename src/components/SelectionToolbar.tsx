@@ -1,7 +1,8 @@
 import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Highlighter, Languages, MessageSquareQuote } from 'lucide-react';
+import { Copy, Highlighter, Languages, MessageSquareQuote, StickyNote } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
+import { addClip } from '../clips';
 import { paperText } from '../paper';
 import { captureSourceLocation } from '../source-location';
 import type { TranslationLaunch } from '../translation';
@@ -92,8 +93,11 @@ export function SelectionToolbar({
   onQuote,
   onTranslate,
   onAnnotate,
+  clipSource,
 }: {
   owner: string;
+  // The page a clip of the selection names as its source.
+  clipSource?: { id: string; title: string } | null;
   onSelection: (text: string) => void;
   onQuote: (text: string) => string | undefined;
   onTranslate: (launch: TranslationLaunch) => void;
@@ -309,6 +313,20 @@ export function SelectionToolbar({
         >
           <Languages size={16} />
           翻译
+        </button>
+        <button
+          type="button"
+          onClick={async () => {
+            try {
+              await addClip(selected.text, clipSource ?? null);
+              if (active.current === selected) setStatus('已存入随手记');
+            } catch (error) {
+              if (active.current === selected) setStatus((error as Error).message);
+            }
+          }}
+        >
+          <StickyNote size={16} />
+          记一下
         </button>
         {onAnnotate &&
           ([false, true] as const).map((withNote) => (

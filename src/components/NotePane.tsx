@@ -53,6 +53,7 @@ import { cachedNote } from '../offline-cache';
 import { reveal } from '../encryption';
 import { useTypeView } from '../note-types';
 import type { ProjectContext } from '../../shared/projects';
+import { setInsertTarget } from '../note-insert';
 
 const Editor = lazy(() => import('./Editor'));
 const SplitView = lazy(() => import('./SplitView'));
@@ -199,6 +200,20 @@ export default function NotePane(props: Props) {
     onError: props.onError,
     editorRef: editorHandle,
   });
+  // While editing, 随手记 can insert a clip at the cursor.
+  const inserting = useRef({ insert, addFiles });
+  inserting.current = { insert, addFiles };
+  const editingTitle = editing ? (note?.title ?? '') : null;
+  useEffect(() => {
+    if (editingTitle === null) return;
+    setInsertTarget({
+      id,
+      title: editingTitle,
+      insert: (text) => inserting.current.insert(text),
+      addFiles: (files) => inserting.current.addFiles(files),
+    });
+    return () => setInsertTarget(null);
+  }, [id, editingTitle]);
   // Once per opened note, offer a draft that was never saved.
   const draftChecked = useRef(false);
   const loadedId = note?.id;
@@ -845,6 +860,7 @@ export default function NotePane(props: Props) {
       {!editing && note.kind !== 'folder' && (
         <SelectionToolbar
           owner={id}
+          clipSource={{ id: note.id, title: note.title }}
           onSelection={setSelection}
           onQuote={addQuote}
           onTranslate={setTranslation}

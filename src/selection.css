@@ -34,6 +34,8 @@
 }
 .selection-actions {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 2px;
 }
 .selection-actions button {
@@ -63,6 +65,12 @@
 @media (pointer: coarse) {
   .selection-actions button {
     min-height: 44px;
+  }
+}
+@media (max-width: 480px) {
+  .selection-actions button {
+    gap: 4px;
+    padding: 8px 7px;
   }
 }
 
