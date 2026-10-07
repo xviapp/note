@@ -683,7 +683,7 @@ export default function NotePane(props: Props) {
               <Spinner />
             )
           ) : (
-            <>
+            <div className="note-reading-column">
               <FastScroll
                 target={scroll}
                 onInteract={() => {
@@ -759,7 +759,8 @@ export default function NotePane(props: Props) {
                     ))}
                 </article>
               </div>
-            </>
+              {typeView.footer}
+            </div>
           )}
           {!editing &&
             (note.kind === 'markdown' || note.arxiv_id) &&
@@ -832,7 +833,6 @@ export default function NotePane(props: Props) {
           />
         )}
       </div>
-      {typeView.footer}
       {!editing && note.kind !== 'folder' && (
         <SelectionToolbar
           owner={id}

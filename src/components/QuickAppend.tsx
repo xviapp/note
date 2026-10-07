@@ -80,16 +80,18 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, act
       <div className="quick-append-heading">
       <input aria-label="记录标题" placeholder="标题（可选）" value={title}
         disabled={busy || !ready || retrying} onChange={(event) => setTitle(event.target.value)} />
-      {actions}
       </div>
       <div className="quick-append-body">
-        <textarea ref={field} aria-label="记录内容" placeholder={placeholder} rows={2} value={text}
+        <textarea ref={field} aria-label="记录内容" placeholder={placeholder} rows={4} value={text}
           disabled={busy || !ready || retrying} onChange={(event) => setText(event.target.value)}
           onKeyDown={(event) => {
             if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
               event.preventDefault(); void save();
             }
           }} />
+      </div>
+      <div className="quick-append-actions">
+        {actions}
         <button className="button primary compact" type="submit" disabled={disabled || blocked || busy || !ready || !text.trim()}>
           <Send size={15} />{busy ? '正在追加…' : retrying ? '重试追加' : label}
         </button>

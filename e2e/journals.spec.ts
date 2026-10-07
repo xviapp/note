@@ -59,11 +59,16 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   const layout = await page.locator('.quick-append-footer').evaluate((element) => {
     const form = element.querySelector('.quick-append')!.getBoundingClientRect();
     const footer = element.getBoundingClientRect();
-    return { width: form.width, footerWidth: footer.width, center: Math.abs(form.x + form.width / 2 - footer.x - footer.width / 2) };
+    const title = element.querySelector('input')!.getBoundingClientRect();
+    const text = element.querySelector('textarea')!.getBoundingClientRect();
+    const body = element.closest('.note-reading-column')!.querySelector('.read-content')!.getBoundingClientRect();
+    return { width: form.width, footerWidth: footer.width, center: Math.abs(form.x + form.width / 2 - body.x - body.width / 2), equalWidth: Math.abs(title.width - text.width), height: text.height };
   });
   expect(Math.round(layout.width)).toBeLessThanOrEqual(720);
-  expect(layout.width).toBeLessThan(layout.footerWidth - 48);
+  expect(layout.width).toBeLessThan(layout.footerWidth - 20);
   expect(layout.center).toBeLessThan(2);
+  expect(layout.equalWidth).toBeLessThan(1);
+  expect(layout.height).toBeGreaterThanOrEqual(104);
   await expect(page.locator('.cm-editor')).toHaveCount(0);
   await expect(page.locator('.document-meta').getByRole('button', { name: '新建', exact: true })).toHaveCount(0);
   await page.getByLabel('记录标题').fill('傍晚');

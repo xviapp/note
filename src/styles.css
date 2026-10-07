@@ -1330,6 +1330,14 @@ button.node-list-toggle:focus-visible {
   min-height: 0;
   overflow: hidden;
 }
+.note-reading-column {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+  min-height: 0;
+}
 /* Phone fast-scroll handle for long documents; see FastScroll.tsx. */
 .fast-scroll {
   position: absolute;
@@ -3299,7 +3307,7 @@ button.node-list-toggle:focus-visible {
   .source-pane .cm-gutters {
     display: none;
   }
-  .edit-tab-source .note-scroll {
+  .edit-tab-source .note-reading-column {
     display: none;
   }
   .edit-tab-preview .source-pane {
@@ -4272,11 +4280,11 @@ button.node-list-toggle:focus-visible {
   background: var(--surface);
 }
 .quick-append {
-  width: min(720px, calc(100% - 232px));
+  width: min(720px, 100%);
   margin-inline: auto;
 }
 .quick-append input {
-  flex: 1;
+  width: 100%;
   min-width: 0;
 }
 .quick-append-heading {
@@ -4286,15 +4294,23 @@ button.node-list-toggle:focus-visible {
   margin-bottom: 6px;
 }
 .quick-append-body {
-  display: flex;
-  align-items: flex-end;
-  gap: 8px;
+  display: block;
 }
 .quick-append textarea {
-  flex: 1;
+  display: block;
+  width: 100%;
   min-width: 0;
-  max-height: 160px;
+  min-height: 104px;
+  max-height: 200px;
   resize: vertical;
+}
+.quick-append-actions {
+  display: flex;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  padding-right: 120px;
+  margin-top: 8px;
 }
 .quick-append small {
   color: var(--muted);
@@ -4341,8 +4357,8 @@ button.node-list-toggle:focus-visible {
   .quick-append-footer {
     padding-inline: 12px;
   }
-  .quick-append {
-    width: calc(100% - 104px);
+  .quick-append-actions {
+    padding-right: 64px;
   }
 }
 .journal-month {

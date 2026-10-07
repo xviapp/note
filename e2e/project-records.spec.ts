@@ -37,11 +37,16 @@ test('project entries append records, track states and write through references'
     const layout = await page.locator('.quick-append-footer').evaluate((element) => {
       const form = element.querySelector('.quick-append')!.getBoundingClientRect();
       const footer = element.getBoundingClientRect();
-      return { width: form.width, footerWidth: footer.width, center: Math.abs(form.x + form.width / 2 - footer.x - footer.width / 2) };
+      const title = element.querySelector('input')!.getBoundingClientRect();
+      const text = element.querySelector('textarea')!.getBoundingClientRect();
+      const body = element.closest('.note-reading-column')!.querySelector('.read-content')!.getBoundingClientRect();
+      return { width: form.width, footerWidth: footer.width, center: Math.abs(form.x + form.width / 2 - body.x - body.width / 2), equalWidth: Math.abs(title.width - text.width), height: text.height };
     });
     expect(Math.round(layout.width)).toBeLessThanOrEqual(720);
-    expect(layout.width).toBeLessThan(layout.footerWidth - 48);
+    expect(layout.width).toBeLessThan(layout.footerWidth - 20);
     expect(layout.center).toBeLessThan(2);
+    expect(layout.equalWidth).toBeLessThan(1);
+    expect(layout.height).toBeGreaterThanOrEqual(104);
     if (category !== 'note') {
       const title = await page.getByRole('heading', { level: 1 }).boundingBox();
       const status = await page.getByRole('combobox', { name: '条目状态' }).boundingBox();
@@ -54,6 +59,17 @@ test('project entries append records, track states and write through references'
     await page.getByLabel('记录内容').fill('新增一条持续记录');
     await page.getByRole('button', { name: label, exact: true }).click();
     await expect(page.getByText('新增一条持续记录', { exact: true })).toBeVisible();
+    if (info.project.name === 'desktop') {
+      for (let toggle = 0; toggle < 2; toggle++) {
+        await page.getByRole('button', { name: '标题目录', exact: true }).click();
+        const offset = await page.locator('.quick-append').evaluate((element) => {
+          const form = element.getBoundingClientRect();
+          const body = element.closest('.note-reading-column')!.querySelector('.read-content')!.getBoundingClientRect();
+          return Math.abs(form.x + form.width / 2 - body.x - body.width / 2);
+        });
+        expect(offset).toBeLessThan(2);
+      }
+    }
     await expect(page.locator('.read-content blockquote').first()).toContainText(/\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}/);
     if (finished) {
       await page.getByRole('combobox', { name: '条目状态' }).selectOption(finished);
