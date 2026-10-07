@@ -1,5 +1,5 @@
 import { createContext, useContext, useEffect, useRef, useState } from 'react';
-import { api } from './api';
+import { api, cachedApi } from './api';
 import type { NoteNode } from '../shared/types';
 
 export type NodeListing = { nodes: NoteNode[]; nextOffset: number | null };
@@ -56,6 +56,14 @@ export function useNodeListing(query: string, refresh: number) {
     const pages = current.current.pages;
     pending.current = true;
     setState({ query, listing: current.current.listing, loading: true, error: '' });
+    // A cold start shows the device's last snapshot until the server answers.
+    if (!current.current.listing)
+      void cachedApi<NodeListing>(`/api/nodes?${query}`)
+        .then((saved) => {
+          if (!saved || run !== generation.current || current.current.listing) return;
+          setState((value) => (value.listing ? value : { ...value, listing: saved }));
+        })
+        .catch(() => {});
     void (async () => {
       try {
         const nodes = new Map<string, NoteNode>();

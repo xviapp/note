@@ -4,8 +4,11 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import type { NoteNode } from '../shared/types';
 import { ListingCacheContext, useNodeListing, type ListingCache } from './use-node-listing';
 
-const api = vi.hoisted(() => vi.fn());
-vi.mock('./api', () => ({ api }));
+const { api, cachedApi } = vi.hoisted(() => ({
+  api: vi.fn(),
+  cachedApi: vi.fn(async (): Promise<unknown> => undefined),
+}));
+vi.mock('./api', () => ({ api, cachedApi }));
 
 const node = (id: string) => ({ id, title: id }) as NoteNode;
 // Two pages: the first ends at offset 1, the second finishes the folder.
@@ -31,6 +34,31 @@ const ids = (result: { current: ReturnType<typeof useNodeListing> }) =>
 describe('useNodeListing', () => {
   beforeEach(() => {
     api.mockReset();
+    cachedApi.mockReset();
+    cachedApi.mockResolvedValue(undefined);
+  });
+
+  it('shows the device snapshot until the server answers on a cold start', async () => {
+    cachedApi.mockResolvedValue({ nodes: [node('saved')], nextOffset: null });
+    let answer!: (value: unknown) => void;
+    api.mockReturnValue(new Promise((resolve) => (answer = resolve)));
+    const view = setup(new Map(), 'parent=');
+    await waitFor(() => expect(ids(view.result)).toEqual(['saved']));
+    expect(cachedApi).toHaveBeenCalledWith('/api/nodes?parent=');
+    expect(view.result.current.loading).toBe(true);
+    await act(async () => answer({ nodes: [node('fresh')], nextOffset: null }));
+    expect(ids(view.result)).toEqual(['fresh']);
+    expect(view.result.current.loading).toBe(false);
+  });
+
+  it('never lets a late snapshot replace the server listing', async () => {
+    let snapshot!: (value: unknown) => void;
+    cachedApi.mockReturnValue(new Promise((resolve) => (snapshot = resolve)));
+    api.mockResolvedValue({ nodes: [node('fresh')], nextOffset: null });
+    const view = setup(new Map(), 'parent=');
+    await waitFor(() => expect(ids(view.result)).toEqual(['fresh']));
+    await act(async () => snapshot({ nodes: [node('saved')], nextOffset: null }));
+    expect(ids(view.result)).toEqual(['fresh']);
   });
 
   it('shows a loaded listing on return without fetching it again', async () => {

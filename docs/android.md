@@ -16,7 +16,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`，共用�
 
 `MainActivity` 在首帧前按保存的主题设置窗口、DecorView 和 WebView 的背景，夜间、星空主题冷启动不露浅色底；`NoteDevice.setBackground` 在同一次原生更新里保存主题并设置系统栏图标明暗。不要从 JS 调用 `SystemBars.setStyle`，它会把背景改回系统主题色；背景用同一个 `ColorDrawable` 改色，反复替换窗口背景会清除系统栏边距、引起高度抖动。
 
-启动画面保留到界面完成首屏（已登录页、登录页或连接错误）后退出，由 `NoteDevice.finishBoot` 通知，5 秒未收到时也退出。Android 13+ 的启动画面背景跟随 App 主题，见[应用图标](branding.md)。
+启动画面保留到界面完成首屏（已登录页、登录页或连接错误）后退出，由 `NoteDevice.finishBoot` 通知，5 秒未收到时也退出。登录过的设备首屏直接用本机缓存的笔记库，不等代理和登录验证（见[本机缓存](offline-reading.md)）。代理由网页在加载完成后启动：在原生 `onCreate` 中提前设置 WebView 代理会让包内资源加载停顿数秒。Android 13+ 的启动画面背景跟随 App 主题，见[应用图标](branding.md)。
 
 ## 分享与打开方式
 

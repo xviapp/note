@@ -13,7 +13,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { api, lockEdits } from './api';
+import { api, cachedApi, lockEdits } from './api';
 import {
   TEXT_KINDS,
   type AuthStatus,
@@ -67,6 +67,11 @@ export default function App() {
     epoch: ReturnType<typeof cacheEpoch>;
     promise: Promise<boolean>;
   } | null>(null);
+  // Set while the notebook shows a cached session whose listings are already
+  // loading alongside the first session check.
+  const fromCache = useRef(false),
+    answered = useRef(false),
+    checked = useRef(false);
   const refresh = useCallback(() => {
     const epoch = cacheEpoch();
     if (authRequest.current?.epoch === epoch) return authRequest.current.promise;
@@ -74,14 +79,19 @@ export default function App() {
       try {
         const state = await api<AuthStatus>('/api/auth/status');
         if (!state.authenticated) lockEdits();
+        const confirmed = fromCache.current;
+        fromCache.current = false;
+        answered.current = checked.current = true;
         setStatus(state);
         setError('');
         const connected = state.authenticated && !isOffline();
-        if (connected) window.dispatchEvent(new Event('note:library-refresh'));
+        if (connected && !confirmed) window.dispatchEvent(new Event('note:library-refresh'));
         // Picks up passwords changed on other devices (and locks them here).
         if (connected) void refreshCatalog().catch(() => {});
         return connected;
       } catch (e) {
+        fromCache.current = false;
+        checked.current = true;
         setError((e as Error).message);
         return false;
       }
@@ -93,7 +103,17 @@ export default function App() {
     return request;
   }, []);
   useEffect(() => {
+    const epoch = cacheEpoch();
     void refresh();
+    // A signed-in device opens on its cached library while the session is
+    // verified (a slow proxy or network can take seconds); a signed-out answer
+    // then replaces it and clears the cache. A failed check keeps the library,
+    // as when offline.
+    void cachedApi<AuthStatus>('/api/auth/status').then((cached) => {
+      if (!cached?.authenticated || answered.current || epoch !== cacheEpoch()) return;
+      fromCache.current = !checked.current;
+      setStatus(cached);
+    });
     void initializeCache();
     const expired = () => {
       lockEdits();

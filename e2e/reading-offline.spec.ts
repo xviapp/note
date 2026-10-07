@@ -476,13 +476,39 @@ test('an incomplete auth response leaves the previously saved offline session in
     route.fulfill({ status: 200, contentType: 'application/json', body: '{"authenticated":' }),
   );
   await page.reload();
-  await expect(page.locator('.boot-screen .inline-error')).toContainText('服务器响应不完整');
+  // The broken check neither signs the device out nor hides its saved library.
+  await expect(page.locator('.plain-text')).toHaveText('已经保存的内容不能因为响应中断而丢失。');
   expect((await cacheRecords(page)).find((item) => item.id === note.id)?.pinned).toBe(true);
   await page.unroute('**/api/auth/status');
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator('.plain-text')).toHaveText('已经保存的内容不能因为响应中断而丢失。');
   await context.setOffline(false);
+});
+
+test('a cached library opens at once, and a revoked session then signs this device out', async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  const note = await create(page, { title: '冷启动目录', kind: 'text', content: '本机目录' });
+  await page.goto(`/n/${note.id}`);
+  await expect(page.locator('.plain-text')).toHaveText('本机目录');
+  await expect.poll(async () => (await cacheRecords(page)).length).toBeGreaterThan(0);
+  // Hold the session check so the first screen can only come from this device.
+  let release!: () => void;
+  const held = new Promise<void>((resolve) => (release = resolve));
+  await page.route('**/api/auth/status', async (route) => {
+    await held;
+    await route.continue();
+  });
+  await context.clearCookies();
+  await page.reload();
+  await expect(page.locator('.plain-text')).toHaveText('本机目录');
+  release();
+  await expect(page.getByRole('button', { name: '打开笔记库', exact: true })).toBeVisible();
+  await expect.poll(async () => (await cacheRecords(page)).length).toBe(0);
+  await page.unroute('**/api/auth/status');
 });
 
 test('a note opened before shows from this device at once, then the server copy replaces it', async ({

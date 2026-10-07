@@ -135,6 +135,11 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
   if (authProbe) setOffline(false);
   return reveal(value);
 }
+// This device's last copy of a whitelisted GET, shown while the server answers.
+export async function cachedApi<T>(path: string): Promise<T | undefined> {
+  const cached = await cachedResponse<T>(path);
+  return cached === undefined ? undefined : reveal(cached);
+}
 // A moved note takes the encryption of its new place: what is unlocked is
 // re-sealed in the background (the note's menu can finish the rest).
 function moved(path: string, method: string, data: unknown) {
