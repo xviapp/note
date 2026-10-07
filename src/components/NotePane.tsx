@@ -490,7 +490,6 @@ export default function NotePane(props: Props) {
       openAssistant: () => {
         setTranslation(null);
         setPdf(null);
-        if (window.matchMedia('(min-width: 761px)').matches) setAssistantMode('docked');
         setAssistantOpen(true);
       },
       onOpen: props.onOpen,
@@ -723,9 +722,9 @@ export default function NotePane(props: Props) {
                   <NoteHeading
                     note={displayNote!}
                     editing={editing}
+                    actions={typeView.headingActions}
                     onNew={() => props.onAction('new', note)}
                   />
-                  {typeView.heading}
                   <NoteBody
                     note={note}
                     editing={editing}

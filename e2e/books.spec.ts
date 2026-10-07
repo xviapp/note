@@ -90,7 +90,7 @@ test('book details edit the title and cover, and pages expose the book contents'
 test('a photographed page is read, discussed in 青藜 and summarized into reading notes', async ({
   page,
   baseURL,
-}) => {
+}, info) => {
   await login(page, baseURL!);
   await page.goto('/');
   await page.getByRole('button', { name: '新建', exact: true }).click();
@@ -113,7 +113,7 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
 
   // A book adds pages from its card, not from "新建".
   await expect(page.locator('.document-meta')).not.toContainText('新建');
-  // 青藜 is reached through a page's discussions, not a floating button.
+  // The book folder itself has no conversation; its pages offer the launcher.
   await expect(page.locator('.assistant-launcher:visible')).toHaveCount(0);
   const card = page.getByRole('region', { name: '书籍资料' });
   await card.getByRole('button', { name: '手动添加页面' }).click();
@@ -124,6 +124,12 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
   await expect(page.getByRole('heading', { level: 1 })).toHaveText('第 11 页');
   await expect(page.locator('.read-content')).toContainText('农业出现之前');
   await expect(page.locator('.document-meta')).not.toContainText('新建');
+  await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);
+  await page.locator('.assistant-launcher:visible').click();
+  await expect(page.getByRole('complementary', { name: '青藜' })).toBeVisible();
+  await expect(page.locator('.reading-with-assistant')).not.toHaveClass(/assistant-docked/);
+  await page.keyboard.press('Escape');
+  await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);
   await page.goBack();
 
   // Photograph page 12: recognized, then summarized with questions.
@@ -148,6 +154,12 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
   await expect(qingli).toContainText('为什么说农业革命是骗局？');
   await expect(qingli).toContainText('先回答：作者是说个体的生活变差了。');
   await expect(qingli).toContainText('已带上：《人类简史》');
+  await expect(page.locator('.reading-with-assistant')).not.toHaveClass(/assistant-docked/);
+
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })), theme);
+    await page.screenshot({ path: info.outputPath(`book-qingli-${theme}.png`) });
+  }
 
   // Summarize it into the page's reading note.
   await qingli.getByRole('button', { name: '整理到笔记', exact: true }).click();

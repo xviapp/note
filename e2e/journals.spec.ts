@@ -55,6 +55,15 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await expect(page.getByRole('combobox', { name: '模板', exact: true })).toContainText('日常回顾');
   await page.getByRole('button', { name: '写今天的日记', exact: true }).click();
   await expect(page.getByRole('form', { name: '快捷记录' })).toBeVisible();
+  await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);
+  const layout = await page.locator('.quick-append-footer').evaluate((element) => {
+    const form = element.querySelector('.quick-append')!.getBoundingClientRect();
+    const footer = element.getBoundingClientRect();
+    return { width: form.width, footerWidth: footer.width, center: Math.abs(form.x + form.width / 2 - footer.x - footer.width / 2) };
+  });
+  expect(Math.round(layout.width)).toBeLessThanOrEqual(720);
+  expect(layout.width).toBeLessThan(layout.footerWidth - 48);
+  expect(layout.center).toBeLessThan(2);
   await expect(page.locator('.cm-editor')).toHaveCount(0);
   await expect(page.locator('.document-meta').getByRole('button', { name: '新建', exact: true })).toHaveCount(0);
   await page.getByLabel('记录标题').fill('傍晚');

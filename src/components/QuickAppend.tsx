@@ -75,6 +75,7 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, act
     }
   };
   return (
+    <div className="quick-append-footer">
     <form className="quick-append" aria-label="快捷记录" onSubmit={(event) => { event.preventDefault(); void save(); }}>
       <div className="quick-append-heading">
       <input aria-label="记录标题" placeholder="标题（可选）" value={title}
@@ -96,5 +97,6 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, act
       {disabled && <small>联网后可追加内容</small>}
       {error && <p className="inline-error" role="alert">{error}</p>}
     </form>
+    </div>
   );
 }

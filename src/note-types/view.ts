@@ -17,7 +17,7 @@ export interface TypeContext {
   setAppending: (busy: boolean) => void;
   appending: boolean;
   assistantOpen: boolean;
-  // Open 青藜 beside the page (docked on wide screens).
+  // Open 青藜 using the current window mode.
   openAssistant: () => void;
   onOpen: (node: NoteNode) => void;
   onNavigate: (id: string, project?: ProjectContext) => void;
@@ -52,7 +52,7 @@ export interface AssistantCustom {
 // What a type adds to the note page. The page lays these out in fixed places;
 // anything left out falls back to the generic behaviour.
 export interface TypeView {
-  heading?: ReactNode;
+  headingActions?: ReactNode;
   // Beside the note actions in the toolbar.
   toolbar?: ReactNode;
   // Extra items in the note's ⋯ menu.

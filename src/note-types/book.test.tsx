@@ -8,6 +8,14 @@ const { api } = vi.hoisted(() => ({ api: vi.fn() }));
 vi.mock('../api', () => ({ api, ApiError: class extends Error {} }));
 afterEach(() => { cleanup(); api.mockReset(); });
 
+it('uses the shared floating launcher without creating an empty discussion', () => {
+  const ctx = context('波函数的物理含义是什么？');
+  const { result } = renderHook(() => useBookPageView(ctx));
+  expect(result.current!.assistant!.showLauncher).not.toBe(false);
+  expect(result.current!.assistant!.onDraftSend).toBeTypeOf('function');
+  expect(api).not.toHaveBeenCalled();
+});
+
 function context(question: string): TypeContext {
   return {
     note: {

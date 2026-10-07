@@ -187,8 +187,6 @@ export function useBookPageView(ctx: TypeContext): TypeView | null {
         ? undefined
         : (content, quote) => void ask(content, quote || undefined),
       onReplied: ctx.refresh,
-      // The page asks from its questions, discussions and ask bar instead.
-      showLauncher: false,
       noGlobal: true,
     },
   };

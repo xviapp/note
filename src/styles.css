@@ -1396,6 +1396,17 @@ button.node-list-toggle:focus-visible {
 .document-heading {
   margin-bottom: 24px;
 }
+.document-title-row {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  margin-bottom: 10px;
+}
+.document-heading .document-title-row h1 {
+  flex: 1;
+  min-width: 0;
+  margin-bottom: 0;
+}
 .document-heading h1 {
   font-family: var(--font-book);
   font-size: 32px;
@@ -1768,7 +1779,7 @@ button.node-list-toggle:focus-visible {
 .page-ask {
   display: flex;
   gap: 8px;
-  padding: 10px 12px calc(10px + env(safe-area-inset-bottom));
+  padding: 10px 140px calc(10px + env(safe-area-inset-bottom)) 12px;
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
@@ -1776,6 +1787,11 @@ button.node-list-toggle:focus-visible {
   flex: 1;
   min-width: 0;
   border-radius: 999px;
+}
+@media (max-width: 760px) {
+  .page-ask {
+    padding-right: 80px;
+  }
 }
 .book-page-list {
   margin-top: 8px;
@@ -4222,7 +4238,8 @@ button.node-list-toggle:focus-visible {
   margin-top: 24px;
 }
 .project-entry-status {
-  margin: 0 0 20px;
+  flex: 0 0 auto;
+  max-width: 180px;
   color: var(--muted);
   font-size: 13px;
 }
@@ -4233,6 +4250,7 @@ button.node-list-toggle:focus-visible {
 }
 .project-entry-status select {
   width: auto;
+  max-width: 140px;
 }
 .journal-header {
   display: flex;
@@ -4247,11 +4265,15 @@ button.node-list-toggle:focus-visible {
   color: var(--muted);
   font-size: 13px;
 }
-.quick-append {
+.quick-append-footer {
   flex-shrink: 0;
   padding: 10px 24px max(10px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   background: var(--surface);
+}
+.quick-append {
+  width: min(720px, calc(100% - 232px));
+  margin-inline: auto;
 }
 .quick-append input {
   flex: 1;
@@ -4316,8 +4338,11 @@ button.node-list-toggle:focus-visible {
   padding: 12px;
 }
 @media (max-width: 760px) {
-  .quick-append {
+  .quick-append-footer {
     padding-inline: 12px;
+  }
+  .quick-append {
+    width: calc(100% - 104px);
   }
 }
 .journal-month {
