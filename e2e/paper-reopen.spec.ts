@@ -60,7 +60,13 @@ test('reopens a saved arXiv paper internally from the tree, lists, favorites and
       const response = await route.fetch(),
         detail = await response.json();
       return route.fulfill({
-        json: { ...detail, arxiv_id: '2503.01800v1', content: paperHtml, attachments: [] },
+        json: {
+          ...detail,
+          arxiv_id: '2503.01800v1',
+          variant: 'paper',
+          content: paperHtml,
+          attachments: [],
+        },
       });
     }
     if (url.pathname === '/api/nodes') {
@@ -70,7 +76,7 @@ test('reopens a saved arXiv paper internally from the tree, lists, favorites and
         json: {
           ...result,
           nodes: result.nodes.map((node: any) =>
-            node.id === paper.id ? { ...node, arxiv_id: '2503.01800v1' } : node,
+            node.id === paper.id ? { ...node, arxiv_id: '2503.01800v1', variant: 'paper' } : node,
           ),
         },
       });

@@ -13,6 +13,18 @@ import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react
 import { QingliIcon } from './QingliIcon';
 
 export type AssistantMode = 'floating' | 'docked' | 'maximized';
+// On phones a note's 青藜 is a bottom sheet: half height over the page, or
+// full screen. The global conversation stays full screen.
+type SheetSize = 'half' | 'full';
+const SHEET_KEY = 'assistant-sheet';
+const HALF = 0.55;
+function savedSheet(): SheetSize {
+  try {
+    return localStorage.getItem(SHEET_KEY) === 'full' ? 'full' : 'half';
+  } catch {
+    return 'half';
+  }
+}
 
 function viewportBounds() {
   const viewport = window.visualViewport;
@@ -82,7 +94,24 @@ export function AssistantWindow({
   const restoreMode = useRef<AssistantMode>('floating');
   const [viewport, setViewport] = useState(viewportBounds);
   const compact = viewport.width <= 760;
-  const fullscreen = compact || mode === 'maximized';
+  const sheet = compact && label !== '全局青藜';
+  const [sheetSize, setSheetSizeState] = useState<SheetSize>(savedSheet);
+  // Only switching size animates; resizing the window or the keyboard does not.
+  const [animating, setAnimating] = useState(false);
+  const animation = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const setSheetSize = (size: SheetSize) => {
+    setSheetSizeState(size);
+    setAnimating(true);
+    clearTimeout(animation.current);
+    animation.current = setTimeout(() => setAnimating(false), 250);
+    try {
+      localStorage.setItem(SHEET_KEY, size);
+    } catch {
+      /* Optional preference. */
+    }
+  };
+  const [pull, setPull] = useState<{ id: number; startY: number; offset: number } | null>(null);
+  const fullscreen = compact ? !sheet || sheetSize === 'full' : mode === 'maximized';
   const [dockBounds, setDockBounds] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [dragging, setDragging] = useState(false);
@@ -111,7 +140,16 @@ export function AssistantWindow({
     position?.y ?? viewport.y + viewport.height,
   );
   let geometry: CSSProperties = { left: point.x, top: point.y, width, height };
-  if (fullscreen)
+  if (sheet) {
+    const base = viewport.y + (fullscreen ? 0 : viewport.height * (1 - HALF));
+    const top = Math.max(viewport.y, base + (pull?.offset ?? 0));
+    geometry = {
+      left: viewport.x,
+      top,
+      width: viewport.width,
+      height: viewport.y + viewport.height - top,
+    };
+  } else if (fullscreen)
     geometry = {
       left: viewport.x,
       top: viewport.y,
@@ -169,9 +207,26 @@ export function AssistantWindow({
     drag.current = null;
     setDragging(false);
   };
+  // Dragging the handle: up for full screen, down for half, down again to close.
+  const endPull = () => {
+    if (!pull) return;
+    const { offset } = pull;
+    setPull(null);
+    if (Math.abs(offset) < 6) setSheetSize(fullscreen ? 'half' : 'full');
+    else if (offset < -60) setSheetSize('full');
+    else if (offset > 60) {
+      if (fullscreen && !(offset > viewport.height * (1 - HALF) + 60)) {
+        (document.activeElement as HTMLElement | null)?.blur();
+        setSheetSize('half');
+      } else close();
+    }
+  };
 
   return createPortal(
     <>
+      {sheet && visible && !hidden && !fullscreen && (
+        <div className="assistant-sheet-backdrop" aria-hidden="true" onClick={close} />
+      )}
       <button
         ref={launcher}
         className={`assistant-launcher${label === '全局青藜' ? ' global-assistant-launcher' : ''}${tucked ? ' is-tucked' : ''}`}
@@ -190,7 +245,9 @@ export function AssistantWindow({
       </button>
       <aside
         ref={panel}
-        className={`assistant-panel assistant-${compact ? 'maximized' : mode}${dragging ? ' is-dragging' : ''}`}
+        className={`assistant-panel ${
+          !compact ? `assistant-${mode}` : fullscreen ? 'assistant-maximized' : ''
+        }${sheet ? ' assistant-sheet' : ''}${animating ? ' is-animating' : ''}${dragging || pull ? ' is-dragging' : ''}`}
         style={geometry}
         aria-label={label}
         hidden={!visible || hidden}
@@ -201,7 +258,10 @@ export function AssistantWindow({
             event.preventDefault();
             event.stopPropagation();
             if (fullscreen && !compact) toggleMaximized();
-            else close();
+            else if (sheet && fullscreen) {
+              (document.activeElement as HTMLElement | null)?.blur();
+              setSheetSize('half');
+            } else close();
           } else if (fullscreen && event.key === 'Tab') {
             const focusable = [
               ...panel.current!.querySelectorAll<HTMLElement>(
@@ -227,7 +287,37 @@ export function AssistantWindow({
             }
           }
         }}
+        onFocus={(event) => {
+          // The keyboard leaves too little of a half sheet; it stays full until
+          // dragged down or Back.
+          if (sheet && !fullscreen && event.target.matches('textarea, input:not([type=checkbox])'))
+            setSheetSize('full');
+        }}
       >
+        {sheet && (
+          <div
+            className="assistant-sheet-handle"
+            role="button"
+            // Touch and screen readers use it; Tab stays on the panel's controls.
+            tabIndex={-1}
+            aria-label={fullscreen ? '青藜半屏' : '青藜全屏'}
+            onClick={(event) => {
+              // Pointer taps are handled on release; this is assistive technology.
+              if (event.detail === 0) setSheetSize(fullscreen ? 'half' : 'full');
+            }}
+            onPointerDown={(event) => {
+              if (event.button !== 0) return;
+              event.currentTarget.setPointerCapture(event.pointerId);
+              setPull({ id: event.pointerId, startY: event.clientY, offset: 0 });
+            }}
+            onPointerMove={(event) => {
+              if (pull?.id === event.pointerId)
+                setPull({ ...pull, offset: event.clientY - pull.startY });
+            }}
+            onPointerUp={endPull}
+            onPointerCancel={() => setPull(null)}
+          />
+        )}
         <header className="assistant-heading">
           <div
             className="assistant-drag-handle"

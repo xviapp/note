@@ -1176,6 +1176,7 @@ async function paperImportFixture(page: Page, source = paperHtml, svg?: string) 
     paper = {
       ...detail,
       arxiv_id: '2503.01800v1',
+      variant: 'paper',
       content: body.replaceAll('2503.01800v1/figure.png', `/api/files/${image.id}`),
       attachments: [image],
     };
@@ -1594,9 +1595,9 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
   await expect(panel).toBeVisible();
   await expect.poll(async () => (await workspace.boundingBox())!.width).toBe(original.width);
   const floating = (await panel.boundingBox())!;
-  if (info.project.name === 'desktop')
-    expect(floating.height).toBeLessThan(page.viewportSize()!.height);
-  else expect(floating.height).toBe(page.viewportSize()!.height);
+  expect(floating.height).toBeLessThan(page.viewportSize()!.height);
+  // On phones it opens as a half-height sheet.
+  if (info.project.name === 'mobile') expect(floating.width).toBe(page.viewportSize()!.width);
   await input.fill('切换窗口后继续这个问题。');
   await panel.getByRole('button', { name: '附上当前文件', exact: true }).click();
   const attachment = page.getByRole('dialog', { name: '附上文件', exact: true });
@@ -1649,9 +1650,10 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
 
     await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
   }
+  // (On phones typing the question already filled the screen.)
   await expect
-    .poll(async () => (await panel.boundingBox())!.width)
-    .toBe(page.viewportSize()!.width);
+    .poll(async () => (await panel.boundingBox())!.height)
+    .toBe(page.viewportSize()!.height);
   const full = (await panel.boundingBox())!;
   expect(full.x).toBe(0);
   expect(full.y).toBe(0);
@@ -2059,11 +2061,12 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   await page.getByRole('button', { name: '引用选中文字', exact: true }).click();
   await expect(page.locator('.context-quote')).toContainText('A quiet page - 1');
+  // On phones the quote focuses the question, and typing fills the screen.
   if (info.project.name === 'desktop')
     await page.getByRole('button', { name: '最大化青藜', exact: true }).click();
   await cropInBrowser(page, info.project.name === 'mobile');
   await expect(page.locator('.assistant-panel[aria-label="青藜"]')).toHaveClass(
-    /assistant-maximized/,
+    info.project.name === 'desktop' ? /assistant-maximized/ : /assistant-sheet/,
   );
   await page.getByRole('textbox', { name: '发给青藜的问题' }).fill('解释这一页。');
   await page.getByRole('button', { name: '发送', exact: true }).click();

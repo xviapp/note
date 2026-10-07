@@ -140,14 +140,28 @@ test('back restores the originating list and cancelled edits preserve browser hi
   if (info.project.name === 'mobile') {
     await page.getByRole('button', { name: '打开青藜', exact: true }).click();
     const panel = page.getByRole('complementary', { name: '青藜', exact: true });
+    // A half-height sheet over the page; its handle makes it full screen.
+    await expect(panel).toHaveClass(/assistant-sheet/);
+    await expect(panel).not.toHaveClass(/assistant-maximized/);
+    const half = (await panel.boundingBox())!;
+    expect(half.width).toBe(page.viewportSize()!.width);
+    expect(half.y).toBeGreaterThan(page.viewportSize()!.height * 0.4);
+    await page.screenshot({ path: 'test-results/family-chat-sheet-mobile.png' });
+    await panel.getByRole('button', { name: '青藜全屏', exact: true }).click();
     await expect(panel).toHaveClass(/assistant-maximized/);
-    const box = (await panel.boundingBox())!;
-    expect(box.width).toBe(page.viewportSize()!.width);
-    expect(box.height).toBe(page.viewportSize()!.height);
+    await expect
+      .poll(async () => (await panel.boundingBox())!.height)
+      .toBe(page.viewportSize()!.height);
     await page.screenshot({ path: 'test-results/family-chat-mobile.png' });
-    await page.evaluate(() =>
-      window.dispatchEvent(new CustomEvent('note:native-back', { cancelable: true })),
-    );
+    const back = () =>
+      page.evaluate(() =>
+        window.dispatchEvent(new CustomEvent('note:native-back', { cancelable: true })),
+      );
+    // Back first returns to half height, then closes.
+    await back();
+    await expect(panel).not.toHaveClass(/assistant-maximized/);
+    await expect(panel).toBeVisible();
+    await back();
     await expect(panel).toBeHidden();
     await expect(page).toHaveURL(new RegExp(`/n/${node.id}$`));
   }

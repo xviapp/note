@@ -37,6 +37,7 @@ test('saved paper equations keep their notation, hide TeX annotations and scroll
       json: {
         ...detail,
         arxiv_id: '2503.01800v1',
+        variant: 'paper',
         content: `<article class="ltx_document"><section><h2>公式</h2>${equations}</section></article>`,
       },
     });

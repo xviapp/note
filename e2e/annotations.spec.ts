@@ -313,7 +313,13 @@ test('the comparison view shows and adds notes on the source side', async ({ pag
     if (route.request().method() !== 'GET') return route.fallback();
     const detail = await (await route.fetch()).json();
     await route.fulfill({
-      json: { ...detail, arxiv_id: '2503.01800v1', content: paperHtml, attachments: [] },
+      json: {
+        ...detail,
+        arxiv_id: '2503.01800v1',
+        variant: 'paper',
+        content: paperHtml,
+        attachments: [],
+      },
     });
   });
   await page.route(`**/api/nodes/${paper.id}/paper-translation**`, (route) =>

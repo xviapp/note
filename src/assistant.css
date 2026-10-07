@@ -647,3 +647,45 @@
   flex: none;
   font-size: 13px;
 }
+
+/* Phones: a note's 青藜 as a bottom sheet (half height or full screen). */
+.assistant-sheet.is-animating {
+  transition:
+    top 0.2s ease,
+    height 0.2s ease;
+}
+.assistant-sheet:not(.assistant-maximized) {
+  border-width: 1px 0 0;
+  border-radius: 16px 16px 0 0;
+  box-shadow: 0 -8px 24px var(--shadow-soft);
+}
+.assistant-sheet-handle {
+  display: flex;
+  justify-content: center;
+  flex-shrink: 0;
+  padding: 8px 0 2px;
+  touch-action: none;
+  cursor: grab;
+}
+.assistant-sheet-handle::before {
+  content: '';
+  width: 38px;
+  height: 4px;
+  border-radius: 2px;
+  background: var(--line-strong);
+}
+.assistant-maximized .assistant-sheet-handle {
+  padding-top: max(8px, env(safe-area-inset-top));
+}
+.assistant-maximized .assistant-sheet-handle + .assistant-heading {
+  padding-top: 6px;
+}
+.assistant-sheet:not(.assistant-maximized) .assistant-heading {
+  padding-top: 4px;
+}
+.assistant-sheet-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: 49;
+  background: rgb(0 0 0 / 0.12);
+}

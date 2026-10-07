@@ -278,6 +278,7 @@ test('saved arXiv body and local figures remain readable offline', async ({ page
       json: {
         ...detail,
         arxiv_id: '2503.01800v1',
+        variant: 'paper',
         content: `${paperHtml}<img src="/api/files/${image.id}" alt="论文插图" />`,
         attachments: [image],
       },

@@ -83,7 +83,13 @@ async function openPaper(page: Page, title: string, html: string) {
     if (route.request().method() !== 'GET') return route.fallback();
     const detail = await (await route.fetch()).json();
     await route.fulfill({
-      json: { ...detail, arxiv_id: '2503.01800v1', content: html, attachments: [] },
+      json: {
+        ...detail,
+        arxiv_id: '2503.01800v1',
+        variant: 'paper',
+        content: html,
+        attachments: [],
+      },
     });
   });
   return paper;
@@ -375,7 +381,7 @@ test('the translation opens in a window of its own and scrolls with the source',
     if (route.request().method() !== 'GET') return route.fallback();
     const detail = await (await route.fetch()).json();
     await route.fulfill({
-      json: { ...detail, arxiv_id: '2503.01800v1', content, attachments: [] },
+      json: { ...detail, arxiv_id: '2503.01800v1', variant: 'paper', content, attachments: [] },
     });
   });
   await context.route(`**/api/nodes/${paper.id}/paper-translation**`, (route) =>
