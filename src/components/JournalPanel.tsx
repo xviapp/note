@@ -1,3 +1,4 @@
+import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { api } from '../api';
@@ -45,6 +46,7 @@ function savedTemplate(id: string) {
 export function JournalPanel({
   id,
   refresh,
+  headingActions,
   managing,
   onCloseTemplates,
   offline,
@@ -54,6 +56,7 @@ export function JournalPanel({
 }: {
   id: string;
   refresh: number;
+  headingActions: HTMLElement | null;
   managing: boolean;
   onCloseTemplates: () => void;
   offline: boolean;
@@ -115,7 +118,7 @@ export function JournalPanel({
     `${longDate(date)} ${weekday(date)}${entry ? '，已写' : date > today ? '' : '，未写'}`;
   return (
     <section className="journal-panel">
-      <div className="journal-header">
+      {headingActions && createPortal(
         <button
           className="button primary compact"
           disabled={!data || !!busy}
@@ -123,8 +126,9 @@ export function JournalPanel({
         >
           <Plus size={15} />
           新建
-        </button>
-      </div>
+        </button>,
+        headingActions,
+      )}
       <div className="journal-month">
         <button
           className="icon-button"

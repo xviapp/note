@@ -11,6 +11,7 @@ import type { TypeContext, TypeView } from './view';
 // A journal: its calendar instead of a plain list. An entry tells 青藜 its
 // day (see worker/journals.ts).
 export function useJournalView(ctx: TypeContext): TypeView | null {
+  const [headingActions, setHeadingActions] = useState<HTMLSpanElement | null>(null);
   const [managing, setManaging] = useState<string | null>(null);
   const [pending, setPending] = useState<{ journalId: string; date: string; content: string } | null>(null);
   const result = useRef<{ node: NoteNode; created: boolean } | null>(null);
@@ -29,6 +30,7 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
   if (!note) return null;
   if (variantOf(note) === 'journal')
     return {
+      headingActions: !ctx.editing && !draft && <span className="journal-heading-actions" ref={setHeadingActions} />,
       menu: !draft && <button onClick={() => setManaging(note.id)}>管理模板</button>,
       footer: !ctx.editing && draft && (
         <QuickAppend key={`journal:${note.id}:${draft.date}`} id={`journal:${note.id}:${draft.date}`}
@@ -45,6 +47,7 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
         </section>
       ) : <JournalPanel
           id={note.id}
+          headingActions={headingActions}
           managing={managing === note.id}
           onCloseTemplates={() => setManaging(null)}
           refresh={ctx.refreshKey}

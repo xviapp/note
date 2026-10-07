@@ -4260,14 +4260,10 @@ button.node-list-toggle:focus-visible {
   width: auto;
   max-width: 140px;
 }
-.journal-header {
+.journal-heading-actions {
   display: flex;
-  justify-content: flex-end;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 12px;
+  flex-shrink: 0;
 }
-
 .quick-append-footer {
   container-type: inline-size;
   flex-shrink: 0;
