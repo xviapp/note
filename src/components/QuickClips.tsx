@@ -565,9 +565,8 @@ function ClipRow({
           ))}
         <span className="clip-actions">
           {item.text && !sealed && (
-            <button className="text-button clip-copy" title="复制文字" onClick={onCopy}>
-              <Copy size={15} aria-hidden="true" />
-              复制
+            <button className="icon-button clip-copy" aria-label="复制文字" title="复制文字" onClick={onCopy}>
+              <Copy size={15} />
             </button>
           )}
           {item.text.length > LONG && !sealed && (
