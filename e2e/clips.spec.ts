@@ -167,7 +167,7 @@ test('随手记 images go into the note being edited and become notes; clips can
   await dialog.getByLabel('密码', { exact: true }).fill('clip-secret');
   await dialog.getByLabel('再次输入').fill('clip-secret');
   await dialog.getByRole('button', { name: '设置密码' }).click();
-  await expect(dialog.locator('.clips-footer')).toContainText('已加密');
+  await expect(dialog.getByRole('button', { name: '加密设置（已加密）' })).toBeVisible();
   await expect(dialog.locator('.clip-item').first()).toContainText('插入用的一句话');
   const stored = await (await page.request.get('/api/clips')).json();
   expect(stored.keyId).toBeTruthy();
@@ -190,7 +190,7 @@ test('随手记 images go into the note being edited and become notes; clips can
   await expect(dialog.getByLabel('随手记内容')).toBeVisible();
   await dialog.getByRole('button', { name: '加密设置' }).click();
   await dialog.getByRole('button', { name: '取消加密' }).click();
-  await expect(dialog.locator('.clips-footer')).toContainText('未加密');
+  await expect(dialog.getByRole('button', { name: '加密设置（未加密）' })).toBeVisible();
   const plain = await (await page.request.get('/api/clips')).json();
   expect(plain.items.map((clip: { text: string }) => clip.text)).toEqual([
     '加密后的新条目',

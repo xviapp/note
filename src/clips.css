@@ -172,15 +172,12 @@
   color: var(--muted);
   font-size: 13px;
 }
-.clips-footer {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  margin-top: 16px;
-  padding-top: 12px;
-  border-top: 1px solid var(--line);
+.clips-lock {
   color: var(--muted);
-  font-size: 12px;
+}
+.clips-lock.is-encrypted,
+.clips-lock.is-active {
+  color: var(--blue);
 }
 @media (pointer: coarse) {
   .clip-actions .icon-button {
@@ -226,20 +223,34 @@
   border-radius: 50%;
   background: var(--surface);
 }
+.clip-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+}
+.clip-body .clip-text {
+  flex: 1;
+  min-width: 0;
+}
 .clip-image {
-  display: block;
-  margin: 0 8px 6px;
+  flex: none;
+  width: 40px;
+  height: 40px;
+  margin: 4px 8px 0 0;
   padding: 0;
   border-radius: var(--radius-control);
   overflow: hidden;
 }
+.clip-image:only-child {
+  margin-left: 8px;
+}
 .clip-image img {
   display: block;
-  max-width: 100%;
-  max-height: 180px;
+  width: 100%;
+  height: 100%;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
-  object-fit: contain;
+  object-fit: cover;
 }
 .clips-insert-hint {
   margin: 12px 0 0;

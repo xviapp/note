@@ -2389,8 +2389,15 @@ button.node-list-toggle:focus-visible {
   font-weight: 500;
   overflow-wrap: anywhere;
 }
-.modal-heading .icon-button {
+.modal-heading > .icon-button,
+.modal-heading-actions > .icon-button:last-child {
   margin-right: -7px;
+}
+.modal-heading-actions {
+  display: flex;
+  flex: none;
+  align-items: center;
+  gap: 2px;
 }
 .modal.toc-modal {
   inset: 0 0 0 auto;

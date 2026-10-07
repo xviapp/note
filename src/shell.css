@@ -612,15 +612,12 @@ body:has(.android-shell .phone-bottom-nav) .collection-page,
 }
 
 /* Header action, e.g. New on the home page. */
-.app-header .header-clips {
-  flex-shrink: 0;
-  margin-left: auto;
-}
 .app-header .header-search {
   flex-shrink: 0;
   margin-left: auto;
 }
-.app-header .header-clips + .header-search {
+.app-header .header-clips {
+  flex-shrink: 0;
   margin-left: -6px;
 }
 .note-location .location-clips {

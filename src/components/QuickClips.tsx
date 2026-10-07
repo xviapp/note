@@ -14,6 +14,7 @@ import {
   FilePlus2,
   ImagePlus,
   Lock,
+  LockOpen,
   Pin,
   PinOff,
   Search,
@@ -416,16 +417,26 @@ export function QuickClips({
             加载更早的
           </button>
         )}
-        <div className="clips-footer">
-          <span>{keyId ? '已加密' : '未加密'}</span>
-          <button className="text-button" disabled={offline} onClick={() => setView('settings')}>
-            加密设置
-          </button>
-        </div>
       </>
     );
   return (
-    <Modal title="随手记" className="clips-modal" onClose={onClose}>
+    <Modal
+      title="随手记"
+      className="clips-modal"
+      onClose={onClose}
+      actions={
+        // Whether clips are encrypted, and the way to their password.
+        <button
+          className={`icon-button clips-lock${keyId ? ' is-encrypted' : ''}${view === 'settings' ? ' is-active' : ''}`}
+          aria-label={`加密设置（${keyId ? '已加密' : '未加密'}）`}
+          title={keyId ? '已加密 · 加密设置' : '未加密 · 加密设置'}
+          disabled={offline && view !== 'settings'}
+          onClick={() => setView('settings')}
+        >
+          {keyId ? <Lock size={17} /> : <LockOpen size={17} />}
+        </button>
+      }
+    >
       {body}
       {toast.element}
       {viewing && (
@@ -491,12 +502,8 @@ function ClipRow({
           已加密，解锁后显示
         </p>
       ) : (
-        <>
-          {item.file && (
-            <button className="clip-image" title="查看大图" onClick={onView}>
-              <CachedImage src={fileUrl(item.file.id)} alt={item.file.name} />
-            </button>
-          )}
+        // The image is a small thumbnail beside the text.
+        <div className="clip-body">
           {item.text && (
             <button
               className={`clip-text${open ? ' is-open' : ''}`}
@@ -506,7 +513,12 @@ function ClipRow({
               {item.text}
             </button>
           )}
-        </>
+          {item.file && (
+            <button className="clip-image" title="查看大图" onClick={onView}>
+              <CachedImage src={fileUrl(item.file.id)} alt={item.file.name} />
+            </button>
+          )}
+        </div>
       )}
       <div className="clip-meta">
         <span>{formatDate(item.created_at)}</span>

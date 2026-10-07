@@ -151,20 +151,20 @@ export function AppHeader({
         </span>
       </div>
       <button
-        className="icon-button header-clips"
-        aria-label="随手记"
-        title="随手记（Q）"
-        onClick={openClips}
-      >
-        <StickyNote size={19} />
-      </button>
-      <button
         className="icon-button header-search"
         aria-label="搜索笔记"
         title="搜索笔记（Ctrl+K）"
         onClick={onSearch}
       >
         <Search size={19} />
+      </button>
+      <button
+        className="icon-button header-clips"
+        aria-label="随手记"
+        title="随手记（Q）"
+        onClick={openClips}
+      >
+        <StickyNote size={19} />
       </button>
       {onNew && (
         <button className="button compact header-new" onClick={onNew}>

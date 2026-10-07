@@ -87,12 +87,15 @@ export function Modal({
   onClose,
   wide = false,
   className = '',
+  actions,
 }: {
   title: string;
   children: ReactNode;
   onClose: () => void;
   wide?: boolean;
   className?: string;
+  // Extra header buttons, before Close.
+  actions?: ReactNode;
 }) {
   const titleId = useId();
   const ref = useRef<HTMLDialogElement>(null),
@@ -127,9 +130,18 @@ export function Modal({
     >
       <div className="modal-heading">
         <h2 id={titleId}>{title}</h2>
-        <button className="icon-button" aria-label="关闭" onClick={onClose}>
-          <X size={20} />
-        </button>
+        {actions ? (
+          <div className="modal-heading-actions">
+            {actions}
+            <button className="icon-button" aria-label="关闭" onClick={onClose}>
+              <X size={20} />
+            </button>
+          </div>
+        ) : (
+          <button className="icon-button" aria-label="关闭" onClick={onClose}>
+            <X size={20} />
+          </button>
+        )}
       </div>
       {children}
     </dialog>
