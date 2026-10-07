@@ -32,6 +32,8 @@ test('project entries append records, track states and write through references'
     await page.getByRole('tab', { name: new RegExp(category === 'todo' ? '待办' : category === 'issue' ? '问题' : '笔记') }).click();
     await page.locator('.project-item-main').filter({ hasText: `${category}条目` }).click();
     await expect(page).toHaveURL(new RegExp(`category=${category}`));
+    await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
+    await page.getByLabel('记录内容').focus();
     await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
     await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);
     const layout = await page.locator('.quick-append-footer').evaluate((element) => {
@@ -47,6 +49,15 @@ test('project entries append records, track states and write through references'
     expect(layout.center).toBeLessThan(2);
     expect(layout.equalWidth).toBeLessThan(1);
     expect(layout.height).toBeGreaterThanOrEqual(104);
+    const placement = await page.locator('.quick-append-body').evaluate((element) => {
+      const text = element.querySelector('textarea')!.getBoundingClientRect();
+      const button = element.querySelector('button')!.getBoundingClientRect();
+      return { right: button.left - text.right, below: button.top - text.bottom };
+    });
+    expect(info.project.name === 'desktop' ? placement.right : placement.below).toBeGreaterThanOrEqual(8);
+    await expect.poll(() => page.locator('.quick-append-footer').evaluate((element) =>
+      element.getBoundingClientRect().top - document.querySelector('.assistant-launcher')!.getBoundingClientRect().bottom,
+    )).toBeGreaterThanOrEqual(10);
     if (category !== 'note') {
       const title = await page.getByRole('heading', { level: 1 }).boundingBox();
       const status = await page.getByRole('combobox', { name: '条目状态' }).boundingBox();
@@ -86,6 +97,7 @@ test('project entries append records, track states and write through references'
     await expect(page.locator('.note-actions .node-menu').getByRole('button', { name: '编辑正文', exact: true })).toBeVisible();
     await expect(page.locator('.note-actions .node-menu').getByRole('button', { name: '版本历史', exact: true })).toBeVisible();
     await page.locator('.note-actions .node-menu > summary').click();
+    await page.getByLabel('记录内容').focus();
     for (const theme of ['light', 'dark', 'starry']) {
       await page.evaluate((value) => { window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })); }, theme);
       await expect(page.getByRole('button', { name: label, exact: true })).toBeInViewport();
@@ -95,13 +107,13 @@ test('project entries append records, track states and write through references'
   }
   // A physical entry also gets its category and status controls without a route context.
   await page.goto(`/n/${overview.items.find((item) => item.category === 'todo')!.id}`);
-  await expect(page.getByRole('button', { name: '记录进展', exact: true })).toBeVisible();
+  await expect(page.getByRole('form', { name: '快捷记录' })).toBeVisible();
   await expect(page.getByRole('combobox', { name: '条目状态' })).toHaveValue('done');
   await page.goto(`/n/${project.id}`);
   await page.getByRole('tab', { name: /问题/ }).click();
   await page.locator('.project-item-main').filter({ hasText: '外部问题' }).click();
   await page.reload();
-  await expect(page.getByRole('button', { name: '补充讨论', exact: true })).toBeVisible();
+  await expect(page.getByRole('form', { name: '快捷记录' })).toBeVisible();
   await page.getByLabel('记录内容').fill('引用页面中的讨论');
   await page.getByRole('button', { name: '补充讨论', exact: true }).click();
   await expect(page.getByText('引用页面中的讨论', { exact: true })).toBeVisible();

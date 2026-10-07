@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
-import { ChevronLeft, ChevronRight, PenLine } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus } from 'lucide-react';
 import { api } from '../api';
-import type { NoteDetail, NoteNode } from '../../shared/types';
+import type { NoteDetail } from '../../shared/types';
 import {
   defaultEntry,
   fillTemplate,
@@ -11,6 +11,7 @@ import {
   type JournalEntry,
   type JournalMonth,
 } from '../../shared/journals';
+import { readDraft } from '../note-drafts';
 import { Spinner } from './Primitives';
 import { JournalTemplates } from './JournalTemplates';
 
@@ -40,20 +41,24 @@ function savedTemplate(id: string) {
 }
 
 // A journal's calendar: a day with an entry opens it, an empty day (up to
-// today) starts one from the chosen template.
+// today) previews the chosen template without creating a note.
 export function JournalPanel({
   id,
   refresh,
+  managing,
+  onCloseTemplates,
   offline,
   onNavigate,
-  onCreated,
+  onPrepare,
   onChanged,
 }: {
   id: string;
   refresh: number;
+  managing: boolean;
+  onCloseTemplates: () => void;
   offline: boolean;
   onNavigate: (id: string) => void;
-  onCreated: (node: NoteNode) => void;
+  onPrepare: (date: string, content: string) => void;
   onChanged: () => void;
 }) {
   const today = localDate();
@@ -62,7 +67,6 @@ export function JournalPanel({
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
   const [template, setTemplate] = useState(() => savedTemplate(id));
-  const [managing, setManaging] = useState(false);
   const selectTemplate = (value: string) => {
     setTemplate(value);
     try { localStorage.setItem(templateKey(id), value); }
@@ -89,23 +93,18 @@ export function JournalPanel({
   const chosen = data?.templates.find((item) => item.id === template) ?? null;
   const write = async (date: string) => {
     const known = entries.get(date) ?? data?.recent.find((entry) => entry.date === date);
-    if (known) return onNavigate(known.id);
     setBusy(date);
     setError('');
     try {
+      const draft = await readDraft(`append:journal:${id}:${date}`);
+      if (known && !draft) return onNavigate(known.id);
       let content = defaultEntry(date);
       if (chosen) {
         const source = await api<NoteDetail>(`/api/nodes/${chosen.id}`);
         if (source.locked) throw new Error('模板已加密，请先解锁。');
         content = fillTemplate(source.content, date);
       }
-      const result = await api<{ node: NoteNode; created: boolean }>(
-        `/api/nodes/${id}/journal/entries`,
-        'POST',
-        { date, content },
-      );
-      if (result.created) onCreated(result.node);
-      else onNavigate(result.node.id);
+      onPrepare(date, content);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -119,30 +118,12 @@ export function JournalPanel({
       <div className="journal-header">
         <button
           className="button primary compact"
-          disabled={offline || !!busy}
+          disabled={!data || !!busy}
           onClick={() => void write(today)}
         >
-          <PenLine size={15} />
-          {entries.has(today) ? '打开今天的日记' : '写今天的日记'}
+          <Plus size={15} />
+          新建
         </button>
-        <>
-          <label className="journal-template">
-            模板
-            <select
-              value={chosen?.id ?? ''}
-              disabled={!data || !!busy}
-              onChange={(event) => selectTemplate(event.target.value)}
-            >
-              <option value="">仅日期标题</option>
-              {data?.templates.map((item) => (
-                <option key={item.id} value={item.id}>
-                  {item.title.replace(/\.md$/i, '')}
-                </option>
-              ))}
-            </select>
-          </label>
-          <button className="text-button" disabled={!data || !!busy} onClick={() => setManaging(true)}>管理模板</button>
-        </>
       </div>
       <div className="journal-month">
         <button
@@ -189,7 +170,7 @@ export function JournalPanel({
                         .join(' ')}
                       aria-label={label(date, entries.get(date))}
                       title={entries.get(date)?.title}
-                      disabled={date > today || (offline && !entries.has(date)) || !!busy}
+                      disabled={date > today || !data || !!busy}
                       onClick={() => void write(date)}
                     >
                       {Number(date.slice(8))}
@@ -203,7 +184,7 @@ export function JournalPanel({
           ))}
         </tbody>
       </table>
-      {busy && <Spinner label="正在新建日记…" />}
+      {busy && <Spinner label="正在打开日记…" />}
       {error && (
         <p className="inline-error" role="alert">
           {error}
@@ -230,7 +211,7 @@ export function JournalPanel({
         </>
       )}
       {managing && data && <JournalTemplates journalId={id} data={data} selected={chosen?.id ?? ''}
-        offline={offline} onSelect={selectTemplate} onClose={() => setManaging(false)}
+        offline={offline} onSelect={selectTemplate} onClose={onCloseTemplates}
         onChanged={async () => {
           setData(await api<JournalMonth>(`/api/nodes/${id}/journal?month=${month}`));
           onChanged();

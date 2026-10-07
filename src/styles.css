@@ -4262,24 +4262,21 @@ button.node-list-toggle:focus-visible {
 }
 .journal-header {
   display: flex;
+  justify-content: flex-end;
   flex-wrap: wrap;
   align-items: center;
   gap: 12px;
 }
-.journal-template {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  color: var(--muted);
-  font-size: 13px;
-}
+
 .quick-append-footer {
+  container-type: inline-size;
   flex-shrink: 0;
   padding: 10px 24px max(10px, env(safe-area-inset-bottom));
   border-top: 1px solid var(--line);
   background: var(--surface);
 }
 .quick-append {
+  position: relative;
   width: min(720px, 100%);
   margin-inline: auto;
 }
@@ -4294,6 +4291,7 @@ button.node-list-toggle:focus-visible {
   margin-bottom: 6px;
 }
 .quick-append-body {
+  position: relative;
   display: block;
 }
 .quick-append textarea {
@@ -4309,8 +4307,20 @@ button.node-list-toggle:focus-visible {
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
-  padding-right: 120px;
   margin-top: 8px;
+}
+@container (min-width: 700px) {
+  .quick-append {
+    width: min(720px, calc(100% - 256px));
+  }
+  .quick-append-actions {
+    position: absolute;
+    left: calc(100% + 12px);
+    bottom: 0;
+    width: 116px;
+    justify-content: flex-start;
+    margin-top: 0;
+  }
 }
 .quick-append small {
   color: var(--muted);
@@ -4356,9 +4366,6 @@ button.node-list-toggle:focus-visible {
 @media (max-width: 760px) {
   .quick-append-footer {
     padding-inline: 12px;
-  }
-  .quick-append-actions {
-    padding-right: 64px;
   }
 }
 .journal-month {

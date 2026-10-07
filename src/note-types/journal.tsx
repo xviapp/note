@@ -1,23 +1,56 @@
+import { useEffect, useMemo, useRef, useState } from 'react';
 import { variantOf } from '../../shared/types';
 import { longDate, weekday } from '../../shared/journals';
 import { JournalPanel } from '../components/JournalPanel';
 import { QuickAppend } from '../components/QuickAppend';
+import { MarkdownView } from '../components/LazyMarkdown';
+import { createJournalRecorder } from '../journal-record';
+import type { NoteNode } from '../../shared/types';
 import type { TypeContext, TypeView } from './view';
 
 // A journal: its calendar instead of a plain list. An entry tells 青藜 its
 // day (see worker/journals.ts).
 export function useJournalView(ctx: TypeContext): TypeView | null {
-  const { note } = ctx;
+  const [managing, setManaging] = useState<string | null>(null);
+  const [pending, setPending] = useState<{ journalId: string; date: string; content: string } | null>(null);
+  const result = useRef<{ node: NoteNode; created: boolean } | null>(null);
+  const recorder = useMemo(() => pending && createJournalRecorder(pending.journalId, pending.date, pending.content), [pending]);
+  const [saved, setSaved] = useState<NoteNode | null>(null);
+  const { note, appending, onChanged, onNavigate } = ctx;
+  // Navigation must wait for the append leave guard to be released.
+  useEffect(() => {
+    if (!saved || appending) return;
+    setSaved(null);
+    setPending(null);
+    onChanged();
+    onNavigate(saved.id);
+  }, [saved, appending, onChanged, onNavigate]);
+  const draft = pending?.journalId === note?.id ? pending : null;
   if (!note) return null;
   if (variantOf(note) === 'journal')
     return {
-      children: !ctx.editing && (
-        <JournalPanel
+      menu: !draft && <button onClick={() => setManaging(note.id)}>管理模板</button>,
+      footer: !ctx.editing && draft && (
+        <QuickAppend key={`journal:${note.id}:${draft.date}`} id={`journal:${note.id}:${draft.date}`}
+          keyId={note.key_id} disabled={ctx.offline} onBusy={ctx.setAppending}
+          onAppend={async (title, text, key) => { result.current = await recorder!(title, text, key); }}
+          onSaved={() => setSaved(result.current!.node)} />
+      ),
+      children: !ctx.editing && (draft ? (
+        <section className="journal-draft">
+          <button className="text-button" disabled={ctx.appending} onClick={() => setPending(null)}>返回日历</button>
+          <p className="muted">首次追加后保存为当天日记，未提交的输入保留在本设备。</p>
+          <p className="muted">待记录 · {longDate(draft.date)} {weekday(draft.date)}</p>
+          <MarkdownView content={draft.content} onNavigate={ctx.onNavigate} onImage={() => {}} safeImages />
+        </section>
+      ) : <JournalPanel
           id={note.id}
+          managing={managing === note.id}
+          onCloseTemplates={() => setManaging(null)}
           refresh={ctx.refreshKey}
           offline={ctx.offline}
           onNavigate={ctx.onNavigate}
-          onCreated={ctx.onCreated}
+          onPrepare={(date, content) => setPending({ journalId: note.id, date, content })}
           onChanged={ctx.onChanged}
         />
       ),

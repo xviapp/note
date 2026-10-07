@@ -137,6 +137,28 @@ export function AssistantWindow({
     null,
   );
   const margin = compact ? 12 : 24;
+  const [appendTop, setAppendTop] = useState<number | null>(null);
+  // The reading element can be replaced on navigation while its ref stays the same.
+  useLayoutEffect(() => {
+    const root = readingRoot.current;
+    if (!root) return;
+    let footer: Element | null = null;
+    const measure = () => {
+      const next = root.querySelector('.quick-append-footer');
+      if (footer !== next) {
+        if (footer) resize.unobserve(footer);
+        footer = next;
+        if (footer) resize.observe(footer);
+      }
+      setAppendTop(footer?.getClientRects().length ? footer.getBoundingClientRect().top : null);
+    };
+    const resize = new ResizeObserver(measure);
+    resize.observe(root);
+    const mutations = new MutationObserver(measure);
+    mutations.observe(root, { childList: true, subtree: true });
+    measure();
+    return () => { resize.disconnect(); mutations.disconnect(); };
+  });
   const width = Math.max(1, Math.min(440, viewport.width - margin * 2));
   const height = Math.max(
     1,
@@ -248,7 +270,7 @@ export function AssistantWindow({
         hidden={!showLauncher || visible || hidden}
         style={{
           left: viewport.x + viewport.width - margin,
-          top: viewport.y + viewport.height - margin,
+          top: Math.max(viewport.y + margin + 52, Math.min(viewport.y + viewport.height - margin, appendTop === null ? Infinity : appendTop - 12)),
         }}
         aria-label={`打开${label}`}
         title={busy ? `${title} · 正在回复` : title}

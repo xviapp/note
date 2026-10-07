@@ -5,7 +5,7 @@ export { appendContent } from '../shared/records';
 
 // Keep the exact request after an uncertain response: a retry must not append
 // the same block a second time. A version conflict starts from fresh text next time.
-export function createNoteAppender(id: string, timestamp = false) {
+export function createNoteAppender(id: string, timestamp = false, operationKey?: string) {
   let pending: { key: string; payload: { content: string; attachments: string[]; revision: number } } | null = null;
   return async (title: string, text: string) => {
     if (!text.trim()) throw new Error('请先输入内容。');
@@ -15,7 +15,7 @@ export function createNoteAppender(id: string, timestamp = false) {
         if (note.locked) throw new Error('请先解锁这篇笔记。');
         if (note.kind !== 'markdown' && note.kind !== 'text') throw new Error('只有文本笔记可以追加内容。');
         pending = {
-          key: crypto.randomUUID(),
+          key: operationKey ?? crypto.randomUUID(),
           payload: {
             content: appendContent(note.content, title, text, note.kind === 'markdown', timestamp ? recordTime() : undefined),
             attachments: note.attachments.map((file) => file.id),
