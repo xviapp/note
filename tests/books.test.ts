@@ -317,6 +317,17 @@ describe('books', () => {
     const system = JSON.parse(String(fetch.mock.calls.at(-1)![1]!.body)).messages[0].content;
     expect(system).toContain('作者质疑农业带来更好生活。');
     expect(system).toContain('先回应问题，再说明依据');
+    // The book's own page talks about the whole book from its pages' summaries;
+    // other folders have no conversation.
+    replies.push('全书在追问农业的代价。');
+    const whole = await request(`/api/nodes/${book.id}/assistant`, 'POST', { content: '这本书讲什么？' });
+    for await (const _ of sseData(whole.body!)) void _;
+    const bookSystem = JSON.parse(String(fetch.mock.calls.at(-1)![1]!.body)).messages[0].content;
+    expect(bookSystem).toContain('这是书籍的首页');
+    expect(bookSystem).toContain('（第 12 页）：作者质疑农业带来更好生活。');
+    expect(bookSystem).toContain('你是一位耐心的历史老师。');
+    const folder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '普通目录' });
+    expect((await request(`/api/nodes/${folder.id}/assistant`, 'POST', { content: '你好' })).status).toBe(400);
     detail = await ok<NoteDetail>(`/api/nodes/${page12.id}`);
     expect(detail.book_page!.discussions).toEqual([
       { id: discussion.id, title: '为什么说是骗局？', replies: 1, noted: false },

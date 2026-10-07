@@ -113,8 +113,8 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
 
   // A book adds pages from its card, not from "新建".
   await expect(page.locator('.document-meta')).not.toContainText('新建');
-  // The book folder itself has no conversation; its pages offer the launcher.
-  await expect(page.locator('.assistant-launcher:visible')).toHaveCount(0);
+  // The book's own page talks with 青藜 about the whole book.
+  await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);
   const card = page.getByRole('region', { name: '书籍资料' });
   await card.getByRole('button', { name: '手动添加页面' }).click();
   const typed = page.getByRole('dialog', { name: '手动添加页面' });

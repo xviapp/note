@@ -798,7 +798,8 @@ export default function NotePane(props: Props) {
             )}
           {annotationPanel && <AnnotationPanel {...annotationListProps} />}
         </div>
-        {note.kind !== 'folder' && (
+        {/* Folders have no conversation, except a book about the whole book. */}
+        {(note.kind !== 'folder' || variantOf(note) === 'book') && (
           <AssistantPanel
             // The shared 青藜; a type may give it another conversation, title,
             // context line or header actions (a book page's discussions).

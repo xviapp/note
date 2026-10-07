@@ -65,7 +65,9 @@ export async function assistantNode(
 ): Promise<Pick<NoteNode, 'id' | 'title' | 'kind' | 'key_id'>> {
   if (id === GLOBAL_ASSISTANT_ID) return { id, title: '全局对话', kind: 'text', key_id: null };
   const node = await getNode(env, id);
-  if (node.kind === 'folder') throw new AppError(400, '请打开一个文件与青藜对话。');
+  // A book's own page holds a conversation about the whole book.
+  if (node.kind === 'folder' && node.variant !== 'book')
+    throw new AppError(400, '请打开一个文件与青藜对话。');
   return node;
 }
 async function present(env: Env, row: MessageRow): Promise<ChatMessage> {

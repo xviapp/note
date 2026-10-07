@@ -51,10 +51,33 @@ it('sends a manually entered question unchanged', async () => {
   const ctx = context('波函数的物理含义是什么？');
   const { result } = renderHook(() => useBookPageView(ctx));
   render(result.current!.footer);
-  fireEvent.change(screen.getByLabelText('就这一页提问'), { target: { value: '什么是波函数？' } });
+  const field = screen.getByLabelText<HTMLTextAreaElement>('就这一页提问');
+  await waitFor(() => expect(field.disabled).toBe(false));
+  fireEvent.change(field, { target: { value: '什么是波函数？' } });
   fireEvent.click(screen.getByRole('button', { name: '提问' }));
   await waitFor(() => expect(ctx.openAssistant).toHaveBeenCalledOnce());
   expect(result.current!.assistant!.initialPrompt).toEqual({ content: '什么是波函数？', quote: undefined });
+});
+
+it('keeps an unsent question on the device and asks with Enter', async () => {
+  api.mockResolvedValue({ id: 'discussion' });
+  const ctx = context('波函数的物理含义是什么？');
+  const { result } = renderHook(() => useBookPageView(ctx));
+  const first = render(result.current!.footer);
+  let field = screen.getByLabelText<HTMLTextAreaElement>('就这一页提问');
+  await waitFor(() => expect(field.disabled).toBe(false));
+  fireEvent.change(field, { target: { value: '测量是什么？' } });
+  first.unmount();
+  render(result.current!.footer);
+  field = screen.getByLabelText<HTMLTextAreaElement>('就这一页提问');
+  await waitFor(() => expect(field.value).toBe('测量是什么？'));
+  // Shift+Enter is a new line; Enter asks.
+  fireEvent.keyDown(field, { key: 'Enter', shiftKey: true });
+  expect(ctx.openAssistant).not.toHaveBeenCalled();
+  fireEvent.keyDown(field, { key: 'Enter' });
+  await waitFor(() => expect(ctx.openAssistant).toHaveBeenCalledOnce());
+  expect(field.value).toBe('');
+  expect(localStorage.length).toBe(0);
 });
 
 it('reports a failed discussion creation without sending the suggestion', async () => {

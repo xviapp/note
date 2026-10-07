@@ -44,6 +44,14 @@ export function useBookView(ctx: TypeContext): TypeView | null {
         />
       </section>
     ),
+    assistant: {
+      context: (
+        <span>
+          已带上：《{note.book.title}》{note.book.role_prompt ? ' · 书籍角色' : ''} · 各页摘要
+          {note.book.note_id ? ' · 读书笔记' : ''}
+        </span>
+      ),
+    },
     dialogs: editing && (
       <BookForm
         note={note}
@@ -142,7 +150,7 @@ export function useBookPageView(ctx: TypeContext): TypeView | null {
       </>
     ),
     footer: !ctx.editing && !ctx.assistantOpen && (
-      <PageAskBar offline={ctx.offline} onAsk={(question) => void ask(question)} />
+      <PageAskBar key={note.id} id={note.id} keyId={note.key_id} offline={ctx.offline} onAsk={(question) => void ask(question)} />
     ),
     // The page's only attachment is its photo, shown above the text.
     hideAttachments: !ctx.editing,

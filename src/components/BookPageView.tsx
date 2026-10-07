@@ -1,4 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
+import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 import { ChevronLeft, ChevronRight, FileText, List, MessagesSquare, RefreshCw, Send } from 'lucide-react';
 import { api } from '../api';
 import type { BookPageInfo, BookPages, NoteNode } from '../../shared/types';
@@ -216,36 +217,80 @@ export function PageInsights({
   );
 }
 
-// "Ask about this page" at the foot of a book page.
+// "Ask about this page" at the foot of a book page. It grows with the question
+// and keeps unsent text on this device, like the other composers.
 export function PageAskBar({
+  id,
+  keyId,
   offline,
   onAsk,
 }: {
+  id: string;
+  keyId?: string | null;
   offline: boolean;
   onAsk: (question: string) => void;
 }) {
   const [text, setText] = useState('');
-  const submit = (event: FormEvent) => {
-    event.preventDefault();
-    if (!text.trim()) return;
+  const [ready, setReady] = useState(false);
+  const field = useRef<HTMLTextAreaElement>(null);
+  const draftId = `ask:${id}`;
+  // Mounted once per page (keyed by it), so a draft never moves between pages.
+  useEffect(() => {
+    let live = true;
+    void readDraft(draftId).then((draft) => {
+      if (!live) return;
+      setText(draft?.content ?? '');
+      setReady(true);
+    });
+    return () => {
+      live = false;
+    };
+  }, [draftId]);
+  useEffect(() => {
+    if (!ready) return;
+    if (text) writeDraft(draftId, { content: text, attachments: [], revision: 0, savedAt: Date.now() }, keyId);
+    else removeDraft(draftId);
+  }, [draftId, keyId, ready, text]);
+  // Fit the field to its text, up to the height set in CSS.
+  useLayoutEffect(() => {
+    const element = field.current;
+    if (!element) return;
+    element.style.height = '';
+    element.style.height = `${element.scrollHeight + element.offsetHeight - element.clientHeight}px`;
+  }, [text]);
+  const submit = (event?: FormEvent) => {
+    event?.preventDefault();
+    if (offline || !text.trim()) return;
     onAsk(text.trim());
     setText('');
   };
   return (
-    <form className="page-ask" onSubmit={submit}>
-      <input
-        value={text}
-        maxLength={8000}
-        placeholder="就这一页提问…"
-        aria-label="就这一页提问"
-        disabled={offline}
-        onChange={(event) => setText(event.target.value)}
-      />
-      <button className="button primary compact" disabled={offline || !text.trim()}>
-        <Send size={15} />
-        <span>提问</span>
-      </button>
-    </form>
+    <div className="quick-append-footer">
+      <form className="page-ask" onSubmit={submit}>
+        <textarea
+          ref={field}
+          rows={1}
+          value={text}
+          maxLength={8000}
+          placeholder="就这一页提问，青藜会开一个新讨论…"
+          aria-label="就这一页提问"
+          disabled={offline || !ready}
+          onChange={(event) => setText(event.target.value)}
+          onKeyDown={(event) => {
+            // Enter asks; Shift+Enter starts a new line.
+            if (event.key === 'Enter' && !event.shiftKey && !event.nativeEvent.isComposing) {
+              event.preventDefault();
+              submit();
+            }
+          }}
+        />
+        <button className="button primary compact" aria-label="提问" disabled={offline || !text.trim()}>
+          <Send size={15} />
+          <span className="page-ask-label">提问</span>
+        </button>
+      </form>
+      {offline && <small className="page-ask-hint">联网后可以提问</small>}
+    </div>
   );
 }
 

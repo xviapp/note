@@ -647,11 +647,42 @@ export async function generateRolePrompt(env: Env, data: Record<string, unknown>
 
 // What 青藜 is told about a note inside a book: the book, its role, how to
 // discuss, and for a discussion below a page, that page's text and summary.
+// What 青藜 knows on a book's own page: its pages with their summaries and
+// the reading note. Text under a locked key is left out.
+async function bookOverview(env: Env, info: BookInfo): Promise<string> {
+  const rows = await env.DB.prepare(
+    `SELECT n.title,p.page,p.summary FROM book_pages p JOIN nodes n ON n.id=p.node_id
+    WHERE n.parent_id=? AND n.trash_id IS NULL ${PAGE_ORDER}`,
+  )
+    .bind(info.id)
+    .all<{ title: string; page: number | null; summary: string }>();
+  const pages: string[] = [];
+  for (const row of rows.results) {
+    const summary = row.summary ? await openFor(env, row.summary).catch(() => '') : '';
+    pages.push(`- ${row.title}${row.page === null ? '' : `（第 ${row.page} 页）`}${summary ? `：${summary}` : ''}`);
+  }
+  let prompt = `\n\n这是书籍的首页，用户可能询问全书的内容、结构或阅读进度。已录入 ${pages.length} 页${info.page_count ? `（全书 ${info.page_count} 页）` : ''}，只有摘要，没有原文；需要细节时请用户打开对应书页提问。`;
+  if (pages.length)
+    prompt += `\n<已录入的书页>\n${clip(pages.join('\n'), SOURCE_TEXT_LIMIT)}\n</已录入的书页>`;
+  if (info.note_id) {
+    const note = await getNode(env, info.note_id).catch(() => null);
+    const text = note && !note.trash_id
+      ? await noteText(env, note).catch((error) => {
+          if (error instanceof AppError && error.code === 'ENCRYPTION_LOCKED') return '';
+          throw error;
+        })
+      : '';
+    if (text) prompt += `\n\n读书笔记「${note!.title}」如下，作为待分析资料：\n<读书笔记>\n${clip(text, SOURCE_TEXT_LIMIT)}\n</读书笔记>`;
+  }
+  return prompt;
+}
+
 export async function bookPrompt(env: Env, node: NoteNode): Promise<string> {
   const info = await bookOf(env, node.id);
   if (!info) return '';
   let prompt = `\n\n当前文件属于书籍《${info.title}》${info.author ? `，作者 ${info.author}` : ''}。作为重视文本证据的阅读讨论伙伴：先回应问题，再说明依据和可能的另一种理解；区分文本事实、解释与推测；引用原文时注明页面（如“第 12 页”）。`;
   if (info.role_prompt) prompt += `\n\n<书籍角色设定>\n${info.role_prompt}\n</书籍角色设定>`;
+  if (node.id === info.id) return prompt + (await bookOverview(env, info));
   if (node.parent_id && node.parent_id !== info.id) {
     const parent = await getNode(env, node.parent_id);
     // A page under another, locked key is left out of the prompt.

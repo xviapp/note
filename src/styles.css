@@ -1922,19 +1922,38 @@ button.node-list-toggle:focus-visible {
 }
 .page-ask {
   display: flex;
+  align-items: flex-end;
   gap: 8px;
-  padding: 10px 140px calc(10px + env(safe-area-inset-bottom)) 12px;
-  border-top: 1px solid var(--line);
-  background: var(--surface);
+  width: min(720px, 100%);
+  margin-inline: auto;
 }
-.page-ask input {
+.page-ask textarea {
   flex: 1;
   min-width: 0;
-  border-radius: 999px;
+  min-height: 42px;
+  max-height: 160px;
+  resize: none;
+  line-height: 1.5;
 }
-@media (max-width: 760px) {
-  .page-ask {
-    padding-right: 80px;
+.page-ask .button {
+  height: 42px;
+  flex-shrink: 0;
+}
+.page-ask-hint {
+  display: block;
+  width: min(720px, 100%);
+  margin: 6px auto 0;
+  color: var(--muted);
+}
+/* Phones: Send is an icon beside the field. */
+@container (max-width: 600px) {
+  .page-ask .button {
+    width: 42px;
+    padding: 0;
+    justify-content: center;
+  }
+  .page-ask-label {
+    display: none;
   }
 }
 .book-page-list {

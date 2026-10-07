@@ -668,7 +668,7 @@ export function AssistantPanel(props: Props) {
             </div>
           )}
           <div className="context-actions">
-            {node && (
+            {node && (props.fileNode ?? node).kind !== 'folder' && (
               <button
                 type="button"
                 className="text-button"
