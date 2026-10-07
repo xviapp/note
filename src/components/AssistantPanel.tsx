@@ -129,7 +129,9 @@ export function AssistantPanel(props: Props) {
       return `引用最多 ${AI_QUOTE_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`;
     setQuote(text);
     setError('');
-    requestAnimationFrame(() => promptInput.current?.focus({ preventScroll: true }));
+    // On phones the keyboard would cover the sheet; a tap on the field starts typing.
+    if (!matchMedia('(pointer: coarse)').matches)
+      requestAnimationFrame(() => promptInput.current?.focus({ preventScroll: true }));
   };
   useImperativeHandle(props.actionsRef, () => ({ addQuote }));
   const base = `/api/nodes/${scopeId}/assistant`;

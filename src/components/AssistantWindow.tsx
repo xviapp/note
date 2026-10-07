@@ -14,18 +14,10 @@ import { QingliIcon } from './QingliIcon';
 
 export type AssistantMode = 'floating' | 'docked' | 'maximized';
 // On phones 青藜 is a bottom sheet: most of the screen with the page still
-// showing above it, or full screen.
+// showing above it, or full screen. It always opens at the smaller size.
 type SheetSize = 'half' | 'full';
-const SHEET_KEY = 'assistant-sheet';
 const HALF = 0.7;
 const tallest = { width: 0, height: 0 };
-function savedSheet(): SheetSize {
-  try {
-    return localStorage.getItem(SHEET_KEY) === 'full' ? 'full' : 'half';
-  } catch {
-    return 'half';
-  }
-}
 
 function viewportBounds() {
   const viewport = window.visualViewport;
@@ -96,7 +88,7 @@ export function AssistantWindow({
   const [viewport, setViewport] = useState(viewportBounds);
   const compact = viewport.width <= 760;
   const sheet = compact;
-  const [sheetSize, setSheetSizeState] = useState<SheetSize>(savedSheet);
+  const [sheetSize, setSheetSizeState] = useState<SheetSize>('half');
   // Only switching size animates; resizing the window or the keyboard does not.
   const [animating, setAnimating] = useState(false);
   const animation = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -105,12 +97,15 @@ export function AssistantWindow({
     setAnimating(true);
     clearTimeout(animation.current);
     animation.current = setTimeout(() => setAnimating(false), 250);
-    try {
-      localStorage.setItem(SHEET_KEY, size);
-    } catch {
-      /* Optional preference. */
-    }
   };
+  const shown = visible && !hidden;
+  const [wasShown, setWasShown] = useState(shown);
+  if (shown !== wasShown) {
+    setWasShown(shown);
+    if (shown) setSheetSizeState('half');
+  }
+  // Typing in the panel, as opposed to a keyboard left up by the page.
+  const [typing, setTyping] = useState(false);
   const [pull, setPull] = useState<{ id: number; startY: number; offset: number } | null>(null);
   // The keyboard leaves too little of a part-height sheet, so while it shows
   // the sheet fills the screen, and returns to its size once it is put away.
@@ -121,7 +116,7 @@ export function AssistantWindow({
     tallest.height = 0;
   }
   tallest.height = Math.max(tallest.height, viewport.height);
-  const keyboard = sheet && tallest.height - viewport.height > 120;
+  const keyboard = sheet && typing && tallest.height - viewport.height > 120;
   const keyboardSeen = useRef(0);
   useEffect(() => {
     if (keyboard) return () => void (keyboardSeen.current = Date.now());
@@ -303,6 +298,8 @@ export function AssistantWindow({
         aria-label={label}
         hidden={!visible || hidden}
         tabIndex={-1}
+        onFocus={(event) => setTyping(event.target.matches('textarea, input[type="text"], [contenteditable="true"]'))}
+        onBlur={() => setTyping(false)}
         onKeyDown={(event) => {
           if (event.defaultPrevented || event.nativeEvent.isComposing) return;
           if (event.key === 'Escape') {

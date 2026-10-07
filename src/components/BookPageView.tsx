@@ -261,6 +261,8 @@ export function PageAskBar({
   const submit = (event?: FormEvent) => {
     event?.preventDefault();
     if (offline || !text.trim()) return;
+    // Put the keyboard away so 青藜 opens at its usual size.
+    field.current?.blur();
     onAsk(text.trim());
     setText('');
   };

@@ -153,6 +153,11 @@ test('back restores the originating list and cancelled edits preserve browser hi
       .poll(async () => (await panel.boundingBox())!.height)
       .toBe(page.viewportSize()!.height);
     await page.screenshot({ path: 'test-results/family-chat-mobile.png' });
+    // Full screen is not kept: the next opening is half height again.
+    await panel.getByRole('button', { name: '关闭青藜', exact: true }).click();
+    await page.getByRole('button', { name: '打开青藜', exact: true }).click();
+    await expect(panel).not.toHaveClass(/assistant-maximized/);
+    await panel.getByRole('button', { name: '青藜全屏', exact: true }).click();
     const back = () =>
       page.evaluate(() =>
         window.dispatchEvent(new CustomEvent('note:native-back', { cancelable: true })),
