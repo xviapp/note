@@ -11,7 +11,7 @@ import 'katex/dist/katex.min.css';
 import '../math.css';
 import { CachedImage } from './CachedImage';
 import { markdownFrontMatter } from '../../shared/projects';
-import { rehypeRecords, type RecordStyle } from '../markdown-records';
+import { rehypeRecords, rehypeRepeatedTitle, type RecordStyle } from '../markdown-records';
 
 // Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
 // https://github.com/rehypejs/rehype-sanitize#example-math
@@ -34,6 +34,7 @@ export const MarkdownView = memo(function MarkdownView({
   onHeadings,
   safeImages = false,
   records,
+  hideHeading,
 }: {
   content: string;
   onNavigate: (id: string) => void;
@@ -42,6 +43,8 @@ export const MarkdownView = memo(function MarkdownView({
   safeImages?: boolean;
   // Lay out appended records of this kind (issue thread, todo progress, journal day).
   records?: RecordStyle;
+  // A leading H1 with this text repeats the page heading and is hidden.
+  hideHeading?: string;
 }) {
   const ref = useRef<HTMLDivElement>(null);
   const rendered = useMemo(() => {
@@ -54,13 +57,13 @@ export const MarkdownView = memo(function MarkdownView({
   // Appended records are listed by the page itself, so they stay out of the outline.
   useEffect(() => {
     onHeadings?.(
-      Array.from(ref.current?.querySelectorAll(':is(h1,h2,h3,h4,h5,h6):not(.record-heading)') ?? []).map((h) => ({
+      Array.from(ref.current?.querySelectorAll(':is(h1,h2,h3,h4,h5,h6):not(.record-heading, .is-repeated-title)') ?? []).map((h) => ({
         id: h.id,
         title: h.textContent ?? '',
         level: Number(h.tagName[1]),
       })),
     );
-  }, [content, onHeadings]);
+  }, [content, hideHeading, onHeadings]);
   // Renderers keep a stable identity, so a re-render does not remount images or
   // links; the latest callbacks are read when they run.
   const callbacks = useRef({ onNavigate, onImage });
@@ -158,6 +161,7 @@ export const MarkdownView = memo(function MarkdownView({
         rehypePlugins={[
           [rehypeSanitize, markdownSchema],
           [rehypeRecords, records],
+          [rehypeRepeatedTitle, hideHeading],
           rehypeMathCompatibility,
           [rehypeKatex, mathOptions],
         ]}

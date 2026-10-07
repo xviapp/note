@@ -53,7 +53,12 @@ export interface AssistantCustom {
 // What a type adds to the note page. The page lays these out in fixed places;
 // anything left out falls back to the generic behaviour.
 export interface TypeView {
+  // The page heading and kind, in place of the note's own.
+  title?: string;
+  kind?: { icon: ReactNode; label: string };
   headingActions?: ReactNode;
+  // A leading heading in the body that repeats `title`, hidden when reading.
+  hideHeading?: string;
   // How the body lays out records appended below it.
   records?: RecordStyle;
   // Beside the note actions in the toolbar.

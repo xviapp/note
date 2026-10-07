@@ -32,6 +32,11 @@ function weeks(month: string): (string | null)[][] {
   while (days.length % 7) days.push(null);
   return Array.from({ length: days.length / 7 }, (_, i) => days.slice(i * 7, i * 7 + 7));
 }
+// A recent entry's day, with its year only when it is not this year's.
+function shortDate(date: string, today: string) {
+  const [year, month, day] = date.split('-').map(Number);
+  return `${date.slice(0, 4) === today.slice(0, 4) ? '' : `${year}年`}${month}月${day}日`;
+}
 const templateKey = (id: string) => `journal-template:${id}`;
 function savedTemplate(id: string) {
   try {
@@ -48,6 +53,7 @@ export function JournalPanel({
   refresh,
   headingActions,
   managing,
+  onManageTemplates,
   onCloseTemplates,
   offline,
   onNavigate,
@@ -58,6 +64,7 @@ export function JournalPanel({
   refresh: number;
   headingActions: HTMLElement | null;
   managing: boolean;
+  onManageTemplates: () => void;
   onCloseTemplates: () => void;
   offline: boolean;
   onNavigate: (id: string) => void;
@@ -129,95 +136,103 @@ export function JournalPanel({
           disabled={!data || !!busy}
           onClick={() => void write(today)}
         >
-          {entries.has(today) ? <><PenLine size={15} />今天的日记</> : <><Plus size={15} />新建</>}
+          {entries.has(today) ? <><PenLine size={15} />续写今天</> : <><Plus size={15} />写今天</>}
         </button>,
         headingActions,
       )}
-      <div className="journal-month">
-        <button
-          className="icon-button"
-          aria-label="上个月"
-          onClick={() => setMonth((value) => shift(value, -1))}
-        >
-          <ChevronLeft size={18} />
-        </button>
-        <h2>{`${Number(month.slice(0, 4))}年${Number(month.slice(5))}月`}</h2>
-        <button
-          className="icon-button"
-          aria-label="下个月"
-          disabled={month >= today.slice(0, 7)}
-          onClick={() => setMonth((value) => shift(value, 1))}
-        >
-          <ChevronRight size={18} />
-        </button>
-        {month !== today.slice(0, 7) && (
-          <button className="text-button" onClick={() => setMonth(today.slice(0, 7))}>
-            今天
-          </button>
+      <div className="journal-layout">
+        <div className="journal-calendar-column">
+          <div className="journal-month">
+            <button
+              className="icon-button"
+              aria-label="上个月"
+              onClick={() => setMonth((value) => shift(value, -1))}
+            >
+              <ChevronLeft size={18} />
+            </button>
+            <h2>{`${Number(month.slice(0, 4))}年${Number(month.slice(5))}月`}</h2>
+            <button
+              className="icon-button"
+              aria-label="下个月"
+              disabled={month >= today.slice(0, 7)}
+              onClick={() => setMonth((value) => shift(value, 1))}
+            >
+              <ChevronRight size={18} />
+            </button>
+            {month !== today.slice(0, 7) && (
+              <button className="text-button" onClick={() => setMonth(today.slice(0, 7))}>
+                今天
+              </button>
+            )}
+          </div>
+          <table className="journal-calendar">
+            <thead>
+              <tr>
+                {WEEK.map((day) => (
+                  <th key={day} scope="col">
+                    {day}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {weeks(month).map((week, index) => (
+                <tr key={index}>
+                  {week.map((date, day) =>
+                    date ? (
+                      <td key={date}>
+                        <button
+                          className={[entries.has(date) && 'has-entry', drafted(date) && 'has-draft', date === today && 'is-today']
+                            .filter(Boolean)
+                            .join(' ')}
+                          aria-label={label(date, entries.get(date))}
+                          title={entries.get(date)?.title}
+                          disabled={date > today || !data || !!busy}
+                          onClick={() => void write(date)}
+                        >
+                          {Number(date.slice(8))}
+                        </button>
+                      </td>
+                    ) : (
+                      <td key={`empty-${day}`} />
+                    ),
+                  )}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          {data && (
+            <button className="text-button journal-template" onClick={onManageTemplates}>
+              模板：{chosen ? chosen.title.replace(/\.md$/i, '') : '仅日期标题'}
+            </button>
+          )}
+          {busy && <Spinner label="正在打开日记…" />}
+          {error && (
+            <p className="inline-error" role="alert">
+              {error}
+            </p>
+          )}
+          {!data && !error && <Spinner />}
+        </div>
+        {!!data?.recent.length && (
+          <section className="journal-recent" aria-labelledby="journal-recent-title">
+            <h3 id="journal-recent-title">最近的日记</h3>
+            <ol>
+              {data.recent.map((entry) => (
+                <li key={entry.id}>
+                  <button aria-label={`${longDate(entry.date)} ${weekday(entry.date)}`} onClick={() => onNavigate(entry.id)}>
+                    <span className="journal-recent-date">
+                      <strong>{shortDate(entry.date, today)}</strong>
+                      <small>{weekday(entry.date)}</small>
+                    </span>
+                    <span className="journal-recent-excerpt">{entry.excerpt || '（无摘要）'}</span>
+                  </button>
+                </li>
+              ))}
+            </ol>
+          </section>
         )}
       </div>
-      <table className="journal-calendar">
-        <thead>
-          <tr>
-            {WEEK.map((day) => (
-              <th key={day} scope="col">
-                {day}
-              </th>
-            ))}
-          </tr>
-        </thead>
-        <tbody>
-          {weeks(month).map((week, index) => (
-            <tr key={index}>
-              {week.map((date, day) =>
-                date ? (
-                  <td key={date}>
-                    <button
-                      className={[entries.has(date) && 'has-entry', drafted(date) && 'has-draft', date === today && 'is-today']
-                        .filter(Boolean)
-                        .join(' ')}
-                      aria-label={label(date, entries.get(date))}
-                      title={entries.get(date)?.title}
-                      disabled={date > today || !data || !!busy}
-                      onClick={() => void write(date)}
-                    >
-                      {Number(date.slice(8))}
-                    </button>
-                  </td>
-                ) : (
-                  <td key={`empty-${day}`} />
-                ),
-              )}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {busy && <Spinner label="正在打开日记…" />}
-      {error && (
-        <p className="inline-error" role="alert">
-          {error}
-        </p>
-      )}
-      {!data && !error && <Spinner />}
-      {!!data?.recent.length && (
-        <>
-          <h3 className="journal-recent-title">最近的日记</h3>
-          <div className="project-items">
-            {data.recent.map((entry) => (
-              <div className="project-item" key={entry.id}>
-                <button className="project-item-main" onClick={() => onNavigate(entry.id)}>
-                  <span>
-                    <strong>
-                      {longDate(entry.date)} {weekday(entry.date)}
-                    </strong>
-                    {entry.excerpt && <small>{entry.excerpt}</small>}
-                  </span>
-                </button>
-              </div>
-            ))}
-          </div>
-        </>
-      )}
       {managing && data && <JournalTemplates journalId={id} data={data} selected={chosen?.id ?? ''}
         offline={offline} onSelect={selectTemplate} onClose={onCloseTemplates}
         onChanged={async () => {

@@ -75,6 +75,20 @@ export async function journalMonth(env: Env, id: string, url: URL): Promise<Jour
   };
 }
 
+// The live entries on the nearest days before and after `date`.
+export async function journalNeighbours(env: Env, journal: string, date: string) {
+  const side = (compare: '<' | '>', order: 'ASC' | 'DESC') =>
+    env.DB.prepare(
+      `${BELOW} SELECT e.node_id id,e.date FROM journal_entries e JOIN below b ON b.id=e.node_id
+       WHERE e.journal_id=? AND e.date${compare}? ORDER BY e.date ${order} LIMIT 1`,
+    ).bind(journal, journal, date);
+  const [previous, next] = await env.DB.batch<{ id: string; date: string }>([
+    side('<', 'DESC'),
+    side('>', 'ASC'),
+  ]);
+  return { previous: previous.results[0] ?? null, next: next.results[0] ?? null };
+}
+
 async function existing(env: Env, journal: string, date: string) {
   const row = await env.DB.prepare(
     `${BELOW} SELECT e.node_id,EXISTS(SELECT 1 FROM below b WHERE b.id=e.node_id) live

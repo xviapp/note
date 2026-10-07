@@ -130,8 +130,14 @@ export interface NoteDetail extends NoteNode {
   book_page?: BookPageInfo;
   // A discussion below a page (its 青藜 thread is the conversation).
   discussion_page?: string;
-  // A journal entry: its day (YYYY-MM-DD) and journal.
-  journal_entry?: { date: string; journal_id: string };
+  // A journal entry: its day (YYYY-MM-DD), journal, and the entries written
+  // on the nearest days before and after it.
+  journal_entry?: {
+    date: string;
+    journal_id: string;
+    previous?: { id: string; date: string } | null;
+    next?: { id: string; date: string } | null;
+  };
 }
 export interface BookDiscussion {
   id: string;

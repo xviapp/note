@@ -54,3 +54,12 @@ it('keeps records out of the outline', () => {
   render(<MarkdownView content={'# 标题\n\n## 讨论\n\n### 2026-10-07 14:05 · 记录\n\n内容'} onNavigate={() => {}} onImage={() => {}} onHeadings={onHeadings} records="issue" />);
   expect(onHeadings.mock.lastCall![0].map((item: { title: string }) => item.title)).toEqual(['标题', '讨论']);
 });
+
+it('hides a leading title that repeats the page heading, outside the outline', () => {
+  const onHeadings = vi.fn();
+  const { container } = render(<MarkdownView content={'# 2026年10月7日 星期三\n\n## 早上\n\n# 2026年10月7日 星期三'} onNavigate={() => {}} onImage={() => {}} onHeadings={onHeadings} hideHeading="2026年10月7日 星期三" />);
+  expect([...container.querySelectorAll('h1')].map((item) => item.className)).toEqual(['is-repeated-title', '']);
+  expect(onHeadings.mock.lastCall![0].map((item: { title: string }) => item.title)).toEqual(['早上', '2026年10月7日 星期三']);
+  // A different leading title stays.
+  expect(view('# 读书日', undefined).querySelector('.is-repeated-title')).toBeNull();
+});

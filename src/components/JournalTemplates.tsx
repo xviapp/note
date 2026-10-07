@@ -7,7 +7,9 @@ import { MarkdownView } from './LazyMarkdown';
 import type { EditorHandle } from './Editor';
 
 const Editor = lazy(() => import('./Editor'));
-const TOKENS = ['日期', '星期', 'date', 'year', 'month', 'day'];
+// The common placeholders first; the numeric ones behind "更多".
+const TOKENS = ['日期', '星期', 'date'];
+const MORE_TOKENS = ['year', 'month', 'day'];
 
 export function JournalTemplates({ journalId, data, selected, offline, onSelect, onChanged, onClose }: {
   journalId: string;
@@ -22,6 +24,7 @@ export function JournalTemplates({ journalId, data, selected, offline, onSelect,
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [preview, setPreview] = useState(false);
+  const [moreTokens, setMoreTokens] = useState(false);
   const [uncertain, setUncertain] = useState(false);
   const handle = useRef<EditorHandle | null>(null);
   const running = useRef(false);
@@ -114,7 +117,8 @@ export function JournalTemplates({ journalId, data, selected, offline, onSelect,
             <label>模板名称<input value={draft.title} disabled={busy || uncertain} onChange={(event) => setDraft({ ...draft, title: event.target.value })} /></label>
             <div className="template-tokens">
               <span>插入日期：</span>
-              {TOKENS.map((token) => <button key={token} className="text-button" disabled={busy || preview || uncertain} onClick={() => handle.current?.insert(`{{${token}}}`)}>{`{{${token}}}`}</button>)}
+              {(moreTokens ? [...TOKENS, ...MORE_TOKENS] : TOKENS).map((token) => <button key={token} className="text-button" disabled={busy || preview || uncertain} onClick={() => handle.current?.insert(`{{${token}}}`)}>{`{{${token}}}`}</button>)}
+              {!moreTokens && <button className="text-button muted" onClick={() => setMoreTokens(true)}>更多</button>}
             </div>
             <div className="template-editor" inert={busy || uncertain}>
               {preview ? <MarkdownView content={fillTemplate(draft.content, localDate())} onNavigate={() => {}} onImage={() => {}} safeImages /> : (
@@ -139,7 +143,7 @@ export function JournalTemplates({ journalId, data, selected, offline, onSelect,
           </div>
         ) : (
           <div className="form-stack">
-            <div className="template-item"><span>仅日期标题</span><button className="text-button" onClick={() => onSelect('')} disabled={!selected}>{!selected ? '已选用' : '选用'}</button></div>
+            <div className="template-item"><strong>仅日期标题</strong><button className="text-button" onClick={() => onSelect('')} disabled={!selected}>{!selected ? '已选用' : '选用'}</button></div>
             {data.templates.map((item) => <div key={item.id} className="template-item">
               <strong>{item.title.replace(/\.md$/i, '')}</strong>
               <div>

@@ -33,12 +33,9 @@ test('project entries append records, track states and write through references'
     await page.locator('.project-item-main').filter({ hasText: `${category}条目` }).click();
     await expect(page).toHaveURL(new RegExp(`category=${category}`));
     await expect(page.getByRole('button', { name: label, exact: true })).toHaveCount(0);
-    // Phones keep an idle composer to one line; the title appears once it is in use.
-    if (info.project.name === 'desktop') await expect(page.getByLabel('记录标题')).toBeVisible();
-    else {
-      await expect(page.getByLabel('记录标题')).toBeHidden();
-      expect((await page.getByLabel('记录内容').boundingBox())!.height).toBeLessThanOrEqual(44);
-    }
+    // An idle composer is one line; the title appears once it is in use.
+    await expect(page.getByLabel('记录标题')).toBeHidden();
+    expect((await page.getByLabel('记录内容').boundingBox())!.height).toBeLessThanOrEqual(44);
     await page.getByLabel('记录内容').focus();
     await expect(page.getByRole('button', { name: label, exact: true })).toBeVisible();
     await expect(page.locator('.assistant-launcher:visible')).toHaveCount(1);

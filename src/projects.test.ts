@@ -50,6 +50,8 @@ describe('project Markdown metadata', () => {
       summary: '说明 链接',
     });
     expect(markdownMetadata("---\ntitle: 'It''s a note'\n---\n正文").title).toBe("It's a note");
+    // Text under later headings (appended records) is set apart.
+    expect(markdownMetadata('# 今天\n\n### 09:00\n\n读书\n\n### 21:00\n\n散步').summary).toBe('读书 · 散步');
     expect(markdownMetadata('```md\n# 假标题\n```\n\n# 真标题\n\n正文')).toMatchObject({
       title: '真标题',
       status: null,

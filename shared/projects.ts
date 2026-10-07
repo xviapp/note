@@ -75,6 +75,7 @@ export function markdownMetadata(content: string) {
   let fence: { character: string; length: number } | null = null;
   let heading: string | null = null;
   let excerptLength = 0;
+  let section = false;
   const paragraphs: string[] = [];
   for (const line of body.split(/\r?\n/)) {
     const marker = line.match(/^[ \t]{0,3}(`{3,}|~{3,})(.*)$/);
@@ -94,7 +95,11 @@ export function markdownMetadata(content: string) {
     }
     const firstHeading = line.match(/^[ \t]{0,3}#[ \t]+(.+?)[ \t]*$/);
     if (!heading && firstHeading) heading = firstHeading[1].replace(/[ \t]+#+[ \t]*$/, '').trim();
-    if (excerptLength < 2048 && line.trim() && !/^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/.test(line)) {
+    // Text under a later heading (e.g. the next record) is set apart with a dot.
+    if (/^[ \t]{0,3}#{1,6}(?:[ \t]+|$)/.test(line)) section = paragraphs.length > 0;
+    else if (excerptLength < 2048 && line.trim()) {
+      if (section) paragraphs.push('·');
+      section = false;
       const snippet = line.slice(0, 2048 - excerptLength);
       paragraphs.push(snippet);
       excerptLength += snippet.length + 1;

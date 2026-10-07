@@ -6,7 +6,7 @@ import type { RecordKind } from '../../shared/records';
 import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 
 // A reusable composer for adding a block to a text note without opening its editor.
-export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onAppend, actions, onBusy, kind, label = '追加', placeholder = '记下此刻，追加到正文…' }: {
+export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onAppend, actions, onBusy, kind, label = '追加', placeholder = '记下此刻，追加到正文…', autoFocus = false }: {
   id: string;
   keyId?: string | null;
   disabled: boolean;
@@ -18,6 +18,8 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
   kind?: RecordKind;
   label?: string;
   placeholder?: string;
+  // Focus the body once a saved draft is restored.
+  autoFocus?: boolean;
 }) {
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
@@ -53,6 +55,9 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
     });
     return () => { live = false; };
   }, [draftId, customAppend]);
+  useEffect(() => {
+    if (ready && autoFocus) field.current?.focus();
+  }, [ready, autoFocus]);
   useEffect(() => {
     if (!ready) return;
     if (!title && !text) removeDraft(draftId);

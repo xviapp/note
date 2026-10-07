@@ -115,3 +115,14 @@ export function rehypeRecords(style?: RecordStyle) {
     tree.children = output;
   };
 }
+
+// Marks a leading H1 that repeats the page heading (a journal day's date) so
+// it is hidden while staying in the text that annotations anchor to.
+export function rehypeRepeatedTitle(title?: string) {
+  return (tree: Root) => {
+    if (!title) return;
+    const first = tree.children.find((node) => node.type !== 'text' || node.value.trim());
+    if (first?.type === 'element' && first.tagName === 'h1' && textOf(first).trim() === title)
+      first.properties.className = ['is-repeated-title'];
+  };
+}

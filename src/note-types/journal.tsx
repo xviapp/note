@@ -1,5 +1,5 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ChevronLeft } from 'lucide-react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { CalendarDays, ChevronLeft, ChevronRight } from 'lucide-react';
 import { variantOf } from '../../shared/types';
 import { longDate, weekday } from '../../shared/journals';
 import { JournalPanel } from '../components/JournalPanel';
@@ -29,28 +29,34 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
   }, [saved, appending, onChanged, onNavigate]);
   const draft = pending?.journalId === note?.id ? pending : null;
   if (!note) return null;
-  if (variantOf(note) === 'journal')
+  const kind = { icon: <CalendarDays size={14} className="kind-journal" />, label: '日记' };
+  if (variantOf(note) === 'journal') {
+    const day = draft && `${longDate(draft.date)} ${weekday(draft.date)}`;
+    // The template's own date heading repeats the page heading.
+    const preview = draft?.content.replace(/^\s*# (.*)(?:\n+|$)/, (all, title: string) => title.trim() === day ? '' : all);
     return {
+      ...(day ? { title: day, kind } : {}),
       headingActions: !ctx.editing && !draft && <span className="journal-heading-actions" ref={setHeadingActions} />,
       menu: !draft && <button onClick={() => setManaging(note.id)}>管理模板</button>,
       footer: !ctx.editing && draft && (
         <QuickAppend key={`journal:${note.id}:${draft.date}`} id={`journal:${note.id}:${draft.date}`}
-          keyId={note.key_id} disabled={ctx.offline} onBusy={ctx.setAppending}
+          keyId={note.key_id} disabled={ctx.offline} onBusy={ctx.setAppending} autoFocus
           onAppend={async (title, text, key) => { result.current = await recorder!(title, text, key); }}
           onSaved={() => setSaved(result.current!.node)} />
       ),
       children: !ctx.editing && (draft ? (
         <section className="journal-draft" aria-label="待记录的日记">
           <button className="text-button" disabled={ctx.appending} onClick={() => setPending(null)}><ChevronLeft size={15} />返回日历</button>
-          <p className="muted">{longDate(draft.date)}的日记尚未保存：在下方写下第一条记录后才会创建，未提交的输入保留在本设备。</p>
-          <div className="journal-draft-preview">
-            <MarkdownView content={draft.content} onNavigate={ctx.onNavigate} onImage={() => {}} safeImages />
-          </div>
+          <p className="muted">写下第一条记录后保存这篇日记。</p>
+          {preview?.trim() && <div className="journal-draft-preview">
+            <MarkdownView content={preview} onNavigate={ctx.onNavigate} onImage={() => {}} safeImages />
+          </div>}
         </section>
       ) : <JournalPanel
           id={note.id}
           headingActions={headingActions}
           managing={managing === note.id}
+          onManageTemplates={() => setManaging(note.id)}
           onCloseTemplates={() => setManaging(null)}
           refresh={ctx.refreshKey}
           offline={ctx.offline}
@@ -60,8 +66,24 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
         />
       ),
     };
-  if (note.journal_entry)
+  }
+  if (note.journal_entry) {
+    const { date, previous, next } = note.journal_entry;
+    const day = `${longDate(date)} ${weekday(date)}`;
+    const step = (entry: { id: string; date: string } | null | undefined, label: string, icon: ReactNode) => (
+      <button className="icon-button" aria-label={label} title={entry ? `${longDate(entry.date)} ${weekday(entry.date)}` : undefined}
+        disabled={!entry} onClick={() => entry && ctx.onNavigate(entry.id)}>{icon}</button>
+    );
     return {
+      title: day,
+      kind,
+      hideHeading: day,
+      headingActions: !ctx.editing && (
+        <span className="journal-steps">
+          {step(previous, '前一篇日记', <ChevronLeft size={18} />)}
+          {step(next, '后一篇日记', <ChevronRight size={18} />)}
+        </span>
+      ),
       records: 'journal',
       footer: !ctx.editing && (
         <QuickAppend id={note.id} keyId={note.key_id} kind="journal" disabled={ctx.offline}
@@ -76,5 +98,6 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
         ),
       },
     };
+  }
   return null;
 }

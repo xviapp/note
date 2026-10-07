@@ -16,6 +16,7 @@ export function NoteBody({
   onImage,
   onHeadings,
   records,
+  hideHeading,
 }: {
   note: NoteDetail;
   editing: boolean;
@@ -24,6 +25,7 @@ export function NoteBody({
   onImage: (src: string, alt: string) => void;
   onHeadings: (headings: Heading[]) => void;
   records?: RecordStyle;
+  hideHeading?: string;
 }) {
   return (
     <div className="read-content" data-version-id={note.current_version_id}>
@@ -37,6 +39,7 @@ export function NoteBody({
             onImage={onImage}
             onHeadings={onHeadings}
             records={records}
+            hideHeading={editing ? undefined : hideHeading}
           />
         ) : (
           <p className="empty-body">暂无内容。点击「编辑正文」开始编辑。</p>

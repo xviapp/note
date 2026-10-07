@@ -51,7 +51,7 @@ export function NoteLocation({
       )}
       <div className="breadcrumbs">
         <button onClick={() => onNavigate('')}>全部笔记</button>
-        {note?.breadcrumbs.map((part, index) => (
+        {note?.breadcrumbs.map((part, index) => filed(note, index) ? null : (
           <span key={part.id}>
             <ChevronRight size={13} />
             <button
@@ -68,22 +68,34 @@ export function NoteLocation({
   );
 }
 
+// A journal entry's year and month folders say nothing its own title does not.
+function filed(note: NoteDetail, index: number) {
+  if (!note.journal_entry || index === note.breadcrumbs.length - 1) return false;
+  const journal = note.breadcrumbs.findIndex((part) => part.id === note.journal_entry!.journal_id);
+  return journal >= 0 && index > journal;
+}
+
 export function NoteHeading({
   note,
   editing,
   onNew,
+  title,
+  kind,
   actions,
 }: {
   note: NoteDetail;
   editing: boolean;
   onNew: () => void;
+  // Shown instead of the note's own title and kind (e.g. a journal day).
+  title?: string;
+  kind?: { icon: ReactNode; label: string };
   actions?: ReactNode;
 }) {
   return (
     <header className="document-heading">
       <div className="document-title-row">
       <h1>
-        {note.project_category && note.metadata_title ? note.metadata_title : note.title}
+        {title ?? (note.project_category && note.metadata_title ? note.metadata_title : note.title)}
         <LockBadge keyId={note.key_id} size={18} />
       </h1>
       {actions}
@@ -91,8 +103,8 @@ export function NoteHeading({
       {/* Kind, date and New share one ruled row to keep the page top short. */}
       <div className="document-meta">
         <span className="document-kind">
-          <NodeIcon node={note} size={14} />
-          {typeLabel(note)}
+          {kind ? kind.icon : <NodeIcon node={note} size={14} />}
+          {kind ? kind.label : typeLabel(note)}
         </span>
         {note.arxiv_id ? (
           <a className="paper-source" href={note.url!} target="_blank" rel="noopener noreferrer">

@@ -68,7 +68,7 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   dialog = page.getByRole('dialog', { name: '日记模板', exact: true });
   await expect(dialog.getByText('日常回顾', { exact: true })).toBeVisible();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.locator('.document-title-row').getByRole('button', { name: '新建', exact: true }).click();
+  await page.locator('.document-title-row').getByRole('button', { name: '写今天', exact: true }).click();
   const journalId = (await created.json()).id;
   const entries = async () => (await (await page.request.get(`/api/nodes/${journalId}/journal?month=${new Date().toISOString().slice(0, 7)}`)).json()).entries;
   expect(await entries()).toHaveLength(0);
@@ -148,7 +148,7 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await expect(dialog.getByText('日常回顾', { exact: true })).toHaveCount(0);
   await expect(dialog.locator('.template-item').filter({ hasText: '仅日期标题' }).getByRole('button', { name: '已选用' })).toBeDisabled();
   await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.locator('.document-title-row').getByRole('button', { name: '今天的日记', exact: true }).click();
+  await page.locator('.document-title-row').getByRole('button', { name: '续写今天', exact: true }).click();
   await expect(page.getByText('模板保留内容', { exact: true })).toBeVisible();
   // Another device can create the day while its first record is still a local draft.
   await page.getByRole('button', { name: '返回', exact: true }).click();

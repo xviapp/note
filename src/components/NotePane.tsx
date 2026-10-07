@@ -726,6 +726,8 @@ export default function NotePane(props: Props) {
                   <NoteHeading
                     note={displayNote!}
                     editing={editing}
+                    title={typeView.title}
+                    kind={typeView.kind}
                     actions={typeView.headingActions}
                     onNew={() => props.onAction('new', note)}
                   />
@@ -737,6 +739,7 @@ export default function NotePane(props: Props) {
                     onImage={showImage}
                     onHeadings={toc.onHeadings}
                     records={typeView.records}
+                    hideHeading={typeView.hideHeading}
                   />
                   {!editing && layer.marks}
                   {typeView.below}

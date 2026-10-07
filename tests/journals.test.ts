@@ -96,7 +96,12 @@ describe('journals', () => {
     expect(first.created).toBe(true);
     expect(first.node.title).toBe('2026-09-07');
     const detail = await ok<NoteDetail>(`/api/nodes/${first.node.id}`);
-    expect(detail.journal_entry).toEqual({ date: '2026-09-07', journal_id: book.id });
+    expect(detail.journal_entry).toEqual({
+      date: '2026-09-07',
+      journal_id: book.id,
+      previous: null,
+      next: null,
+    });
     expect(detail.breadcrumbs.map((part) => part.title)).toEqual([
       '日记',
       '2026年',
@@ -110,6 +115,13 @@ describe('journals', () => {
     const month = await ok<JournalMonth>(`/api/nodes/${book.id}/journal?month=2026-09`);
     expect(month.entries.map((entry) => entry.date)).toEqual(['2026-09-07', '2026-09-08']);
     expect(month.recent[0].date).toBe('2026-09-08');
+    // An entry links to the nearest days written around it, skipping trashed ones.
+    const earlier = await write(book.id, '2026-08-30');
+    const trashed = await write(book.id, '2026-09-01');
+    await ok(`/api/nodes/${trashed.node.id}`, 'DELETE', { count: 1 });
+    const linked = (await ok<NoteDetail>(`/api/nodes/${first.node.id}`)).journal_entry!;
+    expect(linked.previous).toEqual({ id: earlier.node.id, date: '2026-08-30' });
+    expect(linked.next).toMatchObject({ date: '2026-09-08' });
     // Both days share the year and month folders.
     const years = await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${book.id}`);
     expect(years.nodes.map((node) => node.title).sort()).toEqual(['2026年', 'templates']);

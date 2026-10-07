@@ -22,7 +22,7 @@ import {
 } from './projects';
 import { sealedSize } from '../shared/encryption';
 import { hasKey, locked } from './encryption';
-import { insertJournal, journalEntryOf } from './journals';
+import { insertJournal, journalEntryOf, journalNeighbours } from './journals';
 
 // What a node is: its kind, or the kind of page a side table makes of it.
 // The first matching row wins; keep this in step with NoteVariant.
@@ -122,7 +122,8 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   const book = await bookOf(env, id);
   const page = book ? await pageInfo(env, node) : undefined;
   const discussion = book && node.parent_id && (await isDiscussion(env, id));
-  const entry = node.kind === 'markdown' ? await journalEntryOf(env, id) : null;
+  const day = node.kind === 'markdown' ? await journalEntryOf(env, id) : null;
+  const entry = day && { ...day, ...(await journalNeighbours(env, day.journal_id, day.date)) };
   const project = node.project_category && node.kind === 'markdown' ? await projectOf(env, id) : null;
   let reference: NoteDetail['reference'];
   if (node.variant === 'reference') {
