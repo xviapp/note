@@ -89,7 +89,8 @@ export function rememberClipKey(value: string | null) {
 }
 async function clipKey(refresh = false): Promise<string | null> {
   if (keyId === undefined && !refresh) keyId = (await cachedApi<ClipList>('/api/clips'))?.keyId;
-  if (keyId === undefined || refresh) keyId = (await api<ClipList>('/api/clips')).keyId;
+  if (keyId === undefined || refresh)
+    keyId = (await api<{ keyId: string | null }>('/api/clips/key')).keyId;
   return keyId;
 }
 // Plain text in the form the current setting asks for.
@@ -158,14 +159,22 @@ export function flushClips(): Promise<void> {
   });
   return flushing;
 }
+// Open lists reload once per run, however many clips it sent.
 async function sendAll() {
-  for (;;) {
-    again = false;
-    for (const item of [...outbox]) {
-      if (!outbox.some((entry) => entry.id === item.id)) continue;
-      if (!(await send(item))) return;
+  let delivered = false;
+  try {
+    for (;;) {
+      again = false;
+      for (const item of [...outbox]) {
+        if (!outbox.some((entry) => entry.id === item.id)) continue;
+        const result = await send(item);
+        if (result === 'sent') delivered = true;
+        if (result === 'stop') return;
+      }
+      if (!again) return;
     }
-    if (!again) return;
+  } finally {
+    if (delivered) sent.forEach((listener) => listener());
   }
 }
 const sent = new Set<() => void>();
@@ -174,7 +183,8 @@ export function onClipsSent(listener: () => void) {
   sent.add(listener);
   return () => void sent.delete(listener);
 }
-async function send(item: PendingClip): Promise<boolean> {
+// 'stop' when it cannot go yet, which holds back the rest.
+async function send(item: PendingClip): Promise<'sent' | 'kept' | 'stop'> {
   let current = item;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -191,10 +201,9 @@ async function send(item: PendingClip): Promise<boolean> {
         current.id,
       );
       writeOutbox(outbox.filter((entry) => entry.id !== item.id));
-      sent.forEach((listener) => listener());
-      return true;
+      return 'sent';
     } catch (error) {
-      if (uncertainFailure(error)) return false;
+      if (uncertainFailure(error)) return 'stop';
       // An image sealed for the old setting would have to be uploaded again.
       if (
         attempt === 0 &&
@@ -210,15 +219,15 @@ async function send(item: PendingClip): Promise<boolean> {
           continue;
         } catch (reason) {
           mark(item.id, (reason as Error).message);
-          return false;
+          return 'stop';
         }
       }
       // A definite refusal: keep it for the user, and go on with the rest.
       mark(item.id, (error as Error).message);
-      return true;
+      return 'kept';
     }
   }
-  return true;
+  return 'kept';
 }
 function mark(id: string, error: string) {
   writeOutbox(outbox.map((entry) => (entry.id === id ? { ...entry, error } : entry)));
@@ -268,11 +277,15 @@ export async function setClipEncryption(target: string | null, progress?: (done:
     done += batch.length;
     progress?.(done);
   }
-  for (const id of images) {
-    const plain = await plainOf(await readObject(id));
-    await writeImage(id, target ? await sealData(target, plain) : plain);
-    progress?.(++done);
-  }
+  // A few images at a time: each is read, re-sealed and written back whole.
+  const reseal = async () => {
+    for (let id = images.shift(); id; id = images.shift()) {
+      const plain = await plainOf(await readObject(id));
+      await writeImage(id, target ? await sealData(target, plain) : plain);
+      progress?.(++done);
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, images.length) }, reseal));
   // Clips still waiting here follow the new setting too.
   for (const item of outbox) {
     if (item.file || sealedTextKeyId(item.text) === target) continue;

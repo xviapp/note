@@ -2,7 +2,7 @@ import { SEALED_PREFIX, sealedSize } from './encryption';
 
 // Quick clips (随手记): short text kept outside the note tree, newest first.
 export const CLIP_CHARS = 10_000;
-// Unpinned clips past this count are dropped, oldest first.
+// Unpinned clips past this count are dropped, oldest first, by the periodic cleanup.
 export const CLIP_KEEP = 500;
 export const CLIP_PINNED = 50;
 export const CLIP_PAGE = 50;

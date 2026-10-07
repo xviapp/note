@@ -10,7 +10,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/types';
 import type { NoteNode } from '../shared/types';
-import { CLIP_KEEP, CLIP_PAGE, type Clip, type ClipList } from '../shared/clips';
+import { CLIP_KEEP, CLIP_PAGE, CLIP_PINNED, type Clip, type ClipList } from '../shared/clips';
 import type { LibraryBackup } from '../shared/backup';
 import { cleanup } from '../worker/recovery';
 import {
@@ -140,6 +140,28 @@ describe('clips', () => {
     expect((await ok<ClipList>('/api/clips')).items.map((clip) => clip.id)).toEqual([second.id]);
   });
 
+  it('stops pinning at the limit and still unpins', async () => {
+    const now = Date.now();
+    await bindings.DB.batch(
+      Array.from({ length: CLIP_PINNED }, (_, index) =>
+        bindings.DB.prepare('INSERT INTO clips(id,text,pinned,created_at) VALUES(?,?,1,?)').bind(
+          `p${index}`,
+          `置顶 ${index}`,
+          now - 1000 + index,
+        ),
+      ),
+    );
+    const extra = await add('多出来的');
+    const refused = await request(`/api/clips/${extra.id}`, 'PATCH', { pinned: true });
+    expect(refused.status).toBe(400);
+    // Pinning a pinned clip again is not a new pin.
+    expect((await ok<Clip>('/api/clips/p0', 'PATCH', { pinned: true })).pinned).toBe(true);
+    const unpinned = await ok<Clip>('/api/clips/p0', 'PATCH', { pinned: false });
+    expect(unpinned.pinned).toBe(false);
+    expect(unpinned.created_at).toBeGreaterThan(now - 1000);
+    expect((await ok<Clip>(`/api/clips/${extra.id}`, 'PATCH', { pinned: true })).pinned).toBe(true);
+  });
+
   it('refuses empty or oversized text and unknown clips', async () => {
     expect((await request('/api/clips', 'POST', { id: crypto.randomUUID(), text: ' \n ' })).status).toBe(400);
     expect(
@@ -162,8 +184,9 @@ describe('clips', () => {
     );
     await bindings.DB.batch(rows);
     await bindings.DB.prepare("UPDATE clips SET pinned=1 WHERE id='c0000'").run();
-    // A new clip trims the oldest unpinned ones; a pinned one is kept however old.
+    // Cleanup trims the oldest unpinned ones; a pinned one is kept however old.
     const latest = await add('最新');
+    await cleanup(bindings);
     const seen: string[] = [];
     let list = await ok<ClipList>('/api/clips');
     expect(list.items).toHaveLength(CLIP_PAGE);
@@ -210,6 +233,7 @@ describe('clips', () => {
       items: [{ id: plain.id, text: await sealText(key, id, '明文') }],
     });
     expect(result.remaining).toBe(0);
+    expect(await ok<{ keyId: string | null }>('/api/clips/key')).toEqual({ keyId: id });
     // A device that still thinks clips are plain learns otherwise.
     const refused = await request('/api/clips', 'POST', { id: crypto.randomUUID(), text: '新的' });
     expect(refused.status).toBe(409);

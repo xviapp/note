@@ -37,12 +37,22 @@ const clip = ({ blob_id, file_name, file_mime, file_size, file_key_id, ...row }:
 });
 const CURSOR = /^(\d{1,15})_([a-zA-Z0-9_-]{1,80})$/;
 
+const KEY = 'SELECT clip_key_id FROM site WHERE id=1';
 async function clipKey(env: Env) {
-  const row = await env.DB.prepare('SELECT clip_key_id FROM site WHERE id=1').first<{
-    clip_key_id: string | null;
-  }>();
+  const row = await env.DB.prepare(KEY).first<{ clip_key_id: string | null }>();
   return row?.clip_key_id ?? null;
 }
+// What a device needs before sealing a new clip, without the list.
+export async function getClipKey(env: Env) {
+  return { keyId: await clipKey(env) };
+}
+// Unpinned clips past CLIP_KEEP, dropped by the periodic cleanup; their
+// images are left to the blob sweep that follows.
+export const pruneClips = (env: Env) =>
+  env.DB.prepare(
+    `DELETE FROM clips WHERE pinned=0 AND id IN (
+       SELECT id FROM clips WHERE pinned=0 ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET ?)`,
+  ).bind(CLIP_KEEP);
 // Text in the form the setting asks for: sealed with the clip key, or plain.
 // A device with an old idea of the setting learns it and seals again. An
 // image may come without text.
@@ -73,15 +83,18 @@ export async function listClips(env: Env, url: URL): Promise<ClipList> {
     : env.DB.prepare(
         `${SELECT} WHERE c.pinned=0 ORDER BY c.created_at DESC,c.id DESC LIMIT ?`,
       ).bind(CLIP_PAGE + 1);
-  const [items, pinned, site] = await env.DB.batch<Row & { clip_key_id: string | null }>([
+  // Later pages leave out the pinned clips, which the first one carries.
+  const [items, site, pinned] = await env.DB.batch<Row & { clip_key_id: string | null }>([
     page,
-    env.DB.prepare(`${SELECT} WHERE c.pinned=1 ORDER BY c.created_at DESC,c.id DESC`),
-    env.DB.prepare('SELECT clip_key_id FROM site WHERE id=1'),
+    env.DB.prepare(KEY),
+    ...(cursor
+      ? []
+      : [env.DB.prepare(`${SELECT} WHERE c.pinned=1 ORDER BY c.created_at DESC,c.id DESC`)]),
   ]);
   const rows = items.results.slice(0, CLIP_PAGE);
   const last = rows.at(-1);
   return {
-    pinned: cursor ? [] : pinned.results.map(clip),
+    pinned: pinned?.results.map(clip) ?? [],
     items: rows.map(clip),
     next: items.results.length > CLIP_PAGE && last ? `${last.created_at}_${last.id}` : null,
     keyId: site.results[0]?.clip_key_id ?? null,
@@ -92,9 +105,12 @@ export async function listClips(env: Env, url: URL): Promise<ClipList> {
 // returns the clip it saved the first time.
 export async function createClip(env: Env, data: Record<string, unknown>): Promise<Clip> {
   const id = idValue(data.id);
-  const existing = await env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id).first<Row>();
-  if (existing) return clip(existing);
-  const keyId = await clipKey(env);
+  const [existing, site] = await env.DB.batch<Row & { clip_key_id: string | null }>([
+    env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
+    env.DB.prepare(KEY),
+  ]);
+  if (existing.results[0]) return clip(existing.results[0]);
+  const keyId = site.results[0]?.clip_key_id ?? null;
   const blobId = data.blobId == null ? null : idValue(data.blobId);
   const text = checkedText(data.text, keyId, !!blobId);
   if (blobId) {
@@ -111,18 +127,15 @@ export async function createClip(env: Env, data: Record<string, unknown>): Promi
       ? Math.min(now, Math.max(now - CLIP_BACKDATE, data.createdAt))
       : now;
   // The key is checked again in the write, in case the setting changed meanwhile.
-  const [inserted] = await env.DB.batch([
+  const [inserted, saved] = await env.DB.batch<Row>([
     env.DB.prepare(
       `INSERT INTO clips(id,text,key_id,source_id,pinned,created_at,blob_id)
        SELECT ?,?,?,?,0,?,? WHERE (SELECT clip_key_id FROM site WHERE id=1) IS ?
        ON CONFLICT(id) DO NOTHING RETURNING id`,
     ).bind(id, text, keyId, source, created, blobId, keyId),
-    env.DB.prepare(
-      `DELETE FROM clips WHERE pinned=0 AND id IN (
-         SELECT id FROM clips WHERE pinned=0 ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET ?)`,
-    ).bind(CLIP_KEEP),
+    env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
   ]);
-  const row = await env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id).first<Row>();
+  const row = saved.results[0];
   if (row) return clip(row);
   if (!inserted.results.length)
     throw new AppError(409, '随手记的加密设置已变化，请重试。', 'ENCRYPTION_CHANGED');
@@ -135,23 +148,20 @@ export async function updateClip(
   data: Record<string, unknown>,
 ): Promise<Clip> {
   if (typeof data.pinned !== 'boolean') throw new AppError(400, '请指定是否置顶。');
-  if (data.pinned) {
-    const count = await env.DB.prepare(
-      'SELECT COUNT(*) count FROM clips WHERE pinned=1 AND id!=?',
-    )
-      .bind(id)
-      .first<{ count: number }>();
-    if (count!.count >= CLIP_PINNED) throw new AppError(400, `最多置顶 ${CLIP_PINNED} 条。`);
-  }
-  // An unpinned clip counts as created now, so it is not dropped at once as the oldest.
-  const row = await env.DB.prepare(
-    `UPDATE clips SET pinned=?,created_at=CASE WHEN pinned=1 AND ?=0 THEN ? ELSE created_at END
-     WHERE id=? RETURNING id`,
-  )
-    .bind(data.pinned ? 1 : 0, data.pinned ? 1 : 0, Date.now(), id)
-    .first();
+  // Pinning stops at CLIP_PINNED. An unpinned clip counts as created now, so
+  // it is not dropped at once as the oldest.
+  const [updated, current] = await env.DB.batch<Row>([
+    env.DB.prepare(
+      `UPDATE clips SET pinned=?1,created_at=CASE WHEN pinned=1 AND ?1=0 THEN ?2 ELSE created_at END
+       WHERE id=?3 AND (?1=0 OR pinned=1 OR (SELECT COUNT(*) FROM clips WHERE pinned=1)<?4)
+       RETURNING id`,
+    ).bind(data.pinned ? 1 : 0, Date.now(), id, CLIP_PINNED),
+    env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
+  ]);
+  const row = current.results[0];
   if (!row) throw new AppError(404, '这条随手记不存在或已删除。');
-  return clip((await env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id).first<Row>())!);
+  if (!updated.results.length) throw new AppError(400, `最多置顶 ${CLIP_PINNED} 条。`);
+  return clip(row);
 }
 
 export async function deleteClip(env: Env, id: string) {

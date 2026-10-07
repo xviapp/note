@@ -54,6 +54,9 @@ import '../clips.css';
 const ImageViewer = lazy(() => import('./ImageViewer'));
 type Item = Clip & { pending?: PendingClip };
 const LONG = 280;
+// The server's order: newest first, then by ID.
+const newestFirst = (a: Clip, b: Clip) =>
+  b.created_at - a.created_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 
 // The image of a clip as a file of its own, decrypted here when sealed.
 async function clipFile(file: NonNullable<Clip['file']>) {
@@ -126,8 +129,7 @@ export function QuickClips({
     void flushClips();
     return onClipsSent(() => void load());
   }, [load]);
-  // The copy kept on this device shows first, then the server's answer. Both
-  // are read again when a key is unlocked or locked, which opens or hides text.
+  // The copy kept on this device shows first, then the server's answer.
   useEffect(() => {
     let live = true;
     void cachedApi<ClipList>('/api/clips').then((cached) => {
@@ -137,7 +139,7 @@ export function QuickClips({
     return () => {
       live = false;
     };
-  }, [load, keys]);
+  }, [load]);
   useEffect(() => {
     let live = true;
     void revealPending(outbox).then((items) => live && setPending(items));
@@ -148,12 +150,21 @@ export function QuickClips({
 
   const keyId = list?.keyId ?? null;
   const keyLocked = !!keyId && !isUnlocked(keyId);
+  // Text arrives opened only while its key is unlocked, so unlocking reads
+  // the list again; locking just hides what is shown.
+  const wasLocked = useRef(keyLocked);
+  useEffect(() => {
+    if (wasLocked.current && !keyLocked) void load();
+    wasLocked.current = keyLocked;
+  }, [keyLocked, load]);
   const saved = useMemo(() => {
     const waiting = new Set(outbox.map((item) => item.id));
     return [...(list?.items ?? []), ...more].filter((item) => !waiting.has(item.id));
   }, [list, more, outbox]);
+  const query = filter.trim().toLowerCase();
   const match = (item: Item) =>
-    !filter.trim() || item.text.toLowerCase().includes(filter.trim().toLowerCase());
+    !query ||
+    (!(item.key_id && !isUnlocked(item.key_id)) && item.text.toLowerCase().includes(query));
   const pinned = (list?.pinned ?? []).filter(match);
   const recent = [...pending, ...saved].filter(match);
   const total = (list?.pinned.length ?? 0) + pending.length + saved.length;
@@ -207,10 +218,26 @@ export function QuickClips({
         toast.show('复制失败，请展开后手动选择文字。');
       }
     });
+  // Pinning and deleting change the loaded lists in place rather than reading them again.
+  const without = (id: string) => {
+    setList((current) =>
+      current && {
+        ...current,
+        pinned: current.pinned.filter((entry) => entry.id !== id),
+        items: current.items.filter((entry) => entry.id !== id),
+      },
+    );
+    setMore((current) => current.filter((entry) => entry.id !== id));
+  };
   const pin = (item: Clip) =>
     run(async () => {
-      await api(`/api/clips/${item.id}`, 'PATCH', { pinned: !item.pinned });
-      await load();
+      const updated = await api<Clip>(`/api/clips/${item.id}`, 'PATCH', { pinned: !item.pinned });
+      without(item.id);
+      setList((current) => {
+        if (!current) return current;
+        const place = updated.pinned ? 'pinned' : 'items';
+        return { ...current, [place]: [updated, ...current[place]].sort(newestFirst) };
+      });
     });
   const remove = (item: Item) =>
     run(async () => {
@@ -219,8 +246,7 @@ export function QuickClips({
         return;
       }
       await api(`/api/clips/${item.id}`, 'DELETE');
-      setMore((current) => current.filter((entry) => entry.id !== item.id));
-      await load();
+      without(item.id);
       if (item.text || item.file)
         toast.show('已删除', async () => {
           await addClip(

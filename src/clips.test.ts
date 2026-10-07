@@ -135,4 +135,30 @@ describe('clip outbox', () => {
     ]);
     expect(localStorage.getItem('note-draft:clips')).toBeNull();
   });
+
+  it('reloads open lists once per run and asks only for the key', async () => {
+    api.mockImplementation(async (path: string, method = 'GET') => {
+      if (method === 'GET') return { keyId: null, pinned: [], items: [], next: null };
+      throw new ApiError('当前离线', 0, 'OFFLINE');
+    });
+    const clips = await load();
+    await clips.addClip('一');
+    await clips.addClip('二');
+    await clips.flushClips();
+    api.mockReset();
+    api.mockResolvedValue({ keyId: null });
+    const listener = vi.fn();
+    const stop = clips.onClipsSent(listener);
+    await clips.flushClips();
+    expect(posts()).toHaveLength(2);
+    expect(listener).toHaveBeenCalledTimes(1);
+    stop();
+    // An image needs the current key, not the list.
+    upload.mockResolvedValue({ id: 'img', name: 'shot.png', mime: 'image/png', size: 20 });
+    const png = new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82]);
+    await clips.addClip('', null, undefined, new File([png], 'shot.png'));
+    expect(api.mock.calls.filter(([, method]) => !method || method === 'GET').map(([path]) => path)).toEqual([
+      '/api/clips/key',
+    ]);
+  });
 });

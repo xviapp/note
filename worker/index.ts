@@ -72,6 +72,7 @@ import { journalEntry, journalMonth } from './journals';
 import {
   createClip,
   deleteClip,
+  getClipKey,
   listClips,
   replaceClipImage,
   setClipEncryption,
@@ -157,6 +158,7 @@ export default {
         return json(await cleanup(env));
       }
       if (path === '/api/clips' && method === 'GET') return json(await listClips(env, url));
+      if (path === '/api/clips/key' && method === 'GET') return json(await getClipKey(env));
       if (path === '/api/clips' && method === 'POST')
         return json(await createClip(env, await body(request)), 201);
       if (path === '/api/clips/encryption' && method === 'PUT')

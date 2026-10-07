@@ -3,6 +3,7 @@ import type { TrashBatch } from '../shared/types';
 import { AppError, integer } from './http';
 import { getNode } from './library';
 import { UNREFERENCED } from './storage';
+import { pruneClips } from './clips';
 
 export async function deletePreview(
   env: Env,
@@ -109,6 +110,7 @@ export async function cleanup(env: Env): Promise<{ removed: number }> {
     ).bind(now),
     env.DB.prepare('DELETE FROM login_attempts WHERE window_start<?').bind(now - 3600_000),
     env.DB.prepare('DELETE FROM idempotency WHERE created_at<?').bind(now - 7 * 86400_000),
+    pruneClips(env),
     env.DB.prepare(
       'DELETE FROM translations WHERE id IN (SELECT id FROM translations WHERE body_blob_id IS NULL AND locked_until<=? AND updated_at<? LIMIT 50)',
     ).bind(now, now - 7 * 86400_000),
