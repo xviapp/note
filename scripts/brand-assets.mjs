@@ -76,6 +76,7 @@ try {
 }
 run('magick', [foreground, '-background', palette.paper, '-alpha', 'remove', '-alpha', 'off', '-strip', source]);
 await mkdir(path.join(native, 'drawable-nodpi'), { recursive: true });
+run('magick', [foreground, '-strip', path.join(output, 'clay-foreground.png')]);
 run('magick', [foreground, '-strip', path.join(native, 'drawable-nodpi/brand_clay.png')]);
 for (const size of [64, 128, 180, 192, 512])
   run('magick', [

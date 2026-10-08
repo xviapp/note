@@ -8,12 +8,12 @@
 
 - `src/components/Brand.tsx`、`BootScreen.tsx`：登录、首次设置、加载页和侧栏。
 - `index.html`、`share.html`：favicon、Apple 桌面图标和安装清单。
-- `public/brand/`：64 px favicon、128 px 站内图标、180 px Apple 图标、192 / 512 px 安装图标，以及 Web App Manifest（文件名沿用 `day-` 前缀）。
+- `public/brand/`：透明黏土前景、64 px favicon、128 px 站内图标、180 px Apple 图标、192 / 512 px 安装图标，以及 Web App Manifest（文件名沿用 `day-` 前缀）。
 - `public/favicon.ico`：未读取页面图标配置的客户端兜底，包含 16 / 32 / 48 / 64 px。
 - `public/android-webview.html`：旧系统网页组件提示页。
 - `android/app/src/main/res/`：普通和圆形桌面图标共用透明黏土前景，启动画面使用同一彩色前景，单色主题图标保留独立矢量轮廓。
 
-Android 彩色前景使用 `drawable-nodpi/brand_clay.png`，内缩 16%；单色前景由 `mark.json` 的三条矢量路径生成。两者采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。系统深色模式下桌面图标不变。启动画面背景跟随 App 内选择的主题：白天米白、夜间深灰、星空深蓝；选「跟随系统」时按系统深浅色（`note_surface`）。深色背景上图标放在米白圆底上；浅色背景与圆底同为纸色，会模糊图案边缘，因此不加圆底，深绿图案直接置于米白背景。Android 13+ 通过 `SplashScreen.setSplashScreenTheme` 让系统记住所选主题，从下一次冷启动起生效；更早的版本只能跟随系统深浅色。深色模式冷启动不出现整屏亮帧。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
+Android 彩色前景使用 `drawable-nodpi/brand_clay.png`，内缩 16%；网页加载页使用同一份透明前景 `public/brand/clay-foreground.png`，也内缩 16%。单色前景由 `mark.json` 的三条矢量路径生成。两者采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。系统深色模式下桌面图标不变。启动画面背景跟随 App 内选择的主题：白天米白、夜间深灰、星空深蓝；选「跟随系统」时按系统深浅色（`note_surface`）。深色背景上图标放在米白圆底上；浅色背景不加圆底，深绿图案直接置于米白背景。Android 13+ 通过 `SplashScreen.setSplashScreenTheme` 让系统记住所选主题，从下一次冷启动起生效；更早的版本只能跟随系统深浅色。深色模式冷启动不出现整屏亮帧。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
 
 桌面图标缓存的刷新时间由系统决定；已安装的网页快捷方式是否刷新图标由浏览器及系统决定。
 

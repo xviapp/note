@@ -19,7 +19,7 @@ export function BootScreen({ error, onRetry }: { error: string; onRetry: () => v
   return (
     <div className="boot-screen">
       <div className={`boot-mark${error ? '' : ' is-loading'}`}>
-        <img src="/brand/day-192.png" width="88" height="88" alt="" draggable={false} />
+        <img src="/brand/clay-foreground.png" width="88" height="88" alt="" draggable={false} />
       </div>
       <h1 className="boot-name">页间</h1>
       {error ? (

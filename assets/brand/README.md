@@ -6,7 +6,7 @@
 - `clay.svg`：由 `mark.json` 生成的浅浮雕矢量图，加入柔和漫反射光照与短阴影，保持原有轮廓。
 - `clay-foreground.png`：Chromium 渲染的 1254 × 1254 px 透明前景；无 AI 重绘。
 - `day-original.png`：透明前景叠加奶油白 `#F8F2E8` 底，图案主色为深绿 `#426B55`。
-- `../../public/brand/` 与 `../../public/favicon.ico`：缩放打包的网页资源。
+- `../../public/brand/clay-foreground.png`：与 Android 启动画面相同的透明前景，WebView 加载页按相同的 16% 内缩显示；其余 `public/brand/` 与 `public/favicon.ico` 为带底色的缩放网页资源。
 - Android 自适应及启动画面使用透明黏土前景；单色主题图标直接使用原有三条矢量路径。
 
 运行 `npm run icons` 更新全部资源，需要 ImageMagick、Chromium 与项目已有的 Playwright（可通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定浏览器）。普通 Web / Android 构建直接使用已提交的资源。
