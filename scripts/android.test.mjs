@@ -183,6 +183,20 @@ cliTest('release refuses missing signing configuration and copies the signed bui
   }),
 );
 
+cliTest('loads release signing values from the ignored local env file', () =>
+  fixture(async ({ execute, root }) => {
+    await writeFile(
+      path.join(root, '.env'),
+      `NOTE_ANDROID_KEYSTORE="${path.join(root, 'fixture.jks')}"\nNOTE_ANDROID_STORE_PASSWORD=fixture-only\nNOTE_ANDROID_KEY_ALIAS=fixture\nNOTE_ANDROID_KEY_PASSWORD=fixture-only\n`,
+    );
+    const result = await execute([], {}, 'assembleRelease');
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.calls, [
+      { name: 'gradle', args: ['assembleRelease', '--console=plain', '-PnoteAbi=arm64-v8a'] },
+    ]);
+  }),
+);
+
 for (const [label, devices, message] of [
   ['no connected device', '', /未找到可安装设备/],
   ['multiple ready devices', 'phone-one\tdevice\nemulator-one\tdevice', /多个可用设备/],

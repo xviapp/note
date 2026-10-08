@@ -13,6 +13,7 @@ if (
 const installing = task === 'install' || task === 'installRelease';
 const release = task === 'assembleRelease' || task === 'installRelease';
 const installCommand = release ? 'install:android:release' : 'install:android';
+if (release) await loadLocalSigningConfig();
 const { values } = parseArgs({
   args: process.argv.slice(3),
   options: {
@@ -30,7 +31,7 @@ if (values.help) {
 仅构建 APK：pnpm android:apk
 正式构建 APK：pnpm build:android:release
 构建并安装正式版：pnpm install:android:release [--device <serial>]
-正式版需要配置 NOTE_ANDROID_KEYSTORE、NOTE_ANDROID_STORE_PASSWORD、NOTE_ANDROID_KEY_ALIAS、NOTE_ANDROID_KEY_PASSWORD。
+正式版签名可配置环境变量，或写入仓库根目录 .env（该文件不会提交；环境变量优先）。
 默认只构建 arm64-v8a；其他架构使用 --abi armeabi-v7a / x86_64 / x86。
 手动构建全部架构及通用包：node scripts/android.mjs assembleDebug --abi all`);
   process.exit(0);
@@ -161,4 +162,25 @@ async function run(command, args, options = {}) {
     child.on('exit', resolve);
   });
   if (code !== 0) process.exit(code || 1);
+}
+
+async function loadLocalSigningConfig() {
+  const file = process.env.NOTE_ANDROID_ENV_FILE || path.join(process.cwd(), '.env');
+  if (!existsSync(file)) return;
+  const names = new Set([
+    'NOTE_ANDROID_KEYSTORE',
+    'NOTE_ANDROID_STORE_PASSWORD',
+    'NOTE_ANDROID_KEY_ALIAS',
+    'NOTE_ANDROID_KEY_PASSWORD',
+  ]);
+  const contents = await readFile(file, 'utf8');
+  for (const line of contents.split(/\r?\n/)) {
+    const match = line.match(/^\s*(NOTE_ANDROID_[A-Z_]+)\s*=\s*(.*?)\s*$/);
+    if (!match || !names.has(match[1]) || process.env[match[1]]) continue;
+    let value = match[2];
+    if ((value.startsWith('"') && value.endsWith('"')) || (value.startsWith("'") && value.endsWith("'")))
+      value = value.slice(1, -1);
+    if (value.startsWith('~/')) value = path.join(homedir(), value.slice(2));
+    process.env[match[1]] = value;
+  }
 }
