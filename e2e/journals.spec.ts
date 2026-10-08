@@ -103,7 +103,6 @@ test('journal calendar and quick append work in all themes', async ({ page }, te
   }
   await page.getByRole('button', { name: '返回', exact: true }).click();
   // Another device can create the day while its first record is still a local draft.
-  await page.getByRole('button', { name: '返回', exact: true }).click();
   const yesterday = await page.evaluate(() => {
     const date = new Date();
     date.setDate(date.getDate() - 1);

@@ -3,7 +3,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, PenLine, Plus } from 'lucide-react';
 import { api } from '../api';
 import {
-  defaultEntry,
   localDate,
   longDate,
   weekday,
@@ -47,7 +46,7 @@ export function JournalPanel({
   refresh: number;
   headingActions: HTMLElement | null;
   onNavigate: (id: string) => void;
-  onPrepare: (date: string, content: string) => void;
+  onPrepare: (date: string) => void;
 }) {
   const today = localDate();
   const [month, setMonth] = useState(today.slice(0, 7));
@@ -79,7 +78,7 @@ export function JournalPanel({
     try {
       const draft = await readDraft(`append:journal:${id}:${date}`);
       if (known && !draft) return onNavigate(known.id);
-      onPrepare(date, defaultEntry(date));
+      onPrepare(date);
     } catch (reason) {
       setError((reason as Error).message);
     } finally {

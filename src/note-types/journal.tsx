@@ -4,7 +4,6 @@ import { variantOf } from '../../shared/types';
 import { longDate, weekday } from '../../shared/journals';
 import { JournalPanel } from '../components/JournalPanel';
 import { QuickAppend } from '../components/QuickAppend';
-import { MarkdownView } from '../components/LazyMarkdown';
 import { createJournalRecorder } from '../journal-record';
 import type { NoteNode } from '../../shared/types';
 import type { TypeContext, TypeView } from './view';
@@ -13,9 +12,9 @@ import type { TypeContext, TypeView } from './view';
 // day (see worker/journals.ts).
 export function useJournalView(ctx: TypeContext): TypeView | null {
   const [headingActions, setHeadingActions] = useState<HTMLSpanElement | null>(null);
-  const [pending, setPending] = useState<{ journalId: string; date: string; content: string } | null>(null);
+  const [pending, setPending] = useState<{ journalId: string; date: string } | null>(null);
   const result = useRef<{ node: NoteNode; created: boolean } | null>(null);
-  const recorder = useMemo(() => pending && createJournalRecorder(pending.journalId, pending.date, pending.content), [pending]);
+  const recorder = useMemo(() => pending && createJournalRecorder(pending.journalId, pending.date), [pending]);
   const [saved, setSaved] = useState<NoteNode | null>(null);
   const { note, appending, onChanged, onNavigate } = ctx;
   // Navigation must wait for the append leave guard to be released.
@@ -31,8 +30,6 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
   const kind = { icon: <CalendarDays size={14} className="kind-journal" />, label: '日记' };
   if (variantOf(note) === 'journal') {
     const day = draft && `${longDate(draft.date)} ${weekday(draft.date)}`;
-    // The date heading repeats the page heading.
-    const preview = draft?.content.replace(/^\s*# (.*)(?:\n+|$)/, (all, title: string) => title.trim() === day ? '' : all);
     return {
       ...(day ? { title: day, kind } : {}),
       headingActions: !ctx.editing && !draft && <span className="journal-heading-actions" ref={setHeadingActions} />,
@@ -46,16 +43,13 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
         <section className="journal-draft" aria-label="待记录的日记">
           <button className="text-button" disabled={ctx.appending} onClick={() => setPending(null)}><ChevronLeft size={15} />返回日历</button>
           <p className="muted">写下第一条记录后保存这篇日记。</p>
-          {preview?.trim() && <div className="journal-draft-preview">
-            <MarkdownView content={preview} onNavigate={ctx.onNavigate} onImage={() => {}} safeImages />
-          </div>}
         </section>
       ) : <JournalPanel
           id={note.id}
           headingActions={headingActions}
           refresh={ctx.refreshKey}
           onNavigate={ctx.onNavigate}
-          onPrepare={(date, content) => setPending({ journalId: note.id, date, content })}
+          onPrepare={(date) => setPending({ journalId: note.id, date })}
         />
       ),
     };

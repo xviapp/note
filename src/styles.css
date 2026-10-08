@@ -4517,14 +4517,6 @@ select.status-select.status-unknown {
   margin: 8px 0 16px;
   font-size: 13px;
 }
-.journal-draft-preview > .markdown-body > :first-child {
-  margin-top: 12px;
-}
-.journal-draft-preview {
-  padding: 4px 16px;
-  border: 1px dashed var(--line);
-  border-radius: 6px;
-}
 .quick-append-footer {
   container-type: inline-size;
   flex-shrink: 0;

@@ -1,17 +1,18 @@
 import { api } from './api';
 import { createNoteAppender } from './append-note';
 import { appendRecord } from '../shared/records';
+import { defaultEntry } from '../shared/journals';
 import type { NoteNode } from '../shared/types';
 
-// The first record and template are saved together. If another device wrote
+// The first record and date heading are saved together. If another device wrote
 // this day meanwhile, append to that entry without replacing its contents.
-export function createJournalRecorder(journalId: string, date: string, template: string) {
+export function createJournalRecorder(journalId: string, date: string) {
   let existing: { id: string; key: string; append: ReturnType<typeof createNoteAppender> } | null = null;
   return async (title: string, text: string, key: string) => {
     if (!text.trim()) throw new Error('请先输入内容。');
     const result = await api<{ node: NoteNode; created: boolean }>(
       `/api/nodes/${journalId}/journal/entries`, 'POST',
-      { date, content: appendRecord(template, 'journal', title, text) }, key,
+      { date, content: appendRecord(defaultEntry(date), 'journal', title, text) }, key,
     );
     if (!result.created) {
       if (existing?.id !== result.node.id || existing.key !== key)
