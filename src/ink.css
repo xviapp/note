@@ -1,0 +1,93 @@
+:root[data-ink='true'] {
+  --hover: #eeeeee;
+  --selected: #dddddd;
+  --blue: #000000;
+  --focus: #000000;
+  --focus-ring: #000000;
+  --button-bg: #000000;
+  --button-hover: #333333;
+  --button-ink: #ffffff;
+  --danger: #000000;
+  --danger-bg: #ffffff;
+  --danger-line: #000000;
+  --warning: #000000;
+  --warning-bg: #ffffff;
+  --warning-line: #000000;
+  --favorite: #000000;
+  --success: #000000;
+  --shadow-soft: transparent;
+  --shadow-strong: transparent;
+  --shadow-popover: none;
+  --star-pattern: none;
+}
+
+:root[data-ink='true'] *,
+:root[data-ink='true'] *::before,
+:root[data-ink='true'] *::after {
+  animation: none !important;
+  transition: none !important;
+  scroll-behavior: auto !important;
+  backdrop-filter: none !important;
+  box-shadow: none !important;
+  text-shadow: none !important;
+}
+
+.ink-page-controls {
+  align-self: flex-end;
+  flex-shrink: 0;
+  padding: 8px 12px;
+  display: flex;
+  gap: 8px;
+  z-index: 5;
+}
+
+.ink-page-controls .button {
+  min-height: 44px;
+  background: var(--surface);
+  border: 1px solid var(--ink);
+}
+
+.settings-section .ink-setting {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  width: 100%;
+  text-align: left;
+}
+
+.ink-setting input[role='switch'] {
+  appearance: none;
+  position: relative;
+  width: 44px;
+  height: 26px;
+  min-height: 26px;
+  padding: 3px;
+  margin: 0;
+  border: 1px solid var(--line-strong);
+  border-radius: 20px;
+  background: var(--surface);
+  cursor: pointer;
+}
+
+.ink-setting input[role='switch']::before {
+  content: '';
+  display: block;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--muted);
+}
+
+.ink-setting input[role='switch']:checked {
+  background: var(--button-bg);
+}
+
+.ink-setting input[role='switch']:checked::before {
+  transform: translateX(18px);
+  background: var(--button-ink);
+}
+
+:root[data-ink='true'] .theme-swatch {
+  filter: grayscale(1);
+}

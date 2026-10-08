@@ -2,6 +2,7 @@ import { AssistantPanel, type AssistantHandle } from './components/AssistantPane
 import type { AssistantMode } from './components/AssistantWindow';
 import { usePullRefresh } from './use-pull-refresh';
 import { Capacitor } from '@capacitor/core';
+import { useTheme } from './theme';
 import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import {
   BookOpen,
@@ -171,6 +172,15 @@ function Notebook({
   onCheckSession: () => Promise<boolean>;
 }) {
   const android = Capacitor.getPlatform() === 'android';
+  const { ink } = useTheme();
+  const [wide, setWide] = useState(() => window.matchMedia('(min-width: 1000px)').matches);
+  useEffect(() => {
+    const media = window.matchMedia('(min-width: 1000px)');
+    const update = () => setWide(media.matches);
+    media.addEventListener('change', update);
+    return () => media.removeEventListener('change', update);
+  }, []);
+  const phoneShell = android && !(ink && wide);
   const treeExpansion = useRef(new Set<string>());
   const [globalOpen, setGlobalOpen] = useState(false);
   const [globalSelection, setGlobalSelection] = useState('');
@@ -231,7 +241,7 @@ function Notebook({
   const pullRefresh = usePullRefresh(
     navigation.scroll,
     navigation.key,
-    android && !selected && (view === 'tree' || view === 'favorites'),
+    phoneShell && !ink && !selected && (view === 'tree' || view === 'favorites'),
     refreshLibrary,
     report,
   );
@@ -474,7 +484,12 @@ function Notebook({
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
     setForm({
-      parent: loaded && noteType(loaded).container && !(loaded.kind === 'markdown' && (loaded.project_category || navigation.route.project)) ? loaded.id : loaded?.parent_id || null,
+      parent:
+        loaded &&
+        noteType(loaded).container &&
+        !(loaded.kind === 'markdown' && (loaded.project_category || navigation.route.project))
+          ? loaded.id
+          : loaded?.parent_id || null,
     });
   };
   shortcuts.current.newNode = () => void newNode();
@@ -491,7 +506,7 @@ function Notebook({
   };
   return (
     <div
-      className={`app-shell ${android ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
+      className={`app-shell ${phoneShell ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
     >
       <ShareImport
         onImported={(nodes) => {
@@ -502,7 +517,7 @@ function Notebook({
         }}
         onClipped={() => toast.show('已存入随手记')}
       />
-      {!android && (
+      {!phoneShell && (
         <>
           <button
             className="sidebar-scrim"
@@ -534,7 +549,7 @@ function Notebook({
             view={view}
             section={settingsSection}
             showBack={subpage}
-            showMenu={!android}
+            showMenu={!phoneShell}
             menuOpen={mobileOpen}
             onBack={navigation.back}
             onMenu={openSidebar}
@@ -595,7 +610,7 @@ function Notebook({
                   projectContext={navigation.route.project}
                   refresh={detailRevision}
                   treeRefresh={revision}
-                  showSidebar={!android}
+                  showSidebar={!phoneShell}
                   globalAssistantOpen={globalOpen}
                   onGlobalAssistant={(selection) => {
                     setGlobalSelection(selection);
@@ -644,7 +659,7 @@ function Notebook({
                       回收站
                     </button>
                   </nav>
-                  {android ? (
+                  {phoneShell ? (
                     <Tree
                       refresh={revision}
                       onRefresh={refreshLibrary}

@@ -4,6 +4,7 @@ import { api, formatBytes } from '../api';
 import { type AuthStatus, type StorageInfo } from '../../shared/types';
 import { Modal, Spinner } from './Primitives';
 import { ThemeChoices } from './ThemePicker';
+import { setInkMode, useTheme } from '../theme';
 import { MIN_PASSWORD_LENGTH, preparePassword } from '../../shared/password';
 import { AiSettings } from './AiSettings';
 import { EncryptionSettings } from './Encryption';
@@ -35,6 +36,7 @@ export function Settings({
   onLogout: (all?: boolean) => Promise<void>;
   onError: (e: unknown) => void;
 }) {
+  const { ink } = useTheme();
   const [quota, setQuota] = useState(String((storage?.quotaBytes || 8e9) / 1e9)),
     [busy, setBusy] = useState(false),
     [passwordOpen, setPasswordOpen] = useState(false);
@@ -65,6 +67,20 @@ export function Settings({
             外观
           </h2>
           <ThemeChoices />
+          <label className="setting-row ink-setting">
+            <div>
+              <strong>墨水屏模式</strong>
+              <p>黑白高对比，关闭动效，减少回复刷新。仅在当前设备生效。</p>
+            </div>
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label="墨水屏模式"
+              checked={ink}
+              onChange={(event) => setInkMode(event.target.checked)}
+            />
+          </label>
+          {ink && <p className="field-hint">关闭墨水屏模式后恢复原来的主题。</p>}
         </section>
       )}
       {section === 'reading' && (

@@ -7,6 +7,7 @@ import './styles.css';
 import './assistant.css';
 import './themes.css';
 import './shell.css';
+import './ink.css';
 import { prepareOfflineShell } from './offline-shell';
 import { installSealedDownloads } from './sealed-download';
 async function start() {

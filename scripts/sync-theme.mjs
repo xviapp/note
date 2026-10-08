@@ -50,7 +50,9 @@ const css =
     pressed: theme.interaction.pressedOpacity,
   }) +
   '\n' +
-  rules(':root[data-theme="dark"]', values(dark));
+  rules(':root[data-theme="dark"]', values(dark)) +
+  '\n' +
+  rules(':root[data-ink="true"]', values(theme.inkPalette));
 const target = new URL('../src/family-tokens.css', import.meta.url);
 if (process.argv.includes('--write')) writeFileSync(target, css);
 else if (readFileSync(target, 'utf8') !== css) {

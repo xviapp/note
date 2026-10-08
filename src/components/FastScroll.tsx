@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
+import { useTheme } from '../theme';
 
 // Phones only show a thin overlay scrollbar that cannot be dragged. Long
 // documents get a handle on the right edge that appears while scrolling and
@@ -18,6 +19,7 @@ export function FastScroll({
   target: RefObject<HTMLElement | null>;
   onInteract?: () => void;
 }) {
+  const { ink } = useTheme();
   const handle = useRef<HTMLDivElement>(null);
   const [enabled] = useState(coarsePointer);
   const [visible, setVisible] = useState(false);
@@ -28,7 +30,7 @@ export function FastScroll({
 
   useEffect(() => {
     const element = target.current;
-    if (!enabled || !element) return;
+    if (ink || !enabled || !element) return;
     let timer: ReturnType<typeof setTimeout> | undefined;
     let shown = false;
     const show = (value: boolean) => {
@@ -72,8 +74,30 @@ export function FastScroll({
       resize.disconnect();
       delete document.documentElement.dataset.fastScroll;
     };
-  }, [enabled, target]);
+  }, [enabled, target, ink]);
 
+  if (ink)
+    return (
+      <nav className="ink-page-controls" aria-label="阅读翻屏">
+        {([-1, 1] as const).map((direction) => (
+          <button
+            key={direction}
+            className="button"
+            onClick={() => {
+              const element = target.current;
+              if (!element) return;
+              onInteract?.();
+              element.scrollBy({
+                top: direction * Math.max(1, element.clientHeight - 48),
+                behavior: 'instant',
+              });
+            }}
+          >
+            {direction === -1 ? '上一屏' : '下一屏'}
+          </button>
+        ))}
+      </nav>
+    );
   if (!enabled) return null;
   const seek = (clientY: number) => {
     const element = target.current;

@@ -1,5 +1,11 @@
 export type ThemeMode = 'system' | 'light' | 'dark' | 'oled';
 
+export const inkPalette = {
+  canvas: '#ffffff', surface: '#ffffff', surfaceRaised: '#ffffff', surfaceSoft: '#ffffff',
+  text: '#000000', textMuted: '#333333', border: '#777777', controlBorder: '#000000',
+  overlay: 'rgba(255, 255, 255, 0.85)',
+};
+
 export interface Palette {
   canvas: string;
   surface: string;

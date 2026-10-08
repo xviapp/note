@@ -96,8 +96,14 @@ export function installMobile() {
   const theme = () =>
     void device
       .setBackground({
-        color: getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
-        preference: document.documentElement.dataset.themePreference || 'system',
+        color:
+          document.documentElement.dataset.ink === 'true'
+            ? '#ffffff'
+            : getComputedStyle(document.documentElement).getPropertyValue('--surface').trim(),
+        preference:
+          document.documentElement.dataset.ink === 'true'
+            ? 'light'
+            : document.documentElement.dataset.themePreference || 'system',
       })
       .catch(() => {});
   theme();
@@ -105,7 +111,7 @@ export function installMobile() {
   // Reapplying native appearance on resize can feed back into window layout.
   new MutationObserver(theme).observe(document.documentElement, {
     attributes: true,
-    attributeFilter: ['data-theme', 'data-theme-preference'],
+    attributeFilter: ['data-theme', 'data-theme-preference', 'data-ink'],
   });
   const open = (url: URL) => (isFile(url) ? download(url) : device.openExternal({ url: url.href }));
   window.addEventListener('note:open-link', (event) => {
