@@ -1,10 +1,12 @@
 # 页间图标来源
 
-图标由书页、木杖与叶片三条矢量轮廓组成，暖米白底色，所有主题共用。
+图标由书页、木杖与叶片三条矢量轮廓组成，奶油白底色与深绿哑光黏土浅浮雕，所有主题共用。
 
 - `mark.json`：统一的矢量源数据。`staff` 与 `leaf` 原样复制自提交 `5fa03c8` 的 `android/app/src/main/res/drawable/ic_launcher_foreground.xml` 第 1、2 条路径；`pages` 原样复制自提交 `6dbe7bf` 同一文件的第 3 条路径。路径坐标单位为原稿像素的十分之一，`staffOffsetX: 940` 让木杖与叶片整体向右平移 94 px，与书页凹口对齐，保持原始大小、比例和曲线。
-- `day-original.png`：由 `mark.json` 导出的 1254 × 1254 px 源图，暖米白 `#F9F2E7` 底、柔和深绿 `#426B55` 图案。
+- `clay.svg`：由 `mark.json` 生成的浅浮雕矢量图，加入柔和漫反射光照与短阴影，保持原有轮廓。
+- `clay-foreground.png`：Chromium 渲染的 1254 × 1254 px 透明前景；无 AI 重绘。
+- `day-original.png`：透明前景叠加奶油白 `#F8F2E8` 底，图案主色为深绿 `#426B55`。
 - `../../public/brand/` 与 `../../public/favicon.ico`：缩放打包的网页资源。
-- Android 自适应、单色主题图标及启动画面：直接使用同一组矢量路径。
+- Android 自适应及启动画面使用透明黏土前景；单色主题图标直接使用原有三条矢量路径。
 
-运行 `npm run icons` 更新全部资源，需要 ImageMagick。普通 Web / Android 构建直接使用已提交的资源。
+运行 `npm run icons` 更新全部资源，需要 ImageMagick、Chromium 与项目已有的 Playwright（可通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定浏览器）。普通 Web / Android 构建直接使用已提交的资源。
