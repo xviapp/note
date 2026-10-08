@@ -2,10 +2,8 @@ import { createPortal } from 'react-dom';
 import { useEffect, useMemo, useState } from 'react';
 import { ChevronLeft, ChevronRight, PenLine, Plus } from 'lucide-react';
 import { api } from '../api';
-import type { NoteDetail } from '../../shared/types';
 import {
   defaultEntry,
-  fillTemplate,
   localDate,
   longDate,
   weekday,
@@ -14,7 +12,6 @@ import {
 } from '../../shared/journals';
 import { hasDraft, readDraft } from '../note-drafts';
 import { Spinner } from './Primitives';
-import { JournalTemplates } from './JournalTemplates';
 
 const WEEK = ['一', '二', '三', '四', '五', '六', '日'];
 const shift = (month: string, by: number) => {
@@ -37,51 +34,26 @@ function shortDate(date: string, today: string) {
   const [year, month, day] = date.split('-').map(Number);
   return `${date.slice(0, 4) === today.slice(0, 4) ? '' : `${year}年`}${month}月${day}日`;
 }
-const templateKey = (id: string) => `journal-template:${id}`;
-function savedTemplate(id: string) {
-  try {
-    return localStorage.getItem(templateKey(id)) || '';
-  } catch {
-    return '';
-  }
-}
-
 // A journal's calendar: a day with an entry opens it, an empty day (up to
-// today) previews the chosen template without creating a note.
+// today) prepares a new note without creating it until the first record.
 export function JournalPanel({
   id,
   refresh,
   headingActions,
-  managing,
-  onManageTemplates,
-  onCloseTemplates,
-  offline,
   onNavigate,
   onPrepare,
-  onChanged,
 }: {
   id: string;
   refresh: number;
   headingActions: HTMLElement | null;
-  managing: boolean;
-  onManageTemplates: () => void;
-  onCloseTemplates: () => void;
-  offline: boolean;
   onNavigate: (id: string) => void;
   onPrepare: (date: string, content: string) => void;
-  onChanged: () => void;
 }) {
   const today = localDate();
   const [month, setMonth] = useState(today.slice(0, 7));
   const [data, setData] = useState<JournalMonth | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState('');
-  const [template, setTemplate] = useState(() => savedTemplate(id));
-  const selectTemplate = (value: string) => {
-    setTemplate(value);
-    try { localStorage.setItem(templateKey(id), value); }
-    catch { /* Optional preference. */ }
-  };
   useEffect(() => {
     let live = true;
     setError('');
@@ -100,7 +72,6 @@ export function JournalPanel({
     () => new Map((data?.month === month ? data.entries : []).map((entry) => [entry.date, entry])),
     [data, month],
   );
-  const chosen = data?.templates.find((item) => item.id === template) ?? null;
   const write = async (date: string) => {
     const known = entries.get(date) ?? data?.recent.find((entry) => entry.date === date);
     setBusy(date);
@@ -108,13 +79,7 @@ export function JournalPanel({
     try {
       const draft = await readDraft(`append:journal:${id}:${date}`);
       if (known && !draft) return onNavigate(known.id);
-      let content = defaultEntry(date);
-      if (chosen) {
-        const source = await api<NoteDetail>(`/api/nodes/${chosen.id}`);
-        if (source.locked) throw new Error('模板已加密，请先解锁。');
-        content = fillTemplate(source.content, date);
-      }
-      onPrepare(date, content);
+      onPrepare(date, defaultEntry(date));
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
@@ -201,11 +166,6 @@ export function JournalPanel({
               ))}
             </tbody>
           </table>
-          {data && (
-            <button className="text-button journal-template" onClick={onManageTemplates}>
-              模板：{chosen ? chosen.title.replace(/\.md$/i, '') : '仅日期标题'}
-            </button>
-          )}
           {busy && <Spinner label="正在打开日记…" />}
           {error && (
             <p className="inline-error" role="alert">
@@ -233,12 +193,6 @@ export function JournalPanel({
           </section>
         )}
       </div>
-      {managing && data && <JournalTemplates journalId={id} data={data} selected={chosen?.id ?? ''}
-        offline={offline} onSelect={selectTemplate} onClose={onCloseTemplates}
-        onChanged={async () => {
-          setData(await api<JournalMonth>(`/api/nodes/${id}/journal?month=${month}`));
-          onChanged();
-        }} />}
     </section>
   );
 }

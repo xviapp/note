@@ -203,7 +203,7 @@ export function NodeForm({
         )}
         {kind === 'journal' && !node && (
           <p className="field-hint">
-            按日历写日记，每天一篇，自动放入年、月目录。templates 目录中的 Markdown 文件作为模板。
+            按日历写日记，每天一篇，自动放入年、月目录。
           </p>
         )}
         {kind === 'reference' && !node && (

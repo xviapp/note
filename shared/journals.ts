@@ -1,6 +1,5 @@
 // Journals: a folder with one Markdown note per day, filed in year and month
-// folders. Templates are the Markdown notes in its `templates` folder.
-export const TEMPLATES_FOLDER = 'templates';
+// folders.
 export const RECENT_ENTRIES = 10;
 
 export interface JournalEntry {
@@ -10,17 +9,11 @@ export interface JournalEntry {
   // The first paragraph (sealed for an encrypted journal; the device opens it).
   excerpt: string | null;
 }
-export interface JournalTemplate {
-  id: string;
-  title: string;
-}
 export interface JournalMonth {
   // YYYY-MM
   month: string;
   entries: JournalEntry[];
   recent: JournalEntry[];
-  templates: JournalTemplate[];
-  templateFolderId: string | null;
 }
 
 const WEEKDAYS = ['星期日', '星期一', '星期二', '星期三', '星期四', '星期五', '星期六'];
@@ -55,20 +48,4 @@ export function longDate(date: string): string {
 export const yearFolder = (date: string) => `${parts(date)[0]}年`;
 export const monthFolder = (date: string) => `${parts(date)[1]}月`;
 
-// A template filled in for a day. Placeholders: {{date}} 2026-10-07,
-// {{日期}} 2026年10月7日, {{星期}} 星期三, {{year}} {{month}} {{day}}.
-export function fillTemplate(template: string, date: string): string {
-  const [year, month, day] = parts(date);
-  const values: Record<string, string> = {
-    date,
-    日期: longDate(date),
-    星期: weekday(date),
-    year: String(year),
-    month: String(month),
-    day: String(day),
-  };
-  return template.replace(/\{\{\s*([^{}\s]+)\s*\}\}/g, (all, name: string) =>
-    Object.hasOwn(values, name) ? values[name] : all,
-  );
-}
 export const defaultEntry = (date: string) => `# ${longDate(date)} ${weekday(date)}\n\n`;

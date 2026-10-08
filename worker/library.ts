@@ -348,7 +348,7 @@ export async function createNode(
   ];
   if (book) statements.push(insertBook(env, id, book));
   if (project) statements.push(...insertProject(env, id, now));
-  if (journal) statements.push(...insertJournal(env, id, now));
+  if (journal) statements.push(...insertJournal(env, id));
   if (reference)
     statements.push(
       env.DB.prepare('INSERT INTO node_references(node_id,target_id) VALUES(?,?)').bind(

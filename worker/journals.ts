@@ -4,26 +4,18 @@ import {
   isJournalMonth,
   monthFolder,
   RECENT_ENTRIES,
-  TEMPLATES_FOLDER,
   weekday,
   yearFolder,
   type JournalEntry,
   type JournalMonth,
-  type JournalTemplate,
 } from '../shared/journals';
 import { AppError, idValue } from './http';
 import { createNode, getNode, priorOperation } from './library';
 import type { Env } from './types';
 
-// A new journal: its row and the folder its templates go in.
-export function insertJournal(env: Env, id: string, now: number): D1PreparedStatement[] {
-  return [
-    env.DB.prepare('INSERT INTO journals(node_id) VALUES(?)').bind(id),
-    env.DB.prepare(
-      `INSERT INTO nodes(id,parent_id,kind,title,position,revision,created_at,updated_at)
-       VALUES(?,?,'folder',?,0,1,?,?)`,
-    ).bind(crypto.randomUUID(), id, TEMPLATES_FOLDER, now, now),
-  ];
+// A new journal: only its metadata row. Entry folders are created on demand.
+export function insertJournal(env: Env, id: string): D1PreparedStatement[] {
+  return [env.DB.prepare('INSERT INTO journals(node_id) VALUES(?)').bind(id)];
 }
 async function requireJournal(env: Env, id: string) {
   const node = await getNode(env, id);
@@ -49,29 +41,18 @@ export async function journalMonth(env: Env, id: string, url: URL): Promise<Jour
   await requireJournal(env, id);
   const month = url.searchParams.get('month') || '';
   if (!isJournalMonth(month)) throw new AppError(400, '月份不正确。');
-  const [entries, recent, templates, templateFolders] = await env.DB.batch<Record<string, unknown>>([
+  const [entries, recent] = await env.DB.batch<Record<string, unknown>>([
     env.DB.prepare(
       `${BELOW} SELECT ${ENTRY_COLUMNS} WHERE e.journal_id=? AND e.date LIKE ? ORDER BY e.date`,
     ).bind(id, id, `${month}-%`),
     env.DB.prepare(
       `${BELOW} SELECT ${ENTRY_COLUMNS} WHERE e.journal_id=? ORDER BY e.date DESC LIMIT ?`,
     ).bind(id, id, RECENT_ENTRIES),
-    env.DB.prepare(
-      `SELECT t.id,t.title FROM nodes f JOIN nodes t ON t.parent_id=f.id
-       WHERE f.parent_id=? AND f.kind='folder' AND f.trash_id IS NULL AND lower(trim(f.title))=?
-       AND t.kind='markdown' AND t.trash_id IS NULL ORDER BY t.position,t.id`,
-    ).bind(id, TEMPLATES_FOLDER),
-    env.DB.prepare(
-      `SELECT id FROM nodes WHERE parent_id=? AND kind='folder' AND trash_id IS NULL
-       AND lower(trim(title))=? ORDER BY position,id LIMIT 1`,
-    ).bind(id, TEMPLATES_FOLDER),
   ]);
   return {
     month,
     entries: entries.results as unknown as JournalEntry[],
     recent: recent.results as unknown as JournalEntry[],
-    templates: templates.results as unknown as JournalTemplate[],
-    templateFolderId: (templateFolders.results[0]?.id as string | undefined) ?? null,
   };
 }
 
@@ -113,8 +94,8 @@ async function folder(env: Env, parent: string, title: string, key: string): Pro
   return (await createNode(env, { kind: 'folder', title, parentId: parent }, key)).id;
 }
 // The day's entry: the one already written, or a new note filed in its year
-// and month folders. The device sends the body (from a template, sealed in
-// an encrypted journal); a repeated request returns the same note.
+// and month folders. The device sends the body, sealed in an encrypted
+// journal; a repeated request returns the same note.
 export async function journalEntry(
   env: Env,
   id: string,

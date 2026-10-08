@@ -10,7 +10,6 @@ import worker from '../worker/index';
 import type { Env } from '../worker/types';
 import type { NoteDetail, NoteNode } from '../shared/types';
 import type { JournalMonth } from '../shared/journals';
-import { fillTemplate } from '../shared/journals';
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -124,7 +123,7 @@ describe('journals', () => {
     expect(linked.next).toMatchObject({ date: '2026-09-08' });
     // Both days share the year and month folders.
     const years = await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${book.id}`);
-    expect(years.nodes.map((node) => node.title).sort()).toEqual(['2026年', 'templates']);
+    expect(years.nodes.map((node) => node.title)).toEqual(['2026年']);
   });
   it('refuses future days and frees a day whose entry was trashed', async () => {
     const book = await journal();
@@ -142,22 +141,5 @@ describe('journals', () => {
     const second = await write(book.id, '2026-03-01');
     expect(second.created).toBe(true);
     expect(second.node.id).not.toBe(first.node.id);
-  });
-  it('lists templates and fills them in', async () => {
-    const book = await journal();
-    const folders = await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${book.id}`);
-    const templates = folders.nodes.find((node) => node.title === 'templates')!;
-    await ok('/api/nodes', 'POST', {
-      kind: 'markdown',
-      parentId: templates.id,
-      title: '每日.md',
-      content: '# {{日期}} {{星期}}\n\n## 今天做了什么',
-    });
-    const month = await ok<JournalMonth>(`/api/nodes/${book.id}/journal?month=2026-09`);
-    expect(month.templates.map((item) => item.title)).toEqual(['每日.md']);
-    expect(month.templateFolderId).toBe(templates.id);
-    expect(fillTemplate('# {{日期}} {{星期}} {{unknown}}', '2026-10-07')).toBe(
-      '# 2026年10月7日 星期三 {{unknown}}',
-    );
   });
 });

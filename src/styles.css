@@ -4623,41 +4623,6 @@ select.status-select.status-unknown {
 .quick-append .inline-error {
   margin: 6px 0 0;
 }
-.template-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  flex-wrap: wrap;
-  gap: 8px;
-  padding: 8px 0;
-  border-bottom: 1px solid var(--line);
-}
-.template-item strong {
-  overflow-wrap: anywhere;
-}
-.template-item > div, .template-tokens {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  gap: 8px;
-}
-.template-tokens {
-  font-size: 13px;
-  color: var(--muted);
-}
-.template-editor {
-  min-height: 240px;
-  max-height: 45dvh;
-  overflow: auto;
-  border: 1px solid var(--line);
-  border-radius: 6px;
-}
-.template-editor .cm-editor {
-  min-height: 240px;
-}
-.template-editor > .markdown-body {
-  padding: 12px;
-}
 @media (max-width: 760px) {
   .quick-append-footer {
     padding-inline: 12px;
@@ -4731,11 +4696,6 @@ select.status-select.status-unknown {
   margin-left: -2.5px;
   border-radius: 50%;
   background: var(--blue);
-}
-.journal-template {
-  margin-top: 10px;
-  color: var(--muted);
-  font-size: 13px;
 }
 .journal-recent h3 {
   margin: 20px 0 4px;

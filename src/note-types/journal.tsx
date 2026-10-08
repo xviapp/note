@@ -13,7 +13,6 @@ import type { TypeContext, TypeView } from './view';
 // day (see worker/journals.ts).
 export function useJournalView(ctx: TypeContext): TypeView | null {
   const [headingActions, setHeadingActions] = useState<HTMLSpanElement | null>(null);
-  const [managing, setManaging] = useState<string | null>(null);
   const [pending, setPending] = useState<{ journalId: string; date: string; content: string } | null>(null);
   const result = useRef<{ node: NoteNode; created: boolean } | null>(null);
   const recorder = useMemo(() => pending && createJournalRecorder(pending.journalId, pending.date, pending.content), [pending]);
@@ -32,12 +31,11 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
   const kind = { icon: <CalendarDays size={14} className="kind-journal" />, label: '日记' };
   if (variantOf(note) === 'journal') {
     const day = draft && `${longDate(draft.date)} ${weekday(draft.date)}`;
-    // The template's own date heading repeats the page heading.
+    // The date heading repeats the page heading.
     const preview = draft?.content.replace(/^\s*# (.*)(?:\n+|$)/, (all, title: string) => title.trim() === day ? '' : all);
     return {
       ...(day ? { title: day, kind } : {}),
       headingActions: !ctx.editing && !draft && <span className="journal-heading-actions" ref={setHeadingActions} />,
-      menu: !draft && <button onClick={() => setManaging(note.id)}>管理模板</button>,
       footer: !ctx.editing && draft && (
         <QuickAppend key={`journal:${note.id}:${draft.date}`} id={`journal:${note.id}:${draft.date}`}
           keyId={note.key_id} disabled={ctx.offline} onBusy={ctx.setAppending} autoFocus
@@ -55,14 +53,9 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
       ) : <JournalPanel
           id={note.id}
           headingActions={headingActions}
-          managing={managing === note.id}
-          onManageTemplates={() => setManaging(note.id)}
-          onCloseTemplates={() => setManaging(null)}
           refresh={ctx.refreshKey}
-          offline={ctx.offline}
           onNavigate={ctx.onNavigate}
           onPrepare={(date, content) => setPending({ journalId: note.id, date, content })}
-          onChanged={ctx.onChanged}
         />
       ),
     };

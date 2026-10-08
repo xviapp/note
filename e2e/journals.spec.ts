@@ -1,6 +1,6 @@
 import { test, expect } from './fixtures';
 
-test('journal templates and quick append work in all themes', async ({ page }, testInfo) => {
+test('journal calendar and quick append work in all themes', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const status = await (await page.request.get('/api/auth/status')).json();
   await page.goto(status.initialized ? '/' : '/#setup=e2e-test-only-setup-token-never-deploy-0001');
@@ -21,6 +21,7 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await page.reload();
   await page.locator('.node-list-main').filter({ hasText: '日常记录' }).click();
   await expect(page.getByRole('combobox', { name: '模板', exact: true })).toHaveCount(0);
+  await expect(page.getByRole('button', { name: '管理模板', exact: true })).toHaveCount(0);
   for (const theme of ['light', 'dark', 'starry']) {
     await page.evaluate((value) => {
       window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
@@ -36,38 +37,6 @@ test('journal templates and quick append work in all themes', async ({ page }, t
     await expect(page.locator('.journal-panel').getByRole('button', { name: '新建', exact: true })).toHaveCount(0);
     await page.screenshot({ path: testInfo.outputPath(`calendar-${theme}.png`) });
   }
-  await page.locator('.note-toolbar').getByRole('button', { name: '管理 日常记录', exact: true }).click();
-  await page.getByRole('button', { name: '管理模板', exact: true }).click();
-  let dialog = page.getByRole('dialog', { name: '日记模板', exact: true });
-  await dialog.getByRole('button', { name: '新建模板', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '新建模板', exact: true });
-  await dialog.getByLabel('模板名称').fill('每日回顾');
-  const editor = dialog.getByRole('textbox', { name: 'Markdown 源码' });
-  await editor.press('ControlOrMeta+a');
-  await editor.press('Backspace');
-  await editor.fill('# {{日期}} {{星期}}\n\n今天值得记住的事');
-  for (const theme of ['light', 'dark', 'starry']) {
-    await page.evaluate((value) => {
-      window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
-    }, theme);
-    await page.screenshot({ path: testInfo.outputPath(`template-editor-${theme}.png`) });
-  }
-  await dialog.getByRole('button', { name: '预览今天' }).click();
-  await expect(dialog.getByText('今天值得记住的事', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '保存模板', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '日记模板', exact: true });
-  await expect(dialog.getByText('每日回顾', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '编辑', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '编辑模板', exact: true });
-  await dialog.getByLabel('模板名称').fill('日常回顾');
-  const editSource = dialog.getByRole('textbox', { name: 'Markdown 源码' });
-  await editSource.press('ControlOrMeta+a');
-  await editSource.press('Backspace');
-  await editSource.fill('# {{日期}} {{星期}}\n\n模板保留内容');
-  await dialog.getByRole('button', { name: '保存模板', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '日记模板', exact: true });
-  await expect(dialog.getByText('日常回顾', { exact: true })).toBeVisible();
-  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
   await page.locator('.document-title-row').getByRole('button', { name: '写今天', exact: true }).click();
   const journalId = (await created.json()).id;
   const entries = async () => (await (await page.request.get(`/api/nodes/${journalId}/journal?month=${new Date().toISOString().slice(0, 7)}`)).json()).entries;
@@ -114,7 +83,6 @@ test('journal templates and quick append work in all themes', async ({ page }, t
   await expect(page.locator('.records-journal section.record .record-title')).toHaveText('傍晚');
   await expect(page.locator('.records-journal section.record .record-time')).toHaveText(/^\d{2}:\d{2}$/);
   expect(await entries()).toHaveLength(1);
-  await expect(page.getByText('模板保留内容', { exact: true })).toBeVisible();
   await expect(page.getByLabel('记录内容')).toHaveValue('');
   await page.getByLabel('记录内容').fill('第二条随手记');
   await page.getByLabel('记录内容').press('Control+Enter');
@@ -134,22 +102,6 @@ test('journal templates and quick append work in all themes', async ({ page }, t
     await page.screenshot({ path: testInfo.outputPath(`journal-${theme}.png`) });
   }
   await page.getByRole('button', { name: '返回', exact: true }).click();
-  await page.locator('.note-toolbar').getByRole('button', { name: '管理 日常记录', exact: true }).click();
-  await page.getByRole('button', { name: '管理模板', exact: true }).click();
-  dialog = page.getByRole('dialog', { name: '日记模板', exact: true });
-  for (const theme of ['light', 'dark', 'starry']) {
-    await page.evaluate((value) => {
-      window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
-    }, theme);
-    await page.screenshot({ path: testInfo.outputPath(`templates-${theme}.png`) });
-  }
-  await dialog.getByRole('button', { name: '删除', exact: true }).click();
-  await page.getByRole('dialog', { name: '删除模板？', exact: true }).getByRole('button', { name: '删除模板', exact: true }).click();
-  await expect(dialog.getByText('日常回顾', { exact: true })).toHaveCount(0);
-  await expect(dialog.locator('.template-item').filter({ hasText: '仅日期标题' }).getByRole('button', { name: '已选用' })).toBeDisabled();
-  await dialog.getByRole('button', { name: '关闭', exact: true }).click();
-  await page.locator('.document-title-row').getByRole('button', { name: '续写今天', exact: true }).click();
-  await expect(page.getByText('模板保留内容', { exact: true })).toBeVisible();
   // Another device can create the day while its first record is still a local draft.
   await page.getByRole('button', { name: '返回', exact: true }).click();
   const yesterday = await page.evaluate(() => {
