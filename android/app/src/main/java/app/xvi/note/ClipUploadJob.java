@@ -8,6 +8,7 @@ import android.content.ComponentName;
 import android.content.Context;
 import android.webkit.CookieManager;
 import com.v2ray.ang.embedded.EmbeddedProxy;
+import java.io.ByteArrayOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
 import java.nio.charset.StandardCharsets;
@@ -47,7 +48,11 @@ public class ClipUploadJob extends JobService {
                     settings.setRequestProperty("Cookie", cookie);
                     if (settings.getResponseCode() != 200) { jobFinished(params, true); return; }
                     try (var input = settings.getInputStream()) {
-                        JSONObject value = new JSONObject(new String(input.readAllBytes(), StandardCharsets.UTF_8));
+                        ByteArrayOutputStream response = new ByteArrayOutputStream();
+                        byte[] buffer = new byte[4096];
+                        int length;
+                        while ((length = input.read(buffer)) != -1) response.write(buffer, 0, length);
+                        JSONObject value = new JSONObject(new String(response.toByteArray(), StandardCharsets.UTF_8));
                         // The library key is only available to its unlocked UI. Never
                         // upload an encrypted library's capture as plaintext.
                         if (!value.isNull("keyId")) { jobFinished(params, true); return; }
