@@ -1,17 +1,6 @@
 <svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
-  <defs>
-    <filter id="clay" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="bump"/>
-      <feDiffuseLighting in="bump" surfaceScale="9" diffuseConstant="1.18" lighting-color="#ffffff" result="light">
-        <feDistantLight azimuth="225" elevation="60"/>
-      </feDiffuseLighting>
-      <feComposite in="light" in2="SourceAlpha" operator="in" result="clippedLight"/>
-      <feBlend in="SourceGraphic" in2="clippedLight" mode="multiply" result="relief"/>
-      <feDropShadow dx="2" dy="5" stdDeviation="3" flood-color="#203c2b" flood-opacity="0.12"/>
-    </filter>
-  </defs>
-  <g filter="url(#clay)">
-  <g fill="#426B55" transform="translate(0 1254) scale(0.1 -0.1)">
+  <g transform="translate(627 627) scale(1.12) translate(-627 -627)">
+  <g fill="#526B60" transform="translate(0 1254) scale(0.1 -0.1)">
     <g transform="translate(940 0)">
       <path d="M7005 9584 c259 -338 280 -717 65 -1143 -79 -158 -195 -317 -417 -571 -230 -264 -327 -398 -412 -567 -95 -191 -131 -342 -132 -553 -1 -215 26 -352 136 -690 113 -351 140 -507 139 -830 0 -257 -10 -352 -84 -800 -27 -162 -57 -351 -66 -420 -18 -140 -32 -631 -17 -615 5 6 26 73 47 150 21 76 92 295 158 485 249 718 313 1012 312 1425 -1 238 -16 368 -70 623 -63 296 -66 320 -71 532 -6 228 5 321 53 465 70 211 175 356 493 680 325 330 433 479 510 699 82 233 59 489 -62 706 -30 53 -74 107 -152 186 -132 133 -261 220 -437 298 l-58 26 65 -86z"/>
       <path d="M6850 8761 c-405 -146 -765 -442 -932 -766 -98 -192 -134 -357 -125 -587 6 -160 21 -245 73 -397 45 -129 45 -129 66 -11 52 289 199 572 479 919 242 302 293 367 362 471 94 142 197 352 197 402 0 12 -5 11 -120 -31z"/>

@@ -5,12 +5,12 @@ import path from 'node:path';
 import { existsSync } from 'node:fs';
 import { chromium } from '@playwright/test';
 
-// Render a shallow matte-clay relief from the approved vector contours.
+// Render flat paper shapes from the approved vector contours.
 // Generated assets are committed so ordinary builds do not need ImageMagick.
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const output = path.join(root, 'public/brand');
 const native = path.join(root, 'android/app/src/main/res');
-const palette = { paper: '#F8F2E8', green: '#426B55' };
+const palette = { paper: '#F8F2E8', green: '#526B60' };
 const run = (command, args) => {
   const result = spawnSync(command, args, { stdio: 'inherit' });
   if (result.error || result.status !== 0) throw result.error || new Error(`${command} failed`);
@@ -37,18 +37,7 @@ const svg = path.join(root, 'assets/brand/clay.svg');
 await writeFile(
   svg,
   `<svg xmlns="http://www.w3.org/2000/svg" width="1254" height="1254" viewBox="0 0 1254 1254">
-  <defs>
-    <filter id="clay" x="-15%" y="-15%" width="130%" height="130%" color-interpolation-filters="sRGB">
-      <feGaussianBlur in="SourceAlpha" stdDeviation="12" result="bump"/>
-      <feDiffuseLighting in="bump" surfaceScale="9" diffuseConstant="1.18" lighting-color="#ffffff" result="light">
-        <feDistantLight azimuth="225" elevation="60"/>
-      </feDiffuseLighting>
-      <feComposite in="light" in2="SourceAlpha" operator="in" result="clippedLight"/>
-      <feBlend in="SourceGraphic" in2="clippedLight" mode="multiply" result="relief"/>
-      <feDropShadow dx="2" dy="5" stdDeviation="3" flood-color="#203c2b" flood-opacity="0.12"/>
-    </filter>
-  </defs>
-  <g filter="url(#clay)">
+  <g transform="translate(627 627) scale(1.12) translate(-627 -627)">
   <g fill="${palette.green}" transform="translate(0 1254) scale(0.1 -0.1)">
     <g transform="translate(${mark.staffOffsetX} 0)">
       <path d="${mark.staff}"/>
@@ -60,7 +49,7 @@ await writeFile(
 </svg>
 `,
 );
-// Chromium implements the SVG lighting filter consistently; no artwork is redrawn.
+// Chromium rasterizes the unchanged vector contours with transparent edges.
 const browser = await chromium.launch({
   executablePath: process.env.PLAYWRIGHT_CHROMIUM_EXECUTABLE ||
     (existsSync('/usr/bin/google-chrome') ? '/usr/bin/google-chrome' : undefined),
@@ -111,14 +100,14 @@ run('magick', [
   path.join(root, 'public/favicon.ico'),
 ]);
 
-// Retain vector contours for the monochrome layer; the colored layer uses relief.
+// Retain vector contours for the monochrome layer; the colored layer uses flat fills.
 // Its furthest point stays inside the 66 dp circular safe zone in a 108 dp tile.
 const vector = `<?xml version="1.0" encoding="utf-8"?>
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
     android:width="108dp" android:height="108dp"
     android:viewportWidth="108" android:viewportHeight="108">
-    <group android:translateX="16.38" android:translateY="91.62"
-        android:scaleX="0.006" android:scaleY="-0.006">
+    <group android:translateX="11.8656" android:translateY="96.1344"
+        android:scaleX="0.00672" android:scaleY="-0.00672">
         <group android:translateX="${mark.staffOffsetX}">
             <path android:fillColor="@color/brand_mark" android:pathData="${mark.staff}" />
             <path android:fillColor="@color/brand_mark" android:pathData="${mark.leaf}" />
@@ -159,4 +148,4 @@ run('magick', [
   '-strip',
   path.join(qingli, 'mark-128.png'),
 ]);
-console.log('Updated clay icons, manifests, favicon, Android layers and Qingli mark.');
+console.log('Updated flat icons, manifests, favicon, Android layers and Qingli mark.');
