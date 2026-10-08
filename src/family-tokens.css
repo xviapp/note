@@ -52,15 +52,3 @@
   --family-line-strong: #8E8274;
   --family-scrim: rgba(0, 0, 0, 0.72);
 }
-
-:root[data-ink="true"] {
-  --family-canvas: #ffffff;
-  --family-surface: #ffffff;
-  --family-raised: #ffffff;
-  --family-soft: #ffffff;
-  --family-ink: #000000;
-  --family-muted: #333333;
-  --family-line: #777777;
-  --family-line-strong: #000000;
-  --family-scrim: rgba(255, 255, 255, 0.85);
-}
