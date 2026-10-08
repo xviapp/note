@@ -29,8 +29,10 @@
     "reset-password": "node scripts/reset-password.mjs",
     "deploy": "npm run build && npm run db:remote && wrangler deploy --env production",
     "build:android": "node scripts/assets.mjs && tsc --noEmit && vite build --mode android && cap sync android",
+    "build:android:release": "npm run build:android && node scripts/android.mjs assembleRelease",
     "android:apk": "npm run build:android && node scripts/android.mjs assembleDebug",
     "install:android": "node scripts/android.mjs install",
+    "install:android:release": "node scripts/android.mjs installRelease",
     "android:open": "cap open android",
     "android:release": "npm run build:android && node scripts/android.mjs assembleRelease",
     "android:publish": "node scripts/android-publish.mjs"

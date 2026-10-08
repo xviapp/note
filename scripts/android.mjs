@@ -7,21 +7,12 @@ import { parseArgs } from 'node:util';
 
 const task = process.argv[2] || 'assembleDebug';
 if (
-  !['assembleDebug', 'assembleRelease', 'testDebugUnitTest', 'lintDebug', 'install'].includes(task)
+  !['assembleDebug', 'assembleRelease', 'testDebugUnitTest', 'lintDebug', 'install', 'installRelease'].includes(task)
 )
   throw new Error('Unsupported Android task');
-if (
-  task === 'assembleRelease' &&
-  [
-    'NOTE_ANDROID_KEYSTORE',
-    'NOTE_ANDROID_STORE_PASSWORD',
-    'NOTE_ANDROID_KEY_ALIAS',
-    'NOTE_ANDROID_KEY_PASSWORD',
-  ].some((key) => !process.env[key])
-)
-  throw new Error(
-    '正式构建需要配置 NOTE_ANDROID_KEYSTORE、NOTE_ANDROID_STORE_PASSWORD、NOTE_ANDROID_KEY_ALIAS、NOTE_ANDROID_KEY_PASSWORD。',
-  );
+const installing = task === 'install' || task === 'installRelease';
+const release = task === 'assembleRelease' || task === 'installRelease';
+const installCommand = release ? 'install:android:release' : 'install:android';
 const { values } = parseArgs({
   args: process.argv.slice(3),
   options: {
@@ -31,20 +22,31 @@ const { values } = parseArgs({
   },
 });
 if (values.help) {
-  console.log(`pnpm install:android [--device <serial>]
+  console.log(`pnpm ${installCommand} [--device <serial>]
 
 构建最新版 APK，并通过 adb 覆盖安装，保留应用数据。
 只有一个可用设备时自动选择；多个设备时使用 --device 或 ANDROID_SERIAL 指定。
 需要 JDK 21、Android SDK，以及已开启 USB 调试并授权的手机或模拟器。
 仅构建 APK：pnpm android:apk
+正式构建 APK：pnpm build:android:release
+构建并安装正式版：pnpm install:android:release [--device <serial>]
+正式版需要配置 NOTE_ANDROID_KEYSTORE、NOTE_ANDROID_STORE_PASSWORD、NOTE_ANDROID_KEY_ALIAS、NOTE_ANDROID_KEY_PASSWORD。
 默认只构建 arm64-v8a；其他架构使用 --abi armeabi-v7a / x86_64 / x86。
 手动构建全部架构及通用包：node scripts/android.mjs assembleDebug --abi all`);
   process.exit(0);
 }
+if (
+  release &&
+  ['NOTE_ANDROID_KEYSTORE', 'NOTE_ANDROID_STORE_PASSWORD', 'NOTE_ANDROID_KEY_ALIAS', 'NOTE_ANDROID_KEY_PASSWORD']
+    .some((key) => !process.env[key])
+)
+  throw new Error(
+    '正式构建需要配置 NOTE_ANDROID_KEYSTORE、NOTE_ANDROID_STORE_PASSWORD、NOTE_ANDROID_KEY_ALIAS、NOTE_ANDROID_KEY_PASSWORD。',
+  );
 if (!['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86', 'all'].includes(values.abi))
   throw new Error('--abi 支持 arm64-v8a、armeabi-v7a、x86_64、x86 或 all。');
-if (values.device !== undefined && (task !== 'install' || !values.device.trim()))
-  throw new Error('--device 需要有效的设备序列号，且仅用于 install:android。');
+if (values.device !== undefined && (!installing || !values.device.trim()))
+  throw new Error('--device 需要有效的设备序列号，且仅用于 install:android 或 install:android:release。');
 const sdk = [
   process.env.ANDROID_SDK_ROOT,
   process.env.ANDROID_HOME,
@@ -55,7 +57,7 @@ if (!sdk) throw new Error('请先安装 Android SDK，并设置 ANDROID_SDK_ROOT
 const adb = path.join(sdk, 'platform-tools', process.platform === 'win32' ? 'adb.exe' : 'adb');
 let serial;
 let deviceAbis = [];
-if (task === 'install') {
+if (installing) {
   // Select before building, and pass an explicit serial to every install. Never
   // delegate to Gradle installDebug, which may install on multiple devices.
   const result = spawnSync(adb, ['devices'], { encoding: 'utf8' });
@@ -79,7 +81,7 @@ if (task === 'install') {
       const details = devices.map((device) => `${device.serial} (${device.state})`).join(', ');
       throw new Error(
         available.length > 1
-          ? `检测到多个可用设备：${details}。请用 pnpm install:android --device <序列号> 指定。`
+          ? `检测到多个可用设备：${details}。请用 pnpm ${installCommand} --device <序列号> 指定。`
           : `未找到可安装设备。请连接手机并授权 USB 调试，或启动模拟器。${details ? `当前设备：${details}` : ''}`,
       );
     }
@@ -114,7 +116,7 @@ await run(
   process.platform === 'win32' ? 'cmd.exe' : './gradlew',
   [
     ...(process.platform === 'win32' ? ['/d', '/c', 'gradlew.bat'] : []),
-    task === 'install' ? 'assembleDebug' : task,
+    installing ? (release ? 'assembleRelease' : 'assembleDebug') : task,
     '--console=plain',
     `-PnoteAbi=${values.abi}`,
   ],
@@ -124,9 +126,9 @@ await run(
     env: { ...process.env, ANDROID_HOME: sdk, ANDROID_SDK_ROOT: sdk },
   },
 );
-if (task === 'assembleDebug' || task === 'assembleRelease' || task === 'install') {
+if (task === 'assembleDebug' || task === 'assembleRelease' || installing) {
   const { version } = JSON.parse(await readFile('package.json', 'utf8'));
-  const variant = task === 'assembleRelease' ? 'release' : 'debug';
+  const variant = release ? 'release' : 'debug';
   const apkDir = `android/app/build/outputs/apk/${variant}`;
   const { elements } = JSON.parse(await readFile(`${apkDir}/output-metadata.json`, 'utf8'));
   const outputs = new Map();
@@ -143,7 +145,7 @@ if (task === 'assembleDebug' || task === 'assembleRelease' || task === 'install'
     await copyFile('android/app/build/outputs/mapping/release/mapping.txt', mapping);
     console.log(`R8 mapping: ${path.resolve(mapping)}`);
   }
-  if (task === 'install') {
+  if (installing) {
     const selectedAbi = deviceAbis.find((abi) => outputs.has(abi)) || 'universal';
     const output = outputs.get(selectedAbi);
     if (!output) throw new Error('构建结果中没有兼容此设备的 APK。');

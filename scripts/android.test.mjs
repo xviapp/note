@@ -118,6 +118,40 @@ cliTest('builds and installs a fresh APK only on the one selected device', () =>
   }),
 );
 
+cliTest('release installation checks signing, builds the selected ABI and installs only the release APK', () =>
+  fixture(async ({ execute, root }) => {
+    const missing = await execute([], { NOTE_ANDROID_KEYSTORE: '' }, 'installRelease');
+    assert.notEqual(missing.status, 0);
+    assert.match(missing.stderr, /NOTE_ANDROID_KEYSTORE/);
+    assert.deepEqual(missing.calls, []);
+    const help = await execute(['--help'], { NOTE_ANDROID_KEYSTORE: '' }, 'installRelease');
+    assert.equal(help.status, 0, help.stderr);
+    assert.match(help.stdout, /pnpm install:android:release/);
+    assert.deepEqual(help.calls, []);
+    const env = {
+      NOTE_ANDROID_KEYSTORE: path.join(root, 'fixture.jks'),
+      NOTE_ANDROID_STORE_PASSWORD: 'fixture-only',
+      NOTE_ANDROID_KEY_ALIAS: 'fixture',
+      NOTE_ANDROID_KEY_PASSWORD: 'fixture-only',
+      FIXTURE_DEVICES: 'phone-one\tdevice\nemulator-one\tdevice',
+      FIXTURE_ABIS: 'x86_64,x86',
+    };
+    const args = ['--device', 'emulator-one', '--abi', 'x86_64'];
+    const result = await execute(args, env, 'installRelease');
+    assert.equal(result.status, 0, result.stderr);
+    assert.deepEqual(result.calls.map(call => call.name), ['adb', 'adb', 'frontend', 'gradle', 'adb']);
+    assert.deepEqual(result.calls[2].args, ['run', 'build:android']);
+    assert.deepEqual(result.calls[3].args, ['assembleRelease', '--console=plain', '-PnoteAbi=x86_64']);
+    const apk = path.join(root, 'artifacts/yejian-0.2.1-android-x86_64-release.apk');
+    assert.deepEqual(result.calls[4].args, ['-s', 'emulator-one', 'install', '-r', apk]);
+    assert.equal(await readFile(apk, 'utf8'), 'fresh APK');
+    assert.equal(await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-x86_64-release-mapping.txt'), 'utf8'), 'matching R8 mapping');
+    const failed = await execute(args, { ...env, FIXTURE_GRADLE_EXIT: '8' }, 'installRelease');
+    assert.equal(failed.status, 8);
+    assert.deepEqual(failed.calls.map(call => call.name), ['adb', 'adb', 'frontend', 'gradle']);
+  }),
+);
+
 cliTest('release refuses missing signing configuration and copies the signed build variant', () =>
   fixture(async ({ execute, root }) => {
     const missing = await execute([], { NOTE_ANDROID_KEYSTORE: '' }, 'assembleRelease');
