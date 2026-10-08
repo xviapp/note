@@ -394,10 +394,12 @@ export default {
     }
   },
   async scheduled(
-    _event: ScheduledController,
+    event: ScheduledController,
     env: Env,
     execution: ExecutionContext,
   ): Promise<void> {
-    execution.waitUntil(cleanup(env));
+    // Use the scheduled slot, so delayed delivery still runs the intended maintenance.
+    const slot = Math.floor(event.scheduledTime / (30 * 60_000));
+    execution.waitUntil(cleanup(env, { files: slot % 12 === 0, idempotency: slot % 48 === 0 }));
   },
 } satisfies ExportedHandler<Env>;

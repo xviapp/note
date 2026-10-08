@@ -98,7 +98,10 @@ async function purgeBatch(env: Env, id: string): Promise<void> {
     ).bind(id, id),
   ]);
 }
-export async function cleanup(env: Env): Promise<{ removed: number }> {
+export async function cleanup(
+  env: Env,
+  { files = true, idempotency = false }: { files?: boolean; idempotency?: boolean } = {},
+): Promise<{ removed: number }> {
   const now = Date.now();
   await env.DB.batch([
     env.DB.prepare('DELETE FROM backup_jobs WHERE expires_at<=?').bind(now),
@@ -109,7 +112,9 @@ export async function cleanup(env: Env): Promise<{ removed: number }> {
       'DELETE FROM sessions WHERE expires_at<=? OR epoch!=(SELECT auth_epoch FROM site WHERE id=1)',
     ).bind(now),
     env.DB.prepare('DELETE FROM login_attempts WHERE window_start<?').bind(now - 3600_000),
-    env.DB.prepare('DELETE FROM idempotency WHERE created_at<?').bind(now - 7 * 86400_000),
+    ...(idempotency
+      ? [env.DB.prepare('DELETE FROM idempotency WHERE created_at<?').bind(now - 7 * 86400_000)]
+      : []),
     pruneClips(env),
     env.DB.prepare(
       'DELETE FROM translations WHERE id IN (SELECT id FROM translations WHERE body_blob_id IS NULL AND locked_until<=? AND updated_at<? LIMIT 50)',
@@ -119,21 +124,28 @@ export async function cleanup(env: Env): Promise<{ removed: number }> {
     id: string;
   }>();
   for (const batch of batches.results) await purgeBatch(env, batch.id);
-  const files = await env.DB.prepare(
+  if (!files) return { removed: 0 };
+  // Select once, then delete in bounded batches without rescanning referenced blobs.
+  // Keep D1 calls below the Free plan per-invocation limit, including maintenance above.
+  const candidates = await env.DB.prepare(
     `UPDATE blobs SET state='deleting' WHERE id IN(
-    SELECT id FROM blobs WHERE ${UNREFERENCED} AND (state='deleting' OR draft_until IS NULL OR draft_until<=?) LIMIT 10
+    SELECT id FROM blobs WHERE ${UNREFERENCED} AND (state='deleting' OR draft_until IS NULL OR draft_until<=?) LIMIT 200
   ) RETURNING *`,
   )
     .bind(now)
     .all<BlobRow>();
   let removed = 0;
-  for (const file of files.results) {
+  for (let offset = 0; offset < candidates.results.length; offset += 20) {
+    const batch = candidates.results.slice(offset, offset + 20);
     try {
-      await env.FILES.delete(file.object_key);
-      await env.DB.prepare("DELETE FROM blobs WHERE id=? AND state='deleting'").bind(file.id).run();
-      removed++;
+      await env.FILES.delete(batch.map((file) => file.object_key));
+      const result = await env.DB.prepare(
+        `DELETE FROM blobs WHERE state='deleting' AND id IN (${batch.map(() => '?').join(',')}) RETURNING id`,
+      ).bind(...batch.map((file) => file.id)).all<{ id: string }>();
+      removed += result.results.length;
     } catch {
-      /* Retain the durable deleting marker; next sweep retries. */
+      // Keep the durable markers and quota on failure; a later sweep retries.
+      // Continue other batches so one failed batch does not block this sweep.
     }
   }
   return { removed };
