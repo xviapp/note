@@ -35,8 +35,8 @@ export function useJournalView(ctx: TypeContext): TypeView | null {
       headingActions: !ctx.editing && !draft && <span className="journal-heading-actions" ref={setHeadingActions} />,
       footer: !ctx.editing && draft && (
         <QuickAppend key={`journal:${note.id}:${draft.date}`} id={`journal:${note.id}:${draft.date}`}
-          keyId={note.key_id} disabled={ctx.offline} onBusy={ctx.setAppending} autoFocus
-          onAppend={async (title, text, key) => { result.current = await recorder!(title, text, key); }}
+          keyId={note.key_id} uploadScope={draft.journalId} disabled={ctx.offline} onBusy={ctx.setAppending} autoFocus
+          onAppend={async (title, text, key, attachmentIds) => { result.current = await recorder!(title, text, key, attachmentIds); }}
           onSaved={() => setSaved(result.current!.node)} />
       ),
       children: !ctx.editing && (draft ? (

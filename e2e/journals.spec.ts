@@ -1,5 +1,10 @@
 import { test, expect } from './fixtures';
 
+const photo = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 test('journal calendar and quick append work in all themes', async ({ page }, testInfo) => {
   test.setTimeout(90_000);
   const status = await (await page.request.get('/api/auth/status')).json();
@@ -84,6 +89,17 @@ test('journal calendar and quick append work in all themes', async ({ page }, te
   await expect(page.locator('.records-journal section.record .record-time')).toHaveText(/^\d{2}:\d{2}$/);
   expect(await entries()).toHaveLength(1);
   await expect(page.getByLabel('记录内容')).toHaveValue('');
+  const photoEntryId = (await entries())[0].id;
+  const photoName = '日记照片.png';
+  await page.getByLabel('记录内容').fill('带照片的记录');
+  await page.getByLabel('添加照片').setInputFiles({ name: photoName, mimeType: 'image/png', buffer: photo });
+  await expect(page.getByAltText(photoName)).toBeVisible();
+  await page.getByRole('button', { name: '追加', exact: true }).click();
+  await expect(page.getByLabel('记录内容')).toHaveValue('');
+  await expect(page.getByText('带照片的记录', { exact: true })).toBeVisible();
+  const photoEntry = await (await page.request.get(`/api/nodes/${photoEntryId}`)).json();
+  expect(photoEntry.content).toContain('/api/files/');
+  expect(photoEntry.attachments.some((file: { name: string }) => file.name === photoName)).toBe(true);
   await page.getByLabel('记录内容').fill('第二条随手记');
   await page.getByLabel('记录内容').press('Control+Enter');
   await expect(page.getByText('第二条随手记', { exact: true })).toBeVisible();

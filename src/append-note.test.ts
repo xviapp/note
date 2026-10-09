@@ -26,6 +26,13 @@ describe('quick append', () => {
     expect(unlockNote).toHaveBeenCalledWith('day');
     expect(lockNote).toHaveBeenCalledWith('day');
   });
+  it('adds newly selected attachments while preserving existing ones', async () => {
+    vi.mocked(api).mockResolvedValueOnce(source).mockResolvedValueOnce({});
+    await createNoteAppender('day')('', '![photo](/api/files/photo)', undefined, ['photo']);
+    expect(api).toHaveBeenLastCalledWith('/api/nodes/day/content', 'PUT', {
+      content: '# 今天\n\n原文\n\n![photo](/api/files/photo)\n', attachments: ['image', 'photo'], revision: 3,
+    }, expect.any(String));
+  });
   it('writes the record shape of the note kind', async () => {
     vi.mocked(api).mockResolvedValueOnce(source).mockResolvedValueOnce({});
     await createNoteAppender('day', 'todo')('阶段', '完成第一步');

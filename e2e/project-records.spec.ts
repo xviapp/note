@@ -2,6 +2,11 @@ import { expect, test } from './fixtures';
 import type { NoteNode } from '../shared/types';
 import type { ProjectOverview } from '../shared/projects';
 
+const photo = Buffer.from(
+  'iVBORw0KGgoAAAANSUhEUgAAAAIAAAACCAIAAAD91JpzAAAAFklEQVR4nGP8z8DAwMDAxMDAwMDAAAANHQEDasKb6QAAAABJRU5ErkJggg==',
+  'base64',
+);
+
 test('project entries append records, track states and write through references', async ({ page }, info) => {
   test.setTimeout(60_000);
   const status = await (await page.request.get('/api/auth/status')).json();
@@ -28,6 +33,7 @@ test('project entries append records, track states and write through references'
   const source = await create('/api/nodes', { kind: 'markdown', title: '外部问题', content: '---\nstatus: open\n---\n\n外部原文' });
   await create('/api/nodes', { kind: 'folder', parentId: overview.directories.find((item) => item.category === 'issue')!.id, referenceId: source.id });
   for (const [category, label, finished] of [['todo', '记录进展', 'done'], ['issue', '补充讨论', 'closed'], ['note', '追加笔记', '']]) {
+    const item = overview.items.find((entry) => entry.category === category && entry.title === `${category}条目`)!;
     await page.goto(`/n/${project.id}`);
     await page.getByRole('tab', { name: new RegExp(category === 'todo' ? '待办' : category === 'issue' ? '问题' : '笔记') }).click();
     await page.locator('.project-item-main').filter({ hasText: `${category}条目` }).click();
@@ -81,6 +87,16 @@ test('project entries append records, track states and write through references'
     await page.getByLabel('记录内容').fill('新增一条持续记录');
     await page.getByRole('button', { name: label, exact: true }).click();
     await expect(page.getByText('新增一条持续记录', { exact: true })).toBeVisible();
+    const photoName = `${category}-追加.png`;
+    await page.getByLabel('记录内容').fill(`${category}的照片记录`);
+    await page.getByLabel('添加照片').setInputFiles({ name: photoName, mimeType: 'image/png', buffer: photo });
+    await expect(page.getByAltText(photoName)).toBeVisible();
+    await page.getByRole('button', { name: label, exact: true }).click();
+    await expect(page.getByLabel('记录内容')).toHaveValue('');
+    await expect(page.getByText(`${category}的照片记录`, { exact: true })).toBeVisible();
+    const photoDetail = await (await page.request.get(`/api/nodes/${item.id}`)).json();
+    expect(photoDetail.content).toContain('/api/files/');
+    expect(photoDetail.attachments.some((file: { name: string }) => file.name === photoName)).toBe(true);
     if (info.project.name === 'desktop') {
       for (let toggle = 0; toggle < 2; toggle++) {
         await page.getByRole('button', { name: '标题目录', exact: true }).click();

@@ -43,3 +43,15 @@ it('appends to a concurrently created entry and preserves the retry key and body
   ]);
   expect(vi.mocked(api).mock.calls[4]).toEqual(vi.mocked(api).mock.calls[2]);
 });
+
+it('sends selected attachments when creating the first entry', async () => {
+  vi.mocked(api).mockResolvedValue({ node: { id: 'entry' }, created: true });
+  await createJournalRecorder('journal', '2026-10-07')(
+    '', '![photo](/api/files/photo)', 'operation', ['photo'],
+  );
+  expect(api).toHaveBeenCalledExactlyOnceWith('/api/nodes/journal/journal/entries', 'POST', {
+    date: '2026-10-07',
+    content: expect.stringMatching(/!\[photo\]\(\/api\/files\/photo\)/),
+    attachments: ['photo'],
+  }, 'operation');
+});

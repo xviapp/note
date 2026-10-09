@@ -1,12 +1,20 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { afterEach, beforeEach, expect, it, vi } from 'vitest';
+import type { ComponentProps } from 'react';
 import { QuickAppend } from './QuickAppend';
 import { DRAFT_PREFIX } from '../note-drafts';
 import { ApiError } from '../api';
 
-const { append } = vi.hoisted(() => ({ append: vi.fn() }));
+const { append, upload } = vi.hoisted(() => ({ append: vi.fn(), upload: vi.fn() }));
 vi.mock('../append-note', () => ({ createNoteAppender: () => append }));
-beforeEach(() => { localStorage.clear(); append.mockReset(); });
+vi.mock('../api', async (original) => {
+  const actual = await original<typeof import('../api')>();
+  return { ...actual, upload };
+});
+vi.mock('./CachedImage', () => ({
+  CachedImage: (props: ComponentProps<'img'>) => <img {...props} />,
+}));
+beforeEach(() => { localStorage.clear(); append.mockReset(); upload.mockReset(); });
 afterEach(cleanup);
 
 it('shows submit on focus or input and keeps it available when focus moves to the button', async () => {
@@ -103,4 +111,20 @@ it('restores the custom submission operation after an uncertain response and reo
   expect(submit.mock.calls[1]).toEqual(first);
   expect(append).not.toHaveBeenCalled();
   expect(localStorage.getItem(`${DRAFT_PREFIX}append:journal:book:day`)).toBeNull();
+});
+
+it('uploads selected photos and appends their links and attachment ids', async () => {
+  upload.mockResolvedValue({ id: 'photo', name: '散步.png', mime: 'image/png', size: 4 });
+  const submit = vi.fn().mockResolvedValue(undefined);
+  render(<QuickAppend id="day" disabled={false} onAppend={submit} onSaved={() => {}} />);
+  const field = screen.getByLabelText('记录内容');
+  await waitFor(() => expect((field as HTMLTextAreaElement).disabled).toBe(false));
+  fireEvent.focus(field);
+  const photo = new File([new Uint8Array([1, 2, 3, 4])], '散步.png', { type: 'image/png' });
+  fireEvent.change(screen.getByLabelText('添加照片'), { target: { files: [photo] } });
+  await waitFor(() => expect(upload).toHaveBeenCalledWith(photo, 'day'));
+  expect(screen.getByAltText('散步.png')).toBeTruthy();
+  fireEvent.click(screen.getByRole('button', { name: '追加' }));
+  await waitFor(() => expect(submit).toHaveBeenCalledTimes(1));
+  expect(submit).toHaveBeenCalledWith('', '![散步.png](/api/files/photo)', expect.any(String), ['photo']);
 });

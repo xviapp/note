@@ -8,16 +8,21 @@ import type { NoteNode } from '../shared/types';
 // this day meanwhile, append to that entry without replacing its contents.
 export function createJournalRecorder(journalId: string, date: string) {
   let existing: { id: string; key: string; append: ReturnType<typeof createNoteAppender> } | null = null;
-  return async (title: string, text: string, key: string) => {
-    if (!text.trim()) throw new Error('请先输入内容。');
+  return async (title: string, text: string, key: string, attachmentIds: string[] = []) => {
+    if (!text.trim() && attachmentIds.length === 0) throw new Error('请先输入内容。');
+    const body: { date: string; content: string; attachments?: string[] } = {
+      date,
+      content: appendRecord(defaultEntry(date), 'journal', title, text),
+    };
+    if (attachmentIds.length > 0) body.attachments = attachmentIds;
     const result = await api<{ node: NoteNode; created: boolean }>(
       `/api/nodes/${journalId}/journal/entries`, 'POST',
-      { date, content: appendRecord(defaultEntry(date), 'journal', title, text) }, key,
+      body, key,
     );
     if (!result.created) {
       if (existing?.id !== result.node.id || existing.key !== key)
         existing = { id: result.node.id, key, append: createNoteAppender(result.node.id, 'journal', `${key}-append`) };
-      await existing.append(title, text);
+      await existing.append(title, text, undefined, attachmentIds);
     }
     return result;
   };

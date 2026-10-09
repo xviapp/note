@@ -4596,6 +4596,34 @@ select.status-select.status-unknown {
   position: relative;
   display: block;
 }
+.quick-append-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.quick-append-image {
+  position: relative;
+}
+.quick-append-image img {
+  display: block;
+  width: 112px;
+  height: 84px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+  object-fit: contain;
+}
+.quick-append-image .icon-button {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+}
 .quick-append textarea {
   display: block;
   width: 100%;
@@ -4606,10 +4634,27 @@ select.status-select.status-unknown {
 }
 .quick-append-actions {
   display: flex;
+  flex-wrap: wrap;
   justify-content: flex-end;
   align-items: center;
   gap: 8px;
   margin-top: 8px;
+}
+.quick-append-image-button {
+  position: relative;
+  color: var(--muted);
+  cursor: pointer;
+}
+.quick-append-image-button:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.quick-append-image-button input {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  opacity: 0;
+  cursor: pointer;
 }
 /* An idle composer is a single line; the title and Submit appear once it is in use. */
 .quick-append:not(.is-active) .quick-append-heading {
@@ -4628,9 +4673,15 @@ select.status-select.status-unknown {
     position: absolute;
     left: calc(100% + 12px);
     bottom: 0;
-    width: 116px;
+    width: 132px;
+    flex-direction: column;
+    align-items: stretch;
     justify-content: flex-start;
     margin-top: 0;
+  }
+  .quick-append-actions > .quick-append-image-button,
+  .quick-append-actions > button[type='submit'] {
+    width: 100%;
   }
 }
 /* Phones: once in use, Submit shares the title row so the body field keeps a
@@ -4652,10 +4703,23 @@ select.status-select.status-unknown {
     height: 80px;
     min-height: 64px;
   }
+  .quick-append.is-active .quick-append-images {
+    grid-area: 3 / 1 / 4 / -1;
+    margin-top: 8px;
+    margin-bottom: 0;
+  }
   .quick-append.is-active .quick-append-actions {
     grid-area: 1 / 2;
     align-self: start;
     margin-top: 0;
+  }
+  .quick-append-image-button {
+    width: 36px;
+    min-width: 36px;
+    padding-inline: 8px;
+  }
+  .quick-append-image-button span {
+    display: none;
   }
   .quick-append.is-active > small,
   .quick-append.is-active > .inline-error {

@@ -8,8 +8,8 @@ export { appendContent } from '../shared/records';
 // A Markdown note takes the record shape of its kind; plain text just gets the block.
 export function createNoteAppender(id: string, kind?: RecordKind, operationKey?: string) {
   let pending: { key: string; payload: { content: string; attachments: string[]; revision: number } } | null = null;
-  return async (title: string, text: string, retryKey?: string) => {
-    if (!text.trim()) throw new Error('请先输入内容。');
+  return async (title: string, text: string, retryKey?: string, attachmentIds: string[] = []) => {
+    if (!text.trim() && attachmentIds.length === 0) throw new Error('请先输入内容。');
     try {
       if (!pending) {
         const note = await api<NoteDetail>(`/api/nodes/${id}`);
@@ -21,7 +21,10 @@ export function createNoteAppender(id: string, kind?: RecordKind, operationKey?:
             content: note.kind === 'markdown' && kind
               ? appendRecord(note.content, kind, title, text)
               : appendContent(note.content, title, text, note.kind === 'markdown'),
-            attachments: note.attachments.map((file) => file.id),
+            attachments: [...new Set([
+              ...note.attachments.map((file) => file.id),
+              ...attachmentIds,
+            ])],
             revision: note.revision,
           },
         };
