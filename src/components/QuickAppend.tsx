@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { ImagePlus, Send, X } from 'lucide-react';
+import { ImagePlus, LoaderCircle, Send, X } from 'lucide-react';
 import { fileUrl, uncertainFailure, upload } from '../api';
 import { createNoteAppender } from '../append-note';
 import type { RecordKind } from '../../shared/records';
@@ -205,6 +205,9 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
         </button>
       </div>}
       </div>
+      {uploading && <small className="upload-status" role="status">
+        <LoaderCircle size={14} className="spin" aria-hidden="true" />正在上传照片…
+      </small>}
       {disabled && <small>联网后可追加内容</small>}
       {error && <p className="inline-error" role="alert">{error}</p>}
     </form>

@@ -4733,6 +4733,12 @@ select.status-select.status-unknown {
 .quick-append small {
   color: var(--muted);
 }
+.quick-append .upload-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
 .quick-append .inline-error {
   margin: 6px 0 0;
 }

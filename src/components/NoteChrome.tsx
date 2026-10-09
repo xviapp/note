@@ -4,6 +4,7 @@ import {
   ChevronLeft,
   ChevronRight,
   Link2,
+  LoaderCircle,
   Menu,
   MoreHorizontal,
   Paperclip,
@@ -174,7 +175,7 @@ export function EditToolbar({
   return (
     <div className="edit-toolbar">
       <span className="editing-label" role="status">
-        <Pencil size={14} />
+        {busy || uploading ? <LoaderCircle size={14} className="spin" aria-hidden="true" /> : <Pencil size={14} />}
         {busy ? '正在保存…' : uploading ? '正在上传…' : dirty ? '未保存' : '已保存'}
       </span>
       <div className="edit-tabs">

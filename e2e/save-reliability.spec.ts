@@ -19,6 +19,41 @@ async function create(page: Page, data: object) {
   return response.json();
 }
 
+test('pending photo uploads show visible feedback in every theme', async ({ page }, testInfo) => {
+  await login(page);
+  const journal = await create(page, { kind: 'folder', title: '照片上传', journal: true });
+  const response = await page.request.post(`/api/nodes/${journal.id}/journal/entries`, {
+    headers, data: { date: '2026-10-09', content: '# 日记' },
+  });
+  expect(response.ok()).toBe(true);
+  const { node } = await response.json();
+  await page.goto(`/n/${node.id}`);
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/files?*', async (route) => {
+    await gate;
+    await route.fulfill({ status: 503, contentType: 'application/json', body: JSON.stringify({ error: '上传失败，请重试。' }) });
+  });
+  await page.getByLabel('添加照片').setInputFiles({ name: '照片.png', mimeType: 'image/png', buffer: Buffer.from('image') });
+  const status = page.locator('.upload-status');
+  try {
+    for (const theme of ['light', 'dark', 'starry']) {
+      await page.evaluate((value) => {
+        window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
+      }, theme);
+      await expect(status).toHaveText('正在上传照片…');
+      await expect(status).toBeInViewport();
+      await expect(status.locator('.spin')).toBeVisible();
+      await page.screenshot({ path: testInfo.outputPath(`upload-${theme}.png`) });
+    }
+  } finally {
+    release();
+  }
+  await expect(status).toHaveCount(0);
+  await expect(page.getByRole('alert')).toHaveText('上传失败，请重试。');
+  await expect(page.getByLabel('添加照片')).toBeEnabled();
+});
+
 async function writeSource(page: Page, text: string) {
   const field = page.getByRole('textbox', { name: 'Markdown 源码' });
   await field.click();

@@ -17,6 +17,22 @@ vi.mock('./CachedImage', () => ({
 beforeEach(() => { localStorage.clear(); append.mockReset(); upload.mockReset(); });
 afterEach(cleanup);
 
+it('shows upload feedback while a photo is pending and clears it after failure', async () => {
+  let rejectUpload!: (reason: Error) => void;
+  upload.mockImplementation(() => new Promise((_, reject) => { rejectUpload = reject; }));
+  render(<QuickAppend id="day" disabled={false} onSaved={() => {}} />);
+  await waitFor(() => expect((screen.getByLabelText('添加照片') as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('添加照片'), {
+    target: { files: [new File(['image'], '照片.png', { type: 'image/png' })] },
+  });
+  expect(screen.getByRole('status').textContent).toContain('正在上传');
+  expect((screen.getByRole('button', { name: '追加' }) as HTMLButtonElement).disabled).toBe(true);
+  rejectUpload(new Error('连接中断'));
+  expect((await screen.findByRole('alert')).textContent).toContain('连接中断');
+  expect(screen.queryByRole('status')).toBeNull();
+  expect((screen.getByLabelText('添加照片') as HTMLInputElement).disabled).toBe(false);
+});
+
 it('shows submit on focus or input and keeps it available when focus moves to the button', async () => {
   render(<QuickAppend id="day" disabled={false} onSaved={() => {}} />);
   const title = screen.getByLabelText('记录标题');
