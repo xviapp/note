@@ -179,25 +179,27 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
             </div>
           ))}
         </div>}
-        <textarea ref={field} aria-label="记录内容" placeholder={placeholder} rows={4} value={text}
-          disabled={busy || uploading || !ready || retrying} onChange={(event) => setText(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
-              event.preventDefault(); void save();
-            }
-          }} />
+        <div className="quick-append-editor">
+          <textarea ref={field} aria-label="记录内容" placeholder={placeholder} rows={4} value={text}
+            disabled={busy || uploading || !ready || retrying} onChange={(event) => setText(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter' && (event.ctrlKey || event.metaKey) && !event.nativeEvent.isComposing) {
+                event.preventDefault(); void save();
+              }
+            }} />
+          <label className="icon-button quick-append-image-button" title={uploading ? '正在上传照片…' : '添加照片'}>
+            <ImagePlus size={16} />
+            <input type="file" aria-label="添加照片" accept={IMAGE_ACCEPT} multiple
+              disabled={disabled || blocked || busy || uploading || !ready || retrying}
+              onChange={(event) => {
+                const files = Array.from(event.target.files ?? []);
+                event.target.value = '';
+                void addImages(files);
+              }} />
+          </label>
+        </div>
       {(focused || !!title || !!text || images.length > 0 || busy || uploading) && <div className="quick-append-actions">
         {actions}
-        <label className="button compact quick-append-image-button" title="添加照片">
-          <ImagePlus size={15} /><span>{uploading ? '上传中…' : '照片'}</span>
-          <input type="file" aria-label="添加照片" accept={IMAGE_ACCEPT} multiple
-            disabled={disabled || blocked || busy || uploading || !ready || retrying}
-            onChange={(event) => {
-              const files = Array.from(event.target.files ?? []);
-              event.target.value = '';
-              void addImages(files);
-            }} />
-        </label>
         <button className="button primary compact" type="submit" disabled={disabled || blocked || busy || uploading || !ready || (!text.trim() && images.length === 0)}>
           <Send size={15} />{busy ? '正在追加…' : retrying ? '重试追加' : label}
         </button>
