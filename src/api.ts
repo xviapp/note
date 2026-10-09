@@ -45,6 +45,16 @@ export function lockEdits() {
 export function lockNote(id: string) {
   noteTokens.delete(id);
 }
+// AI work has its own provider budget (up to twenty minutes). Ordinary
+// writes should release the editor promptly when a connection stalls.
+function requestTimeout(path: string, method: string) {
+  if (method === 'GET') return path === '/api/auth/status' ? 5000 : 10_000;
+  if (path === '/api/books/role-prompt' ||
+      /^\/api\/nodes\/[^/]+\/(pages|insights|organize|book-note|paper-translation)(\/|$)/.test(path))
+    return 25 * 60_000;
+  if (/^\/api\/(backups|import\/arxiv|cleanup|clips\/encryption)(\/|$)/.test(path)) return 5 * 60_000;
+  return 30_000;
+}
 export async function api<T = Record<string, unknown>>(
   path: string,
   method = 'GET',
@@ -88,15 +98,18 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
   if (method !== 'GET') headers['x-idempotency-key'] = key ?? crypto.randomUUID();
   Object.assign(headers, await keyHeaders(path));
   let response: Response;
+  const signal = AbortSignal.timeout(requestTimeout(path, method));
   try {
     response = await fetch(path, {
       method,
       headers,
       credentials: 'same-origin',
-      ...(method === 'GET' ? { signal: AbortSignal.timeout(authProbe ? 5000 : 10_000) } : {}),
+      signal,
       body: data === undefined ? undefined : JSON.stringify(data),
     });
   } catch {
+    if (signal.aborted && method !== 'GET')
+      throw new ApiError('请求超时，尚无法确认是否保存成功。请保留当前内容并重试。', 0, 'REQUEST_TIMEOUT');
     setOffline(true);
     const cached = method === 'GET' ? await cachedResponse<T>(path) : undefined;
     if (cached !== undefined) return reveal(cached);
@@ -353,9 +366,9 @@ export async function uploadSealed(
 ): Promise<FileInfo> {
   await proxyReady();
   const sealed = await sealData(keyId, bytes);
-  const response = await fetch(
+  const response = await uploadRequest(
     `/api/files?name=${encodeURIComponent(name)}&size=${sealed.length}&key=${keyId}&mime=${encodeURIComponent(mime)}`,
-    { method: 'POST', credentials: 'same-origin', body: sealed },
+    sealed,
   );
   return parse<FileInfo>(response);
 }
@@ -369,15 +382,21 @@ export async function upload(file: File, scope?: string | null): Promise<FileInf
     const { bytes, mime } = await plainUpload(file);
     return uploadSealed(bytes, file.name, mime, keyId);
   }
-  const response = await fetch(
+  const response = await uploadRequest(
     `/api/files?name=${encodeURIComponent(file.name)}&size=${file.size}`,
-    {
-      method: 'POST',
-      credentials: 'same-origin',
-      body: file,
-    },
+    file,
   );
   return parse<FileInfo>(response);
+}
+async function uploadRequest(path: string, body: BodyInit) {
+  try {
+    return await fetch(path, {
+      method: 'POST', credentials: 'same-origin', body,
+      signal: AbortSignal.timeout(5 * 60_000),
+    });
+  } catch {
+    throw new ApiError('文件上传超时或连接中断，请保留原文件并重试。', 0, 'UPLOAD_INTERRUPTED');
+  }
 }
 export const fileUrl = (id: string, download = false) =>
   `/api/files/${encodeURIComponent(id)}${download ? '?download=1' : ''}`;

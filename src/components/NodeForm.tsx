@@ -16,6 +16,12 @@ import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
 import { NodePicker } from './Tree';
 
+const commonTypes: NoteVariant[] = ['markdown', 'folder', 'journal', 'link'];
+const choices = [
+  ...commonTypes.map((variant) => NOTE_TYPES[variant]),
+  ...CREATABLE_TYPES.filter(({ variant }) => !commonTypes.includes(variant)),
+];
+
 export function NodeForm({
   node,
   parent,
@@ -37,6 +43,7 @@ export function NodeForm({
   );
   const [title, setTitle] = useState(node?.title || existingFile?.name || ''),
     [url, setUrl] = useState(node?.url || '');
+  const [moreTypes, setMoreTypes] = useState(false);
   const [reference, setReference] = useState<{ id: string; title: string } | null>(null);
   const [file, setFile] = useState<File | null>(null),
     [busy, setBusy] = useState(false),
@@ -149,20 +156,26 @@ export function NodeForm({
         {!node && !existingFile && (
           <fieldset className="kind-choices">
             <legend>内容类型</legend>
-            {CREATABLE_TYPES.map(({ variant: value, label }) => (
-              <label key={value} className={kind === value ? 'selected' : ''}>
-                <input
-                  type="radio"
-                  name="kind"
-                  value={value}
-                  checked={kind === value}
-                  disabled={working || !!uploaded.current}
-                  onChange={() => setKind(value)}
-                />
-                <NodeIcon kind={value} />
-                {label}
-              </label>
-            ))}
+            {choices
+              .filter(({ variant }) => moreTypes || commonTypes.includes(variant) || variant === kind)
+              .map(({ variant: value, label }) => (
+                <label key={value} className={kind === value ? 'selected' : ''}>
+                  <input
+                    type="radio"
+                    name="kind"
+                    value={value}
+                    checked={kind === value}
+                    disabled={working || !!uploaded.current}
+                    onChange={() => setKind(value)}
+                  />
+                  <NodeIcon kind={value} />
+                  {label}
+                </label>
+              ))}
+            <button type="button" className="text-button kind-more" aria-expanded={moreTypes}
+              disabled={working} onClick={() => setMoreTypes((value) => !value)}>
+              {moreTypes ? '收起其他类型' : '更多类型'}
+            </button>
           </fieldset>
         )}
         {!iconOnly && (

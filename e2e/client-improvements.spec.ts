@@ -1,3 +1,4 @@
+import { chooseNodeType } from './note-actions';
 import { test, expect, type Page } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { BlobReader, ZipReader } from '@zip.js/zip.js';
@@ -416,7 +417,7 @@ test('untitled notes open for writing and Qingli uses the floating entry', async
   const menu = page.locator('.note-actions .node-menu');
   await menu.getByRole('button', { name: '管理 未命名笔记', exact: true }).click();
   await menu.getByRole('button', { name: '新建笔记', exact: true }).click();
-  await form.getByRole('radio', { name: '纯文本', exact: true }).check();
+  await chooseNodeType(form, '纯文本');
   await form.getByLabel('标题', { exact: true }).fill('   ');
   await form.getByRole('button', { name: '创建', exact: true }).click();
   await expect(page.getByRole('textbox', { name: '纯文本正文' })).toBeFocused();
@@ -676,7 +677,7 @@ test('an arXiv paper with many images keeps importing over continuations and res
   await expect(page.locator('.app-shell')).toBeVisible();
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记', exact: true });
-  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await chooseNodeType(form, 'arXiv 论文');
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
     .fill('https://arxiv.org/html/2503.01800v1');

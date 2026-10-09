@@ -774,6 +774,7 @@ export default function NotePane(props: Props) {
                       <section className="children-section is-folder" aria-label="下级笔记">
                         <NodeList
                           parent={id}
+                          onNew={() => props.onAction('new', note)}
                           refresh={props.treeRefresh}
                           onOpen={props.onOpen}
                           onAction={props.onAction}

@@ -1,3 +1,4 @@
+import { chooseNodeType } from './note-actions';
 import { expect, test, type Page, type Locator } from './fixtures';
 import { noteAction } from './note-actions';
 import { preparePassword } from '../shared/password';
@@ -1225,7 +1226,7 @@ test('SVG paper diagrams remain vector images and appear in screenshots and AI a
   });
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记' });
-  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await chooseNodeType(form, 'arXiv 论文');
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
     .fill('https://arxiv.org/html/2503.01800v1');
@@ -1303,7 +1304,7 @@ test('imports an arXiv paper for reading, MathML, citations, saved position and 
   });
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记' });
-  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await chooseNodeType(form, 'arXiv 论文');
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
     .fill('https://arxiv.org/html/2503.01800v1');
@@ -1458,7 +1459,7 @@ test('long arXiv papers allow the full text or a chosen section without silent t
   const chat = await assistantFixture(page);
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记' });
-  await form.getByRole('radio', { name: 'arXiv 论文', exact: true }).check();
+  await chooseNodeType(form, 'arXiv 论文');
   await form
     .getByLabel('arXiv 论文地址', { exact: true })
     .fill('https://arxiv.org/abs/2503.01800v1');

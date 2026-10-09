@@ -8,7 +8,7 @@ export { appendContent } from '../shared/records';
 // A Markdown note takes the record shape of its kind; plain text just gets the block.
 export function createNoteAppender(id: string, kind?: RecordKind, operationKey?: string) {
   let pending: { key: string; payload: { content: string; attachments: string[]; revision: number } } | null = null;
-  return async (title: string, text: string) => {
+  return async (title: string, text: string, retryKey?: string) => {
     if (!text.trim()) throw new Error('请先输入内容。');
     try {
       if (!pending) {
@@ -16,7 +16,7 @@ export function createNoteAppender(id: string, kind?: RecordKind, operationKey?:
         if (note.locked) throw new Error('请先解锁这篇笔记。');
         if (note.kind !== 'markdown' && note.kind !== 'text') throw new Error('只有文本笔记可以追加内容。');
         pending = {
-          key: operationKey ?? crypto.randomUUID(),
+          key: retryKey ?? operationKey ?? crypto.randomUUID(),
           payload: {
             content: note.kind === 'markdown' && kind
               ? appendRecord(note.content, kind, title, text)

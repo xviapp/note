@@ -1,6 +1,6 @@
 import type { AuthStatus, FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import { FOLDER_ICON_MAX_BYTES } from '../shared/folder-icons';
-import { DRAFT_PREFIX } from './note-drafts';
+import { clearDrafts } from './note-drafts';
 import { openBlob } from './encryption';
 
 // Private content lives in IndexedDB, never the public service-worker cache.
@@ -610,6 +610,7 @@ export async function clearRecentCache() {
   await changed();
 }
 export async function clearPrivateCache() {
+  clearDrafts();
   if (!cacheEpoch().startsWith('signed-out:')) advanceEpoch('signed-out');
   else invalidateJobs(true);
   await transaction('readwrite', async (tx) => {
@@ -617,7 +618,7 @@ export async function clearPrivateCache() {
   }).catch(() => {});
   try {
     for (const key of Object.keys(localStorage))
-      if (key.startsWith('reading:') || key.startsWith('pdf-view:') || key.startsWith(DRAFT_PREFIX))
+      if (key.startsWith('reading:') || key.startsWith('pdf-view:'))
         localStorage.removeItem(key);
     sessionStorage.removeItem('expanded-nodes');
   } catch {

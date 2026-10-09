@@ -214,6 +214,15 @@ export function Empty({
   );
 }
 
+export function EmptyDirectory({ onNew }: { onNew: () => void }) {
+  return (
+    <div className="directory-empty">
+      <p>此目录还没有内容</p>
+      <button className="button primary" onClick={onNew}>创建笔记</button>
+    </div>
+  );
+}
+
 export type Confirm = (
   title: string,
   message: string,

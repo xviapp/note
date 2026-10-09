@@ -1,3 +1,4 @@
+import { editorAction } from './note-actions';
 import { test, expect, type Page } from './fixtures';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
@@ -128,7 +129,7 @@ test('随手记 images go into the note being edited and become notes; clips can
   await source.click();
   await page.keyboard.press('ControlOrMeta+End');
   await page.keyboard.press('Enter');
-  await page.getByRole('button', { name: '插入随手记' }).click();
+  await editorAction(page, '插入随手记');
   dialog = page.getByRole('dialog', { name: '随手记' });
   await expect(dialog.getByText('正在编辑「草稿」')).toBeVisible();
   await dialog
@@ -138,7 +139,7 @@ test('随手记 images go into the note being edited and become notes; clips can
     .click();
   await expect(dialog).toHaveCount(0);
   await expect(source).toContainText('插入用的一句话');
-  await page.getByRole('button', { name: '插入随手记' }).click();
+  await editorAction(page, '插入随手记');
   await dialog
     .locator('.clip-item')
     .filter({ hasText: '图配文' })

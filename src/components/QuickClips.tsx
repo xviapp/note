@@ -43,6 +43,7 @@ import { fileBlob } from '../offline-cache';
 import { useOffline } from '../connectivity';
 import { useInsertTarget, type InsertTarget } from '../note-insert';
 import { useToast } from '../use-toast';
+import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 import { Modal, Spinner } from './Primitives';
 import { CachedImage } from './CachedImage';
 import { UnlockForm, useKeys } from './Encryption';
@@ -54,6 +55,7 @@ import '../clips.css';
 const ImageViewer = lazy(() => import('./ImageViewer'));
 type Item = Clip & { pending?: PendingClip };
 const LONG = 280;
+const COMPOSE_DRAFT = 'clips-compose';
 // The server's order: newest first, then by ID.
 const newestFirst = (a: Clip, b: Clip) =>
   b.created_at - a.created_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
@@ -103,6 +105,7 @@ export function QuickClips({
   const [next, setNext] = useState<string | null>(null);
   const [pending, setPending] = useState<Item[]>([]);
   const [text, setText] = useState('');
+  const [draftReady, setDraftReady] = useState(false);
   const [image, setImage] = useState<File | null>(null);
   const [withSource, setWithSource] = useState(false);
   const [filter, setFilter] = useState('');
@@ -156,6 +159,38 @@ export function QuickClips({
 
   const keyId = list?.keyId ?? null;
   const keyLocked = !!keyId && !isUnlocked(keyId);
+  const sourceId = source?.id ?? null;
+  useEffect(() => {
+    if (keyLocked) {
+      setText('');
+      setDraftReady(false);
+      return;
+    }
+    if (!list || draftReady) return;
+    let live = true;
+    void readDraft(COMPOSE_DRAFT).then((draft) => {
+      if (!live) return;
+      if (draft) {
+        try {
+          const value = JSON.parse(draft.content);
+          if (typeof value.text === 'string') {
+            setText(value.text);
+            setWithSource(!!sourceId && value.sourceId === sourceId);
+          }
+        } catch { /* Ignore an invalid draft. */ }
+      }
+      setDraftReady(true);
+    });
+    return () => { live = false; };
+  }, [list, keyLocked, draftReady, sourceId]);
+  useEffect(() => {
+    if (!draftReady || keyLocked) return;
+    if (!text) removeDraft(COMPOSE_DRAFT);
+    else void writeDraft(COMPOSE_DRAFT, {
+      content: JSON.stringify({ text, sourceId: withSource ? sourceId : null }),
+      attachments: [], revision: 0, savedAt: Date.now(),
+    }, keyId);
+  }, [draftReady, keyLocked, keyId, text, withSource, sourceId]);
   // Text arrives opened only while its key is unlocked, so unlocking reads
   // the list again; locking just hides what is shown.
   const wasLocked = useRef(keyLocked);
@@ -177,7 +212,7 @@ export function QuickClips({
 
   const save = async (event?: FormEvent) => {
     event?.preventDefault();
-    if (busy || (!text.trim() && !image)) return;
+    if (busy || !draftReady || keyLocked || (!text.trim() && !image)) return;
     setBusy(true);
     setError('');
     try {
@@ -352,7 +387,7 @@ export function QuickClips({
             autoFocus
             maxLength={CLIP_CHARS}
             value={text}
-            disabled={keyLocked}
+            disabled={busy || keyLocked || !draftReady}
             onChange={(event) => setText(event.target.value)}
             onPaste={paste}
             onKeyDown={(event) => {
@@ -372,6 +407,7 @@ export function QuickClips({
               <label className="clips-source-toggle">
                 <input
                   type="checkbox"
+                  disabled={busy}
                   checked={withSource}
                   onChange={(event) => setWithSource(event.target.checked)}
                 />
@@ -387,7 +423,7 @@ export function QuickClips({
                 type="file"
                 aria-label="添加图片"
                 accept="image/png,image/jpeg,image/gif,image/webp,image/avif"
-                disabled={keyLocked || offline}
+                disabled={busy || keyLocked || offline || !draftReady}
                 onChange={(event) => {
                   pick(event.target.files?.[0]);
                   event.target.value = '';
@@ -396,7 +432,7 @@ export function QuickClips({
             </label>
             <button
               className="button primary compact"
-              disabled={busy || keyLocked || (!text.trim() && !image)}
+              disabled={busy || keyLocked || !draftReady || (!text.trim() && !image)}
             >
               {busy && image ? '上传中…' : '保存'}
             </button>
@@ -455,7 +491,7 @@ export function QuickClips({
     <Modal
       title="随手记"
       className="clips-modal"
-      onClose={onClose}
+      onClose={() => { if (!busy) onClose(); }}
       actions={
         // Whether clips are encrypted, and the way to their password.
         <button

@@ -1,3 +1,4 @@
+import { chooseNodeType } from './note-actions';
 import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 import type { NoteDetail, NoteNode } from '../shared/types';
@@ -24,7 +25,7 @@ test('projects index Markdown and references, write status to source files and r
   page.on('pageerror', (error) => errors.push(error.message));
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记' });
-  await form.getByRole('radio', { name: '项目', exact: true }).check();
+  await chooseNodeType(form, '项目');
   await form.getByLabel('标题', { exact: true }).fill('页间开发');
   await form.getByRole('button', { name: '创建', exact: true }).click();
   await expect(page.locator('.document-kind')).toHaveText('项目');
@@ -90,7 +91,7 @@ test('projects index Markdown and references, write status to source files and r
     .locator('.document-heading')
     .getByRole('button', { name: '新建', exact: true })
     .click();
-  await form.getByRole('radio', { name: '文件／文件夹引用', exact: true }).check();
+  await chooseNodeType(form, '文件／文件夹引用');
   await form.getByLabel('标题', { exact: true }).fill('共享任务引用');
   await form
     .locator('.node-picker')

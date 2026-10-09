@@ -1,6 +1,7 @@
 import {
   ArrowLeft,
   Clock3,
+  Feather,
   FolderOpen,
   HardDriveDownload,
   Menu,
@@ -167,9 +168,8 @@ export function AppHeader({
         <StickyNote size={19} />
       </button>
       {onNew && (
-        <button className="button compact header-new" onClick={onNew}>
-          <Plus size={16} />
-          新建
+        <button className="icon-button header-new" aria-label="新建" title="新建（N）" onClick={onNew}>
+          <Feather size={20} aria-hidden="true" />
         </button>
       )}
     </header>

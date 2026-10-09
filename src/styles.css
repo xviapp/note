@@ -1262,6 +1262,13 @@ button.node-list-toggle:focus-visible {
   font-size: 12px;
   padding: 18px 0;
 }
+.directory-empty {
+  padding: 36px 0;
+  text-align: center;
+  color: var(--muted);
+  font-size: 14px;
+}
+.directory-empty p { margin: 0 0 16px; }
 .library-home .children-empty {
   padding: 45px 0;
   color: var(--muted);
@@ -1433,6 +1440,7 @@ button.node-list-toggle:focus-visible {
   font-size: 11px;
   color: var(--muted);
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 10px;
   min-height: 32px;
@@ -1441,12 +1449,16 @@ button.node-list-toggle:focus-visible {
 }
 .document-meta > .text-button {
   margin-left: auto;
+  flex-shrink: 0;
+  white-space: nowrap;
 }
 .document-kind {
   display: inline-flex;
   align-items: center;
   gap: 6px;
+  white-space: nowrap;
 }
+.document-meta > span:not(.document-kind) { white-space: nowrap; }
 .document-kind + *::before {
   content: '·';
   margin-right: 10px;
@@ -2182,7 +2194,14 @@ button.node-list-toggle:focus-visible {
   align-items: center;
   gap: 5px;
   margin-right: 12px;
+  white-space: nowrap;
 }
+.edit-insert-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.edit-insert-menu > summary[hidden] { display: none; }
 .source-pane {
   width: 50%;
   min-width: 0;
@@ -2591,6 +2610,7 @@ button.node-list-toggle:focus-visible {
   grid-template-columns: 1fr 1fr;
   gap: 7px;
 }
+.kind-more { grid-column: 1 / -1; justify-self: start; }
 .kind-choices label {
   flex-direction: row;
   align-items: center;
@@ -3211,9 +3231,7 @@ button.node-list-toggle:focus-visible {
     padding: 37px 42px 70px;
   }
 
-  .editing-label {
-    display: none;
-  }
+  .editing-label { margin-right: 0; }
 }
 @media (max-width: 760px) {
   .app-shell {
@@ -3436,9 +3454,37 @@ button.node-list-toggle:focus-visible {
     font-size: 16px;
   }
   .edit-toolbar {
+    position: relative;
     padding: 9px 12px;
     gap: 5px;
-    flex-wrap: wrap;
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto auto auto;
+  }
+  .edit-toolbar .editing-label {
+    grid-row: 2;
+    grid-column: 1 / -1;
+    min-height: 20px;
+    font-size: 12px;
+  }
+  .edit-toolbar .toolbar-spacer { display: none; }
+  .edit-insert-menu { position: static; }
+  .edit-insert-menu .menu-popup {
+    left: auto;
+    right: 12px;
+    min-width: 190px;
+  }
+  .edit-insert-menu .menu-popup button {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+  .edit-insert-menu .menu-popup .file-input-button {
+    width: 100%;
+    justify-content: flex-start;
+    border: 0;
+    background: transparent;
+    font-size: 14px;
+    padding: 8px 12px;
   }
   .edit-toolbar .button {
     font-size: 10px;
@@ -3446,7 +3492,7 @@ button.node-list-toggle:focus-visible {
     padding: 5px 8px;
   }
   .edit-toolbar .file-input-button span {
-    display: none;
+    display: inline;
   }
   .edit-toolbar .file-input-button {
     padding: 7px 9px;
@@ -3458,8 +3504,10 @@ button.node-list-toggle:focus-visible {
     overflow: hidden;
   }
   .edit-tabs button {
-    font-size: 11px;
+    flex: 1;
+    font-size: 12px;
     padding: 6px 10px;
+    min-height: 46px;
     color: var(--muted);
   }
   .edit-tabs button.active {

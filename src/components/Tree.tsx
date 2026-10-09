@@ -13,7 +13,7 @@ import { createPortal } from 'react-dom';
 import { ChevronRight, CornerLeftUp, MoreHorizontal, Plus, RefreshCw } from 'lucide-react';
 import { api } from '../api';
 import type { NoteNode } from '../../shared/types';
-import { NodeIcon, Spinner } from './Primitives';
+import { EmptyDirectory, NodeIcon, Spinner } from './Primitives';
 import { OfflineSaveButton } from './OfflineCache';
 import { useNodeListing, type NodeListing as Listing } from '../use-node-listing';
 import { useOffline } from '../connectivity';
@@ -24,6 +24,7 @@ import { isUnlocked, lock } from '../keyring';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon' | 'encryption';
 export interface TreeProps {
+  onNew?: () => void;
   expansionState?: Set<string>;
   showRefresh?: boolean;
   refresh: number;
@@ -176,7 +177,9 @@ function Branch({
           {error}
         </p>
       )}
-      {!listing.nodes.length && depth === 0 && <p className="tree-empty">暂无笔记</p>}
+      {!listing.nodes.length && depth === 0 && (props.onNew
+        ? <EmptyDirectory onNew={props.onNew} />
+        : <p className="tree-empty">暂无笔记</p>)}
       <ul
         className="tree-branch"
         role={depth ? 'group' : 'tree'}

@@ -647,6 +647,7 @@ function Notebook({
                   {android ? (
                     <Tree
                       refresh={revision}
+                      onNew={() => void newNode()}
                       onRefresh={refreshLibrary}
                       selected={selected}
                       onOpen={openNode}
@@ -659,6 +660,7 @@ function Notebook({
                   ) : (
                     <NodeList
                       parent={null}
+                      onNew={() => void newNode()}
                       refresh={revision}
                       onOpen={openNode}
                       onAction={action}

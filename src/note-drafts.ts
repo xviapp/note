@@ -29,9 +29,14 @@ export async function readDraft(id: string): Promise<NoteDraft | null> {
     return null;
   }
 }
-// Sealing is asynchronous; a draft removed meanwhile is not written back.
+// Sealing is asynchronous; only the newest write may commit, and removal
+// invalidates every in-flight write.
 const generations = new Map<string, number>();
+let epoch = 0;
 export function writeDraft(id: string, draft: NoteDraft, keyId?: string | null) {
+  const started = epoch;
+  const generation = (generations.get(id) ?? 0) + 1;
+  generations.set(id, generation);
   const store = (value: unknown) => {
     try {
       localStorage.setItem(DRAFT_PREFIX + id, JSON.stringify(value));
@@ -40,12 +45,11 @@ export function writeDraft(id: string, draft: NoteDraft, keyId?: string | null) 
     }
   };
   if (!keyId) return store(draft);
-  const generation = generations.get(id) ?? 0;
-  void (async () => {
+  return (async () => {
     const key = await unlockedKey(keyId);
     if (!key) return;
     const sealed = await sealText(key, keyId, JSON.stringify(draft));
-    if ((generations.get(id) ?? 0) === generation) store({ sealed });
+    if (epoch === started && (generations.get(id) ?? 0) === generation) store({ sealed });
   })().catch(() => {});
 }
 export function hasDraft(id: string) {
@@ -59,6 +63,17 @@ export function removeDraft(id: string) {
   generations.set(id, (generations.get(id) ?? 0) + 1);
   try {
     localStorage.removeItem(DRAFT_PREFIX + id);
+  } catch {
+    /* Storage can be unavailable. */
+  }
+}
+// Sign-out also invalidates drafts whose encryption is still in flight.
+export function clearDrafts() {
+  epoch++;
+  generations.clear();
+  try {
+    for (const key of Object.keys(localStorage))
+      if (key.startsWith(DRAFT_PREFIX)) localStorage.removeItem(key);
   } catch {
     /* Storage can be unavailable. */
   }

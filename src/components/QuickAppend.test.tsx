@@ -69,7 +69,7 @@ it('leaves the input editable after a definite failure', async () => {
   expect(field.disabled).toBe(false);
   fireEvent.change(field, { target: { value: '改过的内容' } });
   fireEvent.click(screen.getByRole('button', { name: '追加' }));
-  await waitFor(() => expect(append).toHaveBeenLastCalledWith('', '改过的内容'));
+  await waitFor(() => expect(append).toHaveBeenLastCalledWith('', '改过的内容', expect.any(String)));
 });
 
 it('uses Ctrl+Enter to submit and ignores IME composition', async () => {
@@ -81,7 +81,7 @@ it('uses Ctrl+Enter to submit and ignores IME composition', async () => {
   fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true, isComposing: true });
   expect(append).not.toHaveBeenCalled();
   fireEvent.keyDown(field, { key: 'Enter', ctrlKey: true });
-  await waitFor(() => expect(append).toHaveBeenCalledWith('', '内容'));
+  await waitFor(() => expect(append).toHaveBeenCalledWith('', '内容', expect.any(String)));
 });
 
 it('restores the custom submission operation after an uncertain response and reopening', async () => {

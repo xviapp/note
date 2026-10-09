@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type RefObject } from 'react';
-import { api, fileUrl, lockNote, unlockNote, upload } from './api';
+import { api, ApiError, fileUrl, lockNote, unlockNote, upload } from './api';
 import type { FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import type { useQuestion } from './components/Primitives';
 import { readDraft, removeDraft, writeDraft } from './note-drafts';
@@ -40,6 +40,9 @@ export function useNoteEditor({
   const [tab, setTab] = useState<'source' | 'preview'>('source');
   const draftUploads = useRef(new Set<string>());
   const saveRequest = useRef<{ payload: string; key: string } | null>(null);
+  const currentDraft = useRef({ content, assets });
+  currentDraft.current = { content, assets };
+  const savingNow = useRef(false), uploadingNow = useRef(false);
   const sortedIds = (files: FileInfo[]) =>
     files
       .map((f) => f.id)
@@ -87,7 +90,7 @@ export function useNoteEditor({
       600,
     );
     return () => clearTimeout(timer);
-  }, [id, editing, dirty, content, assets, keyId]);
+  }, [id, editing, dirty, content, assets, keyId, note?.revision]);
 
   const abandonUploads = () => {
     for (const fileId of draftUploads.current)
@@ -103,9 +106,10 @@ export function useNoteEditor({
     if (editorRef.current) editorRef.current.insert(text);
     else setContent((previous) => `${previous}\n\n${text}\n`);
   };
-  // The shortcut saves and keeps editing; the toolbar's 保存 also finishes.
+  // The shortcut keeps editing; 保存 finishes only if no newer edits arrived.
   const save = async (finish = true): Promise<boolean> => {
-    if (!noteRef.current || busy || uploading) return false;
+    if (!noteRef.current || savingNow.current || uploadingNow.current) return false;
+    savingNow.current = true;
     setBusy(true);
     setSaveError('');
     const payload = {
@@ -113,37 +117,54 @@ export function useNoteEditor({
       attachments: assets.map((file) => file.id),
       revision: noteRef.current.revision,
     };
+    const submittedUploads = new Set(draftUploads.current);
     // A retried save of the same draft reuses its key, so it cannot apply twice.
     const fingerprint = JSON.stringify(payload);
     if (saveRequest.current?.payload !== fingerprint)
       saveRequest.current = { payload: fingerprint, key: crypto.randomUUID() };
     try {
-      await api<NoteNode>(`/api/nodes/${id}/content`, 'PUT', payload, saveRequest.current.key);
+      const saved = await api<NoteNode>(`/api/nodes/${id}/content`, 'PUT', payload, saveRequest.current.key);
       // Commit the local baseline before any navigation guard can run again.
       const detail = await api<NoteDetail>(`/api/nodes/${id}`);
+      if (detail.revision < saved.revision)
+        throw new ApiError('正文已提交，但暂时无法确认最新版本。草稿已保留，请联网后再次保存。', 0);
       noteRef.current = detail;
       setNote(detail);
       // When editing continues, the saved note is only the new baseline: the
       // reader may have typed more while the save was in flight.
-      if (finish) reset(detail);
-      for (const fileId of draftUploads.current)
-        if (!detail.attachments.some((file) => file.id === fileId))
+      const latest = currentDraft.current;
+      const changed = latest.content !== payload.content || sortedIds(latest.assets) !== [...payload.attachments].sort().join();
+      const finished = finish && !changed && !uploadingNow.current;
+      if (finished) reset(detail);
+      for (const fileId of submittedUploads) {
+        if (detail.attachments.some((file) => file.id === fileId)) {
+          draftUploads.current.delete(fileId);
+        } else if (!latest.assets.some((file) => file.id === fileId)) {
           void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
-      draftUploads.current.clear();
-      removeDraft(id);
+          draftUploads.current.delete(fileId);
+        }
+      }
       baseRevision.current = detail.revision;
-      if (finish) exitEdit();
+      if (changed) {
+        void writeDraft(id, {
+          content: latest.content, attachments: latest.assets,
+          revision: detail.revision, savedAt: Date.now(),
+        }, keyId);
+      } else removeDraft(id);
+      if (finished) exitEdit();
       onChanged();
-      return true;
+      // A navigation guard must not leave behind edits made during this save.
+      return !changed && !uploadingNow.current;
     } catch (error) {
       setSaveError((error as Error).message);
       return false;
     } finally {
+      savingNow.current = false;
       setBusy(false);
     }
   };
   const leave = async (): Promise<boolean> => {
-    if (busy || uploading) return false;
+    if (savingNow.current || uploadingNow.current) return false;
     if (!editing) return true;
     if (dirty) {
       const answer = await question.ask('还有未保存的修改', '离开之前，如何处理这篇笔记的修改？', [
@@ -232,7 +253,8 @@ export function useNoteEditor({
     }
   };
   const addFiles = async (files: FileList | File[] | null) => {
-    if (!files?.length) return;
+    if (!files?.length || uploadingNow.current) return;
+    uploadingNow.current = true;
     setUploading(true);
     setSaveError('');
     try {
@@ -246,6 +268,7 @@ export function useNoteEditor({
     } catch (e) {
       setSaveError((e as Error).message);
     } finally {
+      uploadingNow.current = false;
       setUploading(false);
     }
   };

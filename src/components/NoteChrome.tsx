@@ -5,6 +5,7 @@ import {
   ChevronRight,
   Link2,
   Menu,
+  MoreHorizontal,
   Paperclip,
   Pencil,
   Plus,
@@ -16,7 +17,7 @@ import { variantOf, type NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
 import { noteType, typeLabel } from '../note-types/registry';
 import { LockBadge } from './LockBadge';
-import type { ReactNode } from 'react';
+import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 // The parts of a note page around its body: location, heading, edit bar.
 
@@ -159,53 +160,74 @@ export function EditToolbar({
   onCancel: () => void;
   onSave: () => void;
 }) {
+  const [compact, setCompact] = useState(() => window.matchMedia('(max-width: 760px)').matches);
+  const insertMenu = useRef<HTMLDetailsElement>(null);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 760px)');
+    const change = () => setCompact(query.matches);
+    query.addEventListener('change', change);
+    return () => query.removeEventListener('change', change);
+  }, []);
+  const closeInsertMenu = () => {
+    if (compact && insertMenu.current) insertMenu.current.open = false;
+  };
   return (
     <div className="edit-toolbar">
-      <span className="editing-label">
+      <span className="editing-label" role="status">
         <Pencil size={14} />
-        正在编辑{dirty ? ' · 未保存' : ''}
+        {busy ? '正在保存…' : uploading ? '正在上传…' : dirty ? '未保存' : '已保存'}
       </span>
       <div className="edit-tabs">
-        <button className={tab === 'source' ? 'active' : ''} onClick={() => onTab('source')}>
+        <button aria-pressed={tab === 'source'} className={tab === 'source' ? 'active' : ''} onClick={() => onTab('source')}>
           源码
         </button>
-        <button className={tab === 'preview' ? 'active' : ''} onClick={() => onTab('preview')}>
+        <button aria-pressed={tab === 'preview'} className={tab === 'preview' ? 'active' : ''} onClick={() => onTab('preview')}>
           预览
         </button>
       </div>
-      <label className="button compact file-input-button">
-        <Paperclip size={15} />
-        <span>{uploading ? '上传中…' : '附件 / 图片'}</span>
-        <input
-          aria-label="上传附件"
-          type="file"
-          multiple
-          disabled={busy || uploading}
-          onChange={(e) => {
-            onFiles(e.target.files);
-            e.target.value = '';
-          }}
-        />
-      </label>
-      {kind === 'markdown' && (
-        <button
-          className="icon-button"
-          aria-label="插入笔记链接"
-          disabled={busy || uploading}
-          onClick={onInsertLink}
-        >
-          <Link2 size={17} />
-        </button>
-      )}
-      <button
-        className="icon-button"
-        aria-label="插入随手记"
-        title="插入随手记"
-        disabled={busy || uploading}
-        onClick={openClips}
-      >
-        <StickyNote size={17} />
-      </button>
+      <details ref={insertMenu} className={`edit-insert-menu${compact ? ' node-menu' : ''}`} open={compact ? undefined : true}>
+        <summary className="icon-button" role="button" aria-label="更多编辑操作" hidden={!compact}>
+          <MoreHorizontal size={19} />
+        </summary>
+        <div className={compact ? 'menu-popup' : 'edit-insert-actions'}>
+          <label className="button compact file-input-button">
+            <Paperclip size={15} />
+            <span>{uploading ? '上传中…' : '附件 / 图片'}</span>
+            <input
+              aria-label="上传附件"
+              type="file"
+              multiple
+              disabled={busy || uploading}
+              onChange={(e) => {
+                closeInsertMenu();
+                onFiles(e.target.files);
+                e.target.value = '';
+              }}
+            />
+          </label>
+          {kind === 'markdown' && (
+            <button
+              className={compact ? '' : 'icon-button'}
+              aria-label="插入笔记链接"
+              disabled={busy || uploading}
+              onClick={() => { closeInsertMenu(); onInsertLink(); }}
+            >
+              <Link2 size={17} />
+              {compact && '插入笔记链接'}
+            </button>
+          )}
+          <button
+            className={compact ? '' : 'icon-button'}
+            aria-label="插入随手记"
+            title="插入随手记"
+            disabled={busy || uploading}
+            onClick={() => { closeInsertMenu(); openClips(); }}
+          >
+            <StickyNote size={17} />
+            {compact && '插入随手记'}
+          </button>
+        </div>
+      </details>
       <span className="toolbar-spacer" />
       <button className="button compact" disabled={busy || uploading} onClick={onCancel}>
         取消

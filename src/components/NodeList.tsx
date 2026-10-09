@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { ArrowUpRight, ChevronRight, History, Star } from 'lucide-react';
 import { formatDate } from '../api';
 import type { NoteNode } from '../../shared/types';
-import { Empty, NodeIcon, Spinner } from './Primitives';
+import { Empty, EmptyDirectory, NodeIcon, Spinner } from './Primitives';
 import { NodeMenu, type NodeAction } from './Tree';
 import { useNodeListing } from '../use-node-listing';
 import { typeLabel } from '../note-types/registry';
@@ -17,8 +17,9 @@ type NodeListProps = {
 export function NodeList({
   view,
   parent,
+  onNew,
   ...props
-}: NodeListProps & { view?: 'favorites' | 'recent'; parent?: string | null }) {
+}: NodeListProps & { view?: 'favorites' | 'recent'; parent?: string | null; onNew?: () => void }) {
   const query = view ? `view=${view}` : `parent=${parent || ''}`;
   const { listing, error, loading, more } = useNodeListing(query, props.refresh);
   if (!listing)
@@ -44,7 +45,7 @@ export function NodeList({
       >
         {view === 'favorites' ? '点击笔记旁的星标添加收藏。' : undefined}
       </Empty>
-    ) : (
+    ) : onNew ? <EmptyDirectory onNew={onNew} /> : (
       <p className="children-empty">此目录还没有内容</p>
     );
   return (

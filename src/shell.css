@@ -618,7 +618,6 @@ body:has(.android-shell .phone-bottom-nav) .collection-page,
 }
 .app-header .header-clips {
   flex-shrink: 0;
-  margin-left: -6px;
 }
 .note-location .location-clips {
   flex-shrink: 0;
@@ -626,7 +625,6 @@ body:has(.android-shell .phone-bottom-nav) .collection-page,
 }
 .app-header .header-new {
   flex-shrink: 0;
-  margin-left: 6px;
 }
 .menu-popup .menu-compact-only {
   display: none;

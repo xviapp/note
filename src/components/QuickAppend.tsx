@@ -32,7 +32,6 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
   const operation = useRef(crypto.randomUUID());
   const field = useRef<HTMLTextAreaElement>(null);
   const append = useMemo(() => createNoteAppender(id, kind), [id, kind]);
-  const customAppend = !!onAppend;
   const draftId = `append:${id}`;
   useEffect(() => {
     let live = true;
@@ -44,7 +43,7 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
           if (typeof saved.title === 'string' && typeof saved.text === 'string') {
             setTitle(saved.title);
             setText(saved.text);
-            if (customAppend && typeof saved.operationKey === 'string') {
+            if (typeof saved.operationKey === 'string') {
               operation.current = saved.operationKey;
               setRetrying(saved.retrying === true);
             }
@@ -54,17 +53,17 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
       setReady(true);
     });
     return () => { live = false; };
-  }, [draftId, customAppend]);
+  }, [draftId]);
   useEffect(() => {
     if (ready && autoFocus) field.current?.focus();
   }, [ready, autoFocus]);
   useEffect(() => {
-    if (!ready) return;
+    if (!ready || busy) return;
     if (!title && !text) removeDraft(draftId);
     else writeDraft(draftId, {
-      content: JSON.stringify({ title, text, ...(customAppend ? { operationKey: operation.current, retrying } : {}) }), attachments: [], revision: 0, savedAt: Date.now(),
+      content: JSON.stringify({ title, text, operationKey: operation.current, retrying }), attachments: [], revision: 0, savedAt: Date.now(),
     }, keyId);
-  }, [draftId, keyId, ready, title, text, retrying, customAppend]);
+  }, [draftId, keyId, ready, busy, title, text, retrying]);
   const save = async () => {
     if (running.current || disabled || blocked || !ready || !text.trim()) return;
     running.current = true;
@@ -72,15 +71,14 @@ export function QuickAppend({ id, keyId, disabled, blocked = false, onSaved, onA
     setBusy(true);
     setError('');
     try {
-      if (onAppend) {
-        setRetrying(true);
-        // Preserve the operation before sending, including across a reload.
-        writeDraft(draftId, {
-          content: JSON.stringify({ title, text, operationKey: operation.current, retrying: true }),
-          attachments: [], revision: 0, savedAt: Date.now(),
-        }, keyId);
-        await onAppend(title, text, operation.current);
-      } else await append(title, text);
+      setRetrying(true);
+      // Every append, including an existing entry, keeps its operation across reloads.
+      await writeDraft(draftId, {
+        content: JSON.stringify({ title, text, operationKey: operation.current, retrying: true }),
+        attachments: [], revision: 0, savedAt: Date.now(),
+      }, keyId);
+      if (onAppend) await onAppend(title, text, operation.current);
+      else await append(title, text, operation.current);
       operation.current = crypto.randomUUID();
       setTitle('');
       setText('');

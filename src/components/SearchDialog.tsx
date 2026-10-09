@@ -36,6 +36,8 @@ export function SearchDialog({
     let live = true;
     const term = query.trim();
     setState('loading');
+    setResults([]);
+    setActive(0);
     const timer = setTimeout(
       () => {
         const request = term
@@ -63,6 +65,7 @@ export function SearchDialog({
           .catch((e) => {
             if (!live) return;
             setError((e as Error).message);
+            pendingEnter.current = false;
             setState('error');
           });
       },
@@ -79,6 +82,7 @@ export function SearchDialog({
       ?.scrollIntoView({ block: 'nearest' });
   }, [active]);
   const open = (node: SearchResult) => {
+    if (state !== 'ready') return;
     onClose();
     if (node.annotation) requestAnnotation(node.id, node.annotation.id);
     onOpen(node);
@@ -116,7 +120,7 @@ export function SearchDialog({
               event.preventDefault();
               // While a search is pending the list is from the previous query.
               if (state === 'loading') pendingEnter.current = true;
-              else if (results[active]) open(results[active]);
+              else if (state === 'ready' && results[active]) open(results[active]);
             }
           }}
         />
