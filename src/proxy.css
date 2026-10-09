@@ -34,17 +34,77 @@
   gap: 12px;
   align-items: center;
 }
+.proxy-form {
+  display: grid;
+  gap: 10px;
+  margin-top: 12px;
+}
+.proxy-form > label {
+  display: grid;
+  gap: 5px;
+  color: var(--muted);
+  font-size: 13px;
+}
+.proxy-form input:not([type='checkbox']) {
+  width: 100%;
+  min-height: 38px;
+  box-sizing: border-box;
+  padding: 7px 10px;
+  color: var(--ink);
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 8px;
+}
+.proxy-subscription-actions {
+  justify-content: space-between;
+}
 .proxy-toggle {
+  position: relative;
   display: flex;
-  flex-direction: row;
   align-items: center;
-  gap: 8px;
-  white-space: nowrap;
+  flex-shrink: 0;
+  min-height: 44px;
+  cursor: pointer;
 }
 .proxy-toggle input {
-  width: 18px;
-  height: 18px;
-  accent-color: var(--button-bg);
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  opacity: 0;
+  cursor: inherit;
+}
+.proxy-toggle-track {
+  width: 44px;
+  height: 26px;
+  border-radius: 13px;
+  background: var(--muted);
+  pointer-events: none;
+}
+.proxy-toggle-track::after {
+  content: '';
+  display: block;
+  width: 20px;
+  height: 20px;
+  margin: 3px;
+  border-radius: 50%;
+  background: var(--surface);
+}
+.proxy-toggle input:checked + .proxy-toggle-track {
+  background: var(--button-bg);
+}
+.proxy-toggle input:checked + .proxy-toggle-track::after {
+  transform: translateX(18px);
+  background: var(--button-ink);
+}
+.proxy-toggle input:focus-visible + .proxy-toggle-track {
+  outline: 2px solid var(--button-bg);
+  outline-offset: 3px;
+}
+.proxy-toggle:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
 }
 body:has(.proxy-status) .app-header,
 body:has(.proxy-status) .note-toolbar {
@@ -52,7 +112,4 @@ body:has(.proxy-status) .note-toolbar {
 }
 body:has(.proxy-status) .auth-theme {
   right: 58px;
-}
-.proxy-boot-settings {
-  margin-top: 12px;
 }

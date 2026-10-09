@@ -5,7 +5,7 @@
     <string name="package_name">app.xvi.note</string>
     <string name="custom_url_scheme">app.xvi.note</string>
     <string name="proxy_start_failed">代理启动失败，当前使用直连。</string>
-    <string name="proxy_stopped">代理已停止运行，当前使用直连。</string>
+    <string name="proxy_reconnecting">代理连接异常，%d 秒后重连。</string>
     <string name="proxy_webview_unsupported">当前 WebView 不支持应用内代理，当前使用直连。</string>
     <string name="clip_widget_label">随手记</string>
     <string name="clip_widget_description">单击记一条，保存后自动关闭</string>

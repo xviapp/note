@@ -1,19 +1,39 @@
 import { useState } from 'react';
 import { CircleAlert, Network } from 'lucide-react';
-import { enableProxy, hasNativeProxy, nativeProxy, retryProxy, useProxyState } from '../proxy';
+import {
+  enableProxy,
+  hasNativeProxy,
+  retryProxy,
+  saveProxySubscription,
+  proxyMessage,
+  subscriptionError,
+  updateProxySubscription,
+  useProxyState,
+  useProxySubscription,
+} from '../proxy';
+import { Modal } from './Primitives';
 import '../proxy.css';
 
 const labels = {
   off: '已关闭，使用直连',
   starting: '正在启动…',
-  running: '已开启，按规则分流',
+  running: '已开启',
+  reconnecting: '连接中断，正在重连…',
   failed: '代理不可用，当前使用直连',
 };
+
 export function ProxySettings() {
   const state = useProxyState();
+  const subscription = useProxySubscription();
+  const [url, setUrl] = useState(subscription.url);
+  const [updateInterval, setUpdateInterval] = useState(String(subscription.updateIntervalMinutes));
+  const [testInterval, setTestInterval] = useState(String(subscription.testIntervalMinutes));
+  const [editingSubscription, setEditingSubscription] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+
   if (!hasNativeProxy()) return <p className="field-hint">网络代理仅在 Android 应用中提供。</p>;
+
   const run = async (action: () => Promise<unknown>) => {
     setBusy(true);
     setError('');
@@ -25,6 +45,10 @@ export function ProxySettings() {
       setBusy(false);
     }
   };
+
+  const locked = busy || subscription.updating || subscription.testing;
+  const message = proxyMessage(state);
+
   return (
     <section className="settings-section">
       <h2>
@@ -39,36 +63,101 @@ export function ProxySettings() {
         <label className="proxy-toggle">
           <input
             type="checkbox"
+            role="switch"
+            aria-label="应用内代理"
             checked={state.enabled}
-            disabled={busy || state.phase === 'starting'}
+            disabled={busy || subscription.updating || state.phase === 'starting'}
             onChange={(event) => void run(() => enableProxy(event.target.checked))}
           />
-          开启
+          <span className="proxy-toggle-track" aria-hidden="true" />
         </label>
       </div>
-      {state.message && <p className="field-hint">{state.message}</p>}
-      {!state.hasProfile && (
-        <p className="field-hint">请先在配置中导入订阅或节点，并选择一个节点。</p>
-      )}
-      <div className="proxy-actions">
+      {message && <p className="field-hint">{message}</p>}
+      {error && !editingSubscription && <p className="field-hint" role="alert">{error}</p>}
+
+      <div className="proxy-actions proxy-subscription-actions">
         <button
           className="button"
-          disabled={busy}
-          onClick={() => void run(() => nativeProxy.openConfiguration())}
+          disabled={locked}
+          onClick={() => {
+            setUrl(subscription.url);
+            setUpdateInterval(String(subscription.updateIntervalMinutes));
+            setTestInterval(String(subscription.testIntervalMinutes));
+            setError('');
+            setEditingSubscription(true);
+          }}
         >
-          节点、订阅与完整配置
+          {subscription.url ? '更换订阅' : '添加订阅'}
         </button>
-        {state.phase === 'failed' && (
-          <button className="button" disabled={busy} onClick={() => void run(retryProxy)}>
-            重试启动
-          </button>
-        )}
+        <button className="button" disabled={locked || !subscription.url} onClick={() => void run(updateProxySubscription)}>
+          {subscription.updating ? '更新中…' : '立即更新'}
+        </button>
       </div>
-      {error && <p className="field-hint">{error}</p>}
-      <p className="field-hint">
-        开启后，页间的联网请求统一按路由规则选择直连、代理或阻止。核心启动失败或停止运行时自动使用直连；节点连接失败时遵守原规则。
-      </p>
-      <p className="field-hint">配置保存在当前手机。可在完整配置中单独备份与恢复，不随笔记同步。</p>
+      {state.phase === 'failed' && (
+        <button className="button" disabled={locked} onClick={() => void run(retryProxy)}>
+          重试启动
+        </button>
+      )}
+
+      {editingSubscription && (
+        <Modal title={subscription.url ? '更换订阅' : '添加订阅'} onClose={() => {
+          if (!locked) setEditingSubscription(false);
+        }}>
+          <form className="proxy-form" onSubmit={(event) => {
+            event.preventDefault();
+            if (locked || !url.trim()) return;
+            void run(async () => {
+              const updateIntervalMinutes = Number(updateInterval), testIntervalMinutes = Number(testInterval);
+              if (!Number.isInteger(updateIntervalMinutes) || updateIntervalMinutes < 15 || updateIntervalMinutes > 2147483647
+                || !Number.isInteger(testIntervalMinutes) || testIntervalMinutes < 1 || testIntervalMinutes > 2147483647) {
+                setError(subscriptionError('INVALID_INTERVAL'));
+                return;
+              }
+              const next = await saveProxySubscription({ url: url.trim(), updateIntervalMinutes, testIntervalMinutes });
+              if (!next.subscription.error) setEditingSubscription(false);
+            });
+          }}>
+            <label>
+              订阅地址
+              <input
+                type="url"
+                value={url}
+                onChange={(event) => setUrl(event.target.value)}
+                placeholder="https://…"
+                required
+                disabled={locked}
+              />
+            </label>
+            <label>
+              订阅更新间隔（分钟）
+              <input type="number" min={15} max={2147483647} step={1} required value={updateInterval}
+                disabled={locked} onChange={(event) => setUpdateInterval(event.target.value)} />
+            </label>
+            <label>
+              连通性测试间隔（分钟）
+              <input type="number" min={1} max={2147483647} step={1} required value={testInterval}
+                disabled={locked} onChange={(event) => setTestInterval(event.target.value)} />
+            </label>
+            <p className="field-hint">订阅更新至少间隔 15 分钟；代理运行时检测当前节点，连续 3 次出现检测失败或延迟超过 2000 毫秒时重新测试全部节点并选优。</p>
+            <p className="field-hint">保存后请点击“立即更新”，下载订阅并自动选择最快的可用节点。</p>
+            {error && <p className="field-hint" role="alert">{error}</p>}
+            {subscription.error && <p className="field-hint" role="alert">{subscriptionError(subscription.error)}</p>}
+            <div className="dialog-actions">
+              <button type="button" className="button" disabled={locked} onClick={() => setEditingSubscription(false)}>取消</button>
+              <button type="submit" className="button primary" disabled={locked || !url.trim()}>
+                {busy ? '保存中…' : '保存订阅'}
+              </button>
+            </div>
+          </form>
+        </Modal>
+      )}
+
+      {((subscription.error && !editingSubscription) || subscription.updating) && (
+        <p className="field-hint">{subscriptionError(subscription.error) || '正在直连更新订阅、自动测试并选择最快节点…'}</p>
+      )}
+      {subscription.testing && <p className="field-hint" role="status">正在检测节点连通性…</p>}
+      {!subscription.testing && subscription.testError && <p className="field-hint" role="status">{subscription.testError === 'CONNECTIVITY_SLOW' ? '当前节点延迟较高。' : '节点连通性检测失败，请检查网络。'}</p>}
+      <p className="field-hint">订阅按设定间隔自动更新并选择最快的可用节点，配置仅保存在当前手机。</p>
     </section>
   );
 }
@@ -94,35 +183,25 @@ export function ProxyStatus() {
       {open && (
         <div className="proxy-details">
           <strong>当前使用直连</strong>
-          <p>{state.message}</p>
+          <p>{proxyMessage(state)}</p>
           {error && <p>{error}</p>}
-          <div className="proxy-actions">
-            <button
-              className="text-button"
-              disabled={busy}
-              onClick={async () => {
-                setBusy(true);
-                setError('');
-                try {
-                  await retryProxy();
-                } catch {
-                  setError('重试未完成，请再试一次。');
-                } finally {
-                  setBusy(false);
-                }
-              }}
-            >
-              重试启动
-            </button>
-            <button
-              className="text-button"
-              onClick={() =>
-                void nativeProxy.openConfiguration().catch(() => setError('无法打开配置，请重试。'))
+          <button
+            className="text-button"
+            disabled={busy}
+            onClick={async () => {
+              setBusy(true);
+              setError('');
+              try {
+                await retryProxy();
+              } catch {
+                setError('重试未完成，请再试一次。');
+              } finally {
+                setBusy(false);
               }
-            >
-              代理配置
-            </button>
-          </div>
+            }}
+          >
+            重试启动
+          </button>
         </div>
       )}
     </aside>

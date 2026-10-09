@@ -1,5 +1,4 @@
 import { useEffect, useState } from 'react';
-import { hasNativeProxy, nativeProxy } from '../proxy';
 import { nativeServer } from '../server';
 import { ServerForm, useServer } from './ServerSettings';
 import { Modal } from './Primitives';
@@ -37,14 +36,6 @@ export function BootScreen({ error, onRetry }: { error: string; onRetry: () => v
             </button>
           )}
           {serverOpen && <ServerDialog onClose={() => setServerOpen(false)} onSaved={onRetry} />}
-          {hasNativeProxy() && (
-            <button
-              className="text-button proxy-boot-settings"
-              onClick={() => void nativeProxy.openConfiguration()}
-            >
-              网络代理配置
-            </button>
-          )}
         </>
       ) : (
         <div className="boot-status" role="status">

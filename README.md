@@ -6,6 +6,8 @@
 
 ## 最新更新
 
+- Android 网络代理设置页改为开关和弹窗配置；可分别设置订阅更新、连通性测试间隔，隐藏订阅地址和节点详情。
+- 代理按设定间隔检测当前节点；连续 3 次检测失败或延迟超过 2000 毫秒时，自动测试现有节点并选择最快的可用节点。
 - 文件上传、青藜和翻译请求在连接未就绪、超时或中断时会及时结束并提示，减少长时间空等；助手附件上传也采用一致的等待处理。
 - 打开笔记、书页等详情时并行加载相关资料，减少进入详情页的等待。
 - 快捷记录上传照片时显示转圈和「正在上传照片…」提示；正文编辑器上传附件或保存时也显示转圈，等待状态更清楚。
@@ -50,7 +52,7 @@
 - 修改密码、退出当前设备或所有设备、部署端重置密码；新密码至少 8 个字符。
 - 青藜（AI 助手）：每个文件独立会话，可附上当前文件或另选 Markdown、TXT、PDF、图片，引用选中文字或内置框选截图提问。PDF 支持选页提取文字、扫描页自动转图和整页图片。流式回复、停止生成、复制及保存为本文件下的 Markdown 子笔记。
 - 全库默认 8 GB，上限可调，80% 用量提醒；历史、回收站、待清理文件和上传预留均计入空间。
-- Android 应用内网络代理：内置 v2rayNG 的节点、订阅、路由和 DNS 配置，手机请求按规则分流，核心故障时自动直连并在右上角提示。配置只保存在本机。详见[网络代理](docs/network-proxy.md)。
+- Android 应用内网络代理：note 与 web 共用无 UI 的轻量代理核心，只保留一个订阅、定期/手动直连更新、全节点自动测试选优和宿主内节点切换。配置只保存在本机。详见[网络代理](docs/network-proxy.md)。
 
 普通笔记正文最多 1 MiB，单文件最多 50 MB。附件最多 100 个。超额时可以继续阅读、收藏、删除和清理。支持整库 ZIP 备份与恢复；目前只搜索标题，全文搜索和离线编辑暂未提供。
 
@@ -113,12 +115,13 @@ Android 客户端使用 Capacitor，工程位于 `android/`，共用 React 界�
 本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 37 和 Build Tools 37：
 
 ```bash
+git clone https://github.com/xviapp/proxy-core.git ../proxy-core # 已有共享目录则跳过
 npm ci
 npm run android:apk        # 默认 arm64-v8a 调试包，输出到 artifacts/
 pnpm install:android       # 连接手机后构建并覆盖安装，保留应用数据
 ```
 
-修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。其他架构、签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
+修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。代理核心为同级独立仓库，接入及接口见[共享代理核心](docs/proxy-core-api.md)。其他架构、签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
 
 ## 本地运行
 
@@ -235,7 +238,7 @@ npx wrangler deploy --dry-run
 | `worker/backups.ts`     | 整库备份导出与恢复                        |
 | `shared/`               | 前后端共用的类型、限制与备份格式          |
 | `android/`              | Capacitor 原生工程与服务器、下载、分享    |
-| `android/v2ray/`        | 内置 v2rayNG 网络代理模块（GPL-3.0）      |
+| `../proxy-core/`        | note 与 web 共用的内置 v2rayNG 网络代理模块（GPL-3.0） |
 | `migrations/`           | D1 schema、索引与事务保护触发器           |
 | `scripts/`              | 开发环境、密码重置和测试服务              |
 

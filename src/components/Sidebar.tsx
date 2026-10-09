@@ -159,14 +159,16 @@ export function AppHeader({
       >
         <Search size={19} />
       </button>
-      <button
-        className="icon-button header-clips"
-        aria-label="随手记"
-        title="随手记（Q）"
-        onClick={openClips}
-      >
-        <StickyNote size={19} />
-      </button>
+      {!(view === 'settings' && section === 'proxy') && (
+        <button
+          className="icon-button header-clips"
+          aria-label="随手记"
+          title="随手记（Q）"
+          onClick={openClips}
+        >
+          <StickyNote size={19} />
+        </button>
+      )}
       {onNew && (
         <button className="icon-button header-new" aria-label="新建" title="新建（N）" onClick={onNew}>
           <Feather size={20} aria-hidden="true" />

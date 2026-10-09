@@ -126,14 +126,6 @@ export function AppUpdates() {
             </p>
             <p>随页间更新；来源与许可证保留。</p>
           </div>
-          <button
-            className="button"
-            onClick={() =>
-              void nativeProxy.openLicenses().catch(() => setMessage('无法打开开源许可，请重试。'))
-            }
-          >
-            开源许可
-          </button>
         </div>
       )}
       {message && (

@@ -7,7 +7,7 @@ import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.webkit.CookieManager;
-import com.v2ray.ang.embedded.EmbeddedProxy;
+import com.v2ray.ang.api.EmbeddedProxyController;
 import java.io.ByteArrayOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -37,7 +37,7 @@ public class ClipUploadJob extends JobService {
             try {
                 // Never silently bypass the configured proxy. Its foreground
                 // lifetime is owned by the app; a later app visit can sync too.
-                if (EmbeddedProxy.isEnabled()) { jobFinished(params, true); return; }
+                if (EmbeddedProxyController.isEnabled()) { jobFinished(params, true); return; }
                 String host = ServerConfig.host(this), origin = "https://" + host;
                 String cookie = CookieManager.getInstance().getCookie(origin);
                 if (cookie == null) { jobFinished(params, true); return; }

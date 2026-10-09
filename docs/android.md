@@ -34,6 +34,7 @@ PDF 双指缩放先变换现有画布，手指离开后再渲染清晰页面；�
 
 ## 构建
 
+- 从 note 根目录运行 `git clone https://github.com/xviapp/proxy-core.git ../proxy-core` 获取同级共享核心；已有目录则跳过。接口和原生依赖说明见[共享代理核心](proxy-core-api.md)。
 - JDK 21、Node.js 22.12+、Android SDK Platform 37 / Build Tools 37。构建脚本依次查找 `ANDROID_SDK_ROOT`、`ANDROID_HOME` 和常见 SDK 目录，并写入 Git 忽略的 `android/local.properties`。
 - `npm run android:apk`：构建前端、同步 Capacitor、编译调试 APK 并复制到 `artifacts/`。默认只构建 `arm64-v8a`；`node scripts/android.mjs assembleDebug --abi <架构>` 构建 `armeabi-v7a`、`x86_64` 或 `x86`，`--abi all` 生成四种架构包和通用包。
 - `pnpm install:android`：选定唯一可用设备（多个时用 `--device <序列号>` 或 `ANDROID_SERIAL`），构建后覆盖安装并保留数据；构建失败不会安装旧包，`--abi` 安装前检查设备兼容性。
