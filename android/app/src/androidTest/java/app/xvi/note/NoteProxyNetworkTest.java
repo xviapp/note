@@ -170,6 +170,7 @@ public class NoteProxyNetworkTest {
             MmkvManager.INSTANCE.encodeServerConfig("", profile);
             assertTrue(EmbeddedProxy.hasProfile());
             assertEquals("running", await(done -> network.setEnabled(true, done)).getString("phase"));
+            assertEquals(Proxy.Type.SOCKS, network.proxy().type());
             int port = EmbeddedProxy.getPort();
             ExecutorService bridges = Executors.newCachedThreadPool();
             bridges.submit(() -> {

@@ -71,7 +71,7 @@ observation.close();
 | 方法 | 宿主责任 |
 | --- | --- |
 | isSupported() | 检查 AndroidX WebView 代理覆盖是否可用 |
-| setProxy(int port, Runnable applied) | 将宿主 WebView 路由指向 127.0.0.1:port，生效后调用 applied |
+| setProxy(int port, Runnable applied) | 将宿主 WebView 路由指向 127.0.0.1:port 的 SOCKS 代理，生效后调用 applied |
 | clearProxy(Runnable cleared) | 清除宿主代理覆盖，完成后调用 cleared |
 
 当前运行时依赖这些完成信号推进状态；请在主线程回调，成功完成时只调用一次，不要提前回调。适配器不负责下载订阅、启动服务、存储配置或重连。现有实现见 note 的 `NoteProxyNetwork` 和 web 的 `BrowserProxyNetwork`。
@@ -94,7 +94,7 @@ observation.close();
 | setBackgroundActive(boolean) | 宿主前台保活工作开始/结束时报告，核心管理 daemon 绑定和心跳 |
 | static isEnabled() | 持久化开关，不代表核心已经运行 |
 | static coreVersion() | 原生 Xray 版本字符串，需完成应用初始化并打包原生库 |
-| static networkProxy() → java.net.Proxy | 返回已确认的本机 HTTP 代理；未确认或清除路由后为 Proxy.NO_PROXY |
+| static networkProxy() → java.net.Proxy | 返回已确认的本机 SOCKS 代理；未确认或清除路由后为 Proxy.NO_PROXY |
 
 控制命令由主线程串行处理，完成回调与观察回调均在主线程。订阅命令成功仅表示对应的保存/下载/测试/选择已完成，不能据此认为 daemon 的异步重载也完成；实际网络可用性以观察到的 `phase == RUNNING` 为准。首次导航应等待 `prepare` 完成并检查状态，而非只检查 enabled。
 
