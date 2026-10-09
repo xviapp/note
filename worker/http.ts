@@ -16,6 +16,91 @@ export const json = (value: unknown, status = 200, extra: HeadersInit = {}) =>
       ...extra,
     },
   });
+
+// Read a request or response stream while enforcing its byte limit. Keeping
+// the reader lifecycle here makes all streaming endpoints cancel and release
+// their readers the same way when a limit is exceeded or the stream ends.
+export async function readLimited(
+  stream: ReadableStream<Uint8Array> | null | undefined,
+  limit: number,
+  tooLarge = '请求内容过大。',
+): Promise<Uint8Array<ArrayBuffer>> {
+  if (!stream) return new Uint8Array(0);
+  const reader = stream.getReader();
+  const chunks: Uint8Array[] = [];
+  let size = 0;
+  try {
+    while (true) {
+      const item = await reader.read();
+      if (item.done) break;
+      size += item.value.byteLength;
+      if (size > limit) {
+        await reader.cancel().catch(() => {});
+        throw new AppError(413, tooLarge);
+      }
+      chunks.push(item.value);
+    }
+  } finally {
+    reader.releaseLock();
+  }
+  const bytes = new Uint8Array(size);
+  let offset = 0;
+  for (const chunk of chunks) {
+    bytes.set(chunk, offset);
+    offset += chunk.byteLength;
+  }
+  return bytes;
+}
+
+export function sseResponse<TEvent>(
+  request: Request,
+  execution: ExecutionContext,
+  run: (signal: AbortSignal, emit: (event: TEvent) => void) => Promise<void>,
+  timeout?: number,
+): Response {
+  const abort = new AbortController();
+  const onAbort = () => abort.abort();
+  request.signal.addEventListener('abort', onAbort, { once: true });
+  if (request.signal.aborted) abort.abort();
+  const timer = timeout === undefined ? undefined : setTimeout(() => abort.abort('timeout'), timeout);
+  let disconnected = false;
+  const stream = new ReadableStream<Uint8Array>({
+    start(controller) {
+      const encoder = new TextEncoder();
+      const emit = (event: TEvent) => {
+        if (disconnected) return;
+        try {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
+        } catch {
+          disconnected = true;
+          abort.abort();
+        }
+      };
+      execution.waitUntil(
+        Promise.resolve()
+          .then(() => run(abort.signal, emit))
+          .catch(() => {})
+          .finally(() => {
+            if (timer !== undefined) clearTimeout(timer);
+            request.signal.removeEventListener('abort', onAbort);
+            if (!disconnected) controller.close();
+          }),
+      );
+    },
+    cancel() {
+      disconnected = true;
+      abort.abort();
+    },
+  });
+  return new Response(stream, {
+    headers: {
+      'content-type': 'text/event-stream; charset=utf-8',
+      'cache-control': 'no-store',
+      'x-content-type-options': 'nosniff',
+    },
+  });
+}
+
 export async function body<T = Record<string, unknown>>(
   request: Request,
   limit = 6 * 1_048_576 + 65_536,
@@ -26,26 +111,7 @@ export async function body<T = Record<string, unknown>>(
   // JSON escaping can expand one byte of plain text into six bytes (e.g. \u0000).
   // Notes retain their independent 1 MiB UTF-8 bound in storage.ts.
   if (Number(request.headers.get('content-length')) > limit) throw new AppError(413, tooLarge);
-  const reader = request.body?.getReader();
-  let size = 0;
-  const chunks: Uint8Array[] = [];
-  if (reader)
-    while (true) {
-      const item = await reader.read();
-      if (item.done) break;
-      size += item.value.byteLength;
-      if (size > limit) {
-        await reader.cancel();
-        throw new AppError(413, tooLarge);
-      }
-      chunks.push(item.value);
-    }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
+  const bytes = await readLimited(request.body, limit, tooLarge);
   try {
     const value = JSON.parse(new TextDecoder().decode(bytes));
     if (!value || typeof value !== 'object' || Array.isArray(value)) throw new Error();

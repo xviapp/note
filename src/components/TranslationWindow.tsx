@@ -11,17 +11,8 @@ import {
   X,
 } from 'lucide-react';
 import type { TranslationLaunch } from '../translation';
+import { useVisualViewport } from '../use-visual-viewport';
 import '../translation.css';
-
-function viewportBounds() {
-  const viewport = window.visualViewport;
-  return {
-    x: viewport?.offsetLeft ?? 0,
-    y: viewport?.offsetTop ?? 0,
-    width: viewport?.width ?? innerWidth,
-    height: viewport?.height ?? innerHeight,
-  };
-}
 
 export function TranslationWindow({
   launch,
@@ -38,7 +29,7 @@ export function TranslationWindow({
   canCollapse?: boolean;
   children: ReactNode;
 }) {
-  const [viewport, setViewport] = useState(viewportBounds);
+  const viewport = useVisualViewport();
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const [pinned, setPinned] = useState(false),
     [maximized, setMaximized] = useState(false);
@@ -94,17 +85,6 @@ export function TranslationWindow({
     );
   };
 
-  useEffect(() => {
-    const update = () => setViewport(viewportBounds());
-    window.addEventListener('resize', update);
-    window.visualViewport?.addEventListener('resize', update);
-    window.visualViewport?.addEventListener('scroll', update);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.visualViewport?.removeEventListener('resize', update);
-      window.visualViewport?.removeEventListener('scroll', update);
-    };
-  }, []);
   useEffect(() => {
     panel.current?.focus({ preventScroll: true });
   }, [launch]);

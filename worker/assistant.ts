@@ -5,13 +5,12 @@ import {
   AI_IMAGE_LIMIT,
   AI_PROMPT_LIMIT,
   AI_QUOTE_LIMIT,
-  type ChatEvent,
   type ChatHistory,
   type ChatMessage,
 } from '../shared/assistant';
 import type { FileInfo, NoteNode } from '../shared/types';
 import type { BlobRow, Env } from './types';
-import { AppError, asError, idValue, textValue } from './http';
+import { AppError, asError, idValue, sseResponse, textValue } from './http';
 import { createNode, getNode } from './library';
 import { assistantContext } from './assistant-context';
 import {
@@ -458,94 +457,63 @@ export async function sendChat(
     throw error;
   }
 
-  const abort = new AbortController();
-  const onAbort = () => abort.abort();
-  request.signal.addEventListener('abort', onAbort, { once: true });
-  if (request.signal.aborted) abort.abort();
-  const timer = setTimeout(() => abort.abort('timeout'), timeout);
-  let disconnected = false;
-  const stream = new ReadableStream<Uint8Array>({
-    start(controller) {
-      const encoder = new TextEncoder();
-      const emit = (event: ChatEvent) => {
-        if (!disconnected) {
-          try {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify(event)}\n\n`));
-          } catch {
-            disconnected = true;
-            abort.abort();
-          }
+  return sseResponse(
+    request,
+    execution,
+    async (signal, emit) => {
+      let content = '',
+        error = '',
+        status: ChatMessage['status'] = 'completed';
+      try {
+        emit({
+          type: 'start',
+          user: await message(env, id, userId),
+          assistant: await message(env, id, replyId),
+          context: prepared.usage,
+        });
+        for await (const delta of deepseekReply(
+          apiKey,
+          prepared.messages,
+          signal,
+          maxTokens,
+        )) {
+          content += delta;
+          emit({ type: 'delta', content: delta });
         }
-      };
-      const run = async () => {
-        let content = '',
-          error = '',
-          status: ChatMessage['status'] = 'completed';
-        try {
-          emit({
-            type: 'start',
-            user: await message(env, id, userId),
-            assistant: await message(env, id, replyId),
-            context: prepared.usage,
-          });
-          for await (const delta of deepseekReply(
-            apiKey,
-            prepared.messages,
-            abort.signal,
-            maxTokens,
-          )) {
-            content += delta;
-            emit({ type: 'delta', content: delta });
-          }
-        } catch (e) {
-          status = abort.signal.aborted || content ? 'interrupted' : 'failed';
-          error = abort.signal.aborted
-            ? abort.signal.reason === 'timeout'
-              ? '生成超时，已保留收到的内容。'
-              : '已停止生成。'
-            : asError(e).message;
-        }
-        let stored: BlobRow | null = null;
-        try {
-          if (content) stored = await storeText(env, JSON.stringify({ content }), keyId);
-          await env.DB.prepare(
-            "UPDATE assistant_messages SET status=?,body_blob_id=?,error=? WHERE id=? AND status='pending'",
-          )
-            .bind(status, stored?.id ?? null, error || null, replyId)
-            .run();
-          const saved = await message(env, id, replyId);
-          emit(error ? { type: 'error', error, message: saved } : { type: 'done', message: saved });
-        } catch (e) {
-          if (stored) await discardFile(env, stored.id).catch(() => {});
-          const failure = `回复未能保存：${asError(e).message}`;
-          await env.DB.prepare(
-            "UPDATE assistant_messages SET status='failed',error=? WHERE id=? AND status='pending'",
-          )
-            .bind(failure, replyId)
-            .run()
-            .catch(() => {});
-          emit({ type: 'error', error: failure });
-        } finally {
-          clearTimeout(timer);
-          request.signal.removeEventListener('abort', onAbort);
-          await unlock().catch(() => {});
-          if (!disconnected) controller.close();
-        }
-      };
-      execution.waitUntil(run());
+      } catch (e) {
+        status = signal.aborted || content ? 'interrupted' : 'failed';
+        error = signal.aborted
+          ? signal.reason === 'timeout'
+            ? '生成超时，已保留收到的内容。'
+            : '已停止生成。'
+          : asError(e).message;
+      }
+      let stored: BlobRow | null = null;
+      try {
+        if (content) stored = await storeText(env, JSON.stringify({ content }), keyId);
+        await env.DB.prepare(
+          "UPDATE assistant_messages SET status=?,body_blob_id=?,error=? WHERE id=? AND status='pending'",
+        )
+          .bind(status, stored?.id ?? null, error || null, replyId)
+          .run();
+        const saved = await message(env, id, replyId);
+        emit(error ? { type: 'error', error, message: saved } : { type: 'done', message: saved });
+      } catch (e) {
+        if (stored) await discardFile(env, stored.id).catch(() => {});
+        const failure = `回复未能保存：${asError(e).message}`;
+        await env.DB.prepare(
+          "UPDATE assistant_messages SET status='failed',error=? WHERE id=? AND status='pending'",
+        )
+          .bind(failure, replyId)
+          .run()
+          .catch(() => {});
+        emit({ type: 'error', error: failure });
+      } finally {
+        await unlock().catch(() => {});
+      }
     },
-    cancel() {
-      disconnected = true;
-      abort.abort();
-    },
-  });
-  return new Response(stream, {
-    headers: {
-      'content-type': 'text/event-stream; charset=utf-8',
-      'cache-control': 'no-store',
-      'x-content-type-options': 'nosniff',
-    },
-  });
+    timeout,
+  );
 }
 export async function clearChat(env: Env, id: string): Promise<void> {
   await assistantNode(env, id);

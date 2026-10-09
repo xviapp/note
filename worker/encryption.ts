@@ -16,7 +16,7 @@ import {
   type PlanObject,
 } from '../shared/encryption';
 import { sanitizeSvg, SVG_MIME } from '../shared/svg';
-import { AppError, idValue, integer, textValue } from './http';
+import { AppError, idValue, integer, readLimited, textValue } from './http';
 import { getNode, KEY_SQL, nodePath } from './library';
 import { MAX_FILE_BYTES } from './storage';
 import type { NoteNode } from '../shared/types';
@@ -284,27 +284,7 @@ async function objectTarget(env: Env, root: string, blobId: string) {
   return { target: row.target ?? null, kind: row.kind, node_id: row.node_id };
 }
 async function readAll(request: Request, limit: number): Promise<Uint8Array<ArrayBuffer>> {
-  const reader = request.body?.getReader();
-  const chunks: Uint8Array[] = [];
-  let size = 0;
-  if (reader)
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.byteLength;
-      if (size > limit) {
-        await reader.cancel().catch(() => {});
-        throw new AppError(413, '文件超过允许大小。');
-      }
-      chunks.push(part.value);
-    }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+  return readLimited(request.body, limit, '文件超过允许大小。');
 }
 // Replaces an object's content with the same content under another key (or
 // none). The blob keeps its ID, so no reference changes.

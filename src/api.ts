@@ -25,6 +25,7 @@ import {
 } from './offline-cache';
 import { isOffline, setOffline } from './connectivity';
 import { proxyReady } from './proxy';
+import { sseData } from '../shared/sse';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -353,6 +354,55 @@ export async function parse<T>(response: Response): Promise<T> {
   }
   return value as T;
 }
+
+export interface StreamRequest<TEvent> {
+  path: string;
+  data: unknown;
+  key?: string;
+  signal: AbortSignal;
+  onEvent: (event: TEvent) => void;
+  maxEventCharacters?: number;
+  allowJson?: boolean;
+  emptyMessage: string;
+  interruptedMessage: string;
+}
+
+// Shared transport for server-sent events. It preserves the normal proxy
+// readiness and key-header rules while allowing endpoints to return one JSON
+// event when a cached result is available.
+export async function streamApi<TEvent>(options: StreamRequest<TEvent>): Promise<void> {
+  options.signal.throwIfAborted();
+  await proxyReady();
+  const response = await fetch(options.path, {
+    method: 'POST',
+    credentials: 'same-origin',
+    signal: options.signal,
+    headers: {
+      'content-type': 'application/json',
+      'x-idempotency-key': options.key ?? crypto.randomUUID(),
+      ...(await keyHeaders(options.path)),
+    },
+    body: JSON.stringify(options.data),
+  });
+  if (!response.ok) await parse(response);
+  if (options.allowJson && response.headers.get('content-type')?.includes('application/json')) {
+    const event = await parse<TEvent>(response);
+    options.signal.throwIfAborted();
+    options.onEvent(event);
+    return;
+  }
+  if (!response.body) throw new Error(options.emptyMessage);
+  let finished = false;
+  for await (const data of sseData(response.body, options.maxEventCharacters)) {
+    options.signal.throwIfAborted();
+    const event = JSON.parse(data) as TEvent;
+    options.onEvent(event);
+    const type = (event as { type?: unknown }).type;
+    if (type === 'done' || type === 'error') finished = true;
+  }
+  if (!finished) throw new Error(options.interruptedMessage);
+}
+
 export async function unlockNote(id: string) {
   const result = await api<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: id });
   noteTokens.set(id, result.token);
@@ -364,7 +414,6 @@ export async function uploadSealed(
   mime: string,
   keyId: string,
 ): Promise<FileInfo> {
-  await proxyReady();
   const sealed = await sealData(keyId, bytes);
   const response = await uploadRequest(
     `/api/files?name=${encodeURIComponent(name)}&size=${sealed.length}&key=${keyId}&mime=${encodeURIComponent(mime)}`,
@@ -375,7 +424,6 @@ export async function uploadSealed(
 // `scope` is the node the file will belong to: in an encrypted place the file
 // is sealed with its key before it leaves the device.
 export async function upload(file: File, scope?: string | null): Promise<FileInfo> {
-  await proxyReady();
   const keyId = await scopeOf(scope);
   if (keyId) {
     await keyOrThrow(keyId);
@@ -388,14 +436,25 @@ export async function upload(file: File, scope?: string | null): Promise<FileInf
   );
   return parse<FileInfo>(response);
 }
-async function uploadRequest(path: string, body: BodyInit) {
+export async function uploadRequest(path: string, body: BodyInit, signal?: AbortSignal) {
+  signal?.throwIfAborted();
+  await proxyReady();
+  const controller = new AbortController();
+  const onAbort = () => controller.abort(signal?.reason);
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) controller.abort(signal.reason);
+  const timer = setTimeout(() => controller.abort('timeout'), 5 * 60_000);
   try {
     return await fetch(path, {
       method: 'POST', credentials: 'same-origin', body,
-      signal: AbortSignal.timeout(5 * 60_000),
+      signal: controller.signal,
     });
-  } catch {
+  } catch (error) {
+    if (signal?.aborted) throw error;
     throw new ApiError('文件上传超时或连接中断，请保留原文件并重试。', 0, 'UPLOAD_INTERRUPTED');
+  } finally {
+    clearTimeout(timer);
+    signal?.removeEventListener('abort', onAbort);
   }
 }
 export const fileUrl = (id: string, download = false) =>

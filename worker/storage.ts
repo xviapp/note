@@ -10,10 +10,12 @@ import {
   SEALED_HEADER,
   sealBytes,
   sealedKeyId,
+  sniffMime,
   sealedSize,
   toBase64Url,
 } from '../shared/encryption';
 import { keyFor } from './encryption';
+import { blobReferences, blobUnreferenced } from './blob-references';
 
 export const MAX_FILE_BYTES = 50_000_000;
 export const MAX_TEXT_BYTES = 1_048_576;
@@ -22,17 +24,7 @@ export const STORED_MIME =
   /^(text\/(plain|html)(; charset=utf-8)?|application\/(json(; charset=utf-8)?|pdf|octet-stream)|image\/(png|jpeg|gif|webp|avif|svg\+xml))$/;
 const TEXT_MIME = /^(text\/(plain|html)|application\/json); charset=utf-8$/;
 const DAY = 86400_000;
-export const LIBRARY_UNREFERENCED = `NOT EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM nodes n WHERE n.icon_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM books b WHERE b.cover_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=blobs.id OR m.image_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM paper_translations p WHERE p.body_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM annotations n WHERE n.body_blob_id=blobs.id)
- AND NOT EXISTS(SELECT 1 FROM clips c WHERE c.blob_id=blobs.id)`;
+export const LIBRARY_UNREFERENCED = blobUnreferenced('blobs.id');
 export const UNREFERENCED = `${LIBRARY_UNREFERENCED}
  AND NOT EXISTS(SELECT 1 FROM backup_files f WHERE f.blob_id=blobs.id)`;
 
@@ -87,6 +79,27 @@ async function abandon(env: Env, file: BlobRow): Promise<void> {
     await env.DB.prepare('UPDATE blobs SET draft_until=? WHERE id=?')
       .bind(Date.now(), file.id)
       .run();
+  }
+}
+async function putReserved(
+  env: Env,
+  file: BlobRow,
+  body: ArrayBuffer | ArrayBufferView | Blob | ReadableStream<Uint8Array> | string,
+  transfers: Promise<unknown>[] = [],
+  onFailure?: (error: unknown) => Promise<void>,
+): Promise<BlobRow> {
+  let put: Promise<unknown> | undefined;
+  try {
+    put = env.FILES.put(file.object_key, body, {
+      httpMetadata: { contentType: file.key_id ? 'application/octet-stream' : file.mime },
+    });
+    await Promise.all([put, ...transfers]);
+    return await finish(env, file);
+  } catch (error) {
+    await onFailure?.(error).catch(() => {});
+    await Promise.allSettled([...(put ? [put] : []), ...transfers]);
+    await abandon(env, file);
+    throw error;
   }
 }
 // `keyId` seals the content with that key, which the request must carry.
@@ -153,25 +166,7 @@ export async function storeBytes(
 ): Promise<BlobRow> {
   const bytes = keyId ? await sealBytes(keyFor(env, keyId), keyId, plain) : plain;
   const file = await reserve(env, name, mime, bytes.byteLength, keyId);
-  try {
-    await env.FILES.put(file.object_key, bytes, {
-      httpMetadata: { contentType: keyId ? 'application/octet-stream' : file.mime },
-    });
-    return await finish(env, file);
-  } catch (error) {
-    await abandon(env, file);
-    throw error;
-  }
-}
-function detectMime(bytes: Uint8Array): string {
-  const text = new TextDecoder('latin1').decode(bytes.slice(0, 16));
-  if (text.startsWith('%PDF-')) return 'application/pdf';
-  if (bytes[0] === 137 && text.slice(1, 4) === 'PNG') return 'image/png';
-  if (bytes[0] === 255 && bytes[1] === 216 && bytes[2] === 255) return 'image/jpeg';
-  if (text.startsWith('GIF87a') || text.startsWith('GIF89a')) return 'image/gif';
-  if (text.startsWith('RIFF') && text.slice(8, 12) === 'WEBP') return 'image/webp';
-  if (text.slice(4, 8) === 'ftyp' && /avif|avis/.test(text.slice(8, 16))) return 'image/avif';
-  return 'application/octet-stream';
+  return putReserved(env, file, bytes);
 }
 export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
   const url = new URL(request.url),
@@ -251,7 +246,7 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
     }
     return storeSvg(env, bytes, name);
   }
-  let mime = keyId ? declaredMime : detectMime(signature);
+  let mime = keyId ? declaredMime : sniffMime(signature);
   // Text re-uploaded in plain keeps its type (see the encryption plan).
   if (mime === 'application/octet-stream' && TEXT_MIME.test(declaredMime)) mime = declaredMime;
   let file: BlobRow;
@@ -278,18 +273,16 @@ export async function uploadFile(env: Env, request: Request): Promise<BlobRow> {
       throw error;
     }
   })();
-  const put = env.FILES.put(file.object_key, stream.readable, {
-    httpMetadata: { contentType: keyId ? 'application/octet-stream' : mime },
-  });
   try {
-    await Promise.all([pump, put]);
-    return await finish(env, file);
+    return await putReserved(env, file, stream.readable, [pump], async (error) => {
+      await reader.cancel().catch(() => {});
+      await stream.readable.cancel(error).catch(() => {});
+      await writer.abort(error).catch(() => {});
+    });
   } catch (error) {
     await reader.cancel().catch(() => {});
     await stream.readable.cancel(error).catch(() => {});
     await writer.abort(error).catch(() => {});
-    await Promise.allSettled([pump, put]);
-    await abandon(env, file);
     throw new AppError(400, '上传未完成或文件大小发生变化，请重新选择文件。');
   }
 }
@@ -400,7 +393,7 @@ export async function storageUsage(env: Env): Promise<StorageUsage> {
 export async function storageInfo(env: Env): Promise<StorageInfo> {
   const siteQuery = env.DB.prepare('SELECT quota_bytes,allocated_bytes FROM site WHERE id=1');
   const aiLive = `(EXISTS(SELECT 1 FROM assistant_messages m LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND (m.body_blob_id=b.id OR m.image_blob_id=b.id)) OR EXISTS(SELECT 1 FROM assistant_message_files a JOIN assistant_messages m ON m.id=a.message_id LEFT JOIN nodes n ON n.id=m.node_id WHERE (m.node_id='${GLOBAL_ASSISTANT_ID}' OR (n.id IS NOT NULL AND n.trash_id IS NULL)) AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t JOIN nodes n ON n.id=t.node_id WHERE n.trash_id IS NULL AND t.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM paper_translations p JOIN nodes n ON n.id=p.node_id WHERE n.trash_id IS NULL AND p.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM annotations x JOIN nodes n ON n.id=x.node_id WHERE n.trash_id IS NULL AND x.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM books k JOIN nodes n ON n.id=k.node_id WHERE n.trash_id IS NULL AND k.cover_blob_id=b.id) OR EXISTS(SELECT 1 FROM clips c WHERE c.blob_id=b.id))`;
-  const aiReferenced = `(EXISTS(SELECT 1 FROM assistant_messages m WHERE m.body_blob_id=b.id OR m.image_blob_id=b.id) OR EXISTS(SELECT 1 FROM assistant_message_files a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM translations t WHERE t.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM paper_translations p WHERE p.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM annotations x WHERE x.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM books k WHERE k.cover_blob_id=b.id) OR EXISTS(SELECT 1 FROM clips c WHERE c.blob_id=b.id))`;
+  const referenced = blobReferences('b.id');
   const sumsQuery = env.DB.prepare(
     `SELECT
     COALESCE(SUM(CASE WHEN state='pending' THEN size ELSE 0 END),0) reserved,
@@ -410,7 +403,7 @@ export async function storageInfo(env: Env): Promise<StorageInfo> {
       EXISTS(SELECT 1 FROM nodes n JOIN version_assets a ON a.version_id=n.current_version_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR ${aiLive}
     ) THEN size ELSE 0 END),0) current,
     COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a JOIN versions v ON v.id=a.version_id JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND (n.file_blob_id=b.id OR n.icon_blob_id=b.id)) OR ${aiLive}) THEN size ELSE 0 END),0) live,
-    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v WHERE v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a WHERE a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.file_blob_id=b.id OR n.icon_blob_id=b.id) OR ${aiReferenced}) THEN size ELSE 0 END),0) referenced
+    COALESCE(SUM(CASE WHEN state!='pending' AND (${referenced}) THEN size ELSE 0 END),0) referenced
     FROM blobs b`,
   );
   // Read both views in one D1 transaction so an upload or a cleanup between

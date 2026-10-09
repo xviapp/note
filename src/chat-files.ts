@@ -7,7 +7,7 @@ import {
   type ChatFileKind,
 } from '../shared/chat-files';
 import type { FileInfo, NoteDetail } from '../shared/types';
-import { fileUrl, parse, scopeOf } from './api';
+import { fileUrl, parse, scopeOf, uploadRequest } from './api';
 import { openBlob, plainUpload, sealData } from './encryption';
 import { paperParts } from './paper';
 import { svgDataUrl } from './image-url';
@@ -171,9 +171,10 @@ async function upload(nodeId: string, file: File, signal: AbortSignal): Promise<
   }
   signal.throwIfAborted();
   const size = body instanceof Blob ? body.size : body.length;
-  const response = await fetch(
+  const response = await uploadRequest(
     `/api/nodes/${nodeId}/assistant/files?name=${encodeURIComponent(file.name)}&size=${size}${query}`,
-    { method: 'POST', credentials: 'same-origin', signal, body },
+    body,
+    signal,
   );
   return parse<FileInfo>(response);
 }

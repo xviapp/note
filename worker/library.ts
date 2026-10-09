@@ -111,22 +111,15 @@ export async function nodePath(env: Env, id: string) {
 }
 export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
   const node = await getNode(env, id);
-  let body: { content: string; sealed?: string } = { content: '' };
-  if (node.current_version_id) {
+  const bodyPromise = (async () => {
+    if (!node.current_version_id) return { content: '' };
     const version = await env.DB.prepare('SELECT body_blob_id FROM versions WHERE id=?')
       .bind(node.current_version_id)
       .first<{ body_blob_id: string }>();
-    if (version) body = await readBody(env, version.body_blob_id);
-  }
-  const file = node.file_blob_id ? await getBlob(env, node.file_blob_id) : undefined;
-  const book = await bookOf(env, id);
-  const page = book ? await pageInfo(env, node) : undefined;
-  const discussion = book && node.parent_id && (await isDiscussion(env, id));
-  const day = node.kind === 'markdown' ? await journalEntryOf(env, id) : null;
-  const entry = day && { ...day, ...(await journalNeighbours(env, day.journal_id, day.date)) };
-  const project = node.project_category && node.kind === 'markdown' ? await projectOf(env, id) : null;
-  let reference: NoteDetail['reference'];
-  if (node.variant === 'reference') {
+    return version ? readBody(env, version.body_blob_id) : { content: '' };
+  })();
+  const referencePromise = (async (): Promise<NoteDetail['reference']> => {
+    if (node.variant !== 'reference') return undefined;
     let target: NoteNode | null = null;
     if (node.reference_target_id) {
       try {
@@ -135,16 +128,39 @@ export async function noteDetail(env: Env, id: string): Promise<NoteDetail> {
         if (!(error instanceof AppError) || ![404, 410].includes(error.status)) throw error;
       }
     }
-    reference = { target };
-  }
+    return { target };
+  })();
+  const [body, file, book, day, project, reference, noteAttachments, breadcrumbs] =
+    await Promise.all([
+      bodyPromise,
+      node.file_blob_id ? getBlob(env, node.file_blob_id) : Promise.resolve(undefined),
+      bookOf(env, id),
+      node.kind === 'markdown' ? journalEntryOf(env, id) : Promise.resolve(null),
+      node.project_category && node.kind === 'markdown'
+        ? projectOf(env, id)
+        : Promise.resolve(null),
+      referencePromise,
+      attachments(env, node.current_version_id),
+      nodePath(env, id),
+    ]);
+  const [page, discussion, entry] = await Promise.all([
+    book ? pageInfo(env, node) : Promise.resolve(undefined),
+    book && node.parent_id ? isDiscussion(env, id) : Promise.resolve(false),
+    day
+      ? journalNeighbours(env, day.journal_id, day.date).then((neighbours) => ({
+          ...day,
+          ...neighbours,
+        }))
+      : Promise.resolve(null),
+  ]);
   return {
     ...node,
     ...body,
-    attachments: await attachments(env, node.current_version_id),
+    attachments: noteAttachments,
     file: file
       ? { id: file.id, name: file.name, mime: file.mime, size: file.size, key_id: file.key_id }
       : undefined,
-    breadcrumbs: await nodePath(env, id),
+    breadcrumbs,
     ...(book ? { book } : {}),
     ...(page ? { book_page: page } : {}),
     ...(discussion ? { discussion_page: node.parent_id! } : {}),

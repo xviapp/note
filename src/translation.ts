@@ -4,8 +4,7 @@ import {
   type TranslationEvent,
   type TranslationLanguage,
 } from '../shared/translation';
-import { sseData } from '../shared/sse';
-import { keyHeaders, parse } from './api';
+import { streamApi } from './api';
 
 export interface TranslationLaunch {
   source?: string;
@@ -38,31 +37,13 @@ export async function translateText(
   signal: AbortSignal,
   onEvent: (event: TranslationEvent) => void,
 ): Promise<void> {
-  const response = await fetch(`/api/nodes/${nodeId}/translations`, {
-    method: 'POST',
-    credentials: 'same-origin',
+  return streamApi<TranslationEvent>({
+    path: `/api/nodes/${nodeId}/translations`,
+    data: { source, targetLanguage, refresh, location },
     signal,
-    headers: {
-      'content-type': 'application/json',
-      'x-idempotency-key': crypto.randomUUID(),
-      ...(await keyHeaders(`/api/nodes/${nodeId}/translations`)),
-    },
-    body: JSON.stringify({ source, targetLanguage, refresh, location }),
+    onEvent,
+    allowJson: true,
+    emptyMessage: '未收到译文，请重试。',
+    interruptedMessage: '连接中断，译文尚未确认保存。可从翻译记录查看。',
   });
-  if (!response.ok) await parse(response);
-  if (response.headers.get('content-type')?.includes('application/json')) {
-    const event = await parse<TranslationEvent>(response);
-    signal.throwIfAborted();
-    onEvent(event);
-    return;
-  }
-  if (!response.body) throw new Error('未收到译文，请重试。');
-  let finished = false;
-  for await (const data of sseData(response.body)) {
-    signal.throwIfAborted();
-    const event = JSON.parse(data) as TranslationEvent;
-    onEvent(event);
-    if (event.type === 'done' || event.type === 'error') finished = true;
-  }
-  if (!finished) throw new Error('连接中断，译文尚未确认保存。可从翻译记录查看。');
 }

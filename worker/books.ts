@@ -100,8 +100,7 @@ export async function saveBook(
   id: string,
   data: Record<string, unknown>,
 ): Promise<BookInfo> {
-  const node = await getNode(env, id);
-  const current = await book(env, id);
+  const [node, current] = await Promise.all([getNode(env, id), book(env, id)]);
   const fields = bookFields(data, current);
   const revision = data.revision === undefined ? node.revision : integer(data.revision, '版本号');
   const title = data.title === undefined ? node.title : textValue(data.title, '书名', 200).trim();

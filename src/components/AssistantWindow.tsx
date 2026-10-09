@@ -9,6 +9,7 @@ import {
 } from 'react';
 import { createPortal } from 'react-dom';
 import { assistantHost } from '../assistant-host';
+import { useVisualViewport } from '../use-visual-viewport';
 import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 
@@ -18,16 +19,6 @@ export type AssistantMode = 'floating' | 'docked' | 'maximized';
 type SheetSize = 'half' | 'full';
 const HALF = 0.7;
 const tallest = { width: 0, height: 0 };
-
-function viewportBounds() {
-  const viewport = window.visualViewport;
-  return {
-    x: viewport?.offsetLeft ?? 0,
-    y: viewport?.offsetTop ?? 0,
-    width: viewport?.width ?? window.innerWidth,
-    height: viewport?.height ?? window.innerHeight,
-  };
-}
 
 // While reading on a phone, the launcher steps aside as the page scrolls down
 // and returns when scrolling up or pausing (the CSS applies it on phones only).
@@ -85,7 +76,7 @@ export function AssistantWindow({
   children: ReactNode;
 }) {
   const restoreMode = useRef<AssistantMode>('floating');
-  const [viewport, setViewport] = useState(viewportBounds);
+  const viewport = useVisualViewport();
   const compact = viewport.width <= 760;
   const sheet = compact;
   const [sheetSize, setSheetSizeState] = useState<SheetSize>('half');
@@ -214,18 +205,6 @@ export function AssistantWindow({
     };
   }
 
-  useEffect(() => {
-    // The visual viewport also follows the mobile keyboard and browser zoom.
-    const update = () => setViewport(viewportBounds());
-    window.addEventListener('resize', update);
-    window.visualViewport?.addEventListener('resize', update);
-    window.visualViewport?.addEventListener('scroll', update);
-    return () => {
-      window.removeEventListener('resize', update);
-      window.visualViewport?.removeEventListener('resize', update);
-      window.visualViewport?.removeEventListener('scroll', update);
-    };
-  }, []);
   useLayoutEffect(() => {
     const anchor = readingRoot.current?.parentElement;
     if (!anchor || mode !== 'docked' || !visible || hidden) return;

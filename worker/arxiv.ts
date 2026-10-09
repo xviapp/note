@@ -1,6 +1,6 @@
 import type { ArxivImportProgress, ArxivPreview } from '../shared/types';
 import type { Env, Session } from './types';
-import { AppError, asError, idValue, textValue } from './http';
+import { AppError, asError, idValue, readLimited, textValue } from './http';
 import { createNode, getNode, priorOperation } from './library';
 import { discardFile, getBlob, storePaper, storeSvg, uploadFile } from './storage';
 import { openValue, sealValue } from './auth';
@@ -165,28 +165,7 @@ async function bounded(response: Response, limit: number): Promise<Uint8Array<Ar
     await response.body.cancel();
     throw new AppError(413, '论文 HTML 或图片超过导入大小限制。');
   }
-  const reader = response.body.getReader(),
-    chunks: Uint8Array[] = [];
-  let size = 0;
-  try {
-    while (true) {
-      const part = await reader.read();
-      if (part.done) break;
-      size += part.value.byteLength;
-      if (size > limit) throw new AppError(413, '论文 HTML 或图片超过导入大小限制。');
-      chunks.push(part.value);
-    }
-  } finally {
-    await reader.cancel().catch(() => {});
-    reader.releaseLock();
-  }
-  const bytes = new Uint8Array(size);
-  let offset = 0;
-  for (const chunk of chunks) {
-    bytes.set(chunk, offset);
-    offset += chunk.byteLength;
-  }
-  return bytes;
+  return readLimited(response.body, limit, '论文 HTML 或图片超过导入大小限制。');
 }
 function titleText(value: string, limit = 200): string {
   return value
