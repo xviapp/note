@@ -11,6 +11,8 @@ const mock = vi.hoisted(() => ({
   saveSubscription: vi.fn(),
   updateSubscription: vi.fn(),
   selectNextNode: vi.fn(),
+  selectNode: vi.fn(),
+  selectAutomatically: vi.fn(),
   enable: vi.fn(),
 }));
 vi.mock('@capacitor/core', () => ({
@@ -23,6 +25,8 @@ vi.mock('@capacitor/core', () => ({
     saveSubscription: mock.saveSubscription,
     updateSubscription: mock.updateSubscription,
     selectNextNode: mock.selectNextNode,
+    selectNode: mock.selectNode,
+    selectAutomatically: mock.selectAutomatically,
     addListener: async (event: string, listener: (state: ProxyState) => void) => {
       expect(event).toBe('status');
       mock.statusListener = listener;
@@ -39,6 +43,7 @@ const emptySubscription: ProxySubscription = {
   url: '',
   lastUpdated: 0,
   updateIntervalMinutes: 1440, testIntervalMinutes: 5, testing: false, lastTested: 0, testError: '',
+  manualIndex: -1, fallback: false,
   nodes: [],
 };
 const off: ProxyState = { enabled: false, phase: 'off', errorCode: '', retryAtMillis: 0, hasProfile: false, subscription: emptySubscription };
@@ -67,7 +72,7 @@ describe('embedded proxy feedback', () => {
     vi.restoreAllMocks();
   });
   it.each(['INVALID_URL', 'NO_SUBSCRIPTION', 'DOWNLOAD_FAILED', 'UPDATE_FAILED', 'NO_NODES',
-    'NO_USABLE_NODES', 'BUSY', 'STORAGE_FAILED', 'TIMEOUT', 'CANCELLED'])('localizes %s', (code) => {
+    'NO_USABLE_NODES', 'INVALID_NODE', 'BUSY', 'STORAGE_FAILED', 'TIMEOUT', 'CANCELLED'])('localizes %s', (code) => {
     expect(subscriptionError(code)).not.toBe('订阅操作未完成，请检查地址和网络后重试。');
     expect(subscriptionError(code)).not.toContain(code);
   });
@@ -128,6 +133,50 @@ describe('single subscription snapshot', () => {
     },
   };
 
+  it('pins a node by index and returns to automatic selection', async () => {
+    act(() => mock.statusListener!(populated));
+    render(<ProxySettings />);
+    expect(screen.getByRole('combobox', { name: '节点' })).toHaveProperty('value', '-1');
+    const pinned = { ...populated, subscription: { ...populated.subscription, manualIndex: 1 } };
+    mock.selectNode.mockResolvedValue(pinned);
+    await act(async () => fireEvent.change(screen.getByRole('combobox', { name: '节点' }), { target: { value: '1' } }));
+    expect(mock.selectNode).toHaveBeenCalledWith({ index: 1 });
+    expect(screen.getByRole('combobox', { name: '节点' })).toHaveProperty('value', '1');
+    mock.selectAutomatically.mockResolvedValue(populated);
+    await act(async () => fireEvent.change(screen.getByRole('combobox', { name: '节点' }), { target: { value: '-1' } }));
+    expect(mock.selectAutomatically).toHaveBeenCalledWith();
+    expect(screen.getByRole('combobox', { name: '节点' })).toHaveProperty('value', '-1');
+  });
+
+  it('keeps the pin distinct from the fallback and follows recovery events', () => {
+    act(() => mock.statusListener!({ ...populated, subscription: { ...populated.subscription, manualIndex: 1, fallback: true } }));
+    render(<ProxySettings />);
+    expect(screen.getByRole('status').textContent).toContain('暂用 节点甲');
+    expect(screen.getByRole('combobox', { name: '节点' })).toHaveProperty('value', '1');
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['自动', '节点甲', '节点乙']);
+    act(() => mock.statusListener!({ ...populated, subscription: { ...populated.subscription, manualIndex: 1,
+      nodes: populated.subscription.nodes.map((node, index) => ({ ...node, selected: index === 1 })) } }));
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(screen.getByRole('combobox', { name: '节点' })).toHaveProperty('value', '1');
+  });
+
+  it.each(['updating', 'testing'] as const)('locks selection while %s', (operation) => {
+    act(() => mock.statusListener!({ ...populated, subscription: { ...populated.subscription, [operation]: true } }));
+    render(<ProxySettings />);
+    expect(screen.getByRole('combobox', { name: '节点' }).hasAttribute('disabled')).toBe(true);
+  });
+
+  it.each(['transport', 'invalid'] as const)('preserves selection and unlocks after %s failure', async (failure) => {
+    act(() => mock.statusListener!(populated));
+    if (failure === 'transport') mock.selectNode.mockRejectedValue(new Error('bridge unavailable'));
+    else mock.selectNode.mockResolvedValue({ ...populated, subscription: { ...populated.subscription, error: 'INVALID_NODE' } });
+    render(<ProxySettings />);
+    await act(async () => fireEvent.change(screen.getByRole('combobox', { name: '节点' }), { target: { value: '1' } }));
+    expect(screen.getByText(failure === 'transport' ? '操作未完成，请重试。' : '节点已不存在，请重新选择。')).toBeTruthy();
+    expect(screen.getByRole('combobox', { name: '节点' })).toHaveProperty('value', '-1');
+    expect(screen.getByRole('combobox', { name: '节点' }).hasAttribute('disabled')).toBe(false);
+  });
+
   it('adds a subscription in a dialog and closes it only after success', async () => {
     let finish!: (state: ProxyState) => void;
     mock.saveSubscription.mockImplementation(() => new Promise<ProxyState>((resolve) => { finish = resolve; }));
@@ -145,7 +194,7 @@ describe('single subscription snapshot', () => {
     await act(async () => finish(populated));
     expect(screen.queryByRole('dialog')).toBeNull();
     expect(screen.getByRole('button', { name: '更换订阅' })).toBeTruthy();
-    expect(screen.queryByText('节点甲')).toBeNull();
+    expect(screen.getByText('节点甲')).toBeTruthy();
     expect(screen.queryByLabelText('订阅地址')).toBeNull();
   });
 
@@ -210,11 +259,11 @@ describe('single subscription snapshot', () => {
     expect((screen.getByRole('button', { name: '更新中…' }) as HTMLButtonElement).disabled).toBe(true);
   });
 
-  it('hides node information and shows refresh failures', async () => {
+  it('shows node information and refresh failures', async () => {
     act(() => mock.statusListener!(populated));
     render(<ProxySettings />);
     expect(screen.queryByText('当前节点')).toBeNull();
-    expect(screen.queryByText('节点甲')).toBeNull();
+    expect(screen.getByText('节点甲')).toBeTruthy();
     expect(screen.queryByRole('button', { name: '下一个节点' })).toBeNull();
     mock.updateSubscription.mockResolvedValue({
       ...populated, subscription: { ...populated.subscription, error: 'UPDATE_FAILED' },

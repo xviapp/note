@@ -67,6 +67,14 @@ final class NoteProxyNetwork {
         controller.selectNextNode(state -> done.accept(toJs(state)));
     }
 
+    void selectNode(int index, Consumer<JSObject> done) {
+        controller.selectNode(index, state -> done.accept(toJs(state)));
+    }
+
+    void selectAutomatically(Consumer<JSObject> done) {
+        controller.selectAutomatically(state -> done.accept(toJs(state)));
+    }
+
     private static JSObject toJs(ProxyState state) {
         return new JSObject()
             .put("enabled", state.getEnabled())
@@ -101,6 +109,8 @@ final class NoteProxyNetwork {
             .put("testing", state.isTesting())
             .put("lastTested", state.getLastTested())
             .put("testError", state.getTestError())
+            .put("manualIndex", state.getManualIndex())
+            .put("fallback", state.isFallback())
             .put("nodes", nodes);
     }
 

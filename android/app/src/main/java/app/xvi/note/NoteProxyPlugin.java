@@ -29,6 +29,8 @@ public class NoteProxyPlugin extends Plugin {
     }
     @PluginMethod public void updateSubscription(PluginCall call) { network.updateSubscription(call::resolve); }
     @PluginMethod public void selectNextNode(PluginCall call) { network.selectNextNode(call::resolve); }
+    @PluginMethod public void selectNode(PluginCall call) { network.selectNode(call.getInt("index", -1), call::resolve); }
+    @PluginMethod public void selectAutomatically(PluginCall call) { network.selectAutomatically(call::resolve); }
     @PluginMethod public void getInfo(PluginCall call) {
         ProxyInfo info = ProxyCore.info();
         call.resolve(new JSObject().put("sourceVersion", info.sourceVersion)

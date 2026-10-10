@@ -28,6 +28,8 @@ export type ProxySubscription = {
   testing: boolean;
   lastTested: number;
   testError: string;
+  manualIndex: number;
+  fallback: boolean;
   nodes: ProxyNode[];
 };
 
@@ -39,6 +41,8 @@ type NativeProxyPlugin = {
   saveSubscription(options: { url: string; updateIntervalMinutes: number; testIntervalMinutes: number }): Promise<ProxyState>;
   updateSubscription(): Promise<ProxyState>;
   selectNextNode(): Promise<ProxyState>;
+  selectNode(options: { index: number }): Promise<ProxyState>;
+  selectAutomatically(): Promise<ProxyState>;
   getInfo(): Promise<{ sourceVersion: string; sourceCommit: string; coreVersion: string }>;
   addListener(event: 'status', callback: (state: ProxyState) => void): Promise<PluginListenerHandle>;
 };
@@ -48,7 +52,7 @@ export const hasNativeProxy = () => Capacitor.getPlatform() === 'android';
 
 let state: ProxyState = {
   enabled: false, phase: 'off', errorCode: '', retryAtMillis: 0, hasProfile: false,
-  subscription: { updating: false, error: '', url: '', lastUpdated: -1, nodes: [], updateIntervalMinutes: 1440, testIntervalMinutes: 5, testing: false, lastTested: 0, testError: '' },
+  subscription: { updating: false, error: '', url: '', lastUpdated: -1, manualIndex: -1, fallback: false, nodes: [], updateIntervalMinutes: 1440, testIntervalMinutes: 5, testing: false, lastTested: 0, testError: '' },
 };
 const listeners = new Set<() => void>();
 
@@ -91,6 +95,7 @@ export function subscriptionError(code: string) {
     NO_SUBSCRIPTION: '请先保存订阅地址。',
     DOWNLOAD_FAILED: '订阅下载失败，请检查地址和网络后重试。',
     UPDATE_FAILED: '订阅更新失败，请检查地址和网络后重试。',
+    INVALID_NODE: '节点已不存在，请重新选择。',
     NO_NODES: '订阅中没有节点，请检查订阅地址。',
     NO_USABLE_NODES: '订阅中没有可用节点，请检查网络后更新订阅。',
     BUSY: '订阅更新或节点检测正在进行，请稍后重试。',
@@ -136,3 +141,6 @@ export async function saveProxySubscription(input: { url: string; updateInterval
 }
 export async function updateProxySubscription() { receive(await nativeProxy.updateSubscription()); }
 export async function selectNextProxyNode() { receive(await nativeProxy.selectNextNode()); }
+
+export async function selectProxyNode(index: number) { receive(await nativeProxy.selectNode({ index })); }
+export async function selectProxyAutomatically() { receive(await nativeProxy.selectAutomatically()); }

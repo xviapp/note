@@ -5,6 +5,8 @@ import {
   hasNativeProxy,
   retryProxy,
   saveProxySubscription,
+  selectProxyNode,
+  selectProxyAutomatically,
   proxyMessage,
   subscriptionError,
   updateProxySubscription,
@@ -48,6 +50,7 @@ export function ProxySettings() {
 
   const locked = busy || subscription.updating || subscription.testing;
   const message = proxyMessage(state);
+  const inUse = subscription.nodes.find((node) => node.selected);
 
   return (
     <section className="settings-section">
@@ -153,6 +156,26 @@ export function ProxySettings() {
 
       {((subscription.error && !editingSubscription) || subscription.updating) && (
         <p className="field-hint">{subscriptionError(subscription.error) || '正在更新订阅…'}</p>
+      )}
+      {subscription.nodes.length > 0 && (
+        <div className="proxy-nodes">
+          <label>
+            节点
+            <select aria-label="节点" value={subscription.manualIndex} disabled={locked}
+              onChange={(event) => {
+                const index = Number(event.target.value);
+                void run(index < 0 ? selectProxyAutomatically : () => selectProxyNode(index));
+              }}>
+              <option value={-1}>自动</option>
+              {subscription.nodes.map((node, index) => (
+                <option key={node.id} value={index}>{node.name}</option>
+              ))}
+            </select>
+          </label>
+          {subscription.fallback && inUse && (
+            <p className="field-hint" role="status">所选节点不可用，暂用 {inUse.name}，恢复后自动切回。</p>
+          )}
+        </div>
       )}
       {subscription.testing && <p className="field-hint" role="status">正在检测节点连通性…</p>}
       {!subscription.testing && subscription.testError && <p className="field-hint" role="status">{subscription.testError === 'CONNECTIVITY_SLOW' ? '当前节点延迟较高。' : '节点连通性检测失败，请检查网络。'}</p>}
