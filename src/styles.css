@@ -4674,7 +4674,7 @@ select.status-select.status-unknown {
   min-width: 0;
   min-height: 104px;
   max-height: 200px;
-  padding-right: 52px;
+  padding-right: 56px;
   resize: vertical;
 }
 .quick-append-editor {
@@ -4688,18 +4688,24 @@ select.status-select.status-unknown {
   gap: 8px;
   margin-top: 8px;
 }
-.quick-append-image-button {
+.quick-append .quick-append-image-button {
   position: absolute;
   right: 8px;
   bottom: 8px;
   z-index: 1;
-  width: 32px;
-  height: 32px;
+  width: 40px;
+  height: 40px;
+  min-width: 0;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: var(--radius-control);
   background: var(--surface);
   color: var(--muted);
   cursor: pointer;
+}
+.quick-append-image-button > svg {
+  width: 20px;
+  height: 20px;
 }
 .quick-append-image-button:has(input:disabled) {
   opacity: 0.5;
@@ -4724,6 +4730,17 @@ select.status-select.status-unknown {
   height: 42px;
   min-height: 0;
   resize: none;
+  padding-right: 40px;
+}
+.quick-append:not(.is-active) .quick-append-image-button {
+  width: 26px;
+  height: 26px;
+  right: 6px;
+  bottom: 6px;
+}
+.quick-append:not(.is-active) .quick-append-image-button > svg {
+  width: 14px;
+  height: 14px;
 }
 @container (min-width: 700px) {
   .quick-append {
