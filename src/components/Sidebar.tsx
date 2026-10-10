@@ -151,15 +151,17 @@ export function AppHeader({
           {view === 'settings' ? (section ? settingsTitles[section] : '设置') : titles[view]}
         </span>
       </div>
-      <button
-        className="icon-button header-search"
-        aria-label="搜索笔记"
-        title="搜索笔记（Ctrl+K）"
-        onClick={onSearch}
-      >
-        <Search size={19} />
-      </button>
-      {!(view === 'settings' && section === 'proxy') && (
+      {view !== 'settings' && (
+        <button
+          className="icon-button header-search"
+          aria-label="搜索笔记"
+          title="搜索笔记（Ctrl+K）"
+          onClick={onSearch}
+        >
+          <Search size={19} />
+        </button>
+      )}
+      {view !== 'settings' && (
         <button
           className="icon-button header-clips"
           aria-label="随手记"

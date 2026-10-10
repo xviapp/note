@@ -135,6 +135,9 @@ button:active:not(:disabled) {
 .settings-detail > .settings-section > h2 {
   display: none;
 }
+.server-settings > .settings-section {
+  border-top: 1px solid var(--line);
+}
 
 .setting-row p,
 .storage-breakdown div,

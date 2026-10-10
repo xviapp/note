@@ -31,7 +31,7 @@ describe('notebook routes', () => {
     }
   });
   it('does not treat unknown routes or object properties as settings sections', () => {
-    for (const path of ['/settings/unknown', '/settings/toString', '/n/', '/n/a/b', '/random'])
+    for (const path of ['/settings/unknown', '/settings/proxy', '/settings/toString', '/n/', '/n/a/b', '/random'])
       expect(routePath(parseRoute(path))).toBe('/');
   });
 });

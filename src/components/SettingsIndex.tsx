@@ -5,14 +5,12 @@ import {
   HardDrive,
   Info,
   LockKeyhole,
-  Network,
   Palette,
   Server,
   Share2,
   ShieldCheck,
   Type,
 } from 'lucide-react';
-import { hasNativeProxy } from '../proxy';
 import { nativeServer } from '../server';
 import { QingliIcon } from './QingliIcon';
 import { settingsTitles, type SettingsSection } from '../navigation';
@@ -40,7 +38,6 @@ const groups = [
     title: '应用',
     items: [
       { key: 'server', icon: Server },
-      { key: 'proxy', icon: Network },
       { key: 'account', icon: ShieldCheck },
       { key: 'about', icon: Info },
     ],
@@ -58,7 +55,7 @@ export function SettingsIndex({ onOpen }: { onOpen: (section: SettingsSection) =
             {group.items
               .filter(
                 ({ key }) =>
-                  (key !== 'proxy' || hasNativeProxy()) && (key !== 'server' || nativeServer),
+                  key !== 'server' || nativeServer,
               )
               .map(({ key, icon: Icon }) => (
                 <button key={key} className="settings-entry" onClick={() => onOpen(key)}>

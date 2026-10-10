@@ -1,5 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
+import { hasNativeProxy } from '../proxy';
 import { getServer, nativeServer, setServer, type ServerInfo } from '../server';
+import { ProxySettings } from './ProxySettings';
 
 export function useServer() {
   const [server, setValue] = useState<ServerInfo | null>(null);
@@ -105,9 +107,10 @@ export function ServerSettings() {
   const [server, setValue] = useServer();
   if (!server) return null;
   return (
-    <section className="settings-section">
+    <section className="settings-section server-settings">
       <p className="field-hint">当前服务器：{server.host}</p>
       <ServerForm server={server} onSaved={setValue} />
+      {hasNativeProxy() && <ProxySettings />}
     </section>
   );
 }

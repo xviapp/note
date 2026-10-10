@@ -23,13 +23,13 @@ public class OriginPolicyTest {
         for (String path : new String[] {
             "/favorites", "/recent", "/offline", "/trash", "/settings",
             "/settings/theme", "/settings/reading", "/settings/ai", "/settings/offline",
-            "/settings/share", "/settings/backup", "/settings/storage", "/settings/account", "/settings/about", "/settings/proxy",
+            "/settings/share", "/settings/backup", "/settings/storage", "/settings/account", "/settings/about",
             "/settings/server"
         }) {
             assertTrue(path, policy.isDocument("https://note.xvi.app" + path));
             assertFalse(path, policy.isDocument("https://other.test" + path));
         }
-        for (String path : new String[] { "/settings/unknown", "/settings/../api/auth", "/settings%2Ftheme", "/favorites/other" })
+        for (String path : new String[] { "/settings/unknown", "/settings/proxy", "/settings/../api/auth", "/settings%2Ftheme", "/favorites/other" })
             assertFalse(path, policy.isDocument("https://note.xvi.app" + path));
     }
 

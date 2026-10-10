@@ -249,14 +249,19 @@ describe('single subscription snapshot', () => {
 });
 
 
-it('hides quick clips only in the proxy settings header', () => {
+it('hides search and quick clips from the settings headers', () => {
   const props = {
-    view: 'settings' as const, section: 'proxy' as const,
+    view: 'settings' as const, section: 'server' as const,
     showBack: true, showMenu: false, menuOpen: false,
     onBack: vi.fn(), onMenu: vi.fn(), onSearch: vi.fn(),
   };
   const { rerender } = render(<AppHeader {...props} />);
+  expect(screen.queryByRole('button', { name: '搜索笔记' })).toBeNull();
   expect(screen.queryByRole('button', { name: '随手记' })).toBeNull();
   rerender(<AppHeader {...props} section={null} />);
+  expect(screen.queryByRole('button', { name: '搜索笔记' })).toBeNull();
+  expect(screen.queryByRole('button', { name: '随手记' })).toBeNull();
+  rerender(<AppHeader {...props} view="tree" section={null} />);
+  expect(screen.getByRole('button', { name: '搜索笔记' })).toBeTruthy();
   expect(screen.getByRole('button', { name: '随手记' })).toBeTruthy();
 });

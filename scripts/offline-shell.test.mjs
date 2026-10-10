@@ -115,7 +115,6 @@ test('collection and settings deep links reopen offline without caching API requ
       '/settings/storage',
       '/settings/account',
       '/settings/about',
-      '/settings/proxy',
     ]) {
       let response;
       handlers.get('fetch')({
@@ -126,7 +125,7 @@ test('collection and settings deep links reopen offline without caching API requ
       });
       assert.equal(await response, shell, path);
     }
-    for (const path of ['/api/nodes', '/settings/unknown', '/unknown']) {
+    for (const path of ['/api/nodes', '/settings/unknown', '/settings/proxy', '/unknown']) {
       handlers.get('fetch')({
         request: { method: 'GET', mode: 'navigate', url: `https://note.test${path}` },
         respondWith: () => assert.fail(`Unexpected offline handler: ${path}`),
