@@ -68,14 +68,16 @@ export function NoteLocation({
           </span>
         ))}
       </div>
-      <button
-        className="icon-button location-clips"
-        aria-label="随手记"
-        title="随手记（Q）"
-        onClick={openClips}
-      >
-        <StickyNote size={18} />
-      </button>
+      {note?.kind !== 'folder' && (
+        <button
+          className="icon-button location-clips"
+          aria-label="随手记"
+          title="随手记（Q）"
+          onClick={openClips}
+        >
+          <StickyNote size={18} />
+        </button>
+      )}
     </div>
   );
 }

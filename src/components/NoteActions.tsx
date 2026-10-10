@@ -8,11 +8,13 @@ import {
   MessageSquareQuote,
   Pencil,
   Star,
+  StickyNote,
 } from 'lucide-react';
 import { TEXT_KINDS, type NoteDetail, type NoteNode } from '../../shared/types';
 import { ReadingSettingsButton } from './ReadingSettings';
 import { NodeMenu, type NodeAction } from './Tree';
 import { splittable } from '../split';
+import { openClips } from '../clips';
 
 const closeMenu = (element: Element) => {
   const menu = element.closest('details');
@@ -110,6 +112,16 @@ export function NoteActions({
       >
         <Star size={18} fill={note.favorite ? 'currentColor' : 'none'} />
       </button>
+      {note.kind === 'folder' && (
+        <button
+          className="icon-button"
+          aria-label="随手记"
+          title="随手记（Q）"
+          onClick={openClips}
+        >
+          <StickyNote size={18} />
+        </button>
+      )}
       {TEXT_KINDS.includes(note.kind) && !projectItem && (
         <button
           className="icon-button toolbar-secondary"
