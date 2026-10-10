@@ -42,8 +42,6 @@
 .proxy-form > label {
   display: grid;
   gap: 5px;
-  color: var(--muted);
-  font-size: 13px;
 }
 .proxy-form input:not([type='checkbox']) {
   width: 100%;

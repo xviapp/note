@@ -138,8 +138,7 @@ export function ProxySettings() {
               <input type="number" min={1} max={2147483647} step={1} required value={testInterval}
                 disabled={locked} onChange={(event) => setTestInterval(event.target.value)} />
             </label>
-            <p className="field-hint">订阅更新至少间隔 15 分钟；代理运行时检测当前节点，连续 3 次出现检测失败或延迟超过 2000 毫秒时重新测试全部节点并选优。</p>
-            <p className="field-hint">保存后请点击“立即更新”，下载订阅并自动选择最快的可用节点。</p>
+            <p className="field-hint">保存后点击「立即更新」下载订阅。</p>
             {error && <p className="field-hint" role="alert">{error}</p>}
             {subscription.error && <p className="field-hint" role="alert">{subscriptionError(subscription.error)}</p>}
             <div className="dialog-actions">
@@ -153,11 +152,10 @@ export function ProxySettings() {
       )}
 
       {((subscription.error && !editingSubscription) || subscription.updating) && (
-        <p className="field-hint">{subscriptionError(subscription.error) || '正在直连更新订阅、自动测试并选择最快节点…'}</p>
+        <p className="field-hint">{subscriptionError(subscription.error) || '正在更新订阅…'}</p>
       )}
       {subscription.testing && <p className="field-hint" role="status">正在检测节点连通性…</p>}
       {!subscription.testing && subscription.testError && <p className="field-hint" role="status">{subscription.testError === 'CONNECTIVITY_SLOW' ? '当前节点延迟较高。' : '节点连通性检测失败，请检查网络。'}</p>}
-      <p className="field-hint">订阅按设定间隔自动更新并选择最快的可用节点，配置仅保存在当前手机。</p>
     </section>
   );
 }

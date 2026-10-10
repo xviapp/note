@@ -55,50 +55,51 @@ export function ServerForm({
   };
   return (
     <form className="form-stack server-form" onSubmit={(event) => void save(event)}>
-      <label>
-        服务器地址
-        <input
-          type="url"
-          inputMode="url"
-          autoCapitalize="none"
-          autoCorrect="off"
-          spellCheck={false}
-          required
-          value={url}
-          onChange={(e) => setUrl(e.target.value)}
-          placeholder={`https://${server.defaultHost}`}
-          disabled={busy}
-        />
-        <span className="field-hint">
-          填写部署页间的 https
-          站点地址。更换后应用会重新打开，需要在新服务器上登录；各服务器的登录状态和离线缓存分开保存。
-        </span>
-      </label>
+      <div className="server-address-row">
+        <label>
+          服务器地址
+          <input
+            type="url"
+            inputMode="url"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            required
+            value={url}
+            onChange={(e) => setUrl(e.target.value)}
+            placeholder={`https://${server.defaultHost}`}
+            disabled={busy}
+          />
+        </label>
+        <button className="button primary" disabled={busy}>
+          {restarting ? '正在切换…' : busy ? '正在保存…' : submitLabel}
+        </button>
+      </div>
+      <p className="field-hint">更换服务器后应用将重启，需重新登录。</p>
       {error && (
         <p className="inline-error" role="alert">
           {error}
         </p>
       )}
-      <div className="dialog-actions">
-        {url !== `https://${server.defaultHost}` && (
-          <button
-            type="button"
-            className="button"
-            disabled={busy}
-            onClick={() => setUrl(`https://${server.defaultHost}`)}
-          >
-            恢复默认
-          </button>
-        )}
-        {onCancel && (
-          <button type="button" className="button" disabled={busy} onClick={onCancel}>
-            取消
-          </button>
-        )}
-        <button className="button primary" disabled={busy}>
-          {restarting ? '正在切换…' : busy ? '正在保存…' : submitLabel}
-        </button>
-      </div>
+      {(url !== `https://${server.defaultHost}` || onCancel) && (
+        <div className="server-secondary-actions">
+          {url !== `https://${server.defaultHost}` && (
+            <button
+              type="button"
+              className="text-button"
+              disabled={busy}
+              onClick={() => setUrl(`https://${server.defaultHost}`)}
+            >
+              恢复默认
+            </button>
+          )}
+          {onCancel && (
+            <button type="button" className="button" disabled={busy} onClick={onCancel}>
+              取消
+            </button>
+          )}
+        </div>
+      )}
     </form>
   );
 }
@@ -108,7 +109,6 @@ export function ServerSettings() {
   if (!server) return null;
   return (
     <section className="settings-section server-settings">
-      <p className="field-hint">当前服务器：{server.host}</p>
       <ServerForm server={server} onSaved={setValue} />
       {hasNativeProxy() && <ProxySettings />}
     </section>

@@ -3112,6 +3112,47 @@ button.node-list-toggle:focus-visible {
   color: var(--muted);
   margin-top: 5px;
 }
+.server-address-row {
+  display: flex;
+  align-items: flex-end;
+  gap: 10px;
+}
+.server-address-row > label {
+  flex: 1;
+  min-width: 0;
+}
+.server-address-row > .button {
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+.server-secondary-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.server-form input:not([type='checkbox']),
+.proxy-form input:not([type='checkbox']) {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.5;
+}
+.server-form button.button,
+.server-form .text-button,
+.server-settings .button,
+.proxy-form button.button {
+  font-size: 14px;
+  font-weight: 600;
+}
+.server-form .field-hint,
+.server-form .inline-error,
+.server-settings .field-hint,
+.server-settings .setting-row p,
+.proxy-form .field-hint {
+  font-size: 12px;
+  font-weight: 400;
+  line-height: 1.7;
+}
 .settings-page {
   max-width: 800px;
 }
@@ -3193,9 +3234,12 @@ button.node-list-toggle:focus-visible {
   gap: 16px;
   margin: 24px 0;
 }
-.setting-row strong {
+.setting-row strong,
+.server-address-row > label,
+.proxy-form > label {
   font-size: 14px;
   font-weight: 600;
+  color: var(--ink);
 }
 .setting-row p {
   font-size: 11px;
