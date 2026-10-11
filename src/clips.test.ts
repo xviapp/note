@@ -31,7 +31,7 @@ describe('clip outbox', () => {
   });
 
   it('uploads an image first and sends the clip naming it', async () => {
-    api.mockImplementation(async (path: string, method = 'GET') =>
+    api.mockImplementation(async (_path: string, method = 'GET') =>
       method === 'GET' ? { keyId: null, pinned: [], items: [], next: null } : {},
     );
     upload.mockResolvedValue({ id: 'img', name: 'shot.png', mime: 'image/png', size: 20 });
@@ -48,7 +48,7 @@ describe('clip outbox', () => {
   });
 
   it('keeps a clip written offline and sends it later under the same ID', async () => {
-    api.mockImplementation(async (path: string, method = 'GET') => {
+    api.mockImplementation(async (_path: string, method = 'GET') => {
       if (method === 'GET') return { keyId: null, pinned: [], items: [], next: null };
       throw new ApiError('当前离线', 0, 'OFFLINE');
     });
@@ -80,7 +80,7 @@ describe('clip outbox', () => {
 
   it('sends clips added while the outbox is empty or already sending', async () => {
     let release = () => {};
-    api.mockImplementation(async (path: string, method = 'GET', data?: { text: string }) => {
+    api.mockImplementation(async (_path: string, method = 'GET', data?: { text: string }) => {
       if (method === 'GET') return { keyId: null, pinned: [], items: [], next: null };
       if (data?.text === '一') await new Promise<void>((resolve) => (release = resolve));
       return {};
@@ -99,7 +99,7 @@ describe('clip outbox', () => {
   });
 
   it('keeps a refused clip with its reason and sends the ones after it', async () => {
-    api.mockImplementation(async (path: string, method = 'GET', data?: { text: string }) => {
+    api.mockImplementation(async (_path: string, method = 'GET', data?: { text: string }) => {
       if (method === 'GET') return { keyId: null, pinned: [], items: [], next: null };
       if (data?.text === '太长') throw new ApiError('每条最多 10000 个字。', 413);
       return {};
@@ -118,7 +118,7 @@ describe('clip outbox', () => {
 
   it('seals a clip again when the setting changed elsewhere', async () => {
     let key: string | null = null;
-    api.mockImplementation(async (path: string, method = 'GET', data?: { text: string }) => {
+    api.mockImplementation(async (_path: string, method = 'GET', data?: { text: string }) => {
       if (method === 'GET') return { keyId: key, pinned: [], items: [], next: null };
       if (!data!.text.startsWith('sealed:')) {
         key = 'k1';
@@ -137,7 +137,7 @@ describe('clip outbox', () => {
   });
 
   it('reloads open lists once per run and asks only for the key', async () => {
-    api.mockImplementation(async (path: string, method = 'GET') => {
+    api.mockImplementation(async (_path: string, method = 'GET') => {
       if (method === 'GET') return { keyId: null, pinned: [], items: [], next: null };
       throw new ApiError('当前离线', 0, 'OFFLINE');
     });

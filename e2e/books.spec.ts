@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './fixtures';
+import { chooseNodeType } from './note-actions';
 import { preparePassword } from '../shared/password';
 import type { NoteDetail, NoteNode } from '../shared/types';
 
@@ -95,7 +96,7 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
   await page.goto('/');
   await page.getByRole('button', { name: '新建', exact: true }).click();
   const form = page.getByRole('dialog', { name: '新建笔记' });
-  await form.getByText('书籍', { exact: true }).click();
+  await chooseNodeType(form, '书籍');
   await form.getByLabel('标题').fill('人类简史');
   await form.getByLabel('作者').fill('赫拉利');
   await form.getByLabel('总页数').fill('400');

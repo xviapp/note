@@ -78,7 +78,7 @@ export function BookRoleField({
         rows={rows}
         maxLength={BOOK_ROLE_LIMIT}
         value={value}
-        placeholder="选择一个阅读角色，或让青藜根据书名生成本书阅读指引；也可以直接填写。"
+        placeholder="填写本书的阅读指引"
         onChange={(e) => onChange(e.target.value)}
         disabled={disabled || generating}
       />
@@ -88,7 +88,7 @@ export function BookRoleField({
         </p>
       ) : (
         <span className="field-hint">
-          书中所有页面和讨论与青藜对话时都会使用这个角色。生成会使用 DeepSeek 额度，并替换当前内容。
+          用于全书对话。生成会使用 DeepSeek 额度并替换当前内容。
         </span>
       )}
     </div>

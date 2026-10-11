@@ -9,9 +9,9 @@ import {
   type IncomingShare,
 } from '../shared-import';
 import { useOffline } from '../connectivity';
-import type { NoteNode, ShareSettings } from '../../shared/types';
-import { api } from '../api';
-import { shareDestinationLabel } from './ShareSettings';
+import type { NoteNode } from '../../shared/types';
+import { useShareDestination } from '../use-share-destination';
+
 import { addClip } from '../clips';
 
 export function ShareImport({
@@ -24,12 +24,7 @@ export function ShareImport({
   const [share, setShare] = useState<IncomingShare | null>(null);
   const [title, setTitle] = useState('');
   const [text, setText] = useState('');
-  const [parent, setParent] = useState<string | null>(null);
-  const [destinationTitle, setDestinationTitle] = useState('根目录');
-  const [initialPath, setInitialPath] = useState<ShareSettings['breadcrumbs']>([]);
-  const [destinationReady, setDestinationReady] = useState(false);
-  const [destinationError, setDestinationError] = useState('');
-  const [retry, setRetry] = useState(0);
+
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const loading = useRef(false);
@@ -37,6 +32,8 @@ export function ShareImport({
   const missed = useRef(false);
   const operating = useRef(false);
   const offline = useOffline();
+  const { destination, parent, error: destinationError, retry: retryDestination, select: selectDestination } =
+    useShareDestination(share?.id ?? null, !offline);
   const load = async (): Promise<void> => {
     if (loading.current) {
       missed.current = true;
@@ -51,11 +48,7 @@ export function ShareImport({
       found = !!result.share;
       setShare(result.share);
       setMessage('');
-      setParent(null);
-      setDestinationReady(false);
-      setDestinationError('');
-      setDestinationTitle('根目录');
-      setInitialPath([]);
+
       if (result.share) {
         setTitle(incomingShareTitle(result.share));
         setText(result.share.text || '');
@@ -66,27 +59,7 @@ export function ShareImport({
     // With a share already open, the next one waits until this one is saved or cancelled.
     if (missed.current && !found) return load();
   };
-  useEffect(() => {
-    if (!share || offline || destinationReady) return;
-    let live = true;
-    setDestinationError('');
-    api<ShareSettings>('/api/share/settings')
-      .then((settings) => {
-        if (!live) return;
-        setParent(settings.parentId);
-        setDestinationTitle(shareDestinationLabel(settings));
-        setInitialPath(settings.breadcrumbs);
-        setDestinationReady(true);
-      })
-      .catch((error) => {
-        if (live) setDestinationError(error.message);
-      });
-    return () => {
-      live = false;
-    };
-    // Keyed by the share's id; a new object for the same share needs no new request.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [share?.id, offline, destinationReady, retry]);
+
   useEffect(() => {
     if (!Capacitor.isNativePlatform()) return;
     const refresh = () => {
@@ -130,7 +103,7 @@ export function ShareImport({
         className="form-stack"
         onSubmit={async (event) => {
           event.preventDefault();
-          if (operating.current || offline || share.error || !destinationReady) return;
+          if (operating.current || offline || share.error || !destination) return;
           operating.current = true;
           setBusy(true);
           setMessage('');
@@ -185,17 +158,14 @@ export function ShareImport({
             )}
             <fieldset disabled={busy}>
               <legend>保存位置</legend>
-              {destinationReady ? (
+              {destination ? (
                 <>
-                  <p className="destination-summary">保存到：{destinationTitle}</p>
+                  <p className="destination-summary">保存到：{destination.title}</p>
                   <NodePicker
                     value={parent}
                     parentsOnly
-                    initialPath={initialPath}
-                    onSelect={(id, title) => {
-                      setParent(id);
-                      setDestinationTitle(title);
-                    }}
+                    initialPath={destination.path}
+                    onSelect={selectDestination}
                   />
                 </>
               ) : (
@@ -205,7 +175,7 @@ export function ShareImport({
                 <button
                   type="button"
                   className="text-button"
-                  onClick={() => setRetry((n) => n + 1)}
+                  onClick={retryDestination}
                 >
                   重新加载保存目录
                 </button>
@@ -259,7 +229,7 @@ export function ShareImport({
             disabled={
               busy ||
               offline ||
-              !destinationReady ||
+              !destination ||
               !!share.error ||
               !title.trim() ||
               (!text.trim() && !share.files.length)

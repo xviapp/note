@@ -12,6 +12,7 @@ import {
 } from 'lucide-react';
 import type { TranslationLaunch } from '../translation';
 import { useVisualViewport } from '../use-visual-viewport';
+import { useWindowDrag } from '../use-window-drag';
 import '../translation.css';
 
 export function TranslationWindow({
@@ -37,9 +38,6 @@ export function TranslationWindow({
   const panel = useRef<HTMLDivElement>(null);
   const close = useRef(onClose);
   close.current = onClose;
-  const drag = useRef<{ id: number; startX: number; startY: number; x: number; y: number } | null>(
-    null,
-  );
   const fullscreen = expanded && maximized;
   const width = Math.max(1, Math.min(expanded ? 440 : 360, viewport.width - 24));
   const maxHeight = Math.max(
@@ -62,6 +60,9 @@ export function TranslationWindow({
     position?.x ?? anchor?.left ?? viewport.x + (viewport.width - width) / 2,
     position?.y ?? initialY,
   );
+  const { handleProps } = useWindowDrag({
+    enabled: !maximized, point, clamp, onMove: setPosition,
+  });
   const host = launch.host?.isConnected ? launch.host : document.body;
 
   useLayoutEffect(() => {
@@ -117,9 +118,7 @@ export function TranslationWindow({
       document.removeEventListener('keydown', key);
     };
   }, [pinned, fullscreen, expanded, host]);
-  const endDrag = () => {
-    drag.current = null;
-  };
+
   return createPortal(
     <div
       ref={panel}
@@ -164,48 +163,7 @@ export function TranslationWindow({
             aria-label="移动翻译窗口"
             tabIndex={maximized ? -1 : 0}
             title={maximized ? undefined : '拖动移动，方向键微调'}
-            onPointerDown={(event) => {
-              if (maximized || event.button !== 0) return;
-              event.preventDefault();
-              event.currentTarget.focus({ preventScroll: true });
-              event.currentTarget.setPointerCapture(event.pointerId);
-              drag.current = {
-                id: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                ...point,
-              };
-            }}
-            onPointerMove={(event) => {
-              const start = drag.current;
-              if (start?.id === event.pointerId)
-                setPosition(
-                  clamp(
-                    start.x + event.clientX - start.startX,
-                    start.y + event.clientY - start.startY,
-                  ),
-                );
-            }}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onLostPointerCapture={endDrag}
-            onKeyDown={(event) => {
-              if (
-                maximized ||
-                !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-              )
-                return;
-              event.preventDefault();
-              const step = event.shiftKey ? 40 : 10;
-              setPosition(
-                clamp(
-                  point.x +
-                    (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0),
-                  point.y +
-                    (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0),
-                ),
-              );
-            }}
+            {...handleProps}
           >
             <Languages size={18} />
             <strong>翻译</strong>

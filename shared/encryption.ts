@@ -29,9 +29,6 @@ export interface KeyRecord {
   check_value: string;
   created_at: number;
 }
-// A node's own setting: inherit (null), plain text below it, or a key.
-export type EncryptionSetting = null | 'none' | string;
-
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 export class DecryptionError extends Error {

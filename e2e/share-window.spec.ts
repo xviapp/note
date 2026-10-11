@@ -220,3 +220,38 @@ test('cancelling saves nothing, and a signed-out window hands over to the app', 
   await page.getByRole('button', { name: '打开页间登录' }).click();
   await expect.poll(() => closed(page)).toEqual([{ openApp: true }]);
 });
+
+test('a failed destination lookup blocks saving until retry restores the configured folder', async ({ page }) => {
+  await login(page);
+  const response = await page.request.post('/api/nodes', {
+    headers,
+    data: { kind: 'folder', title: unique('分享目录'), parentId: null },
+  });
+  expect(response.ok()).toBeTruthy();
+  const folder = await response.json();
+  await page.request.put('/api/share/settings', { headers, data: { parentId: folder.id } });
+  let lookups = 0;
+  await page.route('**/api/share/settings', (route) => {
+    lookups++;
+    return lookups === 1
+      ? route.fulfill({ status: 503, json: { error: '暂时无法读取保存目录' } })
+      : route.continue();
+  });
+  let writes = 0;
+  page.on('request', (request) => {
+    if (request.method() === 'POST' && new URL(request.url()).pathname === '/api/nodes') writes++;
+  });
+  const title = unique('等待目录');
+  const dialog = await openShare(page, { text: title });
+  await expect(dialog.getByRole('alert')).toHaveText('暂时无法读取保存目录');
+  await expect(dialog.getByRole('button', { name: '保存', exact: true })).toBeDisabled();
+  expect(writes).toBe(0);
+  expect(lookups).toBe(1);
+  await dialog.getByRole('button', { name: '重新加载保存目录' }).click();
+  await expect(dialog.getByText(folder.title, { exact: true })).toBeVisible();
+  await dialog.getByRole('button', { name: '保存', exact: true }).click();
+  await expect.poll(() => closed(page)).toEqual([{ saved: true }]);
+  const { nodes } = await (await page.request.get(`/api/nodes?parent=${folder.id}`)).json();
+  expect(nodes).toEqual(expect.arrayContaining([expect.objectContaining({ title, parent_id: folder.id })]));
+  expect(writes).toBe(1);
+});

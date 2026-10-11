@@ -5,8 +5,7 @@ import { api } from '../api';
 import { Modal, Spinner } from './Primitives';
 import { NodePicker } from './Tree';
 
-export const shareDestinationLabel = (settings: Settings) =>
-  settings.breadcrumbs.map((part) => part.title).join(' / ') || '根目录';
+import { shareDestinationLabel } from '../use-share-destination';
 
 export function ShareSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);

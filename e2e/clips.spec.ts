@@ -131,7 +131,7 @@ test('随手记 images go into the note being edited and become notes; clips can
   await page.keyboard.press('Enter');
   await editorAction(page, '插入随手记');
   dialog = page.getByRole('dialog', { name: '随手记' });
-  await expect(dialog.getByText('正在编辑「草稿」')).toBeVisible();
+  await expect(dialog.getByText('插入位置：「草稿」的光标处')).toBeVisible();
   await dialog
     .locator('.clip-item')
     .filter({ hasText: '插入用的一句话' })

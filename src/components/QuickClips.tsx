@@ -10,19 +10,13 @@ import {
   type FormEvent,
 } from 'react';
 import {
-  Copy,
-  FilePlus2,
   ImagePlus,
   Lock,
   LockOpen,
-  Pin,
-  PinOff,
   Search,
-  TextCursorInput,
-  Trash2,
   X,
 } from 'lucide-react';
-import { api, cachedApi, fileUrl, formatDate, scopeOf, upload } from '../api';
+import { api, cachedApi, fileUrl } from '../api';
 import {
   addClip,
   discardPending,
@@ -30,58 +24,33 @@ import {
   onClipsSent,
   rememberClipKey,
   revealPending,
-  setClipEncryption,
   usePendingClips,
   type PendingClip,
 } from '../clips';
 import { CLIP_CHARS, CLIP_IMAGE_MIME, type Clip, type ClipList } from '../../shared/clips';
-import { MIN_ENCRYPTION_PASSWORD } from '../../shared/encryption';
-import type { NoteNode, ShareSettings } from '../../shared/types';
-import { createKey, defaultPolicy, isUnlocked, rewrap } from '../keyring';
+import type { NoteNode } from '../../shared/types';
+import { isUnlocked } from '../keyring';
 import { LockedError } from '../encryption';
-import { fileBlob } from '../offline-cache';
+import { clipFile, copyImage } from '../clip-image';
 import { useOffline } from '../connectivity';
 import { useInsertTarget, type InsertTarget } from '../note-insert';
 import { useToast } from '../use-toast';
 import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 import { Modal, Spinner } from './Primitives';
-import { CachedImage } from './CachedImage';
 import { UnlockForm, useKeys } from './Encryption';
-import { NodePicker } from './Tree';
-import { markdownLink } from './LinkDialog';
-import { shareDestinationLabel } from './ShareSettings';
+import { ClipRow } from './ClipRow';
+import { ClipToNote } from './ClipToNote';
+import { ClipEncryption } from './ClipEncryption';
 import '../clips.css';
 
 const ImageViewer = lazy(() => import('./ImageViewer'));
 type Item = Clip & { pending?: PendingClip };
-const LONG = 280;
 const COMPOSE_DRAFT = 'clips-compose';
 // The server's order: newest first, then by ID.
 const newestFirst = (a: Clip, b: Clip) =>
   b.created_at - a.created_at || (a.id < b.id ? 1 : a.id > b.id ? -1 : 0);
 
-// The image of a clip as a file of its own, decrypted here when sealed.
-async function clipFile(file: NonNullable<Clip['file']>) {
-  const blob = await fileBlob(file.id);
-  return new File([blob], file.name, { type: file.mime });
-}
-// The clipboard takes PNG everywhere, so other types are drawn into one first.
-async function copyImage(file: NonNullable<Clip['file']>) {
-  let blob: Blob = await fileBlob(file.id);
-  if (file.mime !== 'image/png') {
-    const bitmap = await createImageBitmap(blob);
-    const canvas = document.createElement('canvas');
-    canvas.width = bitmap.width;
-    canvas.height = bitmap.height;
-    canvas.getContext('2d')!.drawImage(bitmap, 0, 0);
-    blob = await new Promise<Blob>((resolve, reject) =>
-      canvas.toBlob((png) => (png ? resolve(png) : reject(new Error())), 'image/png'),
-    );
-  }
-  await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })]);
-}
-
-// 随手记: a persistent clipboard. Type to keep something, click one to copy it.
+// 随手记: a persistent clipboard. Keeps text and images ready to insert into notes.
 export function QuickClips({
   source,
   onClose,
@@ -445,7 +414,7 @@ export function QuickClips({
         )}
         {editor && (
           <p className="clips-insert-hint">
-            正在编辑「{editor.title}」，可把随手记插入到光标处。
+            插入位置：「{editor.title}」的光标处
           </p>
         )}
         {total > 5 && (
@@ -533,422 +502,6 @@ function ImageDraft({ file, onRemove }: { file: File; onRemove: () => void }) {
       <button type="button" className="icon-button" aria-label="移除图片" onClick={onRemove}>
         <X size={15} />
       </button>
-    </div>
-  );
-}
-
-function ClipRow({
-  item,
-  offline,
-  onCopy,
-  onCopyImage,
-  onView,
-  onPin,
-  onRemove,
-  onInsert,
-  onConvert,
-  onSource,
-}: {
-  item: Item;
-  offline: boolean;
-  onCopy: () => void;
-  onCopyImage: () => void;
-  onView: () => void;
-  onPin: () => void;
-  onRemove: () => void;
-  onInsert?: () => void;
-  onConvert: () => void;
-  onSource: () => void;
-}) {
-  const [open, setOpen] = useState(false);
-  const sealed = !!item.key_id && !isUnlocked(item.key_id);
-  return (
-    <li className={`clip-item${item.pending ? ' is-pending' : ''}`}>
-      {sealed ? (
-        <p className="clip-text clip-sealed">
-          <Lock size={13} aria-hidden="true" />
-          已加密，解锁后显示
-        </p>
-      ) : (
-        // The image is a small thumbnail beside the text.
-        <div className="clip-body">
-          {item.text && (
-            <p className={`clip-text${open ? ' is-open' : ''}`}>
-              {item.text}
-            </p>
-          )}
-          {item.file && (
-            <button className="clip-image" title="查看大图" onClick={onView}>
-              <CachedImage src={fileUrl(item.file.id)} alt={item.file.name} />
-            </button>
-          )}
-        </div>
-      )}
-      <div className="clip-meta">
-        <span>{formatDate(item.created_at)}</span>
-        {item.source_id && item.source_title && (
-          <button className="text-button clip-source" onClick={onSource}>
-            {item.source_title}
-          </button>
-        )}
-        {item.pending &&
-          (item.pending.error ? (
-            <span className="clip-error" role="alert">
-              {item.pending.error}
-            </span>
-          ) : (
-            <span className="clip-waiting">{offline ? '联网后保存' : '正在保存'}</span>
-          ))}
-        <span className="clip-actions">
-          {item.text && !sealed && (
-            <button className="icon-button clip-copy" aria-label="复制文字" title="复制文字" onClick={onCopy}>
-              <Copy size={15} />
-            </button>
-          )}
-          {item.text.length > LONG && !sealed && (
-            <button className="text-button" aria-expanded={open} onClick={() => setOpen(!open)}>
-              {open ? '收起' : '展开'}
-            </button>
-          )}
-          {item.file && !sealed && (
-            <button className="icon-button" aria-label="复制图片" title="复制图片" onClick={onCopyImage}>
-              <Copy size={15} />
-            </button>
-          )}
-          {onInsert && !sealed && (
-            <button
-              className="icon-button"
-              aria-label="插入到正文"
-              title="插入到正文"
-              disabled={offline && !!item.file}
-              onClick={onInsert}
-            >
-              <TextCursorInput size={15} />
-            </button>
-          )}
-          {!item.pending && !sealed && (
-            <button
-              className="icon-button"
-              aria-label="转为笔记"
-              title="转为笔记"
-              disabled={offline}
-              onClick={onConvert}
-            >
-              <FilePlus2 size={15} />
-            </button>
-          )}
-          {!item.pending && (
-            <button
-              className="icon-button"
-              aria-label={item.pinned ? '取消置顶' : '置顶'}
-              title={item.pinned ? '取消置顶' : '置顶'}
-              disabled={offline}
-              onClick={onPin}
-            >
-              {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}
-            </button>
-          )}
-          <button
-            className="icon-button"
-            aria-label="删除"
-            title="删除"
-            disabled={offline && !item.pending}
-            onClick={onRemove}
-          >
-            <Trash2 size={15} />
-          </button>
-        </span>
-      </div>
-    </li>
-  );
-}
-
-// Moves a clip into the library as a Markdown note, then removes the clip.
-function ClipToNote({
-  item,
-  onCancel,
-  onDone,
-}: {
-  item: Item;
-  onCancel: () => void;
-  onDone: (node: NoteNode) => void;
-}) {
-  const firstLine = item.text.split('\n').find((line) => line.trim())?.trim() ?? '';
-  const [title, setTitle] = useState(
-    firstLine.slice(0, 60) || `随手记 ${new Date(item.created_at).toLocaleDateString('zh-CN')}`,
-  );
-  const [parent, setParent] = useState<string | null>(null);
-  const [destination, setDestination] = useState<{
-    title: string;
-    path: ShareSettings['breadcrumbs'];
-  } | null>(null);
-  const [plainTarget, setPlainTarget] = useState(false);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState('');
-  useEffect(() => {
-    let live = true;
-    api<ShareSettings>('/api/share/settings')
-      .then((settings) => {
-        if (!live) return;
-        setParent(settings.parentId);
-        setDestination({ title: shareDestinationLabel(settings), path: settings.breadcrumbs });
-      })
-      .catch(() => live && setDestination({ title: '根目录', path: [] }));
-    return () => {
-      live = false;
-    };
-  }, []);
-  // An encrypted clip put in a plain place is no longer encrypted.
-  useEffect(() => {
-    let live = true;
-    if (!item.key_id) return;
-    void scopeOf(parent)
-      .then((key) => live && setPlainTarget(!key))
-      .catch(() => {});
-    return () => {
-      live = false;
-    };
-  }, [item.key_id, parent]);
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    if (busy || !title.trim()) return;
-    setBusy(true);
-    setError('');
-    try {
-      const parts: string[] = [];
-      const attachments: string[] = [];
-      // The image is uploaded again into the note's place, sealed as it requires.
-      if (item.file) {
-        const file = await upload(await clipFile(item.file), parent);
-        attachments.push(file.id);
-        parts.push(`![${file.name.replace(/[[\]\\]/g, '')}](${fileUrl(file.id)})`);
-      }
-      if (item.text) parts.push(item.text);
-      if (item.source_id && item.source_title)
-        parts.push(`来源：${markdownLink({ id: item.source_id, title: item.source_title })}`);
-      const node = await api<NoteNode>('/api/nodes', 'POST', {
-        kind: 'markdown',
-        title: title.trim(),
-        parentId: parent,
-        content: `${parts.join('\n\n')}\n`,
-        attachments,
-      });
-      await api(`/api/clips/${item.id}`, 'DELETE').catch(() => {});
-      onDone(node);
-    } catch (reason) {
-      setError((reason as Error).message);
-      setBusy(false);
-    }
-  };
-  return (
-    <form className="form-stack clips-convert" onSubmit={(event) => void submit(event)}>
-      <p>转为 Markdown 笔记后，这条随手记会被移除。</p>
-      <label>
-        标题
-        <input
-          value={title}
-          maxLength={200}
-          required
-          disabled={busy}
-          onChange={(event) => setTitle(event.target.value)}
-        />
-      </label>
-      <fieldset disabled={busy}>
-        <legend>保存位置</legend>
-        {destination ? (
-          <>
-            <p className="destination-summary">保存到：{destination.title}</p>
-            <NodePicker
-              value={parent}
-              parentsOnly
-              initialPath={destination.path}
-              onSelect={(id, label) => {
-                setParent(id);
-                setDestination({ ...destination, title: label });
-              }}
-            />
-          </>
-        ) : (
-          <p role="status">正在读取默认保存目录…</p>
-        )}
-      </fieldset>
-      {plainTarget && (
-        <p className="field-hint">这条随手记已加密，目标位置未加密，转为笔记后将以明文保存。</p>
-      )}
-      {error && (
-        <p className="inline-error" role="alert">
-          {error}
-        </p>
-      )}
-      <div className="dialog-actions">
-        <button type="button" className="button" disabled={busy} onClick={onCancel}>
-          返回
-        </button>
-        <button className="button primary" disabled={busy || !destination || !title.trim()}>
-          {busy ? '正在保存…' : '转为笔记'}
-        </button>
-      </div>
-    </form>
-  );
-}
-
-// Sets, changes or removes the password of all clips. Existing clips are
-// re-sealed here.
-function ClipEncryption({ keyId, onDone }: { keyId: string | null; onDone: () => void }) {
-  useKeys();
-  const [password, setPassword] = useState('');
-  const [repeat, setRepeat] = useState('');
-  const [changing, setChanging] = useState(false);
-  const [busy, setBusy] = useState('');
-  const [error, setError] = useState('');
-  const run = async (action: () => Promise<void>, done = true) => {
-    setBusy('正在处理…');
-    setError('');
-    try {
-      await action();
-      if (done) onDone();
-    } catch (reason) {
-      setError((reason as Error).message);
-    } finally {
-      setBusy('');
-    }
-  };
-  const progress = (count: number) => setBusy(`已处理 ${count} 项…`);
-  const valid = password.length >= MIN_ENCRYPTION_PASSWORD && password === repeat;
-  const passwordFields = (
-    <>
-      <label>
-        {changing ? '新密码' : '密码'}
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={password}
-          disabled={!!busy}
-          onChange={(event) => setPassword(event.target.value)}
-        />
-      </label>
-      <label>
-        再次输入
-        <input
-          type="password"
-          autoComplete="new-password"
-          value={repeat}
-          disabled={!!busy}
-          onChange={(event) => setRepeat(event.target.value)}
-        />
-      </label>
-      <p className="field-hint">至少 {MIN_ENCRYPTION_PASSWORD} 位。</p>
-    </>
-  );
-  let content;
-  if (!keyId)
-    content = (
-      <form
-        className="form-stack"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!valid) return;
-          void run(async () => {
-            const created = await createKey(password, defaultPolicy());
-            await api('/api/encryption/keys', 'POST', created.record);
-            created.commit();
-            await setClipEncryption(created.record.id, progress);
-          });
-        }}
-      >
-        <p>设置密码后，随手记在本设备上加密再上传，密码不会上传。忘记密码将无法恢复内容。</p>
-        {passwordFields}
-        <div className="dialog-actions">
-          <button type="button" className="button" disabled={!!busy} onClick={onDone}>
-            返回
-          </button>
-          <button className="button primary" disabled={!!busy || !valid}>
-            {busy || '设置密码'}
-          </button>
-        </div>
-      </form>
-    );
-  else if (!isUnlocked(keyId))
-    content = (
-      <>
-        <p>请先解锁随手记的密码。</p>
-        <UnlockForm keyId={keyId} />
-        <button className="text-button" onClick={onDone}>
-          返回
-        </button>
-      </>
-    );
-  else if (changing)
-    content = (
-      <form
-        className="form-stack"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!valid) return;
-          // The same content key under a new password: nothing is re-encrypted.
-          void run(async () => {
-            const next = await rewrap(keyId, null, password);
-            await api(`/api/encryption/keys/${keyId}`, 'PUT', next.fields);
-            next.commit();
-          });
-        }}
-      >
-        <p>修改密码不需要重新加密内容。其他设备上记住的密码会在下次联网时失效。</p>
-        {passwordFields}
-        <div className="dialog-actions">
-          <button
-            type="button"
-            className="button"
-            disabled={!!busy}
-            onClick={() => setChanging(false)}
-          >
-            返回
-          </button>
-          <button className="button primary" disabled={!!busy || !valid}>
-            {busy || '修改密码'}
-          </button>
-        </div>
-      </form>
-    );
-  else
-    content = (
-      <>
-        <p>随手记已加密：内容在本设备上加密后再上传，密码不会上传。</p>
-        <p className="field-hint">取消加密后，全部随手记会以明文保存在服务器上。</p>
-        <div className="clips-encryption-actions">
-          <button className="text-button" disabled={!!busy} onClick={() => setChanging(true)}>
-            修改密码
-          </button>
-          <button
-            className="text-button"
-            disabled={!!busy}
-            onClick={() => void run(() => setClipEncryption(keyId, progress))}
-          >
-            检查并同步
-          </button>
-        </div>
-        <div className="dialog-actions">
-          <button className="button" disabled={!!busy} onClick={onDone}>
-            返回
-          </button>
-          <button
-            className="button danger"
-            disabled={!!busy}
-            onClick={() => void run(() => setClipEncryption(null, progress))}
-          >
-            {busy || '取消加密'}
-          </button>
-        </div>
-      </>
-    );
-  return (
-    <div className="form-stack clips-encryption">
-      {content}
-      {error && (
-        <p className="inline-error" role="alert">
-          {error}
-        </p>
-      )}
     </div>
   );
 }

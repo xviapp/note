@@ -2,7 +2,6 @@ import {
   ENCRYPTION_ITERATIONS,
   exportContentKey,
   importContentKey,
-  KEY_ID,
   keyCheck,
   newContentKey,
   newSalt,
@@ -142,7 +141,6 @@ const ready = (async () => {
     /* Keys stay locked when the database cannot be read. */
   }
 })();
-export const keyringReady = () => ready;
 
 // Locks keys whose time is up; the page re-locks what it shows.
 function sweep() {
@@ -166,7 +164,6 @@ export function isUnlocked(id: string): boolean {
   const entry = unlocked.get(id);
   return !!entry && !expired(entry);
 }
-export const unlockedIds = () => [...unlocked.keys()].filter(isUnlocked);
 export const unlockedEntries = () =>
   [...unlocked.values()]
     .filter((entry) => !expired(entry))
@@ -324,5 +321,3 @@ export function lockAll() {
   }
   emit();
 }
-export const isKeyId = (value: unknown): value is string =>
-  typeof value === 'string' && KEY_ID.test(value);

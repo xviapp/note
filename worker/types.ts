@@ -39,9 +39,3 @@ export interface BlobRow {
   // The content key it is sealed with, null for plain text.
   key_id: string | null;
 }
-export interface RequestContext {
-  request: Request;
-  env: Env;
-  execution: ExecutionContext;
-  session: Session;
-}

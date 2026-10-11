@@ -1,0 +1,367 @@
+/* Journals */
+.journal-panel {
+  container-type: inline-size;
+  margin-top: 24px;
+}
+/* Calendar and recent entries side by side when the column is wide enough. */
+.journal-layout {
+  display: grid;
+  gap: 8px 40px;
+}
+.journal-calendar-column {
+  width: 100%;
+  max-width: 420px;
+  margin-inline: auto;
+}
+@container (min-width: 700px) {
+  .journal-layout {
+    grid-template-columns: minmax(0, 380px) minmax(0, 1fr);
+    align-items: start;
+  }
+  .journal-calendar-column {
+    margin-inline: 0;
+  }
+}
+.project-entry-status {
+  flex: 0 0 auto;
+  max-width: 180px;
+  font-size: 13px;
+}
+.project-entry-status label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 6px;
+}
+.project-entry-status select {
+  max-width: 140px;
+}
+.journal-steps {
+  display: flex;
+  flex-shrink: 0;
+  gap: 2px;
+}
+.journal-heading-actions {
+  display: flex;
+  flex-shrink: 0;
+}
+.journal-draft {
+  margin-top: 24px;
+}
+.journal-draft > .muted {
+  margin: 8px 0 16px;
+  font-size: 13px;
+}
+.quick-append-footer {
+  container-type: inline-size;
+  flex-shrink: 0;
+  padding: 10px 24px max(10px, env(safe-area-inset-bottom));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+}
+.quick-append {
+  position: relative;
+  width: min(720px, 100%);
+  margin-inline: auto;
+}
+.quick-append input {
+  width: 100%;
+  min-width: 0;
+}
+.quick-append-heading {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+.quick-append-body {
+  position: relative;
+  display: block;
+}
+.quick-append-images {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+.quick-append-image {
+  position: relative;
+}
+.quick-append-image img {
+  display: block;
+  width: 112px;
+  height: 84px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface-subtle);
+  object-fit: contain;
+}
+.quick-append-image .icon-button {
+  position: absolute;
+  top: -9px;
+  right: -9px;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface);
+}
+.quick-append textarea {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  min-height: 104px;
+  max-height: 200px;
+  padding-right: 56px;
+  resize: vertical;
+}
+.quick-append-editor {
+  position: relative;
+}
+.quick-append-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  align-items: center;
+  gap: 8px;
+  margin-top: 8px;
+}
+.quick-append .quick-append-image-button {
+  position: absolute;
+  right: 8px;
+  bottom: 8px;
+  z-index: 1;
+  width: 40px;
+  height: 40px;
+  min-width: 0;
+  min-height: 0;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--muted);
+  cursor: pointer;
+}
+.quick-append-image-button > svg {
+  width: 20px;
+  height: 20px;
+}
+.quick-append-image-button:has(input:disabled) {
+  opacity: 0.5;
+  cursor: default;
+}
+.quick-append-image-button:focus-within {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.quick-append-image-button input {
+  position: absolute;
+  inset: 0;
+  width: auto;
+  opacity: 0;
+  cursor: pointer;
+}
+/* An idle composer is a single line; the title and Submit appear once it is in use. */
+.quick-append:not(.is-active) .quick-append-heading {
+  display: none;
+}
+.quick-append:not(.is-active) textarea {
+  height: 42px;
+  min-height: 0;
+  resize: none;
+  padding-right: 40px;
+}
+.quick-append:not(.is-active) .quick-append-image-button {
+  width: 26px;
+  height: 26px;
+  right: 6px;
+  bottom: 6px;
+}
+.quick-append:not(.is-active) .quick-append-image-button > svg {
+  width: 14px;
+  height: 14px;
+}
+@container (min-width: 700px) {
+  .quick-append {
+    width: min(720px, calc(100% - 256px));
+  }
+  .quick-append-actions {
+    position: absolute;
+    left: calc(100% + 12px);
+    bottom: 0;
+    width: 116px;
+    justify-content: flex-start;
+    margin-top: 0;
+  }
+}
+/* Phones: once in use, Submit shares the title row so the body field keeps a
+   modest height. */
+@container (max-width: 600px) {
+  .quick-append.is-active {
+    display: grid;
+    grid-template-columns: minmax(0, 1fr) auto;
+    column-gap: 8px;
+  }
+  .quick-append.is-active .quick-append-heading {
+    grid-area: 1 / 1;
+  }
+  .quick-append.is-active .quick-append-body {
+    display: contents;
+  }
+  .quick-append.is-active .quick-append-editor {
+    grid-area: 2 / 1 / 3 / -1;
+  }
+  .quick-append.is-active .quick-append-editor textarea {
+    height: 80px;
+    min-height: 64px;
+  }
+  .quick-append.is-active .quick-append-images {
+    grid-area: 3 / 1 / 4 / -1;
+    margin-top: 8px;
+    margin-bottom: 0;
+  }
+  .quick-append.is-active .quick-append-actions {
+    grid-area: 1 / 2;
+    align-self: start;
+    margin-top: 0;
+  }
+  .quick-append.is-active > small,
+  .quick-append.is-active > .inline-error {
+    grid-column: 1 / -1;
+  }
+}
+.quick-append small {
+  color: var(--muted);
+}
+.quick-append .upload-status {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+.quick-append .inline-error {
+  margin: 6px 0 0;
+}
+@media (max-width: 760px) {
+  .quick-append-footer {
+    padding-inline: 12px;
+  }
+}
+.journal-month {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 18px 0 8px;
+}
+.journal-month h2 {
+  min-width: 108px;
+  text-align: center;
+  font-family: var(--font-book);
+  font-size: 17px;
+}
+.journal-calendar {
+  width: 100%;
+  border-collapse: collapse;
+  table-layout: fixed;
+}
+.journal-calendar th {
+  padding: 6px 0;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 500;
+}
+.journal-calendar td {
+  padding: 2px;
+  text-align: center;
+}
+.journal-calendar button {
+  position: relative;
+  width: 100%;
+  max-width: 48px;
+  aspect-ratio: 1;
+  border-radius: 10px;
+  color: var(--ink);
+  font-size: 14px;
+}
+.journal-calendar button:hover:not(:disabled) {
+  background: var(--surface-subtle);
+}
+.journal-calendar button:disabled {
+  color: var(--muted);
+  opacity: 0.45;
+}
+.journal-calendar button.is-today {
+  outline: 1.5px solid var(--blue);
+  outline-offset: -1.5px;
+  color: var(--blue);
+  font-weight: 600;
+}
+.journal-calendar button.has-entry {
+  background: var(--selected);
+  font-weight: 600;
+}
+.journal-calendar button.has-entry:hover:not(:disabled) {
+  background: var(--selected);
+  box-shadow: inset 0 0 0 1px var(--line-strong);
+}
+/* Unsent input kept on this device. */
+.journal-calendar button.has-draft::after {
+  content: '';
+  position: absolute;
+  left: 50%;
+  bottom: 5px;
+  width: 5px;
+  height: 5px;
+  margin-left: -2.5px;
+  border-radius: 50%;
+  background: var(--blue);
+}
+.journal-recent h3 {
+  margin: 20px 0 4px;
+  color: var(--muted);
+  font-size: 14px;
+  font-weight: 500;
+}
+@container (min-width: 700px) {
+  .journal-recent h3 {
+    margin-top: 24px;
+  }
+}
+.journal-recent ol {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.journal-recent li {
+  border-bottom: 1px solid var(--line);
+}
+.journal-recent button {
+  display: grid;
+  grid-template-columns: 5.5em minmax(0, 1fr);
+  align-items: baseline;
+  gap: 12px;
+  width: 100%;
+  padding: 10px 0;
+  text-align: left;
+}
+.journal-recent-date strong {
+  display: block;
+  color: var(--ink);
+  font-size: 14px;
+  font-weight: 500;
+}
+.journal-recent-date small {
+  color: var(--muted);
+  font-size: 12px;
+}
+.journal-recent button:hover .journal-recent-date strong {
+  color: var(--blue);
+}
+.journal-recent-excerpt {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 13px;
+  line-height: 1.6;
+}

@@ -211,17 +211,17 @@ export function NodeForm({
         )}
         {kind === 'project' && !node && (
           <p className="field-hint">
-            自动创建 todo、issue、note 目录，项目页汇总其中的 Markdown 文件。
+            集中管理待办、问题和笔记。
           </p>
         )}
         {kind === 'journal' && !node && (
           <p className="field-hint">
-            按日历写日记，每天一篇，自动放入年、月目录。
+            每天一篇，按年月归档。
           </p>
         )}
         {kind === 'reference' && !node && (
           <>
-            <p className="field-hint">选择原文件或文件夹，引用不会复制内容。删除引用保留原内容。</p>
+            <p className="field-hint">引用不复制内容，删除引用不影响原文件。</p>
             <NodePicker
               value={reference?.id || null}
               label="选择引用内容"

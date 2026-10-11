@@ -10,6 +10,7 @@ import {
 import { createPortal } from 'react-dom';
 import { assistantHost } from '../assistant-host';
 import { useVisualViewport } from '../use-visual-viewport';
+import { useWindowDrag } from '../use-window-drag';
 import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 
@@ -115,13 +116,9 @@ export function AssistantWindow({
   const fullscreen = compact ? !sheet || sheetSize === 'full' || keyboard : mode === 'maximized';
   const [dockBounds, setDockBounds] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
-  const [dragging, setDragging] = useState(false);
   const panel = useRef<HTMLElement>(null),
     launcher = useRef<HTMLButtonElement>(null);
   const tucked = useScrollAway();
-  const drag = useRef<{ id: number; startX: number; startY: number; x: number; y: number } | null>(
-    null,
-  );
   const margin = compact ? 12 : 24;
   const [appendTop, setAppendTop] = useState<number | null>(null);
   const appendWatch = useRef<{ root: HTMLElement; stop: () => void } | null>(null);
@@ -176,6 +173,9 @@ export function AssistantWindow({
     position?.x ?? viewport.x + viewport.width,
     position?.y ?? viewport.y + viewport.height,
   );
+  const { dragging, handleProps } = useWindowDrag({
+    enabled: !compact && mode === 'floating', point, clamp, onMove: setPosition, stopKeyPropagation: true,
+  });
   let geometry: CSSProperties = { left: point.x, top: point.y, width, height };
   if (sheet) {
     const base = viewport.y + (fullscreen ? 0 : viewport.height * (1 - HALF));
@@ -228,10 +228,7 @@ export function AssistantWindow({
       onModeChange('maximized');
     }
   };
-  const endDrag = () => {
-    drag.current = null;
-    setDragging(false);
-  };
+
   // Dragging the handle: up for full screen, down for half, down again to close.
   const endPull = () => {
     if (!pull) return;
@@ -350,51 +347,7 @@ export function AssistantWindow({
             aria-label="移动青藜窗口"
             tabIndex={!compact && mode === 'floating' ? 0 : -1}
             title={!compact && mode === 'floating' ? '拖动移动，方向键微调' : undefined}
-            onPointerDown={(event) => {
-              if (compact || mode !== 'floating' || event.button !== 0) return;
-              event.preventDefault();
-              event.currentTarget.focus({ preventScroll: true });
-              event.currentTarget.setPointerCapture(event.pointerId);
-              drag.current = {
-                id: event.pointerId,
-                startX: event.clientX,
-                startY: event.clientY,
-                ...point,
-              };
-              setDragging(true);
-            }}
-            onPointerMove={(event) => {
-              const start = drag.current;
-              if (start?.id === event.pointerId)
-                setPosition(
-                  clamp(
-                    start.x + event.clientX - start.startX,
-                    start.y + event.clientY - start.startY,
-                  ),
-                );
-            }}
-            onPointerUp={endDrag}
-            onPointerCancel={endDrag}
-            onLostPointerCapture={endDrag}
-            onKeyDown={(event) => {
-              if (
-                compact ||
-                mode !== 'floating' ||
-                !['ArrowLeft', 'ArrowRight', 'ArrowUp', 'ArrowDown'].includes(event.key)
-              )
-                return;
-              event.preventDefault();
-              event.stopPropagation();
-              const step = event.shiftKey ? 40 : 10;
-              setPosition(
-                clamp(
-                  point.x +
-                    (event.key === 'ArrowLeft' ? -step : event.key === 'ArrowRight' ? step : 0),
-                  point.y +
-                    (event.key === 'ArrowUp' ? -step : event.key === 'ArrowDown' ? step : 0),
-                ),
-              );
-            }}
+            {...handleProps}
           >
             <strong>
               <QingliIcon size={22} />

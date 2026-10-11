@@ -11,10 +11,10 @@ import {
 } from '../shared-import';
 import { device } from '../mobile';
 import { useOffline } from '../connectivity';
-import type { ArxivPreview, AuthStatus, NodeKind, ShareSettings } from '../../shared/types';
+import type { ArxivPreview, AuthStatus, NodeKind } from '../../shared/types';
 import { NodeIcon } from './Primitives';
 import { NodePicker } from './Tree';
-import { shareDestinationLabel } from './ShareSettings';
+import { useShareDestination } from '../use-share-destination';
 import { addClip, flushClips } from '../clips';
 
 const MarkdownView = lazy(() =>
@@ -53,17 +53,15 @@ export default function ShareWindow() {
   const [paperMode, setPaperMode] = useState<'import' | 'link'>('import');
   const [paper, setPaper] = useState<ArxivPreview | null>(null);
   const [paperError, setPaperError] = useState('');
-  const [parent, setParent] = useState<string | null>(null);
-  const [destination, setDestination] = useState<{
-    title: string;
-    path: ShareSettings['breadcrumbs'];
-  } | null>(null);
+
   const [choosing, setChoosing] = useState(false);
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const edited = useRef(false);
   const resume = useRef<string | null>(null);
   const offline = useOffline();
+  const { destination, parent, error: destinationError, retry: retryDestination, select: selectDestination } =
+    useShareDestination(share?.id ?? null, auth === 'in' && !offline);
 
   useEffect(() => {
     let live = true;
@@ -121,20 +119,7 @@ export default function ShareWindow() {
     };
   }, [kind, auth, offline]);
 
-  useEffect(() => {
-    if (auth !== 'in' || destination || offline) return;
-    let live = true;
-    api<ShareSettings>('/api/share/settings')
-      .then((settings) => {
-        if (!live) return;
-        setParent(settings.parentId);
-        setDestination({ title: shareDestinationLabel(settings), path: settings.breadcrumbs });
-      })
-      .catch(() => live && setDestination({ title: '根目录', path: [] }));
-    return () => {
-      live = false;
-    };
-  }, [auth, destination, offline]);
+
 
   const close = (options: { saved?: boolean; openApp?: boolean } = {}) =>
     void device.closeShare(options).catch(() => {});
@@ -152,7 +137,7 @@ export default function ShareWindow() {
 
   async function save(event: FormEvent) {
     event.preventDefault();
-    if (!share || !kind || busy) return;
+    if (!share || !kind || busy || offline || !destination) return;
     setBusy(true);
     setMessage('');
     try {
@@ -409,15 +394,18 @@ export default function ShareWindow() {
                 {choosing ? '完成' : '更改'}
               </button>
             </div>
+            {destinationError && !offline && (
+              <div>
+                <p className="inline-error" role="alert">{destinationError}</p>
+                <button type="button" className="text-button" onClick={retryDestination}>重新加载保存目录</button>
+              </div>
+            )}
             {choosing && destination && (
               <NodePicker
                 value={parent}
                 parentsOnly
                 initialPath={destination.path}
-                onSelect={(id, label) => {
-                  setParent(id);
-                  setDestination({ ...destination, title: label });
-                }}
+                onSelect={selectDestination}
               />
             )}
           </div>

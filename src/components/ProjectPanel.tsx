@@ -261,8 +261,8 @@ export function ProjectPanel({
                 <p>{category === 'todo' ? '所有待办均已完成。' : '所有问题均已关闭。'}</p>
               ) : (
                 <>
-                  <p>还没有{PROJECT_LABELS[category]}，点「新建{PROJECT_LABELS[category]}」添加第一条。</p>
-                  <small>放进「{directory?.title ?? category}」文件夹的 Markdown 笔记也会出现在这里。</small>
+                  <p>还没有{PROJECT_LABELS[category]}</p>
+                  <small>也可从「{directory?.title ?? category}」目录收录 Markdown 笔记。</small>
                 </>
               )}
             </div>

@@ -223,12 +223,12 @@ function ManualPageDialog({
             rows={10}
             required
             value={text}
-            placeholder="输入或粘贴这一页的文字，支持 Markdown。"
+            placeholder="输入正文，支持 Markdown"
             onChange={(event) => setText(event.target.value)}
             disabled={!!busy}
             autoFocus
           />
-          <span className="field-hint">保存后青藜会为这一页生成摘要和值得追问的问题。</span>
+          <span className="field-hint">保存后自动生成摘要和追问，使用 DeepSeek API 额度。</span>
         </label>
         {error && (
           <p className="inline-error" role="alert">
@@ -282,7 +282,7 @@ function PageNumberDialog({
             autoFocus
           />
           <span className="field-hint">
-            照片交给 DeepSeek 识别文字，使用你的 API 额度；每张照片保存为一页笔记。
+            每张照片保存为一页；识别使用 DeepSeek API 额度。
           </span>
         </label>
         <div className="dialog-actions">
@@ -381,7 +381,6 @@ export function BookForm({
                   event.target.value = '';
                 }} />
               </label>
-              <span className="field-hint">选择图片或拍摄封面，保存时自动压缩。</span>
               {(coverId || coverFile) && <button type="button" className="text-button" disabled={busy} onClick={() => { setCoverId(null); setCoverFile(null); uploadedCover.current = null; }}>移除封面</button>}
             </div>
           </div>

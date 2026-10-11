@@ -140,7 +140,6 @@ export async function saveProxySubscription(input: { url: string; updateInterval
   return next;
 }
 export async function updateProxySubscription() { receive(await nativeProxy.updateSubscription()); }
-export async function selectNextProxyNode() { receive(await nativeProxy.selectNextNode()); }
 
 export async function selectProxyNode(index: number) { receive(await nativeProxy.selectNode({ index })); }
 export async function selectProxyAutomatically() { receive(await nativeProxy.selectAutomatically()); }

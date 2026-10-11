@@ -300,11 +300,3 @@ export interface StorageInfo extends StorageUsage {
   trashBytes: number;
   orphanBytes: number;
 }
-export const KIND_LABELS: Record<NodeKind, string> = {
-  folder: '文件夹',
-  markdown: 'Markdown 笔记',
-  text: '纯文本',
-  pdf: 'PDF',
-  image: '图片',
-  link: '网页链接',
-};

@@ -201,7 +201,7 @@ export function PageInsights({
             </button>
           ))
         ) : (
-          <p className="muted-text">还没有讨论。点上面的问题、划词「问青藜」或在下方提问。</p>
+          <p className="muted-text">在下方提问，开始本页讨论。</p>
         )}
       </div>
       {info.note_id && (
@@ -209,7 +209,6 @@ export function PageInsights({
           <FileText size={18} />
           <span>
             <strong>本页读书笔记</strong>
-            <small>讨论整理后的结论与依据</small>
           </span>
         </button>
       )}
@@ -370,7 +369,7 @@ export function BookPageList({
         <span>页面（{list.pages.length}）</span>
         <span>按页码</span>
       </div>
-      {!list.pages.length && <p className="muted-text">还没有页面，点上方「拍照添加页面」。</p>}
+      {!list.pages.length && <p className="muted-text">还没有书页，可拍照或手动添加。</p>}
       {list.pages.map((page) => (
         <button key={page.id} className="book-page-row" onClick={() => onNavigate(page.id)}>
           <span className="book-page-number">{page.page ?? '·'}</span>

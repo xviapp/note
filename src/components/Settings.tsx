@@ -147,7 +147,7 @@ export function Settings({
             </button>
           </form>
           <p className="field-hint">
-            容量上限包含历史和回收站；Cloudflare 账号的免费额度由所有项目共享。
+            此上限不代表 Cloudflare 费用上限。
           </p>
           <button
             className="text-button"
@@ -165,7 +165,7 @@ export function Settings({
             }}
           >
             <RotateCcw size={15} />
-            立即执行一批清理
+            清理残留文件
           </button>
         </section>
       )}

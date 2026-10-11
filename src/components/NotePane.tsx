@@ -3,8 +3,6 @@ import {
   Suspense,
   useCallback,
   useEffect,
-  useLayoutEffect,
-  useMemo,
   useRef,
   useState,
 } from 'react';
@@ -16,9 +14,7 @@ import {
   type FileInfo,
   type NoteDetail,
   type NoteNode,
-  type ReadingPosition,
 } from '../../shared/types';
-import { useReading } from '../useReading';
 import { openLink } from '../open-link';
 import { Empty, Modal, Spinner, useQuestion } from './Primitives';
 import { Attachments } from './Attachments';
@@ -30,11 +26,10 @@ import { NoteBody } from './NoteBody';
 import { LinkDialog, markdownLink } from './LinkDialog';
 import { useNoteEditor } from '../use-note-editor';
 import { NoteActions } from './NoteActions';
-import { useNoteToc } from '../use-note-toc';
 import { NodeList } from './NodeList';
 import { FastScroll } from './FastScroll';
 import { NodeMenu, type NodeAction } from './Tree';
-import { LockedNote, useKeys } from './Encryption';
+import { LockedNote } from './Encryption';
 import { isUnlocked } from '../keyring';
 import { AssistantPanel, type AssistantHandle } from './AssistantPanel';
 import type { AssistantMode } from './AssistantWindow';
@@ -43,43 +38,22 @@ import { TranslationPanel } from './TranslationPanel';
 import type { TranslationLaunch } from '../translation';
 import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
 import { clearSourceHighlight, locateTextSource } from '../source-location';
-import { exportAnnotations, takeRequestedAnnotation, useAnnotations } from '../annotations';
+import { exportAnnotations, useAnnotations } from '../annotations';
 import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
 import { AnnotationList, AnnotationPanel } from './AnnotationDialogs';
-import { useReadingPreferences } from '../reading-preferences';
 import { useOffline } from '../connectivity';
-import { cachedNote } from '../offline-cache';
-import { reveal } from '../encryption';
 import { useTypeView } from '../note-types';
 import type { ProjectContext } from '../../shared/projects';
 import { setInsertTarget } from '../note-insert';
+import { useNoteLoading } from '../use-note-loading';
+import { useNoteReading } from '../use-note-reading';
+import { useNoteAnnotationPosition } from '../use-note-annotation-position';
 
 const Editor = lazy(() => import('./Editor'));
 const SplitView = lazy(() => import('./SplitView'));
 const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
-
-function restoreTextPosition(area: HTMLElement, position: ReadingPosition) {
-  const anchors = Array.from(
-    area.querySelectorAll<HTMLElement>(
-      '.read-content [id^="heading-"], .read-content [data-paper-heading]',
-    ),
-  );
-  const index = anchors.findIndex((element) => element.id === position.heading),
-    anchor = anchors[index];
-  if (anchor) {
-    const nextTop =
-      anchors[index + 1]?.getBoundingClientRect().top ??
-      area.querySelector('.read-content')!.getBoundingClientRect().bottom;
-    const sectionHeight = Math.max(1, nextTop - anchor.getBoundingClientRect().top);
-    area.scrollTop +=
-      anchor.getBoundingClientRect().top -
-      area.getBoundingClientRect().top -
-      24 +
-      (position.headingRatio || 0) * sectionHeight;
-  } else area.scrollTop = (area.scrollHeight - area.clientHeight) * (position.ratio || 0);
-}
 
 interface Props {
   id: string;
@@ -114,16 +88,9 @@ interface Props {
 export default function NotePane(props: Props) {
   const { id } = props;
   const offline = useOffline();
-  const readingPreferences = useReadingPreferences();
   const [note, setNote] = useState<NoteDetail | null>(null),
     noteRef = useRef<NoteDetail | null>(null);
-  const [loadError, setLoadError] = useState<ApiError | Error | null>(null),
-    [retry, setRetry] = useState(0);
-  // Showing this device's copy while the server's answer is on its way. Editing
-  // and other changes wait for the fresh copy, so they never start from old text.
-  const [stale, setStale] = useState(false);
   const [appending, setAppending] = useState(false);
-  const tocPosition = useRef<ReadingPosition | null>(null);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
   const [childrenOpen, setChildrenOpen] = useState(false),
@@ -131,31 +98,7 @@ export default function NotePane(props: Props) {
     [splitOpen, setSplitOpen] = useState(false);
   const [historyOpen, setHistoryOpen] = useState(false),
     [linkOpen, setLinkOpen] = useState(false);
-  const question = useQuestion(),
-    scroll = useRef<HTMLDivElement>(null);
-  const revealAppend = useRef(false);
-  useLayoutEffect(() => {
-    if (!revealAppend.current || !note) return;
-    revealAppend.current = false;
-    touched.current = restored.current = true;
-    requestAnimationFrame(() => {
-      const area = scroll.current;
-      if (area) area.scrollTop = area.scrollHeight;
-    });
-  }, [note]);
-  const toc = useNoteToc({
-    scroll,
-    beforeSideToggle: () => {
-      touched.current = restored.current = true;
-      tocPosition.current = recordScroll() ?? null;
-    },
-    onJump: () => {
-      touched.current = restored.current = true;
-    },
-  });
-  const reading = useReading(id),
-    restored = useRef(false),
-    touched = useRef(false);
+  const question = useQuestion();
   const readingRoot = useRef<HTMLDivElement>(null);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('floating');
@@ -199,6 +142,19 @@ export default function NotePane(props: Props) {
     onChanged: props.onChanged,
     onError: props.onError,
     editorRef: editorHandle,
+  });
+  const {
+    scroll, reading, toc, touched, restored, tocPosition, revealAppend, restorePosition, recordScroll,
+  } = useNoteReading({ id, note, editing });
+  const { loadError, retry, setRetry, stale, applyDetail } = useNoteLoading({
+    id,
+    refresh: props.refresh,
+    editing,
+    note,
+    noteRef,
+    setNote,
+    reset,
+    onLoaded: props.onLoaded,
   });
   // While editing, 随手记 can insert a clip at the cursor.
   const inserting = useRef({ insert, addFiles });
@@ -281,129 +237,7 @@ export default function NotePane(props: Props) {
     setPdfLocation({ ...location });
     if (note?.file?.id !== file.id) setPdf(file);
   };
-  const applyDetail = (detail: NoteDetail) => {
-    noteRef.current = detail;
-    setNote(detail);
-    reset(detail);
-    props.onLoaded(detail);
-  };
-  useEffect(() => {
-    if (editing) return;
-    let live = true,
-      answered = false;
-    setLoadError(null);
-    // A note opened before shows at once from this device (a long paper takes
-    // seconds to download); the server's copy then replaces it.
-    if (noteRef.current?.id !== id)
-      void cachedNote(id)
-        .then((cached) => cached && reveal(cached))
-        .then((cached) => {
-          if (!live || answered || !cached) return;
-          setStale(true);
-          applyDetail(cached);
-        });
-    api<NoteDetail>(`/api/nodes/${id}`)
-      .then((detail) => {
-        answered = true;
-        if (!live) return;
-        setStale(false);
-        applyDetail(detail);
-      })
-      .catch((e) => {
-        answered = true;
-        if (!live) return;
-        // Deleted, trashed or signed out: never keep showing the old private copy.
-        setStale(false);
-        setLoadError(e);
-      });
-    return () => {
-      live = false;
-    };
-    // Reload only for a new note or refresh; applyDetail is recreated each render.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, props.refresh, editing, retry]);
-  // A note opened while its key was locked loads again once it is unlocked.
-  const keys = useKeys();
-  useEffect(() => {
-    if (note?.locked && isUnlocked(note.locked)) setRetry((count) => count + 1);
-  }, [keys, note?.locked]);
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
-  const noteId = note?.id;
-  const restorePosition = useCallback(() => {
-    if (!noteId || !reading.initial || editing || touched.current || !scroll.current) return;
-    restoreTextPosition(scroll.current, reading.initial);
-    restored.current = true;
-  }, [noteId, reading.initial, editing]);
-  useEffect(() => {
-    const timer = window.setTimeout(restorePosition, 120);
-    return () => clearTimeout(timer);
-  }, [restorePosition, toc.headings]);
-  useEffect(() => {
-    const article = scroll.current?.querySelector('article');
-    if (!article) return;
-    const observer = new ResizeObserver(() => restorePosition());
-    observer.observe(article);
-    return () => observer.disconnect();
-  }, [note?.id, restorePosition]);
-  useLayoutEffect(() => {
-    // Toggling the sidebar reflows the article; keep the same point in the chapter.
-    const position = tocPosition.current;
-    tocPosition.current = null;
-    if (!position || !scroll.current) return;
-    const area = scroll.current;
-    restoreTextPosition(area, position);
-    const top = area.scrollTop;
-    let active = true;
-    // A newly selected font may finish loading after the initial reflow.
-    void document.fonts.ready.then(() => {
-      if (active && Math.abs(area.scrollTop - top) < 2) restoreTextPosition(area, position);
-    });
-    return () => {
-      active = false;
-    };
-  }, [toc.sideOpen, readingPreferences]);
-  const recordScroll = () => {
-    const area = scroll.current;
-    if (!note || !area || editing || (!restored.current && !touched.current)) return;
-    let heading = '',
-      headingRatio = 0;
-    const top = area.getBoundingClientRect().top;
-    const anchors = Array.from(
-      area.querySelectorAll<HTMLElement>(
-        '.read-content [id^="heading-"], .read-content [data-paper-heading]',
-      ),
-    );
-    for (const [index, element] of anchors.entries()) {
-      const anchorTop = element.getBoundingClientRect().top;
-      if (anchorTop > top + 25) break;
-      heading = element.id;
-      const nextTop =
-        anchors[index + 1]?.getBoundingClientRect().top ??
-        area.querySelector('.read-content')!.getBoundingClientRect().bottom;
-      headingRatio = Math.max(
-        0,
-        Math.min(1, (top + 24 - anchorTop) / Math.max(1, nextTop - anchorTop)),
-      );
-    }
-    toc.setActive(heading);
-    if (!touched.current || (!TEXT_KINDS.includes(note.kind) && !note.arxiv_id)) return;
-    const ratio = Math.max(
-      0,
-      Math.min(1, area.scrollTop / Math.max(1, area.scrollHeight - area.clientHeight)),
-    );
-    const position = { ratio, ...(heading ? { heading, headingRatio } : {}) };
-    reading.update(position);
-    return position;
-  };
-  useEffect(() => {
-    const remember = () => {
-      if (editing || !scroll.current) return;
-      touched.current = restored.current = true;
-      tocPosition.current = recordScroll() ?? reading.initial;
-    };
-    window.addEventListener('note:before-reading-change', remember);
-    return () => window.removeEventListener('note:before-reading-change', remember);
-  });
   const previewFile = (file: FileInfo) => {
     if (file.mime.startsWith('image/')) showImage(fileUrl(file.id), file.name);
     else if (file.mime === 'application/pdf') setPdf(file);
@@ -450,41 +284,14 @@ export default function NotePane(props: Props) {
     markerHost: () => scroll.current?.querySelector<HTMLElement>('.note-article') ?? null,
     onAsk: (text) => addQuote(text),
   });
-  // Text that changed is found while painting; a PDF only goes missing with its file.
-  const missingAnnotations = useMemo(() => {
-    const files = new Set([note?.file?.id, ...(note?.attachments ?? []).map((file) => file.id)]);
-    return new Set([
-      ...layer.missingText,
-      ...annotationList
-        .filter((item) => item.location.kind === 'pdf' && !files.has(item.location.fileId))
-        .map((item) => item.id),
-    ]);
-  }, [layer.missingText, annotationList, note?.file, note?.attachments]);
-  const locateAnnotation = (item: Annotation) => {
-    if (item.location.kind === 'pdf') return locateSource(item.location);
-    const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
-    if (!root) return '原文暂时无法打开，请稍后重试。';
-    touched.current = restored.current = true;
-    return locateTextSource(root, item.location);
-  };
-  // A search result in a note: once the list and text are there, go to it.
-  useEffect(() => {
-    if (!annotationList.length) return;
-    const wanted = takeRequestedAnnotation(id);
-    const item = wanted && annotationList.find((annotation) => annotation.id === wanted);
-    if (!item) return;
-    let tries = 0,
-      timer = 0;
-    const attempt = () => {
-      const failed = locateAnnotation(item);
-      if (failed && ++tries < 20) timer = window.setTimeout(attempt, 150);
-      else if (failed) props.onNotice?.(failed);
-    };
-    timer = window.setTimeout(attempt, 100);
-    return () => window.clearTimeout(timer);
-    // Runs when a file's list arrives; locateAnnotation reads the latest note.
-    // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [annotationList, id]);
+  const { missingAnnotations, locateAnnotation } = useNoteAnnotationPosition({
+    id,
+    note,
+    annotationList,
+    missingText: layer.missingText,
+    locateSource,
+    onNotice: props.onNotice,
+  });
   // The type's own parts of the page: book, book page, project, paper (see note-types).
   const projectContext = props.projectContext ?? (note?.project_id && note.project_category
     ? { id: note.project_id, category: note.project_category } : undefined);
