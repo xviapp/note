@@ -178,6 +178,12 @@ async function sendAll() {
   }
 }
 const sent = new Set<() => void>();
+const saved = new Set<(clip: Clip) => void>();
+// Hand the saved record to open lists before removing its pending copy.
+export function onClipSaved(listener: (clip: Clip) => void) {
+  saved.add(listener);
+  return () => void saved.delete(listener);
+}
 // Called after a clip reaches the server, so open lists can reload.
 export function onClipsSent(listener: () => void) {
   sent.add(listener);
@@ -188,7 +194,7 @@ async function send(item: PendingClip): Promise<'sent' | 'kept' | 'stop'> {
   let current = item;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
-      await api<Clip>(
+      const clip = await api<Clip>(
         '/api/clips',
         'POST',
         {
@@ -200,6 +206,7 @@ async function send(item: PendingClip): Promise<'sent' | 'kept' | 'stop'> {
         },
         current.id,
       );
+      saved.forEach((listener) => listener(clip));
       writeOutbox(outbox.filter((entry) => entry.id !== item.id));
       return 'sent';
     } catch (error) {

@@ -21,6 +21,7 @@ import {
   addClip,
   discardPending,
   flushClips,
+  onClipSaved,
   onClipsSent,
   rememberClipKey,
   revealPending,
@@ -98,12 +99,27 @@ export function QuickClips({
     }
   }, []);
   useEffect(() => {
-    void flushClips();
+    const unsaved = onClipSaved((clip) => {
+      setList((current) => {
+        if (!current) return current;
+        const place = clip.pinned ? 'pinned' : 'items';
+        const updated = {
+          ...current,
+          pinned: current.pinned.filter((item) => item.id !== clip.id),
+          items: current.items.filter((item) => item.id !== clip.id),
+        };
+        updated[place] = [clip, ...updated[place]].sort(newestFirst);
+        return updated;
+      });
+      setMore((current) => current.filter((item) => item.id !== clip.id));
+    });
     const reload = () => void load();
     const unsubscribe = onClipsSent(reload);
+    void flushClips();
     window.addEventListener('note:widget-clips-sent', reload);
     return () => {
       unsubscribe();
+      unsaved();
       window.removeEventListener('note:widget-clips-sent', reload);
     };
   }, [load]);
@@ -176,8 +192,11 @@ export function QuickClips({
     !query ||
     (!(item.key_id && !isUnlocked(item.key_id)) && item.text.toLowerCase().includes(query));
   const pinned = (list?.pinned ?? []).filter(match);
-  const recent = [...pending, ...saved].filter(match);
-  const total = (list?.pinned.length ?? 0) + pending.length + saved.length;
+  // Decryption finishes asynchronously; stop rendering a pending copy as soon
+  // as it leaves the outbox, in the same render that shows its saved record.
+  const waiting = pending.filter((item) => outbox.some((entry) => entry.id === item.id));
+  const recent = [...waiting, ...saved].filter(match);
+  const total = (list?.pinned.length ?? 0) + waiting.length + saved.length;
 
   const save = async (event?: FormEvent) => {
     event?.preventDefault();
