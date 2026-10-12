@@ -89,16 +89,16 @@ export function LockedJournalComposer({ journal, date, onQueued, onUnlocked }: {
       await queueOutboxRecord(record());
       onQueued();
     } catch {
-      setError('未能暂存到本设备，请重试。');
+      setError('没能记下，请重试。');
       setBusy(false);
     }
   };
   if (unlocking && !unlocked)
     return (
       <div className="share-window-status">
-        <p>输入「{journal.title}」的密码后，已写的内容会继续保留。</p>
+        <p>输入密码解锁，已写的内容不会丢。</p>
         <UnlockForm keyId={journal.key_id} owner={journal.title} />
-        <button type="button" className="text-button" onClick={() => setUnlocking(false)}>继续写，稍后解锁</button>
+        <button type="button" className="text-button" onClick={() => setUnlocking(false)}>先不解锁</button>
       </div>
     );
   return (
@@ -151,7 +151,7 @@ export function LockedJournalComposer({ journal, date, onQueued, onUnlocked }: {
         </div>
         <small className="locked-journal-hint">
           <LockKeyhole size={13} aria-hidden="true" />
-          日记本已加密：先存在本设备，解锁后自动记入。
+          日记本已上锁，解锁后自动记入
           <button type="button" className="text-button" onClick={() => setUnlocking(true)}>现在解锁</button>
         </small>
         {error && <p className="inline-error" role="alert">{error}</p>}

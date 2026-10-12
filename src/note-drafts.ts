@@ -75,6 +75,7 @@ export function clearDrafts() {
   void dropPhotos();
   // Loaded on demand: the outbox module imports the API client.
   void import('./journal-outbox').then(({ clearJournalOutbox }) => clearJournalOutbox()).catch(() => {});
+  void import('./save-outbox').then(({ forgetSaves }) => forgetSaves()).catch(() => {});
   try {
     for (const key of Object.keys(localStorage))
       if (key.startsWith(DRAFT_PREFIX)) localStorage.removeItem(key);

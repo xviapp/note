@@ -70,6 +70,8 @@ export async function discardSave(id: string) {
 export interface SaveFailure {
   id: string;
   message: string;
+  // VERSION_CONFLICT: another device or page saved first.
+  code?: string;
   handled: boolean;
 }
 
@@ -112,7 +114,7 @@ async function send(item: PendingSave): Promise<boolean> {
     const detail = await api<NoteDetail>(`/api/nodes/${item.id}`);
     // The save may be newer than this entry: another one replaced it meanwhile.
     if (pendingSave(item.id)?.key !== item.key) return true;
-    if (detail.revision < saved.revision) throw new Error('正文已提交，但暂时无法确认最新版本。');
+    if (detail.revision < saved.revision) throw new Error('还没确认保存成功。');
     const latest = await readDraft(item.id);
     if (latest?.savedAt === draft.savedAt) removeDraft(item.id);
     write(saves.filter((entry) => entry.key !== item.key));
@@ -121,7 +123,9 @@ async function send(item: PendingSave): Promise<boolean> {
   } catch (reason) {
     if (uncertainFailure(reason)) return false;
     const message = (reason as Error).message || '保存未完成。';
-    const failure: SaveFailure = { id: item.id, message, handled: false };
+    const failure: SaveFailure = {
+      id: item.id, message, code: (reason as { code?: string }).code, handled: false,
+    };
     window.dispatchEvent(new CustomEvent<SaveFailure>('note:save-failed', { detail: failure }));
     // An open note took it back into its editor (with the draft); otherwise it waits.
     write(
@@ -133,6 +137,11 @@ async function send(item: PendingSave): Promise<boolean> {
   } finally {
     lockNote(item.id);
   }
+}
+
+// Signing out (clearDrafts) drops what waits here with the drafts.
+export function forgetSaves() {
+  write([]);
 }
 
 // Settles once the note has no save on its way (sent, or refused and waiting).

@@ -353,7 +353,7 @@ function Notebook({
       void flushSaves();
       void flushJournalOutbox().then((sent) => {
         if (sent) {
-          showToast(`已把暂存的 ${sent} 条今日记记入日记`);
+          showToast(`${sent} 条今日记已记入日记`);
           changed();
         }
       });

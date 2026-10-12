@@ -50,7 +50,7 @@ test('pending photo uploads show visible feedback in every theme', async ({ page
     release();
   }
   await expect(status).toHaveCount(0);
-  await expect(page.getByRole('alert')).toContainText('上传失败，请重试。');
+  await expect(page.getByRole('alert')).toContainText('有张照片没传上去');
   await expect(page.getByLabel('添加照片')).toBeEnabled();
 });
 
@@ -79,7 +79,7 @@ test('Save returns to the note at once and finishes in the background', async ({
   // The editor closes while the request is still held.
   await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toHaveCount(0);
   await expect(page.locator('.read-content')).toContainText('后台提交的正文');
-  await expect(page.locator('.save-pending')).toHaveText('正在保存修改…');
+  await expect(page.locator('.save-pending')).toHaveText('正在保存…');
   release();
   await expect(page.locator('.save-pending')).toHaveCount(0);
   await expect.poll(async () => (await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe('后台提交的正文');
@@ -163,7 +163,7 @@ test('failed searches cannot open results from a different query', async ({ page
   await page.route('**/api/search?q=*', (route) => route.fulfill({ status: 503, json: { error: '搜索暂时失败' } }), { times: 1 });
   await field.fill('乙搜索测试');
   // Only this device's titles for the current query remain, marked as such.
-  await expect(dialog.locator('.search-caption')).toHaveText('搜索暂时失败 以下是本机缓存中标题匹配的笔记。');
+  await expect(dialog.locator('.search-caption')).toHaveText('搜索暂时失败，先显示已找到的');
   await expect(dialog.getByRole('option')).toHaveText(['乙搜索测试']);
 });
 

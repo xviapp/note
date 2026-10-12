@@ -58,7 +58,7 @@ test('search shows titles from this device while the server searches', async ({ 
   const dialog = page.getByRole('dialog', { name: '搜索笔记', exact: true });
   const searching = page.waitForRequest('**/api/search?q=*');
   await dialog.getByRole('combobox').fill('本机 标题');
-  await expect(dialog.locator('.search-caption')).toHaveText('本机找到 1 项，正在查找全部…');
+  await expect(dialog.locator('.search-caption')).toHaveText('找到 1 项，继续查找中…');
   await expect(dialog.getByRole('option')).toHaveText(['本机能找到的标题']);
   await searching;
   release();

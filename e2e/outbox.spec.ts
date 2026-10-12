@@ -28,7 +28,7 @@ test('a refused 随手记 shows in 待发送 with its reason, and can be retried
   await entry.click();
   const group = page.getByRole('region', { name: '随手记' });
   await expect(group.getByText('第一条：被拒绝')).toBeVisible();
-  await expect(group.getByText('未能发送：服务器暂不接受').first()).toBeVisible();
+  await expect(group.getByText('没能发送：服务器暂不接受').first()).toBeVisible();
   await page.screenshot({ path: `test-results/outbox-${info.project.name}.png` });
 
   // Deleting asks first; it is only on this device.
@@ -37,7 +37,7 @@ test('a refused 随手记 shows in 待发送 with its reason, and can be retried
   await expect(group.getByText('第二条：也被拒绝')).toHaveCount(0);
 
   refuse = false;
-  await group.getByRole('button', { name: '立即重试' }).click();
+  await group.getByRole('button', { name: '重试' }).click();
   await expect(page.getByText('没有待发送的内容。')).toBeVisible();
   const list = await (await page.request.get('/api/clips')).json();
   expect(list.items.map((item: { text: string }) => item.text)).toEqual(['第一条：被拒绝']);

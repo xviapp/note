@@ -3,6 +3,8 @@ import { api, ApiError, fileUrl, lockNote, unlockNote, upload } from './api';
 import type { FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import type { useQuestion } from './components/Primitives';
 import { readDraft, removeDraft, writeDraft } from './note-drafts';
+import { cachedNote } from './offline-cache';
+import { reveal } from './encryption';
 import type { EditorHandle } from './components/Editor';
 import { pendingSave, queueSave, waitForSave, type SaveFailure } from './save-outbox';
 
@@ -97,6 +99,7 @@ export function useNoteEditor({
   // refused one comes back into the editor with the draft and the reason.
   const editingNow = useRef(editing);
   editingNow.current = editing;
+  const startAttempt = useRef(0);
   useEffect(() => {
     const saved = (event: Event) => {
       const detail = (event as CustomEvent<NoteDetail>).detail;
@@ -112,14 +115,28 @@ export function useNoteEditor({
       void (async () => {
         const draft = await readDraft(id);
         if (!draft) return;
+        // The page showed the refused text as saved. Go back to what the
+        // server has, so the editor's text counts as a change: it is kept as a
+        // draft and leaving asks first.
+        const server =
+          (await api<NoteDetail>(`/api/nodes/${id}`).catch(() => null)) ??
+          (await cachedNote(id).then((cached) => cached && reveal(cached)).catch(() => null));
+        if (server) {
+          noteRef.current = server;
+          setNote(server);
+        }
         try {
           await unlockNote(id);
-          baseRevision.current = draft.revision;
+          baseRevision.current = server?.revision ?? draft.revision;
           setContent(draft.content);
           setAssets(draft.attachments);
           setEditing(true);
           setTab('source');
-          setSaveError(failure.message);
+          setSaveError(
+            failure.code === 'VERSION_CONFLICT'
+              ? '这篇笔记已在其他页面更新。你的内容还在，再次保存会以你的为准，之前的修改可在历史版本中找回。'
+              : failure.message,
+          );
         } catch (e) {
           onError(e);
         }
@@ -246,9 +263,11 @@ export function useNoteEditor({
   // A new, empty note opens for writing without asking.
   const start = async (confirm = true) => {
     // The edit token is requested while the question is open, so confirming
-    // starts editing without another round trip.
-    const unlocking = unlockNote(id);
-    unlocking.catch(() => {});
+    // starts editing without another round trip. Not while a save is on its
+    // way: that save holds the note's token.
+    const attempt = ++startAttempt.current;
+    const unlocking = pendingSave(id) && !pendingSave(id)!.error ? null : unlockNote(id);
+    unlocking?.catch(() => {});
     if (
       confirm &&
       !(await question.confirm(
@@ -257,13 +276,16 @@ export function useNoteEditor({
         '开始编辑',
       ))
     ) {
-      void unlocking.then(() => lockNote(id), () => {});
+      // Only if nothing newer (another start, an edit, a save) needs the token.
+      void unlocking?.then(() => {
+        if (startAttempt.current === attempt && !editingNow.current && !pendingSave(id)) lockNote(id);
+      }, () => {});
       return;
     }
     try {
       // A save still on its way sets the revision this edit starts from.
       await waitForSave(id);
-      await unlocking;
+      await (unlocking ?? unlockNote(id));
       onStart();
       baseRevision.current = noteRef.current?.revision ?? 0;
       setEditing(true);

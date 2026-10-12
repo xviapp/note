@@ -311,5 +311,9 @@ test('reading positions resume across devices and a conflicting save preserves t
   await expect(other.getByRole('textbox', { name: 'Markdown 源码' })).toContainText(
     '设备二仍然保留的草稿',
   );
+  // The refused text counts as a change again: its draft stays on the device.
+  await expect
+    .poll(() => other.evaluate((note) => localStorage.getItem(`note-draft:${note}`), id))
+    .toContain('设备二仍然保留的草稿');
   await other.close();
 });

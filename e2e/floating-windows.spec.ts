@@ -29,6 +29,15 @@ async function openWindow(page: Page, kind: 'journal' | 'assistant') {
   }, kind);
   await page.goto('/window.html');
 }
+// Locking forgets the device's saved key in the background; wait until it is gone.
+const keysForgotten = (page: Page) =>
+  expect.poll(() => page.evaluate(() => new Promise<number>((resolve) => {
+    const open = indexedDB.open('yejian-keys', 1);
+    open.onsuccess = () => {
+      const count = open.result.transaction('keys').objectStore('keys').count();
+      count.onsuccess = () => { open.result.close(); resolve(count.result); };
+    };
+  }))).toBe(0);
 const calls = (page: Page) => page.evaluate(() => (window as any).__calls);
 const today = () => {
   const now = new Date();
@@ -192,17 +201,18 @@ test('今日记 takes records for a locked journal and adds them once it is unlo
   await encryption.getByRole('button', { name: '设置并加密' }).click();
   await encryption.getByRole('button', { name: '立即锁定' }).click();
   await expect(encryption.getByRole('button', { name: '立即锁定' })).toHaveCount(0);
+  await keysForgotten(page);
 
   // The window takes the record without the password.
   await openWindow(page, 'journal');
   const dialog = page.getByRole('dialog', { name: '今日记', exact: true });
-  await expect(dialog.getByText('日记本已加密：先存在本设备，解锁后自动记入。')).toBeVisible();
+  await expect(dialog.getByText('日记本已上锁，解锁后自动记入')).toBeVisible();
   await dialog.getByLabel('记录标题').fill('秘密');
   await dialog.getByPlaceholder('记下此刻…').fill('只写给自己。');
   await page.screenshot({ path: `test-results/window-journal-locked-${info.project.name}.png` });
   await dialog.getByRole('button', { name: '保存', exact: true }).click();
   await expect.poll(() => calls(page)).toEqual([
-    ['closeWindow', { message: '已暂存在本设备，解锁「加密日记」后自动记入今日日记' }],
+    ['closeWindow', { message: '已记下，解锁「加密日记」后自动记入' }],
   ]);
   const month = () => page.request.get(`/api/nodes/${journal.id}/journal?month=${today().slice(0, 7)}`).then((r) => r.json());
   expect((await month()).entries).toEqual([]);
@@ -216,7 +226,7 @@ test('今日记 takes records for a locked journal and adds them once it is unlo
   await waiting.getByRole('button', { name: '去解锁' }).click();
   await app.getByLabel('「加密日记」的密码').fill('diary-secret');
   await app.getByRole('button', { name: '解锁', exact: true }).click();
-  await expect(app.getByText('已把暂存的 1 条今日记记入日记')).toBeVisible();
+  await expect(app.getByText('1 条今日记已记入日记')).toBeVisible();
   await expect.poll(async () => (await month()).entries.map((entry: { date: string }) => entry.date)).toEqual([today()]);
 });
 
@@ -235,13 +245,14 @@ test('unlocking in the 今日记 window keeps what was written', async ({ page }
   await encryption.getByRole('button', { name: '设置并加密' }).click();
   await encryption.getByRole('button', { name: '立即锁定' }).click();
   await expect(encryption.getByRole('button', { name: '立即锁定' })).toHaveCount(0);
+  await keysForgotten(page);
   await openWindow(page, 'journal');
   const dialog = page.getByRole('dialog', { name: '今日记', exact: true });
   await dialog.getByPlaceholder('记下此刻…').fill('先写着');
   await dialog.getByRole('button', { name: '现在解锁' }).click();
   await dialog.getByLabel('「锁着的日记」的密码').fill('diary-secret');
   await dialog.getByRole('button', { name: '解锁', exact: true }).click();
-  await expect(dialog.getByText('日记本已加密：先存在本设备，解锁后自动记入。')).toHaveCount(0);
+  await expect(dialog.getByText('日记本已上锁，解锁后自动记入')).toHaveCount(0);
   await expect(dialog.getByPlaceholder('记下此刻…')).toHaveValue('先写着');
   await dialog.getByRole('button', { name: '保存', exact: true }).click();
   await expect.poll(() => calls(page)).toContainEqual(['closeWindow', { message: '已记入今日日记' }]);

@@ -55,7 +55,7 @@ const journals: OutboxSource = {
         summary: record.title || excerpt(record.text) || '（只有照片）',
         detail: [longDate(record.date), journal, record.photos ? `${record.photos} 张照片` : ''].filter(Boolean).join(' · '),
         createdAt: record.createdAt,
-        status: locked ? `等待解锁「${journal}」` : record.error ? `未能记入：${record.error}` : waiting(),
+        status: locked ? `等待解锁「${journal}」` : record.error ? `没能记入：${record.error}` : waiting(),
         failed: !locked && !!record.error,
         open: locked ? { label: '去解锁', id: record.journalId } : undefined,
       };
@@ -79,10 +79,10 @@ const clips: OutboxSource = {
   async list() {
     return (await revealPending(pendingClips())).map((clip) => ({
       id: clip.id,
-      summary: isSealedText(clip.text) ? '（已加密，解锁随手记后可见）' : excerpt(clip.text) || '（只有图片）',
+      summary: isSealedText(clip.text) ? '（加密内容）' : excerpt(clip.text) || '（只有图片）',
       detail: clip.file ? '含图片' : '',
       createdAt: clip.created_at,
-      status: clip.pending.error ? `未能发送：${clip.pending.error}` : waiting(),
+      status: clip.pending.error ? `没能发送：${clip.pending.error}` : waiting(),
       failed: !!clip.pending.error,
     }));
   },
@@ -134,12 +134,12 @@ const saves: OutboxSource = {
       return {
         id: item.id,
         summary: item.title || '无标题笔记',
-        detail: '正文修改',
+        detail: '',
         createdAt: item.savedAt,
-        status: item.error ? `未能保存：${item.error}` : locked ? '等待解锁这篇笔记' : waiting(),
+        status: item.error ? `没能保存：${item.error}` : locked ? '等待解锁这篇笔记' : waiting(),
         failed: !!item.error,
         // The note offers its draft again, where it can be compared and kept.
-        open: item.error || locked ? { label: item.error ? '打开处理' : '去解锁', id: item.id } : undefined,
+        open: item.error || locked ? { label: item.error ? '打开' : '去解锁', id: item.id } : undefined,
       };
     });
   },

@@ -465,7 +465,7 @@ export default function NotePane(props: Props) {
       </div>
       {sending && !editing && (
         <p className="save-pending" role="status">
-          {offline ? '修改已保存在本设备，联网后自动保存到服务器。' : '正在保存修改…'}
+          {offline ? '离线中，联网后自动保存' : '正在保存…'}
         </p>
       )}
       {editing && (

@@ -186,8 +186,8 @@ function QuickJournalSetting() {
       </div>
       <p className="field-hint">
         {journals && !journals.length
-          ? '还没有日记本。新建日记本后可在这里选择。'
-          : '长按页间图标的「今日记」把记录写入所选日记本的今天。'}
+          ? '还没有日记本'
+          : '长按页间图标选「今日记」，写进这个日记本'}
       </p>
       {error && (
         <p className="inline-error" role="alert">

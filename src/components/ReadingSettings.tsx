@@ -113,8 +113,8 @@ export function ReadingControls() {
 function DeviceReadingControls() {
   const value = useReadingWindowPreferences();
   const rows: [keyof ReadingWindowPreferences, string, string][] = [
-    ['keepAwake', '阅读时屏幕常亮', '打开笔记时不自动熄屏，10 分钟无操作后恢复系统设置。'],
-    ['volumeKeys', '音量键翻页', '阅读时按音量减翻到下一屏，音量加回到上一屏；编辑时不受影响。'],
+    ['keepAwake', '阅读时屏幕常亮', '阅读时不熄屏，10 分钟没操作则恢复'],
+    ['volumeKeys', '音量键翻页', '音量减翻到下一屏，音量加翻回上一屏'],
   ];
   return (
     <div className="reading-device">

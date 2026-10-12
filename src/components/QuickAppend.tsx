@@ -141,7 +141,7 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
         URL.revokeObjectURL(next.preview);
         void dropPhoto(draftId, next.id);
       } catch (reason) {
-        const message = (reason as Error).message || '图片上传失败，请重试。';
+        const message = (reason as Error).message || '照片没传上去';
         setPending((list) => list.map((item) => (item.id === next.id ? { ...item, failed: message } : item)));
       } finally {
         active.current = null;
@@ -226,7 +226,7 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
   useEffect(() => {
     if (!queued || !ready || running.current || disabled || othersBusy) return;
     const failed = pending.find((item) => item.failed);
-    if (failed) failSave(`照片「${failed.file.name}」上传失败，未保存。重试或移除这张照片后再保存。`);
+    if (failed) failSave('有张照片没传上去，还没保存。点它重试或移除后再保存。');
     else if (pending.length === 0) void commit();
     // commit and failSave read this render's input; this runs when the uploads settle.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
@@ -235,7 +235,7 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
     if (running.current || queued || disabled || othersBusy || !ready) return;
     if (!text.trim() && images.length === 0 && pending.length === 0) return;
     if (pending.some((item) => item.failed)) {
-      setError('有照片上传失败，请重试或移除后再保存。');
+      setError('有张照片没传上去，点它重试或移除后再保存。');
       return;
     }
     resumed.current = false;
@@ -309,17 +309,17 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
         {actions}
         <button className="button primary compact" type="submit"
           disabled={disabled || othersBusy || busy || queued || !ready || (!text.trim() && images.length === 0 && pending.length === 0)}>
-          <Send size={15} />{busy ? '正在追加…' : queued ? '等照片传完…' : retrying ? '重试追加' : label}
+          <Send size={15} />{busy ? '正在追加…' : queued ? '保存中…' : retrying ? '重试追加' : label}
         </button>
       </div>}
       </div>
       {uploadCount > 0 && <small className="upload-status" role="status">
         <LoaderCircle size={14} className="spin" aria-hidden="true" />
-        {queued ? `正在上传 ${uploadCount} 张照片，传完自动保存…` : `正在上传 ${uploadCount} 张照片…`}
+        {queued ? '正在上传照片，传完自动保存…' : `正在上传 ${uploadCount} 张照片…`}
       </small>}
-      {disabled && <small>{pending.length ? '联网后上传照片并可追加' : '联网后可追加内容'}</small>}
+      {disabled && <small>{pending.length ? '联网后继续' : '联网后可追加内容'}</small>}
       {failedPhoto && !error && <p className="inline-error" role="alert">
-        照片「{failedPhoto.file.name}」上传失败：{failedPhoto.failed} 点照片上的重试按钮，或移除它。
+        有张照片没传上去，点它重试或移除
       </p>}
       {error && <p className="inline-error" role="alert">{error}</p>}
     </form>

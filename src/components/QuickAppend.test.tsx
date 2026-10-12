@@ -30,7 +30,7 @@ it('keeps typing open while a photo uploads and offers retry after a failure', a
   expect((screen.getByLabelText('记录内容') as HTMLTextAreaElement).disabled).toBe(false);
   expect((screen.getByRole('button', { name: '追加' }) as HTMLButtonElement).disabled).toBe(false);
   rejectUpload(new Error('连接中断'));
-  expect((await screen.findByRole('alert')).textContent).toContain('连接中断');
+  expect((await screen.findByRole('alert')).textContent).toContain('没传上去');
   expect(screen.queryByRole('status')).toBeNull();
   upload.mockResolvedValueOnce({ id: 'photo', name: '照片.png', mime: 'image/png', size: 5 });
   fireEvent.click(screen.getByRole('button', { name: '重试上传 照片.png' }));
@@ -53,7 +53,7 @@ it('saves once photos finish uploading, and a save cut off resumes on reopening'
   fireEvent.change(screen.getByLabelText('记录内容'), { target: { value: '下雨了' } });
   fireEvent.click(screen.getByRole('button', { name: '追加' }));
   expect(submitted).toHaveBeenCalledTimes(1);
-  expect(screen.getByRole('button', { name: '等照片传完…' })).toBeTruthy();
+  expect(screen.getByRole('button', { name: '保存中…' })).toBeTruthy();
   expect(submit).not.toHaveBeenCalled();
   // The window closes (or Android ends the app) before the photo is up.
   await waitFor(() =>

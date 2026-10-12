@@ -142,12 +142,12 @@ export function SearchDialog({
       <p className="search-caption" aria-live="polite">
         {state === 'error'
           ? results.length
-            ? `${error} 以下是本机缓存中标题匹配的笔记。`
+            ? `${error.replace(/[。.]$/, '')}，先显示已找到的`
             : error
           : state === 'loading'
             ? '正在查找…'
             : state === 'local'
-              ? `本机找到 ${results.length} 项，正在查找全部…`
+              ? `找到 ${results.length} 项，继续查找中…`
             : query.trim()
               ? results.length
                 ? `找到 ${results.length} 项${results.length >= 30 ? '（只显示最近修改的 30 项）' : ''}`

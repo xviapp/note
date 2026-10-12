@@ -21,7 +21,7 @@ export function OutboxSettings({ confirm, onNavigate }: { confirm: Confirm; onNa
     }
   };
   const remove = async (group: OutboxGroup, item: OutboxItem) => {
-    if (!(await confirm('删除这条待发送内容？', `「${item.summary}」只保存在这台设备上，删除后无法找回。`, '删除', true)))
+    if (!(await confirm('删除这条内容？', '它还没传到服务器，删除后找不回来。', '删除', true)))
       return;
     await run(`${group.source.key}:${item.id}`, () => group.source.remove(item.id));
   };
@@ -34,7 +34,7 @@ export function OutboxSettings({ confirm, onNavigate }: { confirm: Confirm; onNa
         待发送
       </h2>
       <p className="field-hint">
-        已保存、但还没发到服务器的内容只在这台设备上。联网或解锁后会自动发送；退出登录时会被清除。
+        这些内容还没传到服务器，联网后会自动发送。
       </p>
       {!filled.length && <p className="outbox-empty">没有待发送的内容。</p>}
       {filled.map((group) => (
@@ -46,7 +46,7 @@ export function OutboxSettings({ confirm, onNavigate }: { confirm: Confirm; onNa
             </h3>
             <button className="button compact" disabled={!!busy} onClick={() => void run(group.source.key, () => group.source.retry())}>
               <RotateCcw size={14} />
-              {busy === group.source.key ? '正在发送…' : '立即重试'}
+              {busy === group.source.key ? '正在发送…' : '重试'}
             </button>
           </header>
           <ul>

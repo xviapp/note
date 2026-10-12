@@ -146,7 +146,7 @@ export function JournalWindow() {
   useEffect(() => {
     if (!journalId || locked || auth !== 'in') return;
     void flushJournalOutbox().then((sent) => {
-      if (sent) void device.notify({ message: `已把暂存的 ${sent} 条今日记记入日记` }).catch(() => {});
+      if (sent) void device.notify({ message: `${sent} 条今日记已记入日记` }).catch(() => {});
     });
   }, [journalId, locked, auth]);
   useReady(auth === 'out' || journal !== undefined || !!error);
@@ -164,17 +164,17 @@ export function JournalWindow() {
       ) : error ? (
         <p className="inline-error" role="alert">{error}</p>
       ) : !journal ? (
-        <OpenApp message="还没有日记本。在页间中选择「新建 → 日记本」后再来记录。" />
+        <OpenApp message="还没有日记本，先在页间里新建一个。" />
       ) : locked && journal.key_id ? (
         <LockedJournalComposer
           journal={{ ...journal, key_id: journal.key_id }}
           date={today}
-          onQueued={() => close({ message: `已暂存在本设备，解锁「${journal.title}」后自动记入今日日记` })}
+          onQueued={() => close({ message: `已记下，解锁「${journal.title}」后自动记入` })}
           onUnlocked={() => setLocked(false)}
         />
       ) : (
         <>
-          {offline && <p className="field-hint">离线时可以先写下，联网后再保存。</p>}
+          {offline && <p className="field-hint">离线中，可以先写下</p>}
           <QuickAppend
             // The same draft as the journal's own 写今天 on this device.
             id={`journal:${journal.id}:${today}`}
@@ -193,12 +193,12 @@ export function JournalWindow() {
             onAppend={async (title, text, key, attachmentIds) => {
               await recorder!(title, text, key, attachmentIds);
             }}
-            onSaveFailed={(message) => close({ message: `今日记未保存：${message} 内容已保留，再次打开可继续。` })}
+            onSaveFailed={(message) => close({ message: `没保存成功，内容还在，再打开可继续。${message}` })}
             // A save cut off last time (the window closed or Android ended the
             // app) completes on reopening; the window stays for a new record.
             onSaved={({ resumed }) =>
               resumed
-                ? void device.notify({ message: '上次的今日记已补记入日记' }).catch(() => {})
+                ? void device.notify({ message: '上次的今日记已记入日记' }).catch(() => {})
                 : close({ message: '已记入今日日记' })
             }
           />
