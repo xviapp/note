@@ -2,7 +2,7 @@ import { beforeEach, expect, it, vi } from 'vitest';
 import { readDraft, writeDraft } from './note-drafts';
 import { keepPhoto, pendingPhotos } from './pending-photos';
 import { setOffline } from './connectivity';
-import { discardQuickRecord, flushQuickRecords, markQuickRecord, queuedQuickRecords } from './quick-journal';
+import { discardQuickRecord, flushQuickRecords, holdQuickRecord, markQuickRecord, queuedQuickRecords } from './quick-journal';
 import { localDate } from '../shared/journals';
 
 const { upload, record, unlocked } = vi.hoisted(() => ({ upload: vi.fn(), record: vi.fn(), unlocked: new Map<string, CryptoKey>() }));
@@ -81,5 +81,20 @@ it('lists a record of a locked journal as waiting, without sending or reading it
   expect(record).not.toHaveBeenCalled();
   await discardQuickRecord('append:journal:j1:2026-10-12');
   expect(await queuedQuickRecords()).toEqual([]);
+  expect(localStorage.getItem('note-draft:quick-records')).toBeNull();
+});
+
+it('leaves a record open in a composer to it', async () => {
+  await saveRecord('2026-10-12');
+  const release = holdQuickRecord('append:journal:j1:2026-10-12');
+  expect(await flushQuickRecords()).toBe(0);
+  expect(record).not.toHaveBeenCalled();
+  release();
+  expect(await flushQuickRecords()).toBe(1);
+});
+
+it('unmarks a locked record once it is input again', async () => {
+  markQuickRecord('append:journal:j1:2026-10-12', '0a1b2c3d-0000-4000-8000-000000000001');
+  markQuickRecord('append:journal:j1:2026-10-12', '0a1b2c3d-0000-4000-8000-000000000001', false);
   expect(localStorage.getItem('note-draft:quick-records')).toBeNull();
 });

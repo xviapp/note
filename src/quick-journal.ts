@@ -56,9 +56,11 @@ function writeMarks(marks: Mark[]) {
     /* Storage can be unavailable; a locked record is then only on the calendar. */
   }
 }
-// QuickAppend marks a saved record of an encrypted journal.
-export function markQuickRecord(draftId: string, keyId: string | null | undefined) {
-  if (!keyId || !DAY_DRAFT.test(draftId)) return;
+// QuickAppend marks a saved record of an encrypted journal, and unmarks it
+// when it is input again (a refused save).
+export function markQuickRecord(draftId: string, keyId: string | null | undefined, saved = true) {
+  if (!DAY_DRAFT.test(draftId)) return;
+  if (!keyId || !saved) return unmark(draftId);
   const marks = readMarks();
   if (marks.some((mark) => mark.draftId === draftId)) return;
   writeMarks([...marks, { draftId, keyId, savedAt: Date.now() }]);
@@ -74,6 +76,18 @@ export function quickRecordBody(text: string, images: FileInfo[]) {
     .map((file) => `![${file.name.replace(/[[\]\\]/g, '')}](${fileUrl(file.id)})`)
     .join('\n\n');
   return [text.trim(), imageText].filter(Boolean).join('\n\n');
+}
+
+// Drafts open in a composer in this window: it sends them itself, so a flush
+// leaves them alone instead of uploading the same photos alongside it.
+const held = new Map<string, number>();
+export function holdQuickRecord(draftId: string) {
+  held.set(draftId, (held.get(draftId) ?? 0) + 1);
+  return () => {
+    const count = (held.get(draftId) ?? 1) - 1;
+    if (count > 0) held.set(draftId, count);
+    else held.delete(draftId);
+  };
 }
 
 // Refusals are kept for this session, beside the record.
@@ -165,7 +179,7 @@ export function flushQuickRecords({ earlier = false } = {}): Promise<number> {
     try {
       const today = localDate();
       for (const record of await queuedQuickRecords()) {
-        if (record.locked || (earlier && record.date >= today)) continue;
+        if (record.locked || held.has(record.draftId) || (earlier && record.date >= today)) continue;
         try {
           await send(record);
           errors.delete(record.draftId);

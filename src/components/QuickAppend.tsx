@@ -6,7 +6,7 @@ import type { RecordKind } from '../../shared/records';
 import type { FileInfo } from '../../shared/types';
 import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 import { dropPhoto, dropPhotos, keepPhoto, pendingPhotos } from '../pending-photos';
-import { markQuickRecord, quickRecordBody } from '../quick-journal';
+import { holdQuickRecord, markQuickRecord, quickRecordBody } from '../quick-journal';
 import { CachedImage } from './CachedImage';
 
 const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
@@ -111,6 +111,8 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
     return () => { live = false; };
   }, [draftId]);
   useEffect(() => () => current.current.forEach((item) => URL.revokeObjectURL(item.preview)), []);
+  // A 今日记 record saved here is sent from here while open (src/quick-journal.ts).
+  useEffect(() => holdQuickRecord(draftId), [draftId]);
   useEffect(() => {
     if (ready && autoFocus) field.current?.focus();
   }, [ready, autoFocus]);
@@ -118,7 +120,7 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
     if (!ready || busy) return;
     if (!title && !text && images.length === 0 && pending.length === 0) removeDraft(draftId);
     else {
-      if (queued || retrying) markQuickRecord(draftId, keyId);
+      markQuickRecord(draftId, keyId, queued || retrying);
       writeDraft(draftId, {
         content: JSON.stringify({ title, text, attachments: images, operationKey: operation.current, retrying, queued }),
         attachments: images, revision: 0, savedAt: Date.now(),
