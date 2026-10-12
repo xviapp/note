@@ -13,6 +13,7 @@ import { AppUpdates } from './AppUpdates';
 import { CacheSettings } from './OfflineCache';
 import { ShareSettings } from './ShareSettings';
 import { ServerSettings } from './ServerSettings';
+import { OutboxSettings } from './OutboxSettings';
 import { settingsTitles, type SettingsSection } from '../navigation';
 import { SettingsIndex } from './SettingsIndex';
 import type { Confirm } from './Primitives';
@@ -25,6 +26,7 @@ export function Settings({
   onChanged,
   onLogout,
   onError,
+  onNavigate,
 }: {
   section: SettingsSection | null;
   onOpen: (section: SettingsSection) => void;
@@ -33,6 +35,7 @@ export function Settings({
   onChanged: () => void;
   onLogout: (all?: boolean) => Promise<void>;
   onError: (e: unknown) => void;
+  onNavigate: (id: string) => void;
 }) {
   const [quota, setQuota] = useState(String((storage?.quotaBytes || 8e9) / 1e9)),
     [busy, setBusy] = useState(false),
@@ -76,6 +79,7 @@ export function Settings({
       )}
       {section === 'offline' && <CacheSettings />}
       {section === 'share' && <ShareSettings />}
+      {section === 'outbox' && <OutboxSettings confirm={confirm} onNavigate={onNavigate} />}
       {section === 'backup' && <BackupSettings confirm={confirm} onChanged={onChanged} />}
       {section === 'ai' && <AiSettings confirm={confirm} />}
       {section === 'encryption' && <EncryptionSettings />}

@@ -74,6 +74,11 @@ export async function listNodes(
     params = [limit + 1, offset];
   } else if (view === 'recent') {
     query = `SELECT ${NODE_COLUMNS} FROM nodes n JOIN reading_states r ON r.node_id=n.id WHERE n.trash_id IS NULL ORDER BY r.last_opened_at DESC,n.id LIMIT 20`;
+  } else if (view === 'journals') {
+    // The 今日记 journal chosen in settings comes first, then the journal written in most recently.
+    query = `SELECT ${NODE_COLUMNS} FROM nodes n JOIN journals j ON j.node_id=n.id WHERE n.trash_id IS NULL
+      ORDER BY n.id IS (SELECT quick_journal_id FROM site WHERE id=1) DESC,COALESCE((SELECT MAX(e.date) FROM journal_entries e JOIN nodes x ON x.id=e.node_id
+        WHERE e.journal_id=n.id AND x.trash_id IS NULL),'') DESC,n.created_at DESC,n.id LIMIT 20`;
   } else {
     const parent = url.searchParams.get('parent') || null;
     if (parent) await getNode(env, parent);

@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { AI_QUOTE_LIMIT, type AssistantSettings, type ChatHistory, type ChatMessage, type ChatInput } from '../../shared/assistant';
 import type { NoteNode } from '../../shared/types';
-import { api } from '../api';
+import { api, cachedApi } from '../api';
 import { streamChat } from '../assistant';
 import { uploadPreparedFile, validatePreparedFiles, type PreparedChatFile } from '../chat-files';
 
@@ -17,6 +17,10 @@ interface Options {
   onReplied?: () => void;
   onNavigate: (id: string) => void;
 }
+
+const RESUMED = 'resumed';
+// Long enough for a stream that survived the background to deliver its end.
+export const RESUME_CHECK_MS = 3000;
 
 // Own the conversation lifecycle so callers never coordinate request keys,
 // uploads or stream cancellation. Only explicit sends can start paid requests.
@@ -40,6 +44,8 @@ export function useAssistantConversation(props: Options) {
   const abort = useRef<AbortController | null>(null),
     mounted = useRef(true);
   const requestKey = useRef<{ payload: string; key: string } | null>(null);
+  // The server's history has arrived; a cached copy no longer applies.
+  const fresh = useRef(false);
   const base = `/api/nodes/${scopeId}/assistant`;
   const draft = !!props.onDraftSend;
   const load = useCallback(
@@ -52,6 +58,7 @@ export function useAssistantConversation(props: Options) {
       try {
         const history = await api<ChatHistory>(`${base}${before ? `?before=${before}` : ''}`);
         if (!mounted.current) return;
+        if (!before) fresh.current = true;
         setMessages((old) =>
           before
             ? [
@@ -86,6 +93,18 @@ export function useAssistantConversation(props: Options) {
   }, []);
   useEffect(() => {
     if (!visible || abort.current) return;
+    // This device's last copy (the global conversation) shows while the server answers.
+    if (!draft && !fresh.current)
+      void Promise.all([cachedApi<ChatHistory>(base), cachedApi<AssistantSettings>('/api/ai/settings')]).then(
+        ([history, cached]) => {
+          if (!mounted.current) return;
+          if (cached) setSettings((current) => current ?? cached);
+          if (!history || fresh.current) return;
+          setMessages(history.messages);
+          setNextBefore(history.nextBefore);
+          setLoading(false);
+        },
+      );
     void load();
     api<AssistantSettings>('/api/ai/settings')
       .then((value) => {
@@ -127,6 +146,29 @@ export function useAssistantConversation(props: Options) {
     abort.current = controller;
     let replyId = '',
       started = false;
+    // A phone may freeze or drop the stream while the app is in the background.
+    // Back in front, ask the server: once it has finished the reply, stop
+    // waiting and show what it saved.
+    let away = false,
+      check: ReturnType<typeof setTimeout> | undefined;
+    const watch = (event: Event) => {
+      if (event.type === 'pagehide' || document.visibilityState === 'hidden') {
+        away = true;
+        return;
+      }
+      if (!away || !replyId) return;
+      away = false;
+      clearTimeout(check);
+      check = setTimeout(async () => {
+        const history = await api<ChatHistory>(base).catch(() => null);
+        const reply = history?.messages.find((m) => m.id === replyId);
+        if (abort.current === controller && reply && reply.status !== 'pending')
+          controller.abort(RESUMED);
+      }, RESUME_CHECK_MS);
+    };
+    window.addEventListener('pagehide', watch);
+    window.addEventListener('focus', watch);
+    document.addEventListener('visibilitychange', watch);
     try {
       let data: ChatInput = { content: '继续生成', continueFrom };
       if (!continueFrom) {
@@ -181,7 +223,9 @@ export function useAssistantConversation(props: Options) {
         }
       });
     } catch (e) {
-      if (mounted.current) {
+      // A reply the server already finished: the history reload below shows it.
+      if (controller.signal.reason === RESUMED) requestKey.current = null;
+      else if (mounted.current) {
         const message = controller.signal.aborted
           ? started
             ? '已停止生成。'
@@ -198,6 +242,10 @@ export function useAssistantConversation(props: Options) {
           );
       }
     } finally {
+      clearTimeout(check);
+      window.removeEventListener('pagehide', watch);
+      window.removeEventListener('focus', watch);
+      document.removeEventListener('visibilitychange', watch);
       if (mounted.current) {
         setSending(false);
         setUploading(false);

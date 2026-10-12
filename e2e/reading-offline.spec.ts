@@ -35,8 +35,10 @@ async function pin(page: Page, title: string) {
   });
   await page.keyboard.press('Escape');
 }
-async function cacheRecords(page: Page) {
-  return page.evaluate(async () => {
+// The copies this device keeps for reading; `prefetched` ones (bodies fetched
+// ahead from a list, src/prefetch.ts) are left out unless asked for.
+async function cacheRecords(page: Page, prefetched = false) {
+  return page.evaluate(async (withPrefetched) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
       const open = indexedDB.open('yejian-offline', 3);
       open.onsuccess = () => resolve(open.result);
@@ -51,13 +53,13 @@ async function cacheRecords(page: Page) {
             content: detail.content,
             title: detail.title,
             sizes: files.map((file: any) => file.blob.size),
-          })),
+          })).filter((item: any) => withPrefetched || !item.prefetched),
         );
       request.onerror = () => reject(request.error);
     });
     db.close();
     return result;
-  });
+  }, prefetched);
 }
 function pdfFixture() {
   const objects = [
@@ -93,6 +95,27 @@ async function upload(page: Page, name: string, data: Buffer) {
   expect(response.ok()).toBeTruthy();
   return response.json();
 }
+
+test('notes shown in a list are fetched ahead and open offline without being visited', async ({
+  page,
+  context,
+}) => {
+  await login(page);
+  const note = await create(page, { title: '还没读过的笔记', kind: 'markdown', content: '# 预取\n\n先存好的正文。' });
+  await page.goto('/');
+  await expect(page.locator('.main-content').getByText('还没读过的笔记')).toBeVisible();
+  // Only the body is kept, marked as fetched ahead; it is not listed as read offline.
+  await expect
+    .poll(async () => (await cacheRecords(page, true)).find((item) => item.id === note.id))
+    .toMatchObject({ prefetched: true, complete: false, content: '# 预取\n\n先存好的正文。' });
+  expect((await cacheRecords(page)).map((item) => item.id)).not.toContain(note.id);
+  // A fresh offline page opens it from this device.
+  await page.evaluate(() => navigator.serviceWorker.ready.then(() => undefined));
+  await context.setOffline(true);
+  await page.goto(`/n/${note.id}`);
+  await expect(page.locator('.read-content')).toContainText('先存好的正文。');
+  await context.setOffline(false);
+});
 
 test('reading preferences apply live, preserve formula/code spacing, and survive reload', async ({
   page,

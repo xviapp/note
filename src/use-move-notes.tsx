@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { api } from './api';
 import type { NoteNode } from '../shared/types';
 import type { MovedNode } from './components/Tree';
+import { knownNode, settleChange, showChange } from './optimistic';
 
 // Moving notes by drag or dialog: each completed move is revealed in the tree
 // once and announced with a toast that can undo it.
@@ -50,14 +51,22 @@ export function useMoveNotes({
     const timer = setTimeout(() => setMoved(null), 3500);
     return () => clearTimeout(timer);
   }, [moved]);
+  // The note shows in its new folder at once; a refused move puts it back.
   const drop = async (id: string, parent: string | null, title: string) => {
     if (!id || id === parent || !(await canLeave())) return false;
+    if ((knownNode(id)?.parent_id ?? undefined) === parent) return false;
+    const withdraw = showChange(id, { fields: { parent_id: parent } });
     try {
       const node = await relocate(id, parent);
-      if (!node) return false;
+      if (!node) {
+        withdraw();
+        return false;
+      }
+      settleChange(withdraw);
       announce(id, node.parent_id, parent, title);
       return true;
     } catch (e) {
+      withdraw();
       onError(e);
       return false;
     }

@@ -29,6 +29,7 @@ export function NodeForm({
   iconOnly = false,
   onClose,
   onSaved,
+  onBackground,
 }: {
   node?: NoteNode;
   parent: string | null;
@@ -36,6 +37,9 @@ export function NodeForm({
   iconOnly?: boolean;
   onClose: () => void;
   onSaved: (node: NoteNode) => void;
+  // Given, the form closes once its files are uploaded and the request goes on
+  // in the background: `shown` is what the lists show until it is confirmed.
+  onBackground?: (request: Promise<NoteNode>, shown: { fields?: Partial<NoteNode>; added?: NoteNode }) => void;
 }) {
   const [kind, setKind] = useState<NoteVariant>(
     (node && variantOf(node)) ||
@@ -101,6 +105,48 @@ export function NodeForm({
         uploaded.current = await upload(file, parent);
       }
       if (kind === 'paper' && !continued.current) setProgress(null);
+      // Files are up; the record itself can be saved behind the closed form.
+      if (onBackground && kind !== 'paper') {
+        const request = (node
+          ? api<NoteNode>(`/api/nodes/${node.id}`, 'PATCH', {
+              title,
+              ...(kind === 'link' && !node.arxiv_id ? { url } : {}),
+              revision: node.revision,
+              ...(folderLike ? { icon: iconData } : {}),
+            })
+          : api<NoteNode>('/api/nodes', 'POST', {
+              kind: NOTE_TYPES[kind].create?.kind ?? kind,
+              title,
+              parentId: parent,
+              url,
+              fileId: uploaded.current?.id,
+              content: '',
+              ...(kind === 'project' ? { project: true } : {}),
+              ...(kind === 'journal' ? { journal: true } : {}),
+              ...(kind === 'reference' ? { referenceId: reference!.id } : {}),
+              ...(folderLike ? { icon: iconData } : {}),
+              ...(kind === 'book' ? { book: { author, pageCount: Number(pageCount) || 0, rolePrompt: role } } : {}),
+            }, key.current)
+        ).then((result) => {
+          if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_blob_id)
+            void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
+          return result;
+        });
+        const now = Date.now();
+        onBackground(
+          request,
+          node
+            ? { fields: { title: title.trim() || node.title } }
+            : {
+                added: {
+                  id: `pending-${key.current}`, parent_id: parent, kind: NOTE_TYPES[kind].create?.kind ?? 'markdown',
+                  title: title.trim() || '正在创建…', position: Number.MAX_SAFE_INTEGER, url: null, file_blob_id: null,
+                  current_version_id: null, revision: 0, trash_id: null, created_at: now, updated_at: now, child_count: 0,
+                },
+              },
+        );
+        return;
+      }
       const result = node
         ? await api<NoteNode>(`/api/nodes/${node.id}`, 'PATCH', {
             title,

@@ -1,6 +1,8 @@
-import { createContext, useContext, useEffect, useRef, useState } from 'react';
+import { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react';
 import { api, cachedApi } from './api';
 import type { NoteNode } from '../shared/types';
+import { prefetchNotes } from './prefetch';
+import { applyChanges, rememberNodes, useOptimisticVersion } from './optimistic';
 
 export type NodeListing = { nodes: NoteNode[]; nextOffset: number | null };
 type CachedListing = { listing: NodeListing; pages: number; refresh: number };
@@ -81,7 +83,10 @@ export function useNodeListing(query: string, refresh: number) {
         const listing = { nodes: [...nodes.values()], nextOffset };
         current.current = { query, listing, pages: loaded };
         remember(cache, query, { listing, pages: loaded, refresh });
+        rememberNodes(listing.nodes);
         setState({ query, listing, loading: false, error: '' });
+        // Opening one of them then shows its text at once.
+        prefetchNotes(listing.nodes);
       } catch (error) {
         if (run === generation.current)
           setState({
@@ -126,8 +131,17 @@ export function useNodeListing(query: string, refresh: number) {
       if (run === generation.current) pending.current = false;
     }
   };
+  // Changes not confirmed yet (src/optimistic.ts) show over what was loaded.
+  const pendingChanges = useOptimisticVersion();
+  const loadedListing = state.query === query ? state.listing : null;
+  const shown = useMemo(
+    () => loadedListing && { ...loadedListing, nodes: applyChanges(query, loadedListing.nodes) },
+    // pendingChanges is the version of the changes applyChanges reads.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+    [loadedListing, query, pendingChanges],
+  );
   return {
-    listing: state.query === query ? state.listing : null,
+    listing: shown,
     loading: state.query !== query || state.loading,
     error: state.query === query ? state.error : '',
     more,

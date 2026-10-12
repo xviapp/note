@@ -122,6 +122,17 @@ button:active:not(:disabled) {
   flex: 1;
   font-weight: 600;
 }
+/* How many items wait in 待发送. */
+.settings-entry > span.settings-badge {
+  flex: none;
+  min-width: 22px;
+  padding: 1px 7px;
+  border-radius: var(--family-radius-pill);
+  background: var(--selected);
+  color: var(--blue);
+  font-size: 12px;
+  text-align: center;
+}
 .settings-entry:hover {
   background: var(--hover);
 }

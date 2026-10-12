@@ -32,6 +32,10 @@ export function offlineShell(): Plugin {
             name !== '/sw.js' &&
             name !== '/_headers' &&
             name !== '/android-webview.html' &&
+            // Android's own windows (bundled in the app); Cloudflare redirects
+            // these .html paths, so a cached copy would fail as a navigation.
+            name !== '/share.html' &&
+            name !== '/window.html' &&
             !name.startsWith('/offline-resources-') &&
             !name.endsWith('.map'),
         )
@@ -129,7 +133,7 @@ self.addEventListener('activate', (event) => {
 self.addEventListener('fetch', (event) => {
   const request = event.request, url = new URL(request.url);
   if (request.method !== 'GET' || url.origin !== self.location.origin || url.pathname.startsWith('/api/')) return;
-  const navigation = request.mode === 'navigate' && (url.pathname === '/' || /^\\/n\\/[\\w-]+$/.test(url.pathname) || /^\\/(?:favorites|recent|offline|trash|settings(?:\\/(?:theme|reading|ai|offline|share|backup|storage|account|about|server))?)$/.test(url.pathname));
+  const navigation = request.mode === 'navigate' && (url.pathname === '/' || /^\\/n\\/[\\w-]+$/.test(url.pathname) || /^\\/(?:favorites|recent|offline|trash|settings(?:\\/(?:theme|reading|ai|offline|share|outbox|backup|storage|account|about|server))?)$/.test(url.pathname));
   if (navigation) {
     event.respondWith(fetch(request).catch(async () => {
       const response = await (await caches.open(CACHE)).match('/');

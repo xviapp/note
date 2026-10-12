@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type FormEvent } from 'react';
-import { BookText, Camera, PenLine, Settings2 } from 'lucide-react';
+import { useEffect, useRef, useState, type FormEvent, type Ref } from 'react';
+import { BookText, Camera, Images, PenLine, Settings2, X } from 'lucide-react';
 import { api, fileUrl, upload } from '../api';
 import { addBookPage, pagePhoto } from '../books';
 import {
@@ -12,6 +12,11 @@ import {
 import { BookRoleField } from './BookRoleField';
 import { Modal } from './Primitives';
 import { CachedImage } from './CachedImage';
+
+// Phones open the camera directly and keep shooting page after page; computers
+// choose files.
+const hasCamera = () =>
+  typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 // The top of a book's page: its details, and adding pages or discussions.
 export function BookCard({
@@ -29,8 +34,11 @@ export function BookCard({
   onOpen: (node: NoteNode) => void;
   onError: (error: unknown) => void;
 }) {
-  const input = useRef<HTMLInputElement>(null);
+  const input = useRef<HTMLInputElement>(null),
+    camera = useRef<HTMLInputElement>(null);
+  const [touch] = useState(hasCamera);
   const [photos, setPhotos] = useState<File[]>([]),
+    [shooting, setShooting] = useState(false),
     [typing, setTyping] = useState(false);
   const [progress, setProgress] = useState(''),
     [collecting, setCollecting] = useState(false);
@@ -103,11 +111,21 @@ export function BookCard({
         <button
           className="button compact primary"
           disabled={offline || !!progress}
-          onClick={() => input.current?.click()}
+          onClick={() => (touch ? camera : input).current?.click()}
         >
           <Camera size={15} />
           <span>{progress || '拍照添加页面'}</span>
         </button>
+        {touch && (
+          <button
+            className="button compact"
+            disabled={offline || !!progress}
+            onClick={() => input.current?.click()}
+          >
+            <Images size={15} />
+            <span>从相册添加</span>
+          </button>
+        )}
         <button
           className="button compact"
           disabled={offline || !!progress}
@@ -136,9 +154,19 @@ export function BookCard({
           hidden
           onChange={(event) => {
             setPhotos(Array.from(event.target.files ?? []));
+            setShooting(false);
             event.target.value = '';
           }}
         />
+        {touch && (
+          <CameraInput
+            ref={camera}
+            onPhoto={(file) => {
+              setPhotos([file]);
+              setShooting(true);
+            }}
+          />
+        )}
       </div>
       {typing && (
         <ManualPageDialog
@@ -154,8 +182,10 @@ export function BookCard({
       )}
       {photos.length > 0 && (
         <PageNumberDialog
-          count={photos.length}
+          photos={photos}
           next={book.pages_read + 1}
+          onAdd={shooting ? (file) => setPhotos((list) => [...list, file]) : undefined}
+          onRemove={(index) => setPhotos((list) => list.filter((_, at) => at !== index))}
           onClose={() => setPhotos([])}
           onStart={(start) => void recognize(start)}
         />
@@ -248,18 +278,66 @@ function ManualPageDialog({
   );
 }
 
+// A hidden input that opens the rear camera for one photo.
+function CameraInput({
+  ref,
+  onPhoto,
+}: {
+  ref: Ref<HTMLInputElement>;
+  onPhoto: (file: File) => void;
+}) {
+  return (
+    <input
+      ref={ref}
+      type="file"
+      accept="image/*"
+      capture="environment"
+      hidden
+      onChange={(event) => {
+        const file = event.target.files?.[0];
+        if (file) onPhoto(file);
+        event.target.value = '';
+      }}
+    />
+  );
+}
+
+function PhotoThumb({ file, label, onRemove }: { file: File; label: string; onRemove: () => void }) {
+  const [url, setUrl] = useState('');
+  useEffect(() => {
+    const value = URL.createObjectURL(file);
+    setUrl(value);
+    return () => URL.revokeObjectURL(value);
+  }, [file]);
+  return (
+    <li>
+      {url && <img src={url} alt={label} />}
+      <button type="button" className="icon-button" aria-label={`移除${label}`} onClick={onRemove}>
+        <X size={14} />
+      </button>
+    </li>
+  );
+}
+
 function PageNumberDialog({
-  count,
+  photos,
   next,
+  onAdd,
+  onRemove,
   onClose,
   onStart,
 }: {
-  count: number;
+  photos: File[];
   next: number;
+  // Set while shooting with the camera: another page can be added.
+  onAdd?: (file: File) => void;
+  onRemove: (index: number) => void;
   onClose: () => void;
   onStart: (start: number | null) => void;
 }) {
   const [page, setPage] = useState(String(next));
+  const camera = useRef<HTMLInputElement>(null);
+  const count = photos.length;
   return (
     <Modal title={`识别 ${count} 张书页`} onClose={onClose}>
       <form
@@ -269,6 +347,25 @@ function PageNumberDialog({
           onStart(Number(page) || null);
         }}
       >
+        <ol className="book-photo-strip" aria-label="待识别的书页">
+          {photos.map((file, index) => (
+            <PhotoThumb
+              key={`${file.name}-${file.lastModified}-${index}`}
+              file={file}
+              label={`第 ${index + 1} 张`}
+              onRemove={() => (count > 1 ? onRemove(index) : onClose())}
+            />
+          ))}
+        </ol>
+        {onAdd && (
+          <>
+            <button type="button" className="button" onClick={() => camera.current?.click()}>
+              <Camera size={15} />
+              继续拍下一页
+            </button>
+            <CameraInput ref={camera} onPhoto={onAdd} />
+          </>
+        )}
         <label>
           {count > 1 ? '起始页码' : '页码'}
           <input
@@ -279,10 +376,10 @@ function PageNumberDialog({
             value={page}
             placeholder="留空则不记页码"
             onChange={(event) => setPage(event.target.value)}
-            autoFocus
+            autoFocus={!onAdd}
           />
           <span className="field-hint">
-            每张照片保存为一页；识别使用 DeepSeek API 额度。
+            每张照片保存为一页，按顺序编号；识别使用 DeepSeek API 额度。
           </span>
         </label>
         <div className="dialog-actions">

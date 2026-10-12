@@ -41,7 +41,7 @@ test('pending photo uploads show visible feedback in every theme', async ({ page
       await page.evaluate((value) => {
         window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
       }, theme);
-      await expect(status).toHaveText('正在上传照片…');
+      await expect(status).toHaveText('正在上传 1 张照片…');
       await expect(status).toBeInViewport();
       await expect(status.locator('.spin')).toBeVisible();
       await page.screenshot({ path: testInfo.outputPath(`upload-${theme}.png`) });
@@ -50,7 +50,7 @@ test('pending photo uploads show visible feedback in every theme', async ({ page
     release();
   }
   await expect(status).toHaveCount(0);
-  await expect(page.getByRole('alert')).toHaveText('上传失败，请重试。');
+  await expect(page.getByRole('alert')).toContainText('上传失败，请重试。');
   await expect(page.getByLabel('添加照片')).toBeEnabled();
 });
 
@@ -62,42 +62,67 @@ async function writeSource(page: Page, text: string) {
   await expect(field).toHaveText(text, { useInnerText: true });
 }
 
-for (const finish of [true, false]) {
-  test(`typing during ${finish ? 'Save' : 'Ctrl+S'} survives completion and reload`, async ({ page }) => {
-    await login(page);
-    const node = await create(page, { kind: 'markdown', title: '保存中的草稿', content: '原文' });
-    await page.goto(`/n/${node.id}`);
-    await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-    await page.getByRole('button', { name: '开始编辑', exact: true }).click();
-    const source = page.getByRole('textbox', { name: 'Markdown 源码' });
-    await writeSource(page, '提交的正文');
-    let release!: () => void;
-    const gate = new Promise<void>((resolve) => { release = resolve; });
-    await page.route(`**/api/nodes/${node.id}/content`, async (route) => {
-      await gate;
-      await route.continue();
-    });
-    const sent = page.waitForRequest((request) => request.method() === 'PUT' && request.url().endsWith('/content'));
-    if (finish) await page.getByRole('button', { name: '保存', exact: true }).click();
-    else await source.press('ControlOrMeta+s');
-    await sent;
-    const latest = '提交的正文\n请求期间新增的内容';
-    await writeSource(page, latest);
-    await expect.poll(() => page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toContain('请求期间新增');
-    release();
-    await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
-    await expect(source).toContainText('请求期间新增');
-    await expect.poll(async () => (await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe('提交的正文');
-    await expect.poll(() => page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toContain('请求期间新增');
-    page.on('dialog', (dialog) => void dialog.accept());
-    await page.reload();
-    await page.getByRole('button', { name: '恢复草稿', exact: true }).click();
-    await expect(source).toContainText('请求期间新增');
-    await page.getByRole('button', { name: '保存', exact: true }).click();
-    await expect(source).toHaveCount(0);
-    await expect(page.locator('.read-content')).toContainText('请求期间新增');
+test('Save returns to the note at once and finishes in the background', async ({ page }) => {
+  await login(page);
+  const node = await create(page, { kind: 'markdown', title: '后台保存', content: '原文' });
+  await page.goto(`/n/${node.id}`);
+  await page.getByRole('button', { name: '编辑正文', exact: true }).click();
+  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
+  await writeSource(page, '后台提交的正文');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/nodes/${node.id}/content`, async (route) => {
+    await gate;
+    await route.continue();
   });
-}
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  // The editor closes while the request is still held.
+  await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toHaveCount(0);
+  await expect(page.locator('.read-content')).toContainText('后台提交的正文');
+  await expect(page.locator('.save-pending')).toHaveText('正在保存修改…');
+  release();
+  await expect(page.locator('.save-pending')).toHaveCount(0);
+  await expect.poll(async () => (await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe('后台提交的正文');
+  await expect.poll(() => page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toBeNull();
+  await page.reload();
+  await expect(page.locator('.read-content')).toContainText('后台提交的正文');
+  await expect(page.getByRole('button', { name: '恢复草稿', exact: true })).toHaveCount(0);
+});
+
+// Ctrl+S keeps editing, so it still waits for the new revision.
+test('typing during Ctrl+S survives completion and reload', async ({ page }) => {
+  await login(page);
+  const node = await create(page, { kind: 'markdown', title: '保存中的草稿', content: '原文' });
+  await page.goto(`/n/${node.id}`);
+  await page.getByRole('button', { name: '编辑正文', exact: true }).click();
+  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
+  const source = page.getByRole('textbox', { name: 'Markdown 源码' });
+  await writeSource(page, '提交的正文');
+  let release!: () => void;
+  const gate = new Promise<void>((resolve) => { release = resolve; });
+  await page.route(`**/api/nodes/${node.id}/content`, async (route) => {
+    await gate;
+    await route.continue();
+  });
+  const sent = page.waitForRequest((request) => request.method() === 'PUT' && request.url().endsWith('/content'));
+  await source.press('ControlOrMeta+s');
+  await sent;
+  const latest = '提交的正文\n请求期间新增的内容';
+  await writeSource(page, latest);
+  await expect.poll(() => page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toContain('请求期间新增');
+  release();
+  await expect(page.getByRole('button', { name: '保存', exact: true })).toBeEnabled();
+  await expect(source).toContainText('请求期间新增');
+  await expect.poll(async () => (await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe('提交的正文');
+  await expect.poll(() => page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toContain('请求期间新增');
+  page.on('dialog', (dialog) => void dialog.accept());
+  await page.reload();
+  await page.getByRole('button', { name: '恢复草稿', exact: true }).click();
+  await expect(source).toContainText('请求期间新增');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(source).toHaveCount(0);
+  await expect(page.locator('.read-content')).toContainText('请求期间新增');
+});
 
 test('a committed append with a lost response is not duplicated after reopening', async ({ page }) => {
   await login(page);
@@ -137,10 +162,9 @@ test('failed searches cannot open results from a different query', async ({ page
   await expect(dialog.getByRole('option')).toHaveCount(1);
   await page.route('**/api/search?q=*', (route) => route.fulfill({ status: 503, json: { error: '搜索暂时失败' } }), { times: 1 });
   await field.fill('乙搜索测试');
-  await expect(dialog.locator('.search-caption')).toHaveText('搜索暂时失败');
-  await field.press('Enter');
-  await expect(dialog).toBeVisible();
-  await expect(dialog.getByRole('option')).toHaveCount(0);
+  // Only this device's titles for the current query remain, marked as such.
+  await expect(dialog.locator('.search-caption')).toHaveText('搜索暂时失败 以下是本机缓存中标题匹配的笔记。');
+  await expect(dialog.getByRole('option')).toHaveText(['乙搜索测试']);
 });
 
 test('an unsubmitted clip survives closing and reloading without being sent', async ({ page }) => {

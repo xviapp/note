@@ -43,7 +43,7 @@ test('family navigation, setting routes and all palettes remain usable on narrow
     ['阅读', 'reading'],
     ['青藜', 'ai'],
     ['离线缓存', 'offline'],
-    ['分享保存', 'share'],
+    ['保存位置', 'share'],
     ['备份与恢复', 'backup'],
     ['存储空间', 'storage'],
     ['密码与设备', 'account'],

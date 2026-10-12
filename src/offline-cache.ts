@@ -21,6 +21,8 @@ interface CachedNote {
   accessedAt: number;
   savedAt: number;
   error?: string;
+  // Fetched ahead of opening (src/prefetch.ts): the body only, first to go.
+  prefetched?: boolean;
 }
 // Folder icon blobs are immutable, so a saved copy never needs revalidation.
 interface CachedIcon {
@@ -199,6 +201,7 @@ async function refreshSnapshot() {
     if (sequence !== refreshSequence) return;
     snapshot = {
       notes: notes
+        .filter((note) => !note.prefetched)
         .sort((a, b) => b.accessedAt - a.accessedAt)
         .map(({ detail, ...note }) => {
           const {
@@ -376,6 +379,10 @@ export const cacheablePath = (path: string) =>
   path === '/api/storage' ||
   path === '/api/storage/usage' ||
   path === '/api/clips' ||
+  // 青藜's global conversation (its latest page) and whether it is set up, so
+  // the 问青藜 window and panel open with the last conversation.
+  path === '/api/nodes/qingli-global/assistant' ||
+  path === '/api/ai/settings' ||
   /^\/api\/nodes(?:\?.*)?$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/annotations$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/pages$/.test(path) ||
@@ -485,6 +492,60 @@ async function commitNote(
     store.put(entry);
   });
   await changed();
+}
+// A note fetched before it is opened (src/prefetch.ts): only its body, never its
+// files, marked least recently read so it is the first to go. It never makes
+// room for itself: a full cache simply skips it.
+export async function rememberPrefetched(detail: NoteDetail, epoch = cacheEpoch()) {
+  let added = false;
+  await transaction('readwrite', async (tx) => {
+    if (epoch !== cacheEpoch()) return;
+    if (!(await request<CachedResponse | undefined>(tx.objectStore('responses').get('/api/auth/status')))) return;
+    const store = tx.objectStore('notes');
+    const notes = await request<CachedNote[]>(store.getAll());
+    if (notes.some((note) => note.id === detail.id)) return;
+    const body = stored(detail);
+    const entry: CachedNote = {
+      id: body.id, detail: body, files: [], fileIds: [], complete: false, pinned: false,
+      bytes: bytes(body), accessedAt: 0, savedAt: Date.now(), prefetched: true,
+    };
+    const total = notes.reduce((sum, note) => sum + note.bytes, entry.bytes);
+    if (notes.filter((note) => !note.pinned).length >= 100 || total > readLimit()) return;
+    store.put(entry);
+    added = true;
+  });
+  if (added) await changed();
+  return added;
+}
+// Notes whose titles hold every word, from what this device has seen: cached
+// directory listings and note copies. Shown while the server searches, and
+// alone when it cannot be reached.
+export async function searchCachedTitles(words: string[], limit = 30): Promise<NoteNode[]> {
+  const lower = words.map((word) => word.toLowerCase());
+  const found = new Map<string, NoteNode>();
+  const consider = (node: NoteNode | undefined) => {
+    if (!node?.id || found.has(node.id) || node.trash_id) return;
+    const title = (node.title ?? '').toLowerCase();
+    if (lower.every((word) => title.includes(word))) found.set(node.id, node);
+  };
+  await transaction('readonly', async (tx) => {
+    const [responses, notes] = await Promise.all([
+      request<CachedResponse[]>(tx.objectStore('responses').getAll()),
+      request<CachedNote[]>(tx.objectStore('notes').getAll()),
+    ]);
+    for (const note of notes) {
+      const { content: _content, attachments: _attachments, breadcrumbs: _breadcrumbs, file: _file, ...node } = note.detail;
+      consider(node as NoteNode);
+    }
+    for (const response of responses)
+      if (/^\/api\/nodes(?:\?|$)/.test(response.path))
+        for (const node of (response.value as { nodes?: NoteNode[] })?.nodes ?? []) consider(node);
+  }).catch(() => {});
+  return [...found.values()].sort((a, b) => b.updated_at - a.updated_at).slice(0, limit);
+}
+// Whether a note has a copy here, without counting as reading it.
+export async function hasCachedNote(id: string) {
+  return transaction('readonly', async (tx) => !!(await request(tx.objectStore('notes').getKey(id)))).catch(() => true);
 }
 const pending = new Map<string, Promise<void>>();
 export function rememberNote(

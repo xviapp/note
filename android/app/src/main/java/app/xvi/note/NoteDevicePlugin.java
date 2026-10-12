@@ -118,7 +118,46 @@ public class NoteDevicePlugin extends Plugin {
     public void openExternal(PluginCall call) {
         String url = call.getString("url", "");
         getActivity().runOnUiThread(() -> {
-            host().openExternal(Uri.parse(url));
+            String failure = host().openExternal(Uri.parse(url));
+            if (failure == null) call.resolve();
+            else call.reject(failure);
+        });
+    }
+
+    @PluginMethod
+    public void setWindowState(PluginCall call) {
+        boolean keepAwake = call.getBoolean("keepAwake", false);
+        boolean secure = call.getBoolean("secure", false);
+        boolean volumeKeys = call.getBoolean("volumeKeys", false);
+        getActivity().runOnUiThread(() -> {
+            host().setWindowState(keepAwake, secure, volumeKeys);
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void takeLaunch(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            JSObject launch = host().takeLaunch();
+            call.resolve(launch == null ? new JSObject().put("action", org.json.JSONObject.NULL) : launch);
+        });
+    }
+
+    @PluginMethod
+    public void hideWindow(PluginCall call) {
+        getActivity().runOnUiThread(() -> {
+            host().hideWindow();
+            call.resolve();
+        });
+    }
+
+    @PluginMethod
+    public void closeWindow(PluginCall call) {
+        String path = call.getString("path");
+        if (path != null && !path.matches("/[A-Za-z0-9/_-]*")) { call.reject("无效的页面地址。"); return; }
+        String message = call.getString("message");
+        getActivity().runOnUiThread(() -> {
+            host().closeWindow(message, path);
             call.resolve();
         });
     }
@@ -252,8 +291,6 @@ public class NoteDevicePlugin extends Plugin {
                 String checksum = call.getString("sha256");
                 if (checksum != null && !checksum.equals(hex(digest.digest())))
                     throw new java.io.IOException("文件校验失败，请重新下载。");
-                getActivity().runOnUiThread(() ->
-                    Toast.makeText(getContext(), "已保存到所选位置", Toast.LENGTH_SHORT).show());
                 call.resolve(new JSObject().put("cancelled", false));
             } catch (Exception error) {
                 try { DocumentsContract.deleteDocument(getContext().getContentResolver(), destination); }

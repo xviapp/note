@@ -1,6 +1,7 @@
 package app.xvi.note;
 
 import android.app.Activity;
+import android.content.Intent;
 import android.content.res.Configuration;
 import android.graphics.Color;
 import android.graphics.drawable.GradientDrawable;
@@ -17,7 +18,8 @@ import android.widget.TextView;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
-/** A native capture window: no WebView, note list, or MainActivity. */
+/** A native capture window: no WebView, note list, or MainActivity. Opened by the
+ * widget, the launcher shortcut, the Quick Settings tile and selected text. */
 public class ClipCaptureActivity extends Activity {
     private final ExecutorService writer = Executors.newSingleThreadExecutor();
     private boolean saving;
@@ -68,6 +70,11 @@ public class ClipCaptureActivity extends Activity {
         getWindow().setLayout(Math.min(dp(560), getResources().getDisplayMetrics().widthPixels - dp(32)), WindowManager.LayoutParams.WRAP_CONTENT);
         getWindow().setSoftInputMode(WindowManager.LayoutParams.SOFT_INPUT_STATE_ALWAYS_VISIBLE | WindowManager.LayoutParams.SOFT_INPUT_ADJUST_RESIZE);
         if (state != null) input.setText(state.getString("text", ""));
+        else {
+            // Text selected in another app ("存入随手记"), ready to save or add to.
+            CharSequence selected = getIntent().getCharSequenceExtra(Intent.EXTRA_PROCESS_TEXT);
+            if (selected != null) { input.setText(selected.toString()); input.setSelection(input.length()); }
+        }
         input.requestFocus();
     }
     private void save() {

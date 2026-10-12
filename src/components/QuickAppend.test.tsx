@@ -3,6 +3,7 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest';
 import type { ComponentProps } from 'react';
 import { QuickAppend } from './QuickAppend';
 import { DRAFT_PREFIX } from '../note-drafts';
+import { dropPhotos, pendingPhotos } from '../pending-photos';
 import { ApiError } from '../api';
 
 const { append, upload } = vi.hoisted(() => ({ append: vi.fn(), upload: vi.fn() }));
@@ -14,10 +15,10 @@ vi.mock('../api', async (original) => {
 vi.mock('./CachedImage', () => ({
   CachedImage: (props: ComponentProps<'img'>) => <img {...props} />,
 }));
-beforeEach(() => { localStorage.clear(); append.mockReset(); upload.mockReset(); });
+beforeEach(async () => { localStorage.clear(); append.mockReset(); upload.mockReset(); await dropPhotos(); });
 afterEach(cleanup);
 
-it('shows upload feedback while a photo is pending and clears it after failure', async () => {
+it('keeps typing open while a photo uploads and offers retry after a failure', async () => {
   let rejectUpload!: (reason: Error) => void;
   upload.mockImplementation(() => new Promise((_, reject) => { rejectUpload = reject; }));
   render(<QuickAppend id="day" disabled={false} onSaved={() => {}} />);
@@ -25,12 +26,45 @@ it('shows upload feedback while a photo is pending and clears it after failure',
   fireEvent.change(screen.getByLabelText('添加照片'), {
     target: { files: [new File(['image'], '照片.png', { type: 'image/png' })] },
   });
-  expect(screen.getByRole('status').textContent).toContain('正在上传');
-  expect((screen.getByRole('button', { name: '追加' }) as HTMLButtonElement).disabled).toBe(true);
+  expect((await screen.findByRole('status')).textContent).toContain('正在上传 1 张照片');
+  expect((screen.getByLabelText('记录内容') as HTMLTextAreaElement).disabled).toBe(false);
+  expect((screen.getByRole('button', { name: '追加' }) as HTMLButtonElement).disabled).toBe(false);
   rejectUpload(new Error('连接中断'));
   expect((await screen.findByRole('alert')).textContent).toContain('连接中断');
   expect(screen.queryByRole('status')).toBeNull();
-  expect((screen.getByLabelText('添加照片') as HTMLInputElement).disabled).toBe(false);
+  upload.mockResolvedValueOnce({ id: 'photo', name: '照片.png', mime: 'image/png', size: 5 });
+  fireEvent.click(screen.getByRole('button', { name: '重试上传 照片.png' }));
+  await waitFor(() => expect(screen.queryByRole('alert')).toBeNull());
+  expect(await pendingPhotos('append:day')).toEqual([]);
+});
+
+it('saves once photos finish uploading, and a save cut off resumes on reopening', async () => {
+  let finish!: (file: unknown) => void;
+  upload.mockImplementation(() => new Promise((resolve) => { finish = resolve; }));
+  const submit = vi.fn().mockResolvedValue(undefined);
+  const saved = vi.fn();
+  const submitted = vi.fn();
+  const view = render(<QuickAppend id="day" disabled={false} onAppend={submit} onSubmit={submitted} onSaved={saved} />);
+  await waitFor(() => expect((screen.getByLabelText('添加照片') as HTMLInputElement).disabled).toBe(false));
+  fireEvent.change(screen.getByLabelText('添加照片'), {
+    target: { files: [new File(['image'], '雨.png', { type: 'image/png' })] },
+  });
+  await screen.findByRole('status');
+  fireEvent.change(screen.getByLabelText('记录内容'), { target: { value: '下雨了' } });
+  fireEvent.click(screen.getByRole('button', { name: '追加' }));
+  expect(submitted).toHaveBeenCalledTimes(1);
+  expect(screen.getByRole('button', { name: '等照片传完…' })).toBeTruthy();
+  expect(submit).not.toHaveBeenCalled();
+  // The window closes (or Android ends the app) before the photo is up.
+  await waitFor(() =>
+    expect(JSON.parse(JSON.parse(localStorage.getItem(`${DRAFT_PREFIX}append:day`)!).content).queued).toBe(true));
+  view.unmount();
+  upload.mockResolvedValue({ id: 'rain', name: '雨.png', mime: 'image/png', size: 5 });
+  render(<QuickAppend id="day" disabled={false} onAppend={submit} onSaved={saved} />);
+  await waitFor(() => expect(saved).toHaveBeenCalledWith({ resumed: true }));
+  expect(submit).toHaveBeenCalledWith('', '下雨了\n\n![雨.png](/api/files/rain)', expect.any(String), ['rain']);
+  expect(await pendingPhotos('append:day')).toEqual([]);
+  finish(undefined);
 });
 
 it('shows submit on focus or input and keeps it available when focus moves to the button', async () => {

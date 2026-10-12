@@ -16,6 +16,7 @@
         android:label="@string/app_name"
         android:roundIcon="@mipmap/ic_launcher_round"
         android:supportsRtl="true"
+        android:enableOnBackInvokedCallback="true"
         android:theme="@style/AppTheme">
 
         <activity
@@ -31,7 +32,18 @@
                 <action android:name="android.intent.action.MAIN" />
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
+            <meta-data android:name="android.app.shortcuts" android:resource="@xml/shortcuts" />
         </activity>
+
+        <!-- 今日记 and 问青藜 (launcher shortcuts): window.html floating over the current app. -->
+        <activity android:name=".JournalWindowActivity" android:label="@string/shortcut_journal"
+            android:theme="@style/ShareTheme" android:exported="false" android:excludeFromRecents="true"
+            android:taskAffinity="app.xvi.note.journal" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density" />
+        <activity android:name=".AssistantWindowActivity" android:label="@string/shortcut_qingli"
+            android:theme="@style/ShareTheme" android:exported="false" android:excludeFromRecents="true"
+            android:taskAffinity="app.xvi.note.assistant" android:windowSoftInputMode="adjustResize"
+            android:configChanges="orientation|keyboardHidden|keyboard|screenSize|locale|smallestScreenSize|screenLayout|uiMode|navigation|density" />
 
         <!-- Shares and "open with" land in a window over the sending app. -->
         <activity
@@ -73,6 +85,20 @@
             android:label="@string/clip_widget_label" android:exported="false"
             android:excludeFromRecents="true" android:taskAffinity="app.xvi.note.capture"
             android:windowSoftInputMode="adjustResize" />
+        <!-- "存入随手记" in the text selection menu of other apps. -->
+        <activity-alias android:name=".ClipProcessText" android:targetActivity=".ClipCaptureActivity"
+            android:label="@string/clip_process_text" android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.PROCESS_TEXT" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <data android:mimeType="text/plain" />
+            </intent-filter>
+        </activity-alias>
+        <service android:name=".ClipTileService" android:exported="true"
+            android:label="@string/clip_widget_label" android:icon="@drawable/tile_clip"
+            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
+            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
+        </service>
         <receiver android:name=".ClipWidget" android:exported="false" android:label="@string/clip_widget_label">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
             <meta-data android:name="android.appwidget.provider" android:resource="@xml/clip_widget" />

@@ -14,6 +14,14 @@ import { useWindowDrag } from '../use-window-drag';
 import { Maximize2, Minimize2, PanelRight, PanelsTopLeft, X } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 
+// Android's floating windows (今日记, 问青藜) share one size: up to 560×720,
+// keeping clear of the screen's edges (and the keyboard, which shrinks it).
+export function windowCard(viewport: { width: number; height: number }) {
+  return {
+    width: Math.max(1, Math.min(560, viewport.width - 32)),
+    height: Math.max(1, Math.min(720, viewport.height - 48)),
+  };
+}
 export type AssistantMode = 'floating' | 'docked' | 'maximized';
 // On phones 青藜 is a bottom sheet: most of the screen with the page still
 // showing above it, or full screen. It always opens at the smaller size.
@@ -51,6 +59,7 @@ export function AssistantWindow({
   title,
   label = '青藜',
   showLauncher = true,
+  centered = false,
   visible,
   hidden,
   busy,
@@ -65,6 +74,7 @@ export function AssistantWindow({
   title: string;
   label?: string;
   showLauncher?: boolean;
+  centered?: boolean;
   visible: boolean;
   hidden: boolean;
   busy: boolean;
@@ -79,7 +89,7 @@ export function AssistantWindow({
   const restoreMode = useRef<AssistantMode>('floating');
   const viewport = useVisualViewport();
   const compact = viewport.width <= 760;
-  const sheet = compact;
+  const sheet = compact && !centered;
   const [sheetSize, setSheetSizeState] = useState<SheetSize>('half');
   // Only switching size animates; resizing the window or the keyboard does not.
   const [animating, setAnimating] = useState(false);
@@ -113,7 +123,11 @@ export function AssistantWindow({
   useEffect(() => {
     if (keyboard) return () => void (keyboardSeen.current = Date.now());
   }, [keyboard]);
-  const fullscreen = compact ? !sheet || sheetSize === 'full' || keyboard : mode === 'maximized';
+  const fullscreen = centered
+    ? mode === 'maximized'
+    : compact
+      ? !sheet || sheetSize === 'full' || keyboard
+      : mode === 'maximized';
   const [dockBounds, setDockBounds] = useState<DOMRect | null>(null);
   const [position, setPosition] = useState<{ x: number; y: number } | null>(null);
   const panel = useRef<HTMLElement>(null),
@@ -174,10 +188,17 @@ export function AssistantWindow({
     position?.y ?? viewport.y + viewport.height,
   );
   const { dragging, handleProps } = useWindowDrag({
-    enabled: !compact && mode === 'floating', point, clamp, onMove: setPosition, stopKeyPropagation: true,
+    enabled: !compact && !centered && mode === 'floating', point, clamp, onMove: setPosition, stopKeyPropagation: true,
   });
   let geometry: CSSProperties = { left: point.x, top: point.y, width, height };
-  if (sheet) {
+  if (centered && !fullscreen) {
+    const card = windowCard(viewport);
+    geometry = {
+      left: viewport.x + (viewport.width - card.width) / 2,
+      top: viewport.y + (viewport.height - card.height) / 2,
+      ...card,
+    };
+  } else if (sheet) {
     const base = viewport.y + (fullscreen ? 0 : viewport.height * (1 - HALF));
     const top = Math.max(viewport.y, base + (pull?.offset ?? 0));
     geometry = {
@@ -246,7 +267,7 @@ export function AssistantWindow({
 
   return createPortal(
     <>
-      {sheet && visible && !hidden && !fullscreen && (
+      {(sheet || centered) && visible && !hidden && !fullscreen && (
         <div className="assistant-sheet-backdrop" aria-hidden="true" onClick={close} />
       )}
       <button
@@ -268,7 +289,9 @@ export function AssistantWindow({
       <aside
         ref={panel}
         className={`assistant-panel ${
-          !compact ? `assistant-${mode}` : fullscreen ? 'assistant-maximized' : ''
+          centered
+            ? `assistant-centered ${fullscreen ? 'assistant-maximized' : 'assistant-floating'}`
+            : !compact ? `assistant-${mode}` : fullscreen ? 'assistant-maximized' : ''
         }${sheet ? ' assistant-sheet' : ''}${animating ? ' is-animating' : ''}${dragging || pull ? ' is-dragging' : ''}`}
         style={geometry}
         aria-label={label}
@@ -281,7 +304,7 @@ export function AssistantWindow({
           if (event.key === 'Escape') {
             event.preventDefault();
             event.stopPropagation();
-            if (fullscreen && !compact) toggleMaximized();
+            if (fullscreen && (!compact || centered)) toggleMaximized();
             // Android also hands Back to the page when it puts the keyboard
             // away: that Back only ends typing.
             else if (sheet && (keyboard || Date.now() - keyboardSeen.current < 800))
@@ -345,8 +368,8 @@ export function AssistantWindow({
             className="assistant-drag-handle"
             role="group"
             aria-label="移动青藜窗口"
-            tabIndex={!compact && mode === 'floating' ? 0 : -1}
-            title={!compact && mode === 'floating' ? '拖动移动，方向键微调' : undefined}
+            tabIndex={!compact && !centered && mode === 'floating' ? 0 : -1}
+            title={!compact && !centered && mode === 'floating' ? '拖动移动，方向键微调' : undefined}
             {...handleProps}
           >
             <strong>
@@ -360,7 +383,7 @@ export function AssistantWindow({
           {actions}
           <button
             className="icon-button"
-            hidden={compact}
+            hidden={compact || centered}
             aria-label={mode === 'docked' ? '悬浮青藜' : '贴边青藜'}
             title={mode === 'docked' ? '悬浮' : '贴边'}
             onClick={() => onModeChange(mode === 'docked' ? 'floating' : 'docked')}
@@ -381,7 +404,7 @@ export function AssistantWindow({
           </button>
           <button
             className="icon-button"
-            hidden={compact}
+            hidden={compact && !centered}
             aria-label={fullscreen ? '还原青藜' : '最大化青藜'}
             title={fullscreen ? '还原' : '最大化'}
             onClick={toggleMaximized}

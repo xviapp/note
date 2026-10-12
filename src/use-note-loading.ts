@@ -5,6 +5,16 @@ import { cachedNote } from './offline-cache';
 import { reveal } from './encryption';
 import { useKeys } from './components/Encryption';
 import { isUnlocked } from './keyring';
+import { readDraft } from './note-drafts';
+import { pendingSave } from './save-outbox';
+
+// While a save of this note is on its way, its draft is what the note now says.
+async function withPendingSave(detail: NoteDetail): Promise<NoteDetail> {
+  const save = pendingSave(detail.id);
+  if (!save || save.error) return detail;
+  const draft = await readDraft(detail.id);
+  return draft ? { ...detail, content: draft.content, attachments: draft.attachments } : detail;
+}
 
 // Cached content may be read immediately; mutations wait for the fresh response.
 export function useNoteLoading({
@@ -40,12 +50,14 @@ export function useNoteLoading({
     if (noteRef.current?.id !== id)
       void cachedNote(id)
         .then((cached) => cached && reveal(cached))
+        .then((cached) => cached && withPendingSave(cached))
         .then((cached) => {
           if (!live || answered || !cached) return;
           setStale(true);
           applyDetail(cached);
         });
     api<NoteDetail>(`/api/nodes/${id}`)
+      .then(withPendingSave)
       .then((detail) => {
         answered = true;
         if (!live) return;

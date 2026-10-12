@@ -96,12 +96,38 @@
   background: var(--surface-subtle);
   object-fit: contain;
 }
+/* A photo still uploading (or failed) shows from the device. */
+.quick-append-image.is-pending img {
+  opacity: 0.6;
+}
+.quick-append-image.is-failed img {
+  opacity: 0.35;
+}
+.quick-append-image-progress,
+.quick-append-image-retry {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: var(--ink);
+}
+.quick-append-image-retry {
+  width: 100%;
+  border: 0;
+  border-radius: var(--radius-control);
+  background: transparent;
+  color: var(--danger, var(--ink));
+  cursor: pointer;
+}
 .quick-append-image .icon-button {
   position: absolute;
   top: -9px;
   right: -9px;
-  width: 26px;
-  height: 26px;
+  width: 30px;
+  height: 30px;
+  /* Not the phone touch size: a 48px button would cover the thumbnail. */
+  min-width: 0;
+  min-height: 0;
   border: 1px solid var(--line);
   border-radius: 50%;
   background: var(--surface);

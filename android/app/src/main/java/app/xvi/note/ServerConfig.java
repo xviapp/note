@@ -102,4 +102,18 @@ final class ServerConfig {
             return CapConfig.loadDefault(context);
         }
     }
+
+    /** The configuration of a floating window (share, 今日记, 青藜): the chosen
+     * server, started at its own page, drawn under the system bars so the page's
+     * scrim covers the whole screen. */
+    static CapConfig loadPage(Context context, String startPath) {
+        try {
+            JSONObject config = bundled(context);
+            config.getJSONObject("server").put("hostname", host(context)).put("appStartPath", startPath);
+            config.getJSONObject("plugins").getJSONObject("SystemBars").put("initialViewportFitValueHint", "cover");
+            return new CapConfig(context.getAssets(), config);
+        } catch (Exception error) {
+            return load(context);
+        }
+    }
 }

@@ -163,6 +163,7 @@ export function asError(error: unknown): AppError {
     ['QUOTA_EXCEEDED', 413, '空间不足，请清理回收站或调整容量上限。'],
     ['VERSION_CONFLICT', 409, '这篇笔记已在其他页面更新，当前编辑内容已保留。'],
     ['INVALID_PARENT', 409, '目标位置不存在、已删除或不能包含子节点。'],
+    ['INVALID_JOURNAL', 409, '这个日记本不存在或已删除。'],
     ['TREE_CYCLE', 400, '不能把节点移动到自己的子节点中。'],
     ['FILE_UNAVAILABLE', 409, '文件尚未上传完成或已被清理，请重新上传。'],
     ['INVALID_FOLDER_ICON', 400, '文件夹图标需要使用不超过 128 KiB 的图片。'],

@@ -80,7 +80,7 @@ function NodeRows({
         const count = node.child_count ?? 0,
           expanded = count > 0 && open.has(node.id);
         return (
-          <div className="node-list-item" key={node.id}>
+          <div className="node-list-item" key={node.id} aria-busy={node.id.startsWith('pending-') || undefined}>
             <div className={`node-list-row${nestable ? ' is-nestable' : ''}`}>
               {count > 0 ? (
                 <button

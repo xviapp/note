@@ -16,7 +16,7 @@ async function login(page: Page) {
   });
   expect(response.ok()).toBeTruthy();
 }
-async function settings(page: Page, section = '分享保存') {
+async function settings(page: Page, section = '保存位置') {
   await expect(page.locator('.app-shell')).toBeVisible();
   const menu = page.getByRole('button', { name: '打开笔记目录', exact: true });
   if (await menu.isVisible()) await menu.click();

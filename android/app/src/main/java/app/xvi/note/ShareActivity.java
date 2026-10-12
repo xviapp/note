@@ -5,10 +5,6 @@ import android.graphics.Color;
 import android.graphics.drawable.ColorDrawable;
 import android.os.Bundle;
 import android.widget.Toast;
-import com.getcapacitor.CapConfig;
-import java.io.ByteArrayOutputStream;
-import java.io.InputStream;
-import java.nio.charset.StandardCharsets;
 import org.json.JSONObject;
 
 /** The window a share opens in: share.html floating over the sending app. It
@@ -20,9 +16,8 @@ public class ShareActivity extends NoteBridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        config = shareConfig();
         registerNotePlugins();
-        config = ServerConfig.load(this);
+        config = ServerConfig.loadPage(this, "/share.html");
         super.onCreate(savedInstanceState);
         if (bridge == null) return;
         // The page draws its own scrim and sheet; everything else shows the app below.
@@ -37,21 +32,6 @@ public class ShareActivity extends NoteBridgeActivity {
     @Override
     public void setTheme(int resid) {
         super.setTheme(R.style.ShareTheme);
-    }
-
-    private CapConfig shareConfig() {
-        try (InputStream input = getAssets().open("capacitor.config.json")) {
-            ByteArrayOutputStream bytes = new ByteArrayOutputStream();
-            byte[] buffer = new byte[8192];
-            for (int length; (length = input.read(buffer)) != -1; ) bytes.write(buffer, 0, length);
-            JSONObject json = new JSONObject(bytes.toString(StandardCharsets.UTF_8.name()));
-            json.getJSONObject("server").put("appStartPath", "/share.html");
-            // The page reaches under the system bars, so its scrim covers the whole screen.
-            json.getJSONObject("plugins").getJSONObject("SystemBars").put("initialViewportFitValueHint", "cover");
-            return new CapConfig(getAssets(), json);
-        } catch (Exception error) {
-            return CapConfig.loadDefault(this);
-        }
     }
 
     private void receive(Intent intent) {

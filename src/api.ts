@@ -79,7 +79,10 @@ export async function api<T = Record<string, unknown>>(
     }
   }
 }
-async function request<T>(path: string, method: string, data: unknown, key?: string): Promise<T> {
+// A note's detail without keeping it as read (no files, see src/prefetch.ts).
+export const fetchNoteAhead = (id: string) =>
+  request<NoteDetail>(`/api/nodes/${id}`, 'GET', undefined, undefined, false);
+async function request<T>(path: string, method: string, data: unknown, key?: string, remember = true): Promise<T> {
   await proxyReady();
   const epoch = cacheEpoch();
   const authProbe = path === '/api/auth/status';
@@ -123,7 +126,10 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
     );
   }
   // An HTTP denial/deletion must never fall back to a stale private snapshot.
+  // A note fetched ahead (remember = false) that is gone is only skipped: it was
+  // never shown, and dropping every snapshot would cancel requests on their way.
   if (
+    remember &&
     method === 'GET' &&
     /^\/api\/nodes\/[\w-]+$/.test(path) &&
     [404, 410].includes(response.status)
@@ -140,7 +146,7 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
     throw new ApiError('会话已更新，请重新连接。', 409, 'SESSION_CHANGED');
   if (authProbe && !(value as AuthStatus).authenticated) await signedOut();
   else {
-    if (method === 'GET') {
+    if (method === 'GET' && remember) {
       await rememberResponse(path, value, epoch).catch(() => {});
       if (/^\/api\/nodes\/[\w-]+$/.test(path))
         void rememberNote(value as NoteDetail, false, epoch).catch(() => {});

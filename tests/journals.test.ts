@@ -125,6 +125,36 @@ describe('journals', () => {
     const years = await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${book.id}`);
     expect(years.nodes.map((node) => node.title)).toEqual(['2026年']);
   });
+  it('lists journals by their latest entry', async () => {
+    const older = await journal();
+    const newer = await journal();
+    const empty = await journal();
+    await write(older.id, '2026-09-01');
+    await write(newer.id, '2026-09-05');
+    const listed = await ok<{ nodes: NoteNode[] }>('/api/nodes?view=journals');
+    expect(listed.nodes.map((node) => node.id)).toEqual([newer.id, older.id, empty.id]);
+    // A trashed journal is left out.
+    const { count } = await ok<{ count: number }>(`/api/nodes/${newer.id}/delete-preview`);
+    await ok(`/api/nodes/${newer.id}`, 'DELETE', { count });
+    const remaining = await ok<{ nodes: NoteNode[] }>('/api/nodes?view=journals');
+    expect(remaining.nodes.map((node) => node.id)).toEqual([older.id, empty.id]);
+  });
+  it('puts the 今日记 journal chosen in settings first', async () => {
+    const chosen = await journal();
+    const latest = await journal();
+    await write(latest.id, '2026-09-05');
+    expect(await ok('/api/journals/quick')).toEqual({ journalId: null });
+    expect(await ok('/api/journals/quick', 'PUT', { journalId: chosen.id })).toEqual({ journalId: chosen.id });
+    const listed = await ok<{ nodes: NoteNode[] }>('/api/nodes?view=journals');
+    expect(listed.nodes.map((node) => node.id)).toEqual([chosen.id, latest.id]);
+    // Only a live journal can be chosen.
+    const folder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '文件夹' });
+    expect((await request('/api/journals/quick', 'PUT', { journalId: folder.id })).status).toBe(409);
+    // Trashing the chosen journal falls back to the latest one.
+    const { count } = await ok<{ count: number }>(`/api/nodes/${chosen.id}/delete-preview`);
+    await ok(`/api/nodes/${chosen.id}`, 'DELETE', { count });
+    expect(await ok('/api/journals/quick')).toEqual({ journalId: null });
+  });
   it('refuses future days and frees a day whose entry was trashed', async () => {
     const book = await journal();
     const future = await request(`/api/nodes/${book.id}/journal/entries`, 'POST', {

@@ -151,3 +151,15 @@ export async function journalPrompt(env: Env, node: NoteNode): Promise<string> {
     .first<{ title: string }>();
   return `\n\n当前文件是日记本「${journal?.title ?? ''}」中 ${entry.date}（${weekday(entry.date)}）的日记。`;
 }
+
+// The journal Android's 今日记 window writes to (null: the one written in most recently).
+export async function quickJournal(env: Env): Promise<{ journalId: string | null }> {
+  const row = await env.DB.prepare('SELECT quick_journal_id id FROM site WHERE id=1').first<{ id: string | null }>();
+  return { journalId: row?.id ?? null };
+}
+export async function saveQuickJournal(env: Env, data: Record<string, unknown>) {
+  const journal = data.journalId === null ? null : idValue(data.journalId);
+  // The database guard checks it is a live journal in the write transaction.
+  await env.DB.prepare('UPDATE site SET quick_journal_id=? WHERE id=1').bind(journal).run();
+  return quickJournal(env);
+}

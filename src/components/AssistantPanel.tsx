@@ -46,6 +46,8 @@ interface Props {
   node?: NoteDetail;
   global?: boolean;
   showLauncher?: boolean;
+  // A card in the middle of the screen (Android's 问青藜 window), never a sheet.
+  centered?: boolean;
   onGlobal?: () => void;
   visible: boolean;
   enabled: boolean;
@@ -144,6 +146,7 @@ export function AssistantPanel(props: Props) {
       <AssistantWindow
         title={props.global ? '全局对话' : (props.title ?? node!.title)}
         showLauncher={props.showLauncher}
+        centered={props.centered}
         label={props.global ? '全局青藜' : '青藜'}
         visible={visible}
         hidden={!props.enabled || capturing}
@@ -488,21 +491,24 @@ export function AssistantPanel(props: Props) {
                 event.target.value = '';
               }}
             />
-            <button
-              type="button"
-              className="text-button"
-              disabled={!props.selection || sending}
-              title={props.selection ? undefined : '先在正文中选中文字'}
-              onClick={() => {
-                const error = addQuote(props.selection);
-                if (error) setError(error);
-              }}
-            >
-              <Quote size={15} />
-              <span className="action-label">
-                {props.selection ? '引用选中文字' : '选中正文后可引用'}
-              </span>
-            </button>
+            {/* A window of its own has no page to quote or capture. */}
+            {!props.centered && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={!props.selection || sending}
+                title={props.selection ? undefined : '先在正文中选中文字'}
+                onClick={() => {
+                  const error = addQuote(props.selection);
+                  if (error) setError(error);
+                }}
+              >
+                <Quote size={15} />
+                <span className="action-label">
+                  {props.selection ? '引用选中文字' : '选中正文后可引用'}
+                </span>
+              </button>
+            )}
             {!!props.annotationCount && !withNotes && (
               <button
                 type="button"
@@ -514,15 +520,17 @@ export function AssistantPanel(props: Props) {
                 <span className="action-label">附上我的批注</span>
               </button>
             )}
-            <button
-              type="button"
-              className="text-button"
-              disabled={!node || sending || capturing}
-              onClick={() => void capture()}
-            >
-              <Camera size={15} />
-              <span className="action-label">框选截图</span>
-            </button>
+            {!props.centered && (
+              <button
+                type="button"
+                className="text-button"
+                disabled={!node || sending || capturing}
+                onClick={() => void capture()}
+              >
+                <Camera size={15} />
+                <span className="action-label">框选截图</span>
+              </button>
+            )}
           </div>
           <textarea
             ref={promptInput}

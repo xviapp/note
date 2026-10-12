@@ -135,7 +135,7 @@ test('a photographed page is read, discussed in 青藜 and summarized into readi
 
   // Photograph page 12: recognized, then summarized with questions.
   await card
-    .locator('input[type=file]')
+    .locator('input[type=file][multiple]')
     .setInputFiles({ name: 'page.png', mimeType: 'image/png', buffer: photo });
   const dialog = page.getByRole('dialog', { name: '识别 1 张书页' });
   await dialog.getByLabel('页码').fill('12');

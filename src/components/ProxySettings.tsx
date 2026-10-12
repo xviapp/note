@@ -63,7 +63,7 @@ export function ProxySettings() {
           <strong>应用内代理</strong>
           <p>{labels[state.phase]}</p>
         </div>
-        <label className="proxy-toggle">
+        <label className="toggle-switch">
           <input
             type="checkbox"
             role="switch"
@@ -72,7 +72,7 @@ export function ProxySettings() {
             disabled={busy || subscription.updating || state.phase === 'starting'}
             onChange={(event) => void run(() => enableProxy(event.target.checked))}
           />
-          <span className="proxy-toggle-track" aria-hidden="true" />
+          <span className="toggle-switch-track" aria-hidden="true" />
         </label>
       </div>
       {message && <p className="field-hint">{message}</p>}

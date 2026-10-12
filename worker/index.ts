@@ -68,7 +68,7 @@ import {
   withKeys,
 } from './encryption';
 import { createProjectItem, projectOverview, saveProjectStatus } from './projects';
-import { journalEntry, journalMonth } from './journals';
+import { journalEntry, journalMonth, quickJournal, saveQuickJournal } from './journals';
 import {
   createClip,
   deleteClip,
@@ -98,6 +98,9 @@ export default {
       const method = request.method,
         path = url.pathname;
       if (path === '/api/share/settings' && method === 'GET') return json(await shareSettings(env));
+      if (path === '/api/journals/quick' && method === 'GET') return json(await quickJournal(env));
+      if (path === '/api/journals/quick' && method === 'PUT')
+        return json(await saveQuickJournal(env, await body(request)));
       if (path === '/api/share/settings' && method === 'PUT')
         return json(await saveShareSettings(env, await body(request)));
       if (path.startsWith('/api/app/android-release') && ['GET', 'HEAD'].includes(method))

@@ -13,7 +13,7 @@ import {
   WifiOff,
   X,
 } from 'lucide-react';
-import { api, cachedApi, lockEdits } from './api';
+import { api, ApiError, cachedApi, lockEdits } from './api';
 import {
   TEXT_KINDS,
   type AuthStatus,
@@ -29,7 +29,10 @@ import { useMoveNotes } from './use-move-notes';
 import { useToast } from './use-toast';
 import { MoveDialog } from './components/MoveDialog';
 import { EncryptionDialog } from './components/Encryption';
-import { refreshCatalog } from './keyring';
+import { refreshCatalog, subscribeKeys } from './keyring';
+import { flushJournalOutbox } from './journal-outbox';
+import { flushSaves } from './save-outbox';
+import { settleChange, showChange } from './optimistic';
 import { NodeForm } from './components/NodeForm';
 import { NodeList } from './components/NodeList';
 import { Settings } from './components/Settings';
@@ -202,6 +205,8 @@ function Notebook({
   const navigation = useNotebookNavigation(leaveGuard);
   const listings = useRef<ListingCache>(new Map());
   const { view, id: selected, section: settingsSection } = navigation.route;
+  const selectedRef = useRef(selected);
+  selectedRef.current = selected;
   const subpage = !!selected || !!settingsSection || ['recent', 'offline', 'trash'].includes(view);
   useEffect(() => {
     setMobileOpen(false);
@@ -287,7 +292,18 @@ function Notebook({
     }
     await navigation.go(path);
   };
+  // A note saved from the new/rename form (see NodeForm's onBackground).
+  // `open`: go to the note (a rename saved in the background already went there).
+  const formSaved = (current: NonNullable<typeof form>, node: NoteNode, open = true) => {
+    const created = !current.node && !current.file;
+    changed();
+    if (created && TEXT_KINDS.includes(node.kind)) setFreshNote(node.id);
+    if (selectedRef.current === node.id) setDetailRevision((r) => r + 1);
+    else if (!current.iconOnly && open) setRoute(node.id);
+  };
   const openNode = (node: NoteNode) => {
+    // Still being created (shown ahead by the new-note form).
+    if (node.id.startsWith('pending-')) return;
     if (node.kind === 'link' && !node.arxiv_id && node.url) {
       openLink(node.url);
       void api(`/api/nodes/${node.id}/open`, 'POST', {}).then(changed).catch(report);
@@ -329,6 +345,60 @@ function Notebook({
       window.removeEventListener('note:clips', open);
     };
   }, [android]);
+  const showToast = toast.show;
+  // 今日记 kept on this device for a locked journal goes out once it is unlocked.
+  useEffect(() => {
+    const flush = () => {
+      // Note bodies saved in the background that are still on their way.
+      void flushSaves();
+      void flushJournalOutbox().then((sent) => {
+        if (sent) {
+          showToast(`已把暂存的 ${sent} 条今日记记入日记`);
+          changed();
+        }
+      });
+    };
+    flush();
+    const stop = subscribeKeys(flush);
+    window.addEventListener('online', flush);
+    window.addEventListener('note:reconnected', flush);
+    return () => {
+      stop();
+      window.removeEventListener('online', flush);
+      window.removeEventListener('note:reconnected', flush);
+    };
+  }, [showToast, changed]);
+  // Android notices and status lines (downloads, links) use the notebook's own.
+  useEffect(() => {
+    const show = (event: Event) => {
+      event.preventDefault();
+      const message = (event as CustomEvent<string>).detail;
+      if (event.type === 'note:toast') showToast(message);
+      else setNotice(message);
+    };
+    window.addEventListener('note:notice', show);
+    window.addEventListener('note:toast', show);
+    return () => {
+      window.removeEventListener('note:notice', show);
+      window.removeEventListener('note:toast', show);
+    };
+  }, [showToast]);
+  // A floating window (今日记, 青藜) handing over to a page of the notebook.
+  const open = useRef((path: string) => void navigation.go(path));
+  open.current = (path) => void navigation.go(path);
+  useEffect(() => {
+    if (!android) return;
+    const take = () =>
+      void import('./mobile')
+        .then(({ device }) => device.takeLaunch())
+        .then(({ action, path }) => {
+          if (action === 'open' && path) open.current(path);
+        })
+        .catch(report);
+    take();
+    window.addEventListener('note:launch', take);
+    return () => window.removeEventListener('note:launch', take);
+  }, [android, report]);
   useEffect(() => {
     const back = (event: Event) => nativeBack.current(event);
     window.addEventListener('note:native-back', back);
@@ -418,34 +488,49 @@ function Notebook({
       setForm({ parent: node.id });
       return;
     }
+    if (kind === 'delete') {
+      await remove(node);
+      return;
+    }
     try {
       const fresh = await api<NoteDetail>(`/api/nodes/${node.id}`);
       if (kind === 'rename') setForm({ node: fresh, parent: fresh.parent_id });
       else if (kind === 'icon') setForm({ node: fresh, parent: fresh.parent_id, iconOnly: true });
       else if (kind === 'move') setMoving(fresh);
       else if (kind === 'encryption') setEncrypting(fresh);
-      else {
-        const preview = await api<{ count: number; title: string }>(
-          `/api/nodes/${node.id}/delete-preview`,
-        );
-        // A single note goes straight to the trash with 撤销; a branch asks first.
-        if (
-          preview.count > 1 &&
-          !(await question.confirm(
-            '移到回收站？',
-            `「${preview.title}」及其下级笔记，共 ${preview.count} 项内容将保留 7 天，到期后清理。`,
-            '移到回收站',
-            true,
-          ))
-        )
-          return;
+    } catch (e) {
+      report(e);
+    }
+  };
+  // A note leaves the list at once and goes to the trash with 撤销. A note
+  // shown without children skips the preview; a branch is counted and asked
+  // about first, as is one whose count turns out different.
+  const remove = async (node: NoteNode, counted = false) => {
+    try {
+      const preview =
+        !counted && node.child_count === 0
+          ? { count: 1, title: node.title }
+          : await api<{ count: number; title: string }>(`/api/nodes/${node.id}/delete-preview`);
+      if (
+        preview.count > 1 &&
+        !(await question.confirm(
+          '移到回收站？',
+          `「${preview.title}」及其下级笔记，共 ${preview.count} 项内容将保留 7 天，到期后清理。`,
+          '移到回收站',
+          true,
+        ))
+      )
+        return;
+      const wasOpen =
+        selected === node.id || !!loaded?.breadcrumbs.some((part) => part.id === node.id);
+      const withdraw = showChange(node.id, { hidden: true });
+      if (wasOpen) setRoute(null);
+      try {
         const batch = await api<{ id: string }>(`/api/nodes/${node.id}`, 'DELETE', {
           count: preview.count,
         });
-        const wasOpen =
-          selected === node.id || !!loaded?.breadcrumbs.some((part) => part.id === node.id);
-        if (wasOpen) setRoute(null);
         changed();
+        settleChange(withdraw);
         toast.show(`「${preview.title}」已移到回收站`, async () => {
           try {
             await api(`/api/trash/${batch.id}/restore`, 'POST', {});
@@ -456,6 +541,11 @@ function Notebook({
             report(e);
           }
         });
+      } catch (e) {
+        withdraw();
+        if (wasOpen) setRoute(selected);
+        if (!counted && e instanceof ApiError && e.code === 'TREE_CHANGED') return remove(node, true);
+        throw e;
       }
     } catch (e) {
       report(e);
@@ -686,6 +776,7 @@ function Notebook({
                 onChanged={changed}
                 onLogout={logout}
                 onError={report}
+                onNavigate={(id) => void navigate(id)}
               />
             )}
           </div>
@@ -751,12 +842,29 @@ function Notebook({
           iconOnly={form.iconOnly}
           onClose={() => setForm(null)}
           onSaved={(node) => {
-            const created = !form.node && !form.file;
             setForm(null);
-            changed();
-            if (created && TEXT_KINDS.includes(node.kind)) setFreshNote(node.id);
-            if (selected === node.id) setDetailRevision((r) => r + 1);
-            else if (!form.iconOnly) setRoute(node.id);
+            formSaved(form, node);
+          }}
+          // The form closes at once: a new note shows in its folder as 正在创建…
+          // and opens when created; a new title shows while it is saved.
+          onBackground={(request, shown) => {
+            const current = form;
+            setForm(null);
+            const target = shown.added?.id ?? current.node?.id;
+            const withdraw = target
+              ? showChange(target, shown.added ? { added: shown.added } : { fields: shown.fields })
+              : () => {};
+            if (current.node && !current.iconOnly && selected !== current.node.id) setRoute(current.node.id);
+            void request
+              .then((node) => {
+                if (shown.added) withdraw();
+                else settleChange(withdraw);
+                formSaved(current, node, !current.node);
+              })
+              .catch((e) => {
+                withdraw();
+                report(e);
+              });
           }}
         />
       )}{' '}

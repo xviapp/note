@@ -7,17 +7,25 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import java.io.File;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.splashscreen.SplashScreen;
 import androidx.core.view.WindowCompat;
 import androidx.core.view.WindowInsetsControllerCompat;
 
 public class MainActivity extends NoteBridgeActivity {
+    // A floating window hands over to the notebook at one of its pages.
+    static final String ACTION_OPEN = "app.xvi.note.action.OPEN";
+    static final String EXTRA_PATH = "path";
     private static final String APPEARANCE_PREFS = "note-appearance";
+    // Camera photos for web file inputs are written here and never removed by Capacitor.
+    private static final long CAPTURE_MAX_AGE_MS = 24L * 60 * 60 * 1000;
     // Longest the splash waits for the UI; past this the page's own loading shows.
     private static final long BOOT_TIMEOUT_MS = 5000;
     private ColorDrawable themeBackground;
     private volatile boolean booting = true;
+    // A page a floating window asked for, kept until the notebook takes it.
+    private String launch;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -35,13 +43,43 @@ public class MainActivity extends NoteBridgeActivity {
         installWebView();
         if (savedInstanceState == null) {
             receiveShare(getIntent());
+            receiveLaunch(getIntent());
         }
+        removeOldCaptures();
     }
 
     @Override
     protected void onNewIntent(Intent intent) {
         super.onNewIntent(intent);
         receiveShare(intent);
+        if (receiveLaunch(intent)) dispatch("note:launch", null);
+    }
+
+    private boolean receiveLaunch(Intent intent) {
+        if (intent == null || !ACTION_OPEN.equals(intent.getAction())) return false;
+        String path = intent.getStringExtra(EXTRA_PATH);
+        if (path == null || !path.matches("/[A-Za-z0-9/_-]*")) return false;
+        launch = path;
+        return true;
+    }
+
+    @Override
+    com.getcapacitor.JSObject takeLaunch() {
+        if (launch == null) return null;
+        com.getcapacitor.JSObject value = new com.getcapacitor.JSObject().put("action", "open").put("path", launch);
+        launch = null;
+        return value;
+    }
+
+    private void removeOldCaptures() {
+        new Thread(() -> {
+            File folder = getExternalFilesDir(android.os.Environment.DIRECTORY_PICTURES);
+            File[] photos = folder == null ? null : folder.listFiles();
+            if (photos == null) return;
+            long cutoff = System.currentTimeMillis() - CAPTURE_MAX_AGE_MS;
+            for (File photo : photos)
+                if (photo.getName().startsWith("JPEG_") && photo.lastModified() < cutoff) photo.delete();
+        }, "note-capture-cleanup").start();
     }
 
     // Shares open in ShareActivity; an older launcher shortcut or task may still

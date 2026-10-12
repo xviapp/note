@@ -303,3 +303,73 @@ html.share-page #root {
     animation: none;
   }
 }
+
+/* 今日记 and 问青藜 (window.html) reuse the share window's sheet. */
+.page-window .share-window-header h1 small {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+}
+.page-window .quick-append-footer {
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+/* Centered, as wide as 问青藜 (windowCard in AssistantWindow.tsx) but shorter:
+   about nine lines of text, still whole above a phone keyboard. */
+.page-window.share-window {
+  align-items: center;
+}
+.page-window .share-window-sheet {
+  width: min(560px, 100% - 32px);
+  height: min(460px, 100% - 48px);
+  max-height: none;
+  padding: 18px 20px;
+  border-bottom: 1px solid var(--line);
+  border-radius: var(--radius-panel);
+  /* Android's native stand-in card (PageWindowActivity) already showed it. */
+  animation: none;
+}
+.page-window .share-window-scrim {
+  animation: none;
+}
+/* The composer fills the card: its phone layout (journals.css) puts Save
+   beside the title, and the text box takes the remaining height. */
+.page-window .quick-append-footer {
+  display: flex;
+  flex: 1;
+  min-height: 0;
+}
+.page-window .quick-append.is-active {
+  flex: 1;
+  grid-template-rows: auto minmax(0, 1fr) auto auto;
+}
+.page-window .quick-append.is-active .quick-append-editor textarea {
+  height: 100%;
+  min-height: 120px;
+  max-height: none;
+  resize: none;
+}
+.share-page .assistant-sheet-backdrop {
+  background: var(--scrim);
+}
+.page-window .share-window-status form {
+  width: 100%;
+}
+
+/* 今日记 for a locked journal: where the record waits, and unlocking now. */
+.locked-journal-hint {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.locked-journal-hint .text-button {
+  font-size: inherit;
+}

@@ -166,6 +166,12 @@
 .reading-adjustments .reading-slider {
   margin-top: 16px;
 }
+.reading-device {
+  border-top: 1px solid var(--line);
+}
+.reading-device .setting-row {
+  margin: 14px 0 0;
+}
 .reading-reset {
   justify-self: end;
   font-size: 12px;

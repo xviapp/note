@@ -18,6 +18,15 @@ export const device = registerPlugin<{
   setBackground(options: { color: string; preference: string }): Promise<void>;
   notify(options: { message: string }): Promise<void>;
   haptic(): Promise<void>;
+  // The open note's window needs: screen kept on, no screenshots, volume-key paging.
+  setWindowState(options: { keepAwake: boolean; secure: boolean; volumeKeys: boolean }): Promise<void>;
+  // What this page was opened for: a floating window's tool, or a page the
+  // notebook should open (returned once).
+  takeLaunch(): Promise<{ action: LaunchAction | null; path?: string }>;
+  // Floating windows (今日记, 青藜): step out of sight, or close with a toast
+  // and/or the notebook opened at a page.
+  hideWindow(): Promise<void>;
+  closeWindow(options: { message?: string; path?: string }): Promise<void>;
   finishBoot(): Promise<void>;
   // The server whose origin serves this UI; changing it restarts the app there.
   getServer(): Promise<import('./server').ServerInfo>;
@@ -31,10 +40,22 @@ export const device = registerPlugin<{
   }): Promise<{ cancelled: boolean }>;
 }>('NoteDevice');
 
+export type LaunchAction = 'open' | 'journal' | 'assistant';
+
+// Messages go to the notebook's notice line or status toast; outside the
+// notebook nothing listens and Android shows its own toast instead.
+export function notice(message: string, kind: 'notice' | 'toast' = 'notice') {
+  if (window.dispatchEvent(new CustomEvent(`note:${kind}`, { detail: message, cancelable: true })))
+    void device.notify({ message }).catch(() => {});
+}
+
 const isFile = (url: URL) =>
   url.origin === location.origin && /^\/api\/files\/[\w-]+$/.test(url.pathname);
 const report = (error: unknown) =>
-  device.notify({ message: error instanceof Error ? error.message : '操作未完成，请重试。' });
+  notice(error instanceof Error ? error.message : '操作未完成，请重试。');
+const saved = ({ cancelled }: { cancelled: boolean }) => {
+  if (!cancelled) notice('已保存到所选位置', 'toast');
+};
 
 const base64 = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
@@ -50,11 +71,11 @@ async function download(url: URL, name = '') {
     const blob = await fileBlob(sealed);
     if (blob.size > 25 * 1024 * 1024)
       throw new Error('加密文件超过 25 MiB，请在桌面浏览器中下载。');
-    await device.saveFile({
+    saved(await device.saveFile({
       data: await base64(blob),
       name: name || sealedFile(sealed)?.name || '页间文件',
       mime: blob.type.split(';')[0] || 'application/octet-stream',
-    });
+    }));
   } else if (isFile(url)) {
     const response = await fetch(url, { method: 'HEAD', credentials: 'same-origin' });
     if (!response.ok)
@@ -62,20 +83,20 @@ async function download(url: URL, name = '') {
     const encoded = response.headers
       .get('content-disposition')
       ?.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
-    await device.saveFile({
+    saved(await device.saveFile({
       url: url.href,
       name: name || (encoded ? decodeURIComponent(encoded) : '页间文件'),
       mime: response.headers.get('content-type')?.split(';')[0] || 'application/octet-stream',
-    });
+    }));
   } else if (['blob:', 'data:'].includes(url.protocol)) {
     const response = await fetch(url);
     const blob = await response.blob();
     if (blob.size > 6 * 1024 * 1024) throw new Error('此图片或草稿过大，暂时无法保存。');
-    await device.saveFile({
+    saved(await device.saveFile({
       data: await base64(blob),
       name: name || '页间截图.jpg',
       mime: blob.type.split(';')[0] || 'application/octet-stream',
-    });
+    }));
   }
 }
 

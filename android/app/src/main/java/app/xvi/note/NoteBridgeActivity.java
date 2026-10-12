@@ -2,6 +2,8 @@ package app.xvi.note;
 
 import android.content.Intent;
 import android.net.Uri;
+import android.view.KeyEvent;
+import android.view.WindowManager;
 import android.webkit.CookieManager;
 import android.webkit.WebResourceRequest;
 import android.webkit.WebResourceResponse;
@@ -19,6 +21,8 @@ import org.json.JSONObject;
 abstract class NoteBridgeActivity extends BridgeActivity {
     ShareInbox shareInbox;
     private final ExecutorService shareExecutor = Executors.newSingleThreadExecutor();
+    // Set by the page while a note is open and the reader chose volume-key paging.
+    private boolean volumeKeys;
 
     /** Registers plugins; call before super.onCreate. */
     void registerNotePlugins() {
@@ -47,10 +51,11 @@ abstract class NoteBridgeActivity extends BridgeActivity {
             public boolean shouldOverrideUrlLoading(WebView view, WebResourceRequest request) {
                 String url = request.getUrl().toString();
                 if (policy.isDocument(url)) return false;
-                if (policy.isDownload(url)) {
-                    view.evaluateJavascript("window.dispatchEvent(new CustomEvent('note:download', {detail: "
-                        + JSONObject.quote(url) + "}))", null);
-                } else openExternal(request.getUrl());
+                if (policy.isDownload(url)) dispatch("note:download", JSONObject.quote(url));
+                else {
+                    String failure = openExternal(request.getUrl());
+                    if (failure != null) dispatch("note:notice", JSONObject.quote(failure));
+                }
                 return true;
             }
         });
@@ -81,6 +86,18 @@ abstract class NoteBridgeActivity extends BridgeActivity {
         return shareInbox.next();
     }
 
+    /** What the page was opened for: a floating window's tool, or a page the
+     * notebook should open (taken once); null when nothing is waiting. */
+    com.getcapacitor.JSObject takeLaunch() {
+        return null;
+    }
+
+    /** A floating window steps out of sight; the notebook has nothing to hide. */
+    void hideWindow() {}
+
+    /** A floating window closes, with a toast and/or opening the notebook at `path`. */
+    void closeWindow(String message, String path) {}
+
     /** The share window's exit; the notebook has nothing to close. */
     void closeShare(boolean saved, boolean openApp) {}
 
@@ -88,14 +105,47 @@ abstract class NoteBridgeActivity extends BridgeActivity {
 
     void finishBoot() {}
 
-    void openExternal(Uri uri) {
+    /** Opens a web or mail link in another app; returns why it could not, or null. */
+    String openExternal(Uri uri) {
         String scheme = uri.getScheme();
-        if (!"https".equals(scheme) && !"http".equals(scheme) && !"mailto".equals(scheme)) return;
+        if (!"https".equals(scheme) && !"http".equals(scheme) && !"mailto".equals(scheme)) return null;
         try {
             startActivity(new Intent(Intent.ACTION_VIEW, uri).addCategory(Intent.CATEGORY_BROWSABLE));
+            return null;
         } catch (android.content.ActivityNotFoundException error) {
-            Toast.makeText(this, "没有可打开此链接的应用", Toast.LENGTH_SHORT).show();
+            return "没有可打开此链接的应用";
         }
+    }
+
+    /** Fires a window event in the page; `detail` is a JSON literal or null. */
+    void dispatch(String event, String detail) {
+        if (bridge == null) return;
+        bridge.getWebView().evaluateJavascript("window.dispatchEvent(new CustomEvent(" + JSONObject.quote(event)
+            + (detail == null ? "" : ", {detail: " + detail + "}") + "))", null);
+    }
+
+    /** What the open note asks of the window: screen kept on, no screenshots, volume keys page. */
+    void setWindowState(boolean keepAwake, boolean secure, boolean volumeKeys) {
+        setWindowFlag(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON, keepAwake);
+        setWindowFlag(WindowManager.LayoutParams.FLAG_SECURE, secure);
+        this.volumeKeys = volumeKeys;
+    }
+
+    private void setWindowFlag(int flag, boolean enabled) {
+        if (enabled) getWindow().addFlags(flag);
+        else getWindow().clearFlags(flag);
+    }
+
+    @Override
+    public boolean dispatchKeyEvent(KeyEvent event) {
+        int code = event.getKeyCode();
+        if (volumeKeys && bridge != null && (code == KeyEvent.KEYCODE_VOLUME_DOWN || code == KeyEvent.KEYCODE_VOLUME_UP)) {
+            // Both halves are consumed so the system shows no volume panel.
+            if (event.getAction() == KeyEvent.ACTION_DOWN)
+                dispatch("note:volume-key", code == KeyEvent.KEYCODE_VOLUME_DOWN ? "1" : "-1");
+            return true;
+        }
+        return super.dispatchKeyEvent(event);
     }
 
     @Override

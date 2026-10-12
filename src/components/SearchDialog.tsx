@@ -1,6 +1,7 @@
 import { useEffect, useId, useRef, useState } from 'react';
 import { MessageSquareQuote, Search } from 'lucide-react';
 import { api } from '../api';
+import { searchCachedTitles } from '../offline-cache';
 import type { NoteNode, SearchResult } from '../../shared/types';
 import { Modal, NodeIcon } from './Primitives';
 import { requestAnnotation } from '../annotations';
@@ -18,7 +19,8 @@ export function SearchDialog({
   const [query, setQuery] = useState(''),
     [results, setResults] = useState<SearchResult[]>([]),
     [active, setActive] = useState(0),
-    [state, setState] = useState<'loading' | 'ready' | 'error'>('loading'),
+    // 'local': titles from this device, shown until the server answers.
+    [state, setState] = useState<'loading' | 'local' | 'ready' | 'error'>('loading'),
     [error, setError] = useState('');
   const list = useId();
   const listRef = useRef<HTMLUListElement>(null),
@@ -38,6 +40,14 @@ export function SearchDialog({
     setState('loading');
     setResults([]);
     setActive(0);
+    let answered = false;
+    // Titles this device has seen show at once; the server's results replace them.
+    if (term)
+      void searchCachedTitles(term.split(/\s+/).filter(Boolean).slice(0, 8)).then((found) => {
+        if (!live || answered || !found.length) return;
+        setResults(found.map((node): SearchResult => ({ ...node, path: [] })));
+        setState('local');
+      });
     const timer = setTimeout(
       () => {
         const request = term
@@ -49,6 +59,7 @@ export function SearchDialog({
             );
         request
           .then((found) => {
+            answered = true;
             if (!live) return;
             if (pendingEnter.current && found[0]) {
               pendingEnter.current = false;
@@ -63,9 +74,11 @@ export function SearchDialog({
             setState('ready');
           })
           .catch((e) => {
+            answered = true;
             if (!live) return;
             setError((e as Error).message);
             pendingEnter.current = false;
+            // Titles found on this device stay, marked as such.
             setState('error');
           });
       },
@@ -82,7 +95,8 @@ export function SearchDialog({
       ?.scrollIntoView({ block: 'nearest' });
   }, [active]);
   const open = (node: SearchResult) => {
-    if (state !== 'ready') return;
+    // Results always belong to the current query: they are cleared when it changes.
+    if (state === 'loading') return;
     onClose();
     if (node.annotation) requestAnnotation(node.id, node.annotation.id);
     onOpen(node);
@@ -119,17 +133,21 @@ export function SearchDialog({
             } else if (event.key === 'Enter') {
               event.preventDefault();
               // While a search is pending the list is from the previous query.
-              if (state === 'loading') pendingEnter.current = true;
-              else if (state === 'ready' && results[active]) open(results[active]);
+              if (state === 'loading' || state === 'local') pendingEnter.current = true;
+              else if (results[active]) open(results[active]);
             }
           }}
         />
       </label>
       <p className="search-caption" aria-live="polite">
         {state === 'error'
-          ? error
+          ? results.length
+            ? `${error} 以下是本机缓存中标题匹配的笔记。`
+            : error
           : state === 'loading'
             ? '正在查找…'
+            : state === 'local'
+              ? `本机找到 ${results.length} 项，正在查找全部…`
             : query.trim()
               ? results.length
                 ? `找到 ${results.length} 项${results.length >= 30 ? '（只显示最近修改的 30 项）' : ''}`

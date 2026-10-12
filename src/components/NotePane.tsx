@@ -5,6 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
+  useSyncExternalStore,
 } from 'react';
 import { FileText, X } from 'lucide-react';
 import { api, ApiError, fileUrl, lockNote, unlockNote } from '../api';
@@ -49,6 +50,9 @@ import { setInsertTarget } from '../note-insert';
 import { useNoteLoading } from '../use-note-loading';
 import { useNoteReading } from '../use-note-reading';
 import { useNoteAnnotationPosition } from '../use-note-annotation-position';
+import { useReadingWindow } from '../reading-window';
+import { settleChange, showChange } from '../optimistic';
+import { pendingSaves, subscribeSaves } from '../save-outbox';
 
 const Editor = lazy(() => import('./Editor'));
 const SplitView = lazy(() => import('./SplitView'));
@@ -156,6 +160,11 @@ export default function NotePane(props: Props) {
     reset,
     onLoaded: props.onLoaded,
   });
+  // This note's body on its way to the server (保存 returned at once).
+  const saves = useSyncExternalStore(subscribeSaves, pendingSaves);
+  const sending = saves.find((item) => item.id === id && !item.error);
+  // Android: the screen stays on, encrypted notes block screenshots, volume keys page.
+  useReadingWindow(!!note, !!note?.key_id, !!note && !editing);
   // While editing, 随手记 can insert a clip at the cursor.
   const inserting = useRef({ insert, addFiles });
   inserting.current = { insert, addFiles };
@@ -243,15 +252,24 @@ export default function NotePane(props: Props) {
     else if (file.mime === 'application/pdf') setPdf(file);
     else openLink(fileUrl(file.id, true));
   };
+  // Shown at once; withdrawn if the server refuses.
   const toggleFavorite = async () => {
     if (!note) return;
+    const favorite = note.favorite ? 0 : 1;
+    const mark = (value: number) => {
+      if (!noteRef.current) return;
+      noteRef.current = { ...noteRef.current, favorite: value };
+      setNote(noteRef.current);
+    };
+    mark(favorite);
+    const withdraw = showChange(id, { fields: { favorite } });
     try {
-      await api(`/api/nodes/${id}/favorite`, 'PUT', { enabled: !note.favorite });
-      const next = { ...note, favorite: note.favorite ? 0 : 1 };
-      noteRef.current = next;
-      setNote(next);
+      await api(`/api/nodes/${id}/favorite`, 'PUT', { enabled: !!favorite });
       props.onChanged();
+      settleChange(withdraw);
     } catch (e) {
+      withdraw();
+      mark(favorite ? 0 : 1);
       props.onError(e);
     }
   };
@@ -445,6 +463,11 @@ export default function NotePane(props: Props) {
         />
         {typeView.toolbar}
       </div>
+      {sending && !editing && (
+        <p className="save-pending" role="status">
+          {offline ? '修改已保存在本设备，联网后自动保存到服务器。' : '正在保存修改…'}
+        </p>
+      )}
       {editing && (
         <EditToolbar
           kind={note.kind}

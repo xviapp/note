@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="utf-8"?>
+<shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="clip" android:icon="@drawable/shortcut_clip"
+        android:shortcutShortLabel="@string/shortcut_clip">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="app.xvi.note" android:targetClass="app.xvi.note.ClipCaptureActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="journal" android:icon="@drawable/shortcut_journal"
+        android:shortcutShortLabel="@string/shortcut_journal">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="app.xvi.note" android:targetClass="app.xvi.note.JournalWindowActivity" />
+    </shortcut>
+    <shortcut android:shortcutId="qingli" android:icon="@drawable/shortcut_qingli"
+        android:shortcutShortLabel="@string/shortcut_qingli">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="app.xvi.note" android:targetClass="app.xvi.note.AssistantWindowActivity" />
+    </shortcut>
+</shortcuts>

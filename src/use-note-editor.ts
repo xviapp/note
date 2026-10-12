@@ -4,6 +4,7 @@ import type { FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import type { useQuestion } from './components/Primitives';
 import { readDraft, removeDraft, writeDraft } from './note-drafts';
 import type { EditorHandle } from './components/Editor';
+import { pendingSave, queueSave, waitForSave, type SaveFailure } from './save-outbox';
 
 // Editing a note's body and attachments: a draft, a confirmed start, a save that
 // is safe to retry, and a guard that asks before unsaved changes are left.
@@ -92,6 +93,47 @@ export function useNoteEditor({
     return () => clearTimeout(timer);
   }, [id, editing, dirty, content, assets, keyId, note?.revision]);
 
+  // A background save of this note: its result replaces the shown copy, and a
+  // refused one comes back into the editor with the draft and the reason.
+  const editingNow = useRef(editing);
+  editingNow.current = editing;
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const detail = (event as CustomEvent<NoteDetail>).detail;
+      if (detail.id !== id || editingNow.current) return;
+      noteRef.current = detail;
+      setNote(detail);
+      reset(detail);
+    };
+    const failed = (event: Event) => {
+      const failure = (event as CustomEvent<SaveFailure>).detail;
+      if (failure.id !== id || editingNow.current) return;
+      failure.handled = true;
+      void (async () => {
+        const draft = await readDraft(id);
+        if (!draft) return;
+        try {
+          await unlockNote(id);
+          baseRevision.current = draft.revision;
+          setContent(draft.content);
+          setAssets(draft.attachments);
+          setEditing(true);
+          setTab('source');
+          setSaveError(failure.message);
+        } catch (e) {
+          onError(e);
+        }
+      })();
+    };
+    window.addEventListener('note:saved', saved);
+    window.addEventListener('note:save-failed', failed);
+    return () => {
+      window.removeEventListener('note:saved', saved);
+      window.removeEventListener('note:save-failed', failed);
+    };
+    // Handlers read the latest state through refs and stable setters.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [id]);
   const abandonUploads = () => {
     for (const fileId of draftUploads.current)
       void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
@@ -109,6 +151,22 @@ export function useNoteEditor({
   // The shortcut keeps editing; 保存 finishes only if no newer edits arrived.
   const save = async (finish = true): Promise<boolean> => {
     if (!noteRef.current || savingNow.current || uploadingNow.current) return false;
+    // 保存 returns to the note at once and the body is sent in the background
+    // (src/save-outbox.ts); Ctrl+S keeps editing, so it waits for the new revision.
+    if (finish) {
+      const current = noteRef.current;
+      const shown = { ...current, content, attachments: assets };
+      await queueSave(current, content, assets);
+      for (const fileId of draftUploads.current)
+        if (!assets.some((file) => file.id === fileId)) void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
+      draftUploads.current.clear();
+      noteRef.current = shown;
+      setNote(shown);
+      reset(shown);
+      exitEdit();
+      onChanged();
+      return true;
+    }
     savingNow.current = true;
     setBusy(true);
     setSaveError('');
@@ -187,6 +245,10 @@ export function useNoteEditor({
   });
   // A new, empty note opens for writing without asking.
   const start = async (confirm = true) => {
+    // The edit token is requested while the question is open, so confirming
+    // starts editing without another round trip.
+    const unlocking = unlockNote(id);
+    unlocking.catch(() => {});
     if (
       confirm &&
       !(await question.confirm(
@@ -194,10 +256,14 @@ export function useNoteEditor({
         '确认后可以修改正文和附件。按 Ctrl+S 保存后继续编辑，点「保存」后回到只读预览。',
         '开始编辑',
       ))
-    )
+    ) {
+      void unlocking.then(() => lockNote(id), () => {});
       return;
+    }
     try {
-      await unlockNote(id);
+      // A save still on its way sets the revision this edit starts from.
+      await waitForSave(id);
+      await unlocking;
       onStart();
       baseRevision.current = noteRef.current?.revision ?? 0;
       setEditing(true);
@@ -212,6 +278,8 @@ export function useNoteEditor({
     const draft = await readDraft(id),
       current = noteRef.current;
     if (!draft || !current || editing) return;
+    // The draft is being saved in the background, not left behind.
+    if (pendingSave(id) && !pendingSave(id)!.error) return;
     if (
       draft.content === current.content &&
       sortedIds(draft.attachments) === sortedIds(current.attachments)

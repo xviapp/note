@@ -19,7 +19,8 @@ export default defineConfig(({ mode }) => ({
   build: {
     chunkSizeWarningLimit: 900,
     outDir: mode === 'android' ? 'dist-android' : 'dist',
-    // share.html is Android's share window, a page of its own over the sending app.
-    rollupOptions: { input: { main: 'index.html', share: 'share.html' } },
+    // share.html is Android's share window, a page of its own over the sending app;
+    // window.html the floating 今日记 and 问青藜 windows opened from the launcher.
+    rollupOptions: { input: { main: 'index.html', share: 'share.html', window: 'window.html' } },
   },
 }));

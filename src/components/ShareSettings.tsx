@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
-import { FolderOpen, Share2 } from 'lucide-react';
-import type { ShareSettings as Settings } from '../../shared/types';
+import { CalendarDays, FolderOpen, Share2 } from 'lucide-react';
+import type { NoteNode, ShareSettings as Settings } from '../../shared/types';
 import { api } from '../api';
 import { Modal, Spinner } from './Primitives';
 import { NodePicker } from './Tree';
@@ -37,12 +37,12 @@ export function ShareSettings() {
     <section className="settings-section share-settings">
       <h2>
         <Share2 size={19} />
-        分享保存
+        保存位置
       </h2>
       {settings ? (
         <div className="share-setting-row">
           <div>
-            <span className="small muted">默认保存位置</span>
+            <span className="small muted">分享保存到</span>
             <p className="destination-summary">
               <FolderOpen size={17} />
               <span>{shareDestinationLabel(settings)}</span>
@@ -66,6 +66,7 @@ export function ShareSettings() {
         </button>
       )}
       <p className="field-hint">用于系统分享，保存时仍可更改。</p>
+      <QuickJournalSetting />
       {error && !draft && (
         <p className="inline-error" role="alert">
           {error}
@@ -118,5 +119,81 @@ export function ShareSettings() {
         </Modal>
       )}
     </section>
+  );
+}
+
+// Where Android's 今日记 window writes: a chosen journal, or (by default) the
+// journal written in most recently. An account setting, like the share folder.
+function QuickJournalSetting() {
+  const [journals, setJournals] = useState<NoteNode[] | null>(null);
+  const [value, setValue] = useState<string | null>(null);
+  const [busy, setBusy] = useState(false),
+    [error, setError] = useState('');
+  useEffect(() => {
+    let live = true;
+    Promise.all([
+      api<{ nodes: NoteNode[] }>('/api/nodes?view=journals'),
+      api<{ journalId: string | null }>('/api/journals/quick'),
+    ])
+      .then(([list, setting]) => {
+        if (!live) return;
+        setJournals(list.nodes);
+        setValue(setting.journalId);
+      })
+      .catch((reason: Error) => live && setError(reason.message));
+    return () => {
+      live = false;
+    };
+  }, []);
+  const choose = async (journalId: string | null) => {
+    setBusy(true);
+    setError('');
+    try {
+      setValue((await api<{ journalId: string | null }>('/api/journals/quick', 'PUT', { journalId })).journalId);
+      // The 今日记 window opens from this device's cached list; refresh its order.
+      await api('/api/nodes?view=journals').catch(() => {});
+    } catch (reason) {
+      setError((reason as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  return (
+    <>
+      <div className="share-setting-row">
+        <label className="quick-journal-setting">
+          <span className="small muted">
+            <CalendarDays size={14} aria-hidden="true" />
+            今日记保存到
+          </span>
+          {journals ? (
+            <select
+              value={value ?? ''}
+              disabled={busy}
+              onChange={(event) => void choose(event.target.value || null)}
+            >
+              <option value="">最近写过的日记本</option>
+              {journals.map((journal) => (
+                <option key={journal.id} value={journal.id}>
+                  {journal.title}
+                </option>
+              ))}
+            </select>
+          ) : (
+            !error && <Spinner />
+          )}
+        </label>
+      </div>
+      <p className="field-hint">
+        {journals && !journals.length
+          ? '还没有日记本。新建日记本后可在这里选择。'
+          : '长按页间图标的「今日记」把记录写入所选日记本的今天。'}
+      </p>
+      {error && (
+        <p className="inline-error" role="alert">
+          {error}
+        </p>
+      )}
+    </>
   );
 }

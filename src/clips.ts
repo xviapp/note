@@ -60,6 +60,12 @@ window.addEventListener('storage', (event) => {
   outbox = readOutbox();
   listeners.forEach((listener) => listener());
 });
+// The outbox outside React (the 待发送 list).
+export const pendingClips = () => outbox;
+export function subscribePendingClips(listener: () => void) {
+  listeners.add(listener);
+  return () => void listeners.delete(listener);
+}
 export function usePendingClips() {
   return useSyncExternalStore((listener) => {
     listeners.add(listener);

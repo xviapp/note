@@ -203,6 +203,8 @@ function Branch({
               }
               aria-selected={props.selected === node.id}
               aria-expanded={hasChildren ? open : undefined}
+              // A note being created, shown ahead of the server (src/optimistic.ts).
+              aria-busy={node.id.startsWith('pending-') || undefined}
             >
               <div
                 className={[

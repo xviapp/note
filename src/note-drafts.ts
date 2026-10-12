@@ -1,6 +1,7 @@
 import type { FileInfo } from '../shared/types';
 import { isSealedText, openText, sealedTextKeyId, sealText } from '../shared/encryption';
 import { unlockedKey } from './keyring';
+import { dropPhotos } from './pending-photos';
 
 // Unsaved edits, kept on this device so a closed tab, a crash or Android
 // reclaiming the app does not lose them. Cleared with the private cache on
@@ -71,6 +72,9 @@ export function removeDraft(id: string) {
 export function clearDrafts() {
   epoch++;
   generations.clear();
+  void dropPhotos();
+  // Loaded on demand: the outbox module imports the API client.
+  void import('./journal-outbox').then(({ clearJournalOutbox }) => clearJournalOutbox()).catch(() => {});
   try {
     for (const key of Object.keys(localStorage))
       if (key.startsWith(DRAFT_PREFIX)) localStorage.removeItem(key);

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Capacitor } from '@capacitor/core';
 import { RotateCcw } from 'lucide-react';
 import { Modal } from './Primitives';
 import {
@@ -7,6 +8,11 @@ import {
   setReadingPreferences,
   useReadingPreferences,
 } from '../reading-preferences';
+import {
+  setReadingWindowPreferences,
+  useReadingWindowPreferences,
+  type ReadingWindowPreferences,
+} from '../reading-window';
 import '../reading-settings.css';
 
 export function ReadingControls() {
@@ -91,6 +97,7 @@ export function ReadingControls() {
           </label>
         ))}
       </details>
+      {Capacitor.getPlatform() === 'android' && <DeviceReadingControls />}
       <button
         className="text-button reading-reset"
         onClick={() => setReadingPreferences(readingDefaults)}
@@ -98,6 +105,37 @@ export function ReadingControls() {
         <RotateCcw size={14} />
         恢复默认
       </button>
+    </div>
+  );
+}
+
+// This device only: the window while a note is open.
+function DeviceReadingControls() {
+  const value = useReadingWindowPreferences();
+  const rows: [keyof ReadingWindowPreferences, string, string][] = [
+    ['keepAwake', '阅读时屏幕常亮', '打开笔记时不自动熄屏，10 分钟无操作后恢复系统设置。'],
+    ['volumeKeys', '音量键翻页', '阅读时按音量减翻到下一屏，音量加回到上一屏；编辑时不受影响。'],
+  ];
+  return (
+    <div className="reading-device">
+      {rows.map(([key, label, hint]) => (
+        <div className="setting-row" key={key}>
+          <div>
+            <strong>{label}</strong>
+            <p>{hint}</p>
+          </div>
+          <label className="toggle-switch">
+            <input
+              type="checkbox"
+              role="switch"
+              aria-label={label}
+              checked={value[key]}
+              onChange={(event) => setReadingWindowPreferences({ [key]: event.target.checked })}
+            />
+            <span className="toggle-switch-track" aria-hidden="true" />
+          </label>
+        </div>
+      ))}
     </div>
   );
 }
