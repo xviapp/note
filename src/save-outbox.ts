@@ -18,6 +18,9 @@ export interface PendingSave {
   revision: number;
   key: string;
   savedAt: number;
+  // The savedAt of the draft written for this save. Entries queued by 0.4.24
+  // lack it (their draft was stamped separately, a little earlier).
+  draftAt?: number;
   error?: string;
 }
 const STORE = `${DRAFT_PREFIX}saves`;
@@ -53,11 +56,14 @@ export function subscribeSaves(listener: () => void) {
   return () => void listeners.delete(listener);
 }
 
+// Throws when the body cannot be kept on this device: the editor keeps it then.
 export async function queueSave(note: NoteDetail, content: string, attachments: FileInfo[]) {
-  await writeDraft(note.id, { content, attachments, revision: note.revision, savedAt: Date.now() }, note.key_id ?? null);
+  const savedAt = Date.now();
+  if (!(await writeDraft(note.id, { content, attachments, revision: note.revision, savedAt }, note.key_id ?? null)))
+    throw new Error('无法在本机暂存正文，编辑内容已保留。请清理本机存储空间或稍后重试。');
   write([
     ...saves.filter((item) => item.id !== note.id),
-    { id: note.id, title: note.title, keyId: note.key_id ?? null, revision: note.revision, key: crypto.randomUUID(), savedAt: Date.now() },
+    { id: note.id, title: note.title, keyId: note.key_id ?? null, revision: note.revision, key: crypto.randomUUID(), savedAt, draftAt: savedAt },
   ]);
   void flushSaves();
 }
@@ -100,8 +106,10 @@ export function flushSaves(retryRefused = false): Promise<void> {
 // False stops the round: the connection is lost and later saves wait too.
 async function send(item: PendingSave): Promise<boolean> {
   const draft = await readDraft(item.id);
-  if (!draft) {
-    write(saves.filter((entry) => entry.id !== item.id));
+  // The body saved with this entry, or a later edit of it; never an older draft.
+  if (!draft || draft.savedAt < (item.draftAt ?? 0)) {
+    const message = '本机找不到这次保存的正文，未发送。';
+    write(saves.map((entry) => (entry.key === item.key ? { ...entry, error: message } : entry)));
     return true;
   }
   try {

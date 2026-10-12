@@ -4,6 +4,7 @@ import { api, cachedApi } from '../api';
 import { useOffline } from '../connectivity';
 import { createJournalRecorder } from '../journal-record';
 import { flushJournalOutbox } from '../journal-outbox';
+import { flushQuickRecords } from '../quick-journal';
 import { isUnlocked, keysVersion, subscribeKeys } from '../keyring';
 import { device } from '../mobile';
 import { dismissReadingOverlay } from '../mobile-back';
@@ -142,11 +143,15 @@ export function JournalWindow() {
   const [locked, setLocked] = useState(false);
   const journalId = journal?.id, keyId = journal?.key_id;
   useEffect(() => setLocked(!!keyId && !isUnlocked(keyId)), [journalId, keyId]);
-  // Records kept while it was locked go out once it is unlocked here.
+  // Records kept while it was locked go out once it is unlocked here, and
+  // records saved here on an earlier day that Android ended before sending.
   useEffect(() => {
     if (!journalId || locked || auth !== 'in') return;
     void flushJournalOutbox().then((sent) => {
       if (sent) void device.notify({ message: `${sent} 条今日记已记入日记` }).catch(() => {});
+    });
+    void flushQuickRecords({ earlier: true }).then((sent) => {
+      if (sent) void device.notify({ message: `${sent} 条之前的今日记已记入日记` }).catch(() => {});
     });
   }, [journalId, locked, auth]);
   useReady(auth === 'out' || journal !== undefined || !!error);

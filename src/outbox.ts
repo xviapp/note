@@ -5,6 +5,7 @@ import { discardPending, flushClips, pendingClips, revealPending, subscribePendi
 import { isOffline } from './connectivity';
 import { flushJournalOutbox, listOutbox, removeOutboxRecord, subscribeOutbox } from './journal-outbox';
 import { isUnlocked, subscribeKeys } from './keyring';
+import { discardQuickRecord, flushQuickRecords, queuedQuickRecords, subscribeQuickRecords } from './quick-journal';
 import { discardSave, flushSaves, pendingSaves, subscribeSaves } from './save-outbox';
 import { isSealedText } from '../shared/encryption';
 import { longDate } from '../shared/journals';
@@ -71,6 +72,40 @@ const journals: OutboxSource = {
   },
   retry: flushJournalOutbox,
   remove: removeOutboxRecord,
+};
+
+// 今日记 saved in the window that Android ended, or that was refused.
+const quickRecords: OutboxSource = {
+  key: 'quick-journal',
+  label: '今日记补记',
+  async list() {
+    const titles = new Map(
+      ((await cachedApi<{ nodes: NoteNode[] }>('/api/nodes?view=journals'))?.nodes ?? []).map((node) => [node.id, node.title]),
+    );
+    return (await queuedQuickRecords()).map((record) => {
+      const journal = titles.get(record.journalId) ?? '日记本';
+      const photos = record.images.length + record.photos;
+      return {
+        id: record.draftId,
+        summary: record.locked ? '（加密内容）' : record.title || excerpt(record.text) || '（只有照片）',
+        detail: [longDate(record.date), journal, photos ? `${photos} 张照片` : ''].filter(Boolean).join(' · '),
+        createdAt: record.savedAt,
+        status: record.locked ? `等待解锁「${journal}」` : record.error ? `没能记入：${record.error}` : waiting(),
+        failed: !record.locked && !!record.error,
+        open: record.locked ? { label: '去解锁', id: record.journalId } : undefined,
+      };
+    });
+  },
+  subscribe(listener) {
+    const stopRecords = subscribeQuickRecords(listener);
+    const stopKeys = subscribeKeys(listener);
+    return () => {
+      stopRecords();
+      stopKeys();
+    };
+  },
+  retry: () => flushQuickRecords(),
+  remove: discardQuickRecord,
 };
 
 const clips: OutboxSource = {
@@ -155,7 +190,7 @@ const saves: OutboxSource = {
   remove: discardSave,
 };
 
-export const SOURCES: OutboxSource[] = [saves, journals, clips, widget];
+export const SOURCES: OutboxSource[] = [saves, journals, quickRecords, clips, widget];
 
 export interface OutboxGroup {
   source: OutboxSource;

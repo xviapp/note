@@ -1,5 +1,6 @@
 import { openBytes, sealBytes } from '../shared/encryption';
 import { unlockedKey } from './keyring';
+import { draftEpoch } from './note-drafts';
 
 // Photos chosen for a quick record but not uploaded yet. They stay on this
 // device until uploaded (sealed with the note's key in an encrypted place), so
@@ -47,6 +48,8 @@ async function store<T>(mode: IDBTransactionMode, action: (photos: IDBObjectStor
 }
 
 export async function keepPhoto(draft: string, id: string, file: File, keyId?: string | null) {
+  // Sign-out clears the photos; one still being read or sealed is not kept.
+  const started = draftEpoch();
   let bytes: ArrayBuffer = await file.arrayBuffer();
   if (keyId) {
     const key = await unlockedKey(keyId);
@@ -58,7 +61,9 @@ export async function keepPhoto(draft: string, id: string, file: File, keyId?: s
     draft, id, name: file.name, type: file.type, lastModified: file.lastModified, bytes,
     addedAt: Date.now() * 1000 + (sequence++ % 1000), keyId: keyId ?? null,
   };
-  await store('readwrite', (photos) => photos.put(value));
+  await store('readwrite', (photos) => {
+    if (draftEpoch() === started) photos.put(value);
+  });
 }
 
 // The draft's photos still waiting, in the order chosen; sealed ones need their key unlocked.

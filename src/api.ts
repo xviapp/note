@@ -20,6 +20,7 @@ import {
   cachedResponse,
   clearPrivateCache,
   rememberNote,
+  rememberPrefetched,
   rememberResponse,
   removeCachedNote,
 } from './offline-cache';
@@ -80,6 +81,8 @@ export async function api<T = Record<string, unknown>>(
   }
 }
 // A note's detail without keeping it as read (no files, see src/prefetch.ts).
+// A note fetched before it is opened (src/prefetch.ts), cached as the server
+// sent it (sealed fields stay sealed) unless the cache was cleared meanwhile.
 export const fetchNoteAhead = (id: string) =>
   request<NoteDetail>(`/api/nodes/${id}`, 'GET', undefined, undefined, false);
 async function request<T>(path: string, method: string, data: unknown, key?: string, remember = true): Promise<T> {
@@ -150,7 +153,8 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
       await rememberResponse(path, value, epoch).catch(() => {});
       if (/^\/api\/nodes\/[\w-]+$/.test(path))
         void rememberNote(value as NoteDetail, false, epoch).catch(() => {});
-    }
+    } else if (method === 'GET' && /^\/api\/nodes\/[\w-]+$/.test(path))
+      await rememberPrefetched(value as NoteDetail, epoch).catch(() => {});
     if (/^\/api\/auth\/(logout|logout-all|password)$/.test(path) && method === 'POST')
       await signedOut();
     if (node && method === 'DELETE' && path === `/api/nodes/${node}`)

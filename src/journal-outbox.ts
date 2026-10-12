@@ -2,6 +2,7 @@ import { fileUrl, uncertainFailure, upload } from './api';
 import { isOffline } from './connectivity';
 import { createJournalRecorder } from './journal-record';
 import { isUnlocked } from './keyring';
+import { draftEpoch } from './note-drafts';
 
 // 今日记 for an encrypted journal that is not unlocked on this device. The
 // record cannot be sealed with the journal's key yet, so it waits here, sealed
@@ -92,7 +93,9 @@ export function subscribeOutbox(listener: () => void) {
 }
 const changed = () => listeners.forEach((listener) => listener());
 
+// Sign-out clears the records: work started before it writes nothing.
 async function write(id: string, status: Stored['status'], record: OutboxRecord, createdAt = Date.now()) {
+  const started = draftEpoch();
   const payload: Payload = {
     title: record.title,
     text: record.text,
@@ -105,7 +108,9 @@ async function write(id: string, status: Stored['status'], record: OutboxRecord,
   const value: Stored = {
     id, status, journalId: record.journalId, keyId: record.keyId, date: record.date, createdAt, ...head, photos,
   };
-  await store('records', 'readwrite', (records) => records.put(value));
+  await store('records', 'readwrite', (records) => {
+    if (draftEpoch() === started) records.put(value);
+  });
 }
 async function read(row: Stored): Promise<OutboxRecord> {
   const payload = JSON.parse(new TextDecoder().decode(await unseal(row))) as Payload;
@@ -164,14 +169,18 @@ let flushing: Promise<number> | null = null;
 // Sends every waiting record whose journal is unlocked here, oldest first.
 // Returns how many were added; a failed one stays with its reason.
 export function flushJournalOutbox(): Promise<number> {
-  return (flushing ??= (async () => {
+  if (flushing) return flushing;
+  if (isOffline()) return Promise.resolve(0);
+  // Cleared once settled, never before it is stored.
+  flushing = (async () => {
     let sent = 0;
+    const started = draftEpoch();
     try {
-      if (isOffline()) return 0;
       const rows = ((await store<Stored[]>('records', 'readonly', (records) => records.getAll())) ?? [])
         .filter((row) => row.status === 'queued' && isUnlocked(row.keyId))
         .sort((a, b) => a.createdAt - b.createdAt);
       for (const row of rows) {
+        if (draftEpoch() !== started) break;
         try {
           const record = await read(row);
           const images = [];
@@ -187,17 +196,23 @@ export function flushJournalOutbox(): Promise<number> {
           sent++;
         } catch (reason) {
           // A connection lost midway retries later as it is; a refusal is kept with its reason.
-          if (uncertainFailure(reason)) break;
-          await store('records', 'readwrite', (records) => records.put({ ...row, error: (reason as Error).message }));
+          if (uncertainFailure(reason) || draftEpoch() !== started) break;
+          await store('records', 'readwrite', (records) => {
+            if (draftEpoch() === started) records.put({ ...row, error: (reason as Error).message });
+          });
           changed();
         }
       }
     } finally {
-      flushing = null;
       if (sent) changed();
     }
     return sent;
-  })().catch(() => 0));
+  })()
+    .catch(() => 0)
+    .finally(() => {
+      flushing = null;
+    });
+  return flushing;
 }
 
 export async function clearJournalOutbox() {

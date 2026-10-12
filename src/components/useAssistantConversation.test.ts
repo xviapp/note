@@ -74,6 +74,50 @@ it('keeps waiting while the server is still writing the reply', async () => {
   await waitFor(() => expect(view.result.current.error).toBe('已停止生成。'));
 });
 
+it('keeps asking after coming back until the server has finished the reply', async () => {
+  const view = conversation();
+  await waitFor(() => expect(view.result.current.settings?.configured).toBe(true));
+  act(() => view.result.current.composer.setPrompt('问'));
+  act(() => void view.result.current.send());
+  await waitFor(() => expect(view.result.current.sending).toBe(true));
+  vi.useFakeTimers();
+  try {
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('focus'));
+    await act(() => vi.advanceTimersByTimeAsync(RESUME_CHECK_MS * 3));
+    expect(view.result.current.sending).toBe(true);
+    reply = message('a1', 'assistant', 'completed', '完整的回答');
+    await act(() => vi.advanceTimersByTimeAsync(RESUME_CHECK_MS));
+  } finally {
+    vi.useRealTimers();
+  }
+  await waitFor(() => expect(view.result.current.sending).toBe(false));
+  await waitFor(() => expect(view.result.current.messages.at(-1)?.content).toBe('完整的回答'));
+  expect(view.result.current.error).toBe('');
+});
+
+it('stops asking once the app goes to the background again', async () => {
+  const view = conversation();
+  await waitFor(() => expect(view.result.current.settings?.configured).toBe(true));
+  act(() => view.result.current.composer.setPrompt('问'));
+  act(() => void view.result.current.send());
+  await waitFor(() => expect(view.result.current.sending).toBe(true));
+  vi.useFakeTimers();
+  try {
+    window.dispatchEvent(new Event('pagehide'));
+    window.dispatchEvent(new Event('focus'));
+    await act(() => vi.advanceTimersByTimeAsync(RESUME_CHECK_MS));
+    window.dispatchEvent(new Event('pagehide'));
+    const asked = api.mock.calls.length;
+    await act(() => vi.advanceTimersByTimeAsync(RESUME_CHECK_MS * 3));
+    expect(api.mock.calls.length).toBe(asked);
+  } finally {
+    vi.useRealTimers();
+  }
+  act(() => view.result.current.cancel());
+  await waitFor(() => expect(view.result.current.error).toBe('已停止生成。'));
+});
+
 it('shows the cached conversation until the server answers', async () => {
   let answer!: (history: ChatHistory) => void;
   api.mockImplementation((path: string) =>

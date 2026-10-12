@@ -40,7 +40,7 @@ async function pin(page: Page, title: string) {
 async function cacheRecords(page: Page, prefetched = false) {
   return page.evaluate(async (withPrefetched) => {
     const db = await new Promise<IDBDatabase>((resolve, reject) => {
-      const open = indexedDB.open('yejian-offline', 3);
+      const open = indexedDB.open('yejian-offline', 4);
       open.onsuccess = () => resolve(open.result);
       open.onerror = () => reject(open.error);
     });

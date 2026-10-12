@@ -335,7 +335,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
     .poll(() =>
       page.evaluate(async (id) => {
         const db = await new Promise<IDBDatabase>((resolve) => {
-          const open = indexedDB.open('yejian-offline', 3);
+          const open = indexedDB.open('yejian-offline', 4);
           open.onsuccess = () => resolve(open.result);
         });
         const cached = await new Promise<any>((resolve) => {

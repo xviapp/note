@@ -31,6 +31,7 @@ import { MoveDialog } from './components/MoveDialog';
 import { EncryptionDialog } from './components/Encryption';
 import { refreshCatalog, subscribeKeys } from './keyring';
 import { flushJournalOutbox } from './journal-outbox';
+import { flushQuickRecords } from './quick-journal';
 import { flushSaves } from './save-outbox';
 import { settleChange, showChange } from './optimistic';
 import { NodeForm } from './components/NodeForm';
@@ -354,6 +355,13 @@ function Notebook({
       void flushJournalOutbox().then((sent) => {
         if (sent) {
           showToast(`${sent} 条今日记已记入日记`);
+          changed();
+        }
+      });
+      // 今日记 saved on an earlier day that Android ended before it was sent.
+      void flushQuickRecords({ earlier: true }).then((sent) => {
+        if (sent) {
+          showToast(`${sent} 条之前的今日记已记入日记`);
           changed();
         }
       });

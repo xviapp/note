@@ -173,7 +173,12 @@ export function useNoteEditor({
     if (finish) {
       const current = noteRef.current;
       const shown = { ...current, content, attachments: assets };
-      await queueSave(current, content, assets);
+      try {
+        await queueSave(current, content, assets);
+      } catch (error) {
+        setSaveError((error as Error).message);
+        return false;
+      }
       for (const fileId of draftUploads.current)
         if (!assets.some((file) => file.id === fileId)) void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
       draftUploads.current.clear();

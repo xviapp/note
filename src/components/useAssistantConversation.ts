@@ -113,7 +113,7 @@ export function useAssistantConversation(props: Options) {
       .catch((e) => {
         if (mounted.current) setError(e.message);
       });
-  }, [visible, load]);
+  }, [visible, load, base, draft]);
   // A question asked from the page goes out once the conversation is ready.
   const initialSent = useRef(false);
   useEffect(() => {
@@ -147,24 +147,36 @@ export function useAssistantConversation(props: Options) {
     let replyId = '',
       started = false;
     // A phone may freeze or drop the stream while the app is in the background.
-    // Back in front, ask the server: once it has finished the reply, stop
-    // waiting and show what it saved.
+    // Back in front, ask the server whenever the stream has been silent for a
+    // while: once it has finished the reply, stop waiting and show what it saved.
+    // Asking stops when the app goes away again, the reply ends or is cancelled.
     let away = false,
+      resumed = false,
+      round = 0,
       check: ReturnType<typeof setTimeout> | undefined;
+    const poll = () => {
+      clearTimeout(check);
+      const current = ++round;
+      check = setTimeout(async () => {
+        const history = await api<ChatHistory>(base).catch(() => null);
+        if (current !== round || abort.current !== controller || !mounted.current) return;
+        const reply = history?.messages.find((m) => m.id === replyId);
+        if (reply && reply.status !== 'pending') controller.abort(RESUMED);
+        else poll();
+      }, RESUME_CHECK_MS);
+    };
     const watch = (event: Event) => {
       if (event.type === 'pagehide' || document.visibilityState === 'hidden') {
         away = true;
+        resumed = false;
+        round++;
+        clearTimeout(check);
         return;
       }
       if (!away || !replyId) return;
       away = false;
-      clearTimeout(check);
-      check = setTimeout(async () => {
-        const history = await api<ChatHistory>(base).catch(() => null);
-        const reply = history?.messages.find((m) => m.id === replyId);
-        if (abort.current === controller && reply && reply.status !== 'pending')
-          controller.abort(RESUMED);
-      }, RESUME_CHECK_MS);
+      resumed = true;
+      poll();
     };
     window.addEventListener('pagehide', watch);
     window.addEventListener('focus', watch);
@@ -192,6 +204,8 @@ export function useAssistantConversation(props: Options) {
         requestKey.current = { payload, key: crypto.randomUUID() };
       await streamChat(scopeId, data, requestKey.current.key, controller.signal, (event) => {
         if (!mounted.current) return;
+        // A live stream needs no asking; the next silence starts it again.
+        if (resumed) poll();
         if (event.type === 'start') {
           setContextNotice(
             event.context?.omittedHistory ? '本次已省略较早的对话，完整历史仍保留。' : '',
@@ -242,6 +256,7 @@ export function useAssistantConversation(props: Options) {
           );
       }
     } finally {
+      round++;
       clearTimeout(check);
       window.removeEventListener('pagehide', watch);
       window.removeEventListener('focus', watch);

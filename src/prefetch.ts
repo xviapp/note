@@ -1,6 +1,6 @@
 import { fetchNoteAhead } from './api';
 import { isOffline } from './connectivity';
-import { hasCachedNote, rememberPrefetched } from './offline-cache';
+import { hasCachedNote } from './offline-cache';
 import { TEXT_KINDS, variantOf, type NoteNode } from '../shared/types';
 
 // Notes shown in a list are fetched ahead, while the device is idle, so that
@@ -45,7 +45,7 @@ async function drain() {
       const id = queue.shift()!;
       if (await hasCachedNote(id)) continue;
       fetched++;
-      await fetchNoteAhead(id).then(rememberPrefetched).catch(() => {});
+      await fetchNoteAhead(id).catch(() => {});
     }
   } finally {
     running = false;

@@ -124,7 +124,7 @@ function readLimit() {
 }
 function openDatabase() {
   return (database ??= new Promise<IDBDatabase>((resolve, reject) => {
-    const request = indexedDB.open('yejian-offline', 3);
+    const request = indexedDB.open('yejian-offline', 4);
     request.onupgradeneeded = (event) => {
       const db = request.result;
       if (event.oldVersion < 1) {
@@ -137,6 +137,17 @@ function openDatabase() {
       // Eviction walks keys oldest first instead of reading every icon blob.
       if (event.oldVersion < 3)
         request.transaction!.objectStore('icons').createIndex('savedAt', 'savedAt');
+      // Before 0.4.25, notes fetched ahead were kept after decryption: their
+      // sealed fields (summaries and the like) were stored in the clear.
+      if (event.oldVersion >= 1 && event.oldVersion < 4) {
+        const notes = request.transaction!.objectStore('notes').openCursor();
+        notes.onsuccess = () => {
+          const cursor = notes.result;
+          if (!cursor) return;
+          if ((cursor.value as CachedNote).prefetched) cursor.delete();
+          cursor.continue();
+        };
+      }
     };
     request.onsuccess = () => {
       request.result.onversionchange = () => {
@@ -496,7 +507,9 @@ async function commitNote(
 // A note fetched before it is opened (src/prefetch.ts): only its body, never its
 // files, marked least recently read so it is the first to go. It never makes
 // room for itself: a full cache simply skips it.
-export async function rememberPrefetched(detail: NoteDetail, epoch = cacheEpoch()) {
+// `detail` is the server's response, before reveal(), and `epoch` the one its
+// request started in.
+export async function rememberPrefetched(detail: NoteDetail, epoch: string) {
   let added = false;
   await transaction('readwrite', async (tx) => {
     if (epoch !== cacheEpoch()) return;

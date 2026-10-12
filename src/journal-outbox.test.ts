@@ -7,6 +7,8 @@ import {
   queuedOutbox,
   saveOutboxDraft,
 } from './journal-outbox';
+import { setOffline } from './connectivity';
+import { clearDrafts } from './note-drafts';
 
 const { unlocked, upload, record } = vi.hoisted(() => ({
   unlocked: new Set<string>(),
@@ -69,4 +71,37 @@ it('stores nothing readable on the device', async () => {
   });
   const bytes = new Uint8Array((rows[0] as { sealed: ArrayBuffer }).sealed);
   expect(new TextDecoder().decode(bytes)).not.toContain('雨停了');
+});
+
+it('writes nothing back once sign-out has cleared the records', async () => {
+  // A record still being sealed when the device signs out is not kept.
+  const queued = queueOutboxRecord(entry([new File(['png-bytes'], '窗外.png', { type: 'image/png' })]));
+  clearDrafts();
+  await clearJournalOutbox();
+  await queued;
+  expect(await queuedOutbox()).toEqual([]);
+  // A refusal that arrives after sign-out does not restore the record with its reason.
+  await queueOutboxRecord(entry());
+  unlocked.add('k1');
+  let refuse!: (error: Error) => void;
+  record.mockImplementationOnce(() => new Promise((_resolve, reject) => (refuse = reject)));
+  const flushing = flushJournalOutbox();
+  await vi.waitFor(() => expect(refuse).toBeDefined());
+  clearDrafts();
+  await clearJournalOutbox();
+  refuse(new Error('这个目录不是日记本。'));
+  await flushing;
+  expect(await queuedOutbox()).toEqual([]);
+});
+
+it('sends nothing offline and the waiting records once back online', async () => {
+  unlocked.add('k1');
+  await queueOutboxRecord(entry());
+  setOffline(true);
+  try {
+    expect(await flushJournalOutbox()).toBe(0);
+  } finally {
+    setOffline(false);
+  }
+  expect(await flushJournalOutbox()).toBe(1);
 });

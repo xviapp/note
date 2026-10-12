@@ -31,27 +31,44 @@ export async function readDraft(id: string): Promise<NoteDraft | null> {
   }
 }
 // Sealing is asynchronous; only the newest write may commit, and removal
-// invalidates every in-flight write.
+// invalidates every in-flight write. The result says whether the draft is on
+// this device: false when storage is full or unavailable, the key is locked or
+// sign-out intervened (a newer write of the same draft counts as stored).
 const generations = new Map<string, number>();
 let epoch = 0;
-export function writeDraft(id: string, draft: NoteDraft, keyId?: string | null) {
-  const started = epoch;
+// Shared by every window on this device (the notebook and Android's quick
+// windows), so sign-out in one stops work started in another. Outside the
+// draft prefix, so clearing the drafts keeps it.
+const EPOCH_KEY = 'note:draft-epoch';
+// Sign-out drops what devices keep; work started before it checks this before writing.
+export function draftEpoch() {
+  try {
+    return `${epoch}:${localStorage.getItem(EPOCH_KEY) ?? ''}`;
+  } catch {
+    return String(epoch);
+  }
+}
+export function writeDraft(id: string, draft: NoteDraft, keyId?: string | null): boolean | Promise<boolean> {
+  const started = draftEpoch();
   const generation = (generations.get(id) ?? 0) + 1;
   generations.set(id, generation);
   const store = (value: unknown) => {
     try {
       localStorage.setItem(DRAFT_PREFIX + id, JSON.stringify(value));
+      return true;
     } catch {
       /* Storage can be full or unavailable; the in-memory draft remains. */
+      return false;
     }
   };
   if (!keyId) return store(draft);
   return (async () => {
     const key = await unlockedKey(keyId);
-    if (!key) return;
+    if (!key) return false;
     const sealed = await sealText(key, keyId, JSON.stringify(draft));
-    if (epoch === started && (generations.get(id) ?? 0) === generation) store({ sealed });
-  })().catch(() => {});
+    if (draftEpoch() !== started) return false;
+    return (generations.get(id) ?? 0) !== generation || store({ sealed });
+  })().catch(() => false);
 }
 export function hasDraft(id: string) {
   try {
@@ -71,6 +88,11 @@ export function removeDraft(id: string) {
 // Sign-out also invalidates drafts whose encryption is still in flight.
 export function clearDrafts() {
   epoch++;
+  try {
+    localStorage.setItem(EPOCH_KEY, crypto.randomUUID());
+  } catch {
+    /* Storage can be unavailable; this window still stops its own work. */
+  }
   generations.clear();
   void dropPhotos();
   // Loaded on demand: the outbox module imports the API client.

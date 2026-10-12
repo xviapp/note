@@ -6,6 +6,7 @@ import type { RecordKind } from '../../shared/records';
 import type { FileInfo } from '../../shared/types';
 import { readDraft, removeDraft, writeDraft } from '../note-drafts';
 import { dropPhoto, dropPhotos, keepPhoto, pendingPhotos } from '../pending-photos';
+import { markQuickRecord, quickRecordBody } from '../quick-journal';
 import { CachedImage } from './CachedImage';
 
 const IMAGE_MIMES = new Set(['image/png', 'image/jpeg', 'image/gif', 'image/webp', 'image/avif']);
@@ -116,10 +117,13 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
   useEffect(() => {
     if (!ready || busy) return;
     if (!title && !text && images.length === 0 && pending.length === 0) removeDraft(draftId);
-    else writeDraft(draftId, {
-      content: JSON.stringify({ title, text, attachments: images, operationKey: operation.current, retrying, queued }),
-      attachments: images, revision: 0, savedAt: Date.now(),
-    }, keyId);
+    else {
+      if (queued || retrying) markQuickRecord(draftId, keyId);
+      writeDraft(draftId, {
+        content: JSON.stringify({ title, text, attachments: images, operationKey: operation.current, retrying, queued }),
+        attachments: images, revision: 0, savedAt: Date.now(),
+      }, keyId);
+    }
   }, [draftId, keyId, ready, busy, title, text, images, pending.length, retrying, queued]);
   const working = busy || uploading || queued;
   useEffect(() => { onBusy?.(working); }, [working, onBusy]);
@@ -184,12 +188,10 @@ export function QuickAppend({ id, keyId, uploadScope, disabled, blocked = false,
     const wasResumed = resumed.current;
     try {
       setRetrying(true);
-      const imageText = images
-        .map((file) => `![${file.name.replace(/[[\]\\]/g, '')}](${fileUrl(file.id)})`)
-        .join('\n\n');
-      const bodyText = [text.trim(), imageText].filter(Boolean).join('\n\n');
+      const bodyText = quickRecordBody(text, images);
       const attachmentIds = images.map((file) => file.id);
       // Every append, including an existing entry, keeps its operation across reloads.
+      markQuickRecord(draftId, keyId);
       await writeDraft(draftId, {
         content: JSON.stringify({ title, text, attachments: images, operationKey: operation.current, retrying: true, queued: true }),
         attachments: images, revision: 0, savedAt: Date.now(),
