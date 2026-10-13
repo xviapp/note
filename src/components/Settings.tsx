@@ -42,8 +42,8 @@ export function Settings({
   const [quota, setQuota] = useState(String((storage?.quotaBytes || 8e9) / 1e9)),
     [busy, setBusy] = useState(false),
     [passwordOpen, setPasswordOpen] = useState(false);
-  // The breakdown loads after the page opens; fill the field once, so a later
-  // refresh never replaces what is being typed.
+  // Fill from the breakdown only before the first response or edit, so a late
+  // response never replaces what is being typed.
   const loadedQuota = storage?.quotaBytes;
   const quotaFilled = useRef(false);
   useEffect(() => {
@@ -143,7 +143,10 @@ export function Settings({
                   max="1000"
                   step="0.001"
                   value={quota}
-                  onChange={(e) => setQuota(e.target.value)}
+                  onChange={(e) => {
+                    quotaFilled.current = true;
+                    setQuota(e.target.value);
+                  }}
                 />
                 <span>GB</span>
               </span>

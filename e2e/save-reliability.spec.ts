@@ -20,6 +20,33 @@ async function create(page: Page, data: object) {
   return response.json();
 }
 
+test('a late storage response preserves a quota typed before it arrives', async ({ page }) => {
+  await login(page);
+  const storage = await (await page.request.get('/api/storage')).json();
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  await page.route('**/api/storage', async (route) => {
+    const response = await route.fetch();
+    await pending;
+    await route.fulfill({ response });
+  });
+  await page.goto('/settings/storage');
+  const field = page.getByLabel('容量上限 GB', { exact: true });
+  const nextQuota = storage.quotaBytes + 1e9;
+  await field.fill(String(nextQuota / 1e9));
+  release();
+  await expect(page.getByRole('progressbar')).toBeVisible();
+  await expect(field).toHaveValue(String(nextQuota / 1e9));
+  try {
+    await page.getByRole('button', { name: '更新上限', exact: true }).click();
+    await expect
+      .poll(async () => (await (await page.request.get('/api/storage')).json()).quotaBytes)
+      .toBe(nextQuota);
+  } finally {
+    await page.request.patch('/api/settings', { headers, data: { quotaBytes: storage.quotaBytes } });
+  }
+});
+
 test('pending photo uploads show visible feedback in every theme', async ({ page }, testInfo) => {
   await login(page);
   const journal = await create(page, { kind: 'folder', title: '照片上传', journal: true });
