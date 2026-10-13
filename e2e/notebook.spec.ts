@@ -233,11 +233,15 @@ test('creation, rename, moving and storage settings work without unlocking file 
   await expect
     .poll(async () => (await (await page.request.get('/api/storage')).json()).quotaBytes)
     .toBe(storage.quotaBytes + 1e9);
-  await page.getByLabel('容量上限 GB', { exact: true }).fill(String(storage.quotaBytes / 1e9));
+  // A padded spelling is saved as the plain number the server stores.
+  await page.getByLabel('容量上限 GB', { exact: true }).fill(`0${storage.quotaBytes / 1e9}.000`);
   await page.getByRole('button', { name: '更新上限', exact: true }).click();
   await expect
     .poll(async () => (await (await page.request.get('/api/storage')).json()).quotaBytes)
     .toBe(storage.quotaBytes);
+  await expect(page.getByLabel('容量上限 GB', { exact: true })).toHaveValue(
+    String(storage.quotaBytes / 1e9),
+  );
   await expect(page.getByRole('dialog')).toHaveCount(0);
   expect(unlocks).toEqual([]);
 });

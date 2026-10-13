@@ -122,9 +122,11 @@ export function Settings({
               e.preventDefault();
               setBusy(true);
               try {
-                await api('/api/settings', 'PATCH', {
+                const saved = await api<StorageInfo>('/api/settings', 'PATCH', {
                   quotaBytes: Math.round(Number(quota) * 1e9),
                 });
+                // Show the stored value, not the typed spelling (01.50 becomes 1.5).
+                setQuota(String(saved.quotaBytes / 1e9));
                 onChanged();
               } catch (e) {
                 onError(e);
