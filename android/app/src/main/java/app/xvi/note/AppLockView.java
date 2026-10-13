@@ -70,7 +70,7 @@ final class AppLockView extends FrameLayout {
         mark.setImageResource(R.mipmap.ic_launcher_round);
         mark.setImportantForAccessibility(IMPORTANT_FOR_ACCESSIBILITY_NO);
         column.addView(mark, new LinearLayout.LayoutParams(dp(64), dp(64)));
-        TextView title = WindowTheme.text(activity, "输入 PIN 解锁页间", 17, theme.ink, true);
+        TextView title = WindowTheme.text(activity, "输入 PIN", 17, theme.ink, true);
         column.addView(title, margins(-2, 20));
 
         dots = new LinearLayout(activity);
@@ -273,7 +273,7 @@ final class AppLockView extends FrameLayout {
     private void confirmForgot() {
         new AlertDialog.Builder(activity)
             .setTitle("忘记 PIN？")
-            .setMessage("将退出当前设备的登录，清除本机缓存和还没发送的内容，并关闭应用锁。服务器上的笔记不受影响，重新登录后可以再设置 PIN。")
+            .setMessage("将退出登录，并清除本机缓存和未发送的内容。笔记仍在服务器上，重新登录后可再设置 PIN。")
             .setNegativeButton("取消", null)
             .setPositiveButton("退出登录", (dialog, which) -> {
                 message.setTextColor(theme.muted);

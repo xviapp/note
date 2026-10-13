@@ -142,7 +142,7 @@ export function SearchDialog({
           aria-expanded={results.length > 0}
           aria-controls={list}
           aria-activedescendant={results.length ? optionId(active) : undefined}
-          placeholder="输入标题、正文或批注中的文字，多个词用空格分开"
+          placeholder="搜索标题、正文和批注"
           value={query}
           maxLength={200}
           onChange={(event) => {

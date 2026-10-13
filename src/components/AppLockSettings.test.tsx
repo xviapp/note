@@ -55,7 +55,7 @@ describe('AppLockSettings', () => {
     fireEvent.click(screen.getByRole('button', { name: '保存' }));
     await screen.findByRole('button', { name: '修改 PIN' });
     expect(mock.appLockSetPin).toHaveBeenCalledWith({ pin: '1234' });
-    expect(screen.getByText(/打开页间时输入 4 位 PIN/)).toBeTruthy();
+    expect(screen.getByText('打开页间时输入 4 位 PIN')).toBeTruthy();
   });
 
   it('keeps digits only and refuses a short PIN', async () => {
@@ -118,6 +118,6 @@ describe('AppLockSettings', () => {
     mock.state = { ...on, biometricAvailable: false };
     render(<AppLockSettings />);
     expect(((await screen.findByRole('switch', { name: '指纹解锁' })) as HTMLInputElement).disabled).toBe(true);
-    expect(screen.getByText(/本机没有可用的指纹/)).toBeTruthy();
+    expect(screen.getByText(/未录入指纹/)).toBeTruthy();
   });
 });

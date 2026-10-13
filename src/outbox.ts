@@ -129,7 +129,7 @@ const clips: OutboxSource = {
 // Android's native 随手记 window writes on its own; what it could not send yet waits there.
 const widget: OutboxSource = {
   key: 'widget',
-  label: '随手记窗口',
+  label: '快捷随手记',
   async list() {
     if (Capacitor.getPlatform() !== 'android') return [];
     const { device } = await import('./mobile');
@@ -137,7 +137,7 @@ const widget: OutboxSource = {
     return items.map((item) => ({
       id: item.id,
       summary: excerpt(item.text),
-      detail: '随手记',
+      detail: '',
       createdAt: item.createdAt,
       status: waiting(),
       failed: false,

@@ -49,8 +49,8 @@ export function AppLockSettings() {
           <strong>应用锁</strong>
           <p>
             {state.enabled
-              ? `打开页间时输入 ${state.pinLength} 位 PIN。随手记、今日记、问青藜和分享不受影响。`
-              : '打开页间时要求输入 PIN。随手记、今日记、问青藜和分享不受影响。'}
+              ? `打开页间时输入 ${state.pinLength} 位 PIN`
+              : '打开页间时需要输入 PIN'}
           </p>
         </div>
         {state.enabled ? (
@@ -75,8 +75,8 @@ export function AppLockSettings() {
               <strong>指纹解锁</strong>
               <p>
                 {state.biometricAvailable
-                  ? '锁屏时可以用指纹代替 PIN'
-                  : '本机没有可用的指纹，可先在系统设置中录入'}
+                  ? '用指纹代替 PIN 解锁'
+                  : '未录入指纹，可在系统设置中添加'}
               </p>
             </div>
             <label className="toggle-switch">
@@ -97,7 +97,7 @@ export function AppLockSettings() {
           <div className="setting-row">
             <div>
               <strong>重新上锁</strong>
-              <p>离开页间超过这段时间，回来时需要解锁</p>
+              <p>离开页间多久后需要重新解锁</p>
             </div>
             <select
               aria-label="重新上锁"
@@ -189,7 +189,7 @@ function PinDialog({ kind, onClose, onDone }: {
           <>
             {field(kind === 'change' ? '新 PIN' : 'PIN', pin, setPin, kind === 'set')}
             {field(kind === 'change' ? '再次输入新 PIN' : '再次输入 PIN', repeat, setRepeat)}
-            <p className="field-hint">4 到 6 位数字，只保存在这台设备上。忘记时只能退出登录后重新设置。</p>
+            <p className="field-hint">4 到 6 位数字，只用于这台设备</p>
           </>
         )}
         {error && (

@@ -120,7 +120,7 @@ public class NoteDevicePlugin extends Plugin {
         boolean enabled = call.getBoolean("enabled", false);
         if (!lock.enabled()) { call.reject("请先设置 PIN。"); return; }
         if (!enabled) { lock.setBiometric(false); call.resolve(); return; }
-        if (!AppLock.biometricAvailable(getContext())) { call.reject("本机没有可用的指纹，请先在系统设置中录入。"); return; }
+        if (!AppLock.biometricAvailable(getContext())) { call.reject("未录入指纹，请先在系统设置中添加。"); return; }
         // Turned on only after a fingerprint has been accepted once.
         getActivity().runOnUiThread(() -> AppLock.authenticate(getActivity(), "验证指纹以启用", "取消", success -> {
             if (!success) { call.reject("未启用指纹解锁。"); return; }
