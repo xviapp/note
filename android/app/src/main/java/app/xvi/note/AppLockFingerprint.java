@@ -16,7 +16,7 @@ final class AppLockFingerprint {
 
     private final Host host;
     private final Runnable scheduled = this::request;
-    private boolean foreground, prompted;
+    private boolean resumed, prompted, pending;
     private Object attempt;
     private Runnable cancel;
 
@@ -24,22 +24,28 @@ final class AppLockFingerprint {
         this.host = host;
     }
 
+    /** Offers the fingerprint once per visit, after the window has focus. */
     void resumed() {
-        foreground = true;
-        if (prompted) return;
-        if (!host.available()) {
-            host.showPin(true);
-            return;
-        }
-        prompted = true;
-        host.showPin(false);
+        resumed = true;
+        if (prompted || !offer()) return;
+        pending = true;
         host.schedule(scheduled);
     }
 
+    /** A pause alone (a dialog, another window) keeps the visit and any open prompt. */
     void paused() {
-        foreground = false;
+        resumed = false;
+        if (!pending) return;
+        // Not opened yet: offer it again on resume instead of waiting on a hidden pad.
+        pending = false;
         prompted = false;
         host.unschedule(scheduled);
+    }
+
+    /** Leaving the app ends the visit, so returning offers the fingerprint again. */
+    void stopped() {
+        paused();
+        prompted = false;
         // Invalidate first: cancel may deliver its callback immediately or after a new prompt.
         attempt = null;
         Runnable previous = cancel;
@@ -48,18 +54,16 @@ final class AppLockFingerprint {
     }
 
     void request() {
-        if (!foreground || attempt != null) return;
-        host.unschedule(scheduled);
-        if (!host.available()) {
-            host.showPin(true);
-            return;
+        if (!resumed || attempt != null) return;
+        if (pending) {
+            pending = false;
+            host.unschedule(scheduled);
         }
-        prompted = true;
-        host.showPin(false);
+        if (!offer()) return;
         Object current = new Object();
         attempt = current;
         Runnable cancellation = host.authenticate(success -> {
-            if (!foreground || attempt != current) return;
+            if (attempt != current) return;
             attempt = null;
             cancel = null;
             if (success) host.unlocked();
@@ -68,5 +72,16 @@ final class AppLockFingerprint {
         // A synchronous completion must not leave a stale cancellation handle behind.
         if (attempt == current) cancel = cancellation;
         else cancellation.run();
+    }
+
+    /** Hides the pad for a prompt, or shows it when the fingerprint cannot be used. */
+    private boolean offer() {
+        if (!host.available()) {
+            host.showPin(true);
+            return false;
+        }
+        prompted = true;
+        host.showPin(false);
+        return true;
     }
 }

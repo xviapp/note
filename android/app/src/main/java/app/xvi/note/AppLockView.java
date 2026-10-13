@@ -286,6 +286,10 @@ final class AppLockView extends FrameLayout {
         fingerprint.paused();
     }
 
+    void stopped() {
+        fingerprint.stopped();
+    }
+
     private boolean canPromptFingerprint() {
         return lock.biometric() && AppLock.biometricAvailable(activity);
     }
@@ -316,7 +320,7 @@ final class AppLockView extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        fingerprint.paused();
+        fingerprint.stopped();
         checker.shutdown();
     }
 }

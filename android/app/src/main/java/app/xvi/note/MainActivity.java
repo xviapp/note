@@ -107,6 +107,8 @@ public class MainActivity extends NoteBridgeActivity {
     @Override
     public void onStop() {
         super.onStop();
+        // The system prompt may pause the activity; only leaving the app cancels it.
+        if (lockView != null) lockView.stopped();
         if (lock == null || isChangingConfigurations()) return;
         stoppedAt = SystemClock.elapsedRealtime();
         // Locked at once, so returning never shows the page first.

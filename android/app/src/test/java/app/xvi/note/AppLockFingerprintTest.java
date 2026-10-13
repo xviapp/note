@@ -15,9 +15,11 @@ public class AppLockFingerprintTest {
         host.runScheduled();
         assertEquals(1, host.attempts.size());
 
-        // Android can dismiss the prompt before the activity receives onPause.
-        host.attempts.get(0).complete(false);
+        // Android can dismiss the prompt between onPause and onStop.
         fingerprint.paused();
+        host.attempts.get(0).complete(false);
+        assertTrue(host.pinVisible);
+        fingerprint.stopped();
         fingerprint.resumed();
         host.runScheduled();
 
@@ -27,13 +29,13 @@ public class AppLockFingerprintTest {
     }
 
     @Test
-    public void pausingCancelsActivePromptAndReopensOnResume() {
+    public void leavingCancelsActivePromptAndReopensOnResume() {
         FakeHost host = new FakeHost();
         AppLockFingerprint fingerprint = new AppLockFingerprint(host);
         fingerprint.resumed();
         host.runScheduled();
 
-        fingerprint.paused();
+        leave(fingerprint);
         assertTrue(host.attempts.get(0).canceled);
         host.attempts.get(0).complete(false);
         fingerprint.request();
@@ -46,13 +48,13 @@ public class AppLockFingerprintTest {
     }
 
     @Test
-    public void pausingRemovesPromptScheduledBeforeWindowFocus() {
+    public void leavingRemovesPromptScheduledBeforeWindowFocus() {
         FakeHost host = new FakeHost();
         AppLockFingerprint fingerprint = new AppLockFingerprint(host);
         fingerprint.resumed();
         assertEquals(1, host.scheduled.size());
 
-        fingerprint.paused();
+        leave(fingerprint);
         assertTrue(host.scheduled.isEmpty());
         host.runScheduled();
         fingerprint.request();
@@ -70,7 +72,7 @@ public class AppLockFingerprintTest {
         fingerprint.resumed();
         host.runScheduled();
         Attempt old = host.attempts.get(0);
-        fingerprint.paused();
+        leave(fingerprint);
         fingerprint.resumed();
         host.runScheduled();
 
@@ -148,7 +150,7 @@ public class AppLockFingerprintTest {
         fingerprint.resumed();
         host.runScheduled();
 
-        fingerprint.paused();
+        leave(fingerprint);
         assertTrue(host.attempts.get(0).canceled);
         assertFalse(host.pinVisible);
         assertEquals(0, host.unlocks);
@@ -171,6 +173,58 @@ public class AppLockFingerprintTest {
         fingerprint.request();
         assertEquals(2, host.attempts.size());
         assertFalse(host.pinVisible);
+    }
+
+    @Test
+    public void pauseAloneKeepsTheOpenPrompt() {
+        FakeHost host = new FakeHost();
+        AppLockFingerprint fingerprint = new AppLockFingerprint(host);
+        fingerprint.resumed();
+        host.runScheduled();
+
+        // Some devices pause the activity while the system prompt is in front.
+        fingerprint.paused();
+        fingerprint.resumed();
+        host.runScheduled();
+        assertFalse(host.attempts.get(0).canceled);
+        assertEquals(1, host.attempts.size());
+
+        host.attempts.get(0).complete(true);
+        assertEquals(1, host.unlocks);
+    }
+
+    @Test
+    public void pauseBeforeThePromptOpensOffersItOnResume() {
+        FakeHost host = new FakeHost();
+        AppLockFingerprint fingerprint = new AppLockFingerprint(host);
+        fingerprint.resumed();
+        fingerprint.paused();
+        assertTrue(host.scheduled.isEmpty());
+
+        fingerprint.resumed();
+        host.runScheduled();
+        assertEquals(1, host.attempts.size());
+        assertFalse(host.pinVisible);
+    }
+
+    @Test
+    public void pauseAfterChoosingPinDoesNotReopenFingerprint() {
+        FakeHost host = new FakeHost();
+        AppLockFingerprint fingerprint = new AppLockFingerprint(host);
+        fingerprint.resumed();
+        host.runScheduled();
+        host.attempts.get(0).complete(false);
+
+        fingerprint.paused();
+        fingerprint.resumed();
+        host.runScheduled();
+        assertEquals(1, host.attempts.size());
+        assertTrue(host.pinVisible);
+    }
+
+    private static void leave(AppLockFingerprint fingerprint) {
+        fingerprint.paused();
+        fingerprint.stopped();
     }
 
     private static final class Attempt {
