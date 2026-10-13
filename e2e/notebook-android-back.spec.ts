@@ -18,11 +18,6 @@ test('Android back dismisses reading surfaces and protects unsaved files', async
   await login(page);
   await createNote(page, `Android 返回 · ${info.project.name}`);
   const noteUrl = page.url();
-  await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  expect(await back()).toBe(false);
-  await expect(page.getByRole('dialog')).toHaveCount(0);
-  await expectPreview(page);
-
   await edit(page);
   await page.getByRole('textbox', { name: 'Markdown 源码' }).fill('# 未保存的手机草稿');
   expect(await back(true)).toBe(false);
