@@ -306,8 +306,13 @@ button:active:not(:disabled) {
   .main-area {
     border: 0;
   }
+  /* Every page's top bar is one touch target tall, buttons or not (设置 has
+     none), and an open note's first row sits where the others' row does. */
   .app-header {
     padding: max(8px, env(safe-area-inset-top)) 16px 8px;
+  }
+  .header-location {
+    min-height: var(--family-touch);
   }
   .header-title {
     font-size: 20px;
@@ -446,7 +451,7 @@ button:active:not(:disabled) {
     background: var(--selected);
   }
   .note-toolbar {
-    padding: max(4px, env(safe-area-inset-top)) 12px 4px;
+    padding: max(8px, env(safe-area-inset-top)) 12px 8px;
     flex-wrap: wrap;
     gap: 0;
   }
