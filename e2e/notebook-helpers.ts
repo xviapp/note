@@ -32,6 +32,14 @@ export async function createNote(page: Page, title: string) {
   await expect(page.locator('.cm-editor')).toHaveCount(0);
   await expect(page.getByRole('heading', { name: title, exact: true })).toBeVisible();
 }
+// Replaces the source text; fill() on CodeMirror can insert instead on phones.
+export async function writeSource(page: Page, text: string) {
+  const field = page.getByRole('textbox', { name: 'Markdown 源码' });
+  await field.click();
+  await field.press('ControlOrMeta+a');
+  await page.keyboard.insertText(text);
+  await expect(field).toHaveText(text, { useInnerText: true });
+}
 export async function edit(page: Page) {
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
   await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toBeVisible();

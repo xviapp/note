@@ -119,6 +119,7 @@ export default function NotePane(props: Props) {
     busy,
     uploading,
     saveError,
+    conflict,
     tab: editTab,
     setTab: setEditTab,
     dirty,
@@ -128,6 +129,7 @@ export default function NotePane(props: Props) {
     start: startEdit,
     offerDraft,
     reconfirm,
+    keepCopy,
     addFiles,
     insert,
     removeAsset,
@@ -487,7 +489,15 @@ export default function NotePane(props: Props) {
           message={saveError}
           note={note}
           content={content}
+          conflict={conflict}
+          busy={busy}
           onReconfirm={() => void reconfirm()}
+          onOverwrite={() => void save()}
+          onKeepCopy={() =>
+            void keepCopy().then((copy) => {
+              if (copy) props.onNotice?.(`你的修改已另存为「${copy.title}」，在这篇笔记的同一目录下。`);
+            })
+          }
         />
       )}
       <div

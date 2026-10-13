@@ -1,5 +1,6 @@
 import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
+import { writeSource } from './notebook-helpers';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
 async function login(page: Page) {
@@ -53,14 +54,6 @@ test('pending photo uploads show visible feedback in every theme', async ({ page
   await expect(page.getByRole('alert')).toContainText('有张照片没传上去');
   await expect(page.getByLabel('添加照片')).toBeEnabled();
 });
-
-async function writeSource(page: Page, text: string) {
-  const field = page.getByRole('textbox', { name: 'Markdown 源码' });
-  await field.click();
-  await field.press('ControlOrMeta+a');
-  await page.keyboard.insertText(text);
-  await expect(field).toHaveText(text, { useInnerText: true });
-}
 
 test('Save returns to the note at once and finishes in the background', async ({ page }) => {
   await login(page);

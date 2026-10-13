@@ -1,6 +1,6 @@
 import { expect, test } from './fixtures';
 import { noteAction } from './note-actions';
-import { expectPreview, login, createNote, edit, nav, assistantSeed } from './notebook-helpers';
+import { expectPreview, login, createNote, edit, nav, assistantSeed, writeSource } from './notebook-helpers';
 
 test('default preview, editing, save/history, favorites, trash and restore', async ({
   page,
@@ -299,8 +299,8 @@ test('reading positions resume across devices and a conflicting save preserves t
   await page.goto(url);
   await edit(page);
   await edit(other);
-  await page.getByRole('textbox', { name: 'Markdown 源码' }).fill('设备一保存的正文');
-  await other.getByRole('textbox', { name: 'Markdown 源码' }).fill('设备二仍然保留的草稿');
+  await writeSource(page, '设备一保存的正文');
+  await writeSource(other, '设备二仍然保留的草稿');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await other.getByRole('button', { name: '保存', exact: true }).click();
   await expect(other.getByRole('alert')).toContainText('已在其他页面更新');
@@ -311,5 +311,35 @@ test('reading positions resume across devices and a conflicting save preserves t
   await expect
     .poll(() => other.evaluate((note) => localStorage.getItem(`note-draft:${note}`), id))
     .toContain('设备二仍然保留的草稿');
+  // Keeping this page's text over the other one's.
+  const alert = other.getByRole('alert');
+  await alert.getByRole('button', { name: '用我的版本覆盖', exact: true }).click();
+  await expect
+    .poll(async () => (await (await other.request.get(`/api/nodes/${id}`)).json()).content)
+    .toBe('设备二仍然保留的草稿');
+  // A second conflict, kept beside the note instead.
+  await page.reload();
+  await edit(page);
+  await edit(other);
+  await writeSource(page, '设备一第二次保存');
+  await writeSource(other, '设备二另存的内容');
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/nodes/${id}`)).json()).content)
+    .toBe('设备一第二次保存');
+  // Ctrl+S, which waits for the server, meets the same conflict.
+  await other.getByRole('textbox', { name: 'Markdown 源码' }).press('ControlOrMeta+s');
+  await alert.getByRole('button', { name: '另存为新笔记', exact: true }).click();
+  await expect(other.locator('.cm-editor')).toHaveCount(0);
+  await expect(other.locator('.read-content')).toContainText('设备一第二次保存');
+  const { parent_id: parent, title } = await (await other.request.get(`/api/nodes/${id}`)).json();
+  const siblings: { id: string; title: string }[] = (
+    await (await other.request.get(`/api/nodes?parent=${parent ?? ''}`)).json()
+  ).nodes;
+  const copy = siblings.find((node) => node.title === `${title}（我的修改）`)!;
+  expect((await (await other.request.get(`/api/nodes/${copy.id}`)).json()).content).toBe(
+    '设备二另存的内容',
+  );
+  expect(await other.evaluate((note) => localStorage.getItem(`note-draft:${note}`), id)).toBeNull();
   await other.close();
 });

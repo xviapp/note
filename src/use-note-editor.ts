@@ -8,6 +8,9 @@ import { reveal } from './encryption';
 import type { EditorHandle } from './components/Editor';
 import { pendingSave, queueSave, waitForSave, type SaveFailure } from './save-outbox';
 
+const CONFLICT_MESSAGE =
+  '这篇笔记已在其他页面更新，你的修改还在编辑器里。可以用你的版本覆盖（之前的内容进入版本历史），或另存为一篇新笔记。';
+
 // Editing a note's body and attachments: a draft, a confirmed start, a save that
 // is safe to retry, and a guard that asks before unsaved changes are left.
 export function useNoteEditor({
@@ -39,7 +42,9 @@ export function useNoteEditor({
     [assets, setAssets] = useState<FileInfo[]>([]);
   const [busy, setBusy] = useState(false),
     [uploading, setUploading] = useState(false),
-    [saveError, setSaveError] = useState('');
+    [saveError, setSaveError] = useState(''),
+    // Another page saved first; the editor still holds this page's text.
+    [conflict, setConflict] = useState(false);
   const [tab, setTab] = useState<'source' | 'preview'>('source');
   const draftUploads = useRef(new Set<string>());
   const saveRequest = useRef<{ payload: string; key: string } | null>(null);
@@ -117,13 +122,7 @@ export function useNoteEditor({
         // The page showed the refused text as saved. Go back to what the
         // server has, so the editor's text counts as a change: it is kept as a
         // draft and leaving asks first.
-        const server =
-          (await api<NoteDetail>(`/api/nodes/${id}`).catch(() => null)) ??
-          (await cachedNote(id).then((cached) => cached && reveal(cached)).catch(() => null));
-        if (server) {
-          noteRef.current = server;
-          setNote(server);
-        }
+        const server = await showServerCopy();
         try {
           await unlockNote(id);
           baseRevision.current = server?.revision ?? draft.revision;
@@ -131,11 +130,8 @@ export function useNoteEditor({
           setAssets(draft.attachments);
           setEditing(true);
           setTab('source');
-          setSaveError(
-            failure.code === 'VERSION_CONFLICT'
-              ? '这篇笔记已在其他页面更新。你的内容还在，再次保存会以你的为准，之前的修改可在历史版本中找回。'
-              : failure.message,
-          );
+          setConflict(failure.code === 'VERSION_CONFLICT');
+          setSaveError(failure.code === 'VERSION_CONFLICT' ? CONFLICT_MESSAGE : failure.message);
         } catch (e) {
           onError(e);
         }
@@ -150,6 +146,18 @@ export function useNoteEditor({
     // Handlers read the latest state through refs and stable setters.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [id]);
+  // The note as the server now has it becomes the base, so the editor's text
+  // counts as a change and the next save replaces the server's version.
+  const showServerCopy = async () => {
+    const server =
+      (await api<NoteDetail>(`/api/nodes/${id}`).catch(() => null)) ??
+      (await cachedNote(id).then((cached) => cached && reveal(cached)).catch(() => null));
+    if (server) {
+      noteRef.current = server;
+      setNote(server);
+    }
+    return server;
+  };
   const abandonUploads = () => {
     for (const fileId of draftUploads.current)
       void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
@@ -159,6 +167,7 @@ export function useNoteEditor({
     setEditing(false);
     lockNote(id);
     setSaveError('');
+    setConflict(false);
   };
   const insert = (text: string) => {
     if (editorRef.current) editorRef.current.insert(text);
@@ -230,12 +239,18 @@ export function useNoteEditor({
           revision: detail.revision, savedAt: Date.now(),
         }, keyId);
       } else removeDraft(id);
+      setConflict(false);
       if (finished) exitEdit();
       onChanged();
       // A navigation guard must not leave behind edits made during this save.
       return !changed && !uploadingNow.current;
     } catch (error) {
-      setSaveError((error as Error).message);
+      if (error instanceof ApiError && error.code === 'VERSION_CONFLICT') {
+        const server = await showServerCopy();
+        if (server) baseRevision.current = server.revision;
+        setConflict(true);
+        setSaveError(CONFLICT_MESSAGE);
+      } else setSaveError((error as Error).message);
       return false;
     } finally {
       savingNow.current = false;
@@ -279,6 +294,7 @@ export function useNoteEditor({
       setEditing(true);
       setTab('source');
       setSaveError('');
+      setConflict(false);
     } catch (e) {
       onError(e);
     }
@@ -320,6 +336,38 @@ export function useNoteEditor({
       setSaveError('');
     } catch (e) {
       onError(e);
+    }
+  };
+  // After a conflict: the edits become a new note beside this one, and this
+  // note stays as the server has it.
+  const keepCopy = async (): Promise<NoteNode | null> => {
+    const current = noteRef.current;
+    if (!current || savingNow.current || uploadingNow.current) return null;
+    savingNow.current = true;
+    setBusy(true);
+    try {
+      const copy = await api<NoteNode>('/api/nodes', 'POST', {
+        kind: current.kind,
+        title: `${current.title.slice(0, 190)}（我的修改）`,
+        parentId: current.parent_id,
+        content,
+        attachments: assets.map((file) => file.id),
+      });
+      // Uploads the copy uses are its attachments now.
+      for (const fileId of draftUploads.current)
+        if (!assets.some((file) => file.id === fileId)) void api(`/api/files/${fileId}`, 'DELETE').catch(() => {});
+      draftUploads.current.clear();
+      removeDraft(id);
+      reset(current);
+      exitEdit();
+      onChanged();
+      return copy;
+    } catch (error) {
+      setSaveError((error as Error).message);
+      return null;
+    } finally {
+      savingNow.current = false;
+      setBusy(false);
     }
   };
   const reconfirm = async () => {
@@ -367,6 +415,7 @@ export function useNoteEditor({
     busy,
     uploading,
     saveError,
+    conflict,
     tab,
     setTab,
     dirty,
@@ -376,6 +425,7 @@ export function useNoteEditor({
     start,
     offerDraft,
     reconfirm,
+    keepCopy,
     addFiles,
     insert,
     removeAsset,

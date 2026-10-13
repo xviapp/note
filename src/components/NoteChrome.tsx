@@ -248,12 +248,21 @@ export function SaveErrorBar({
   message,
   note,
   content,
+  conflict,
+  busy,
   onReconfirm,
+  onOverwrite,
+  onKeepCopy,
 }: {
   message: string;
   note: NoteDetail;
   content: string;
+  // Another page saved first: keep this text over it, or beside it.
+  conflict: boolean;
+  busy: boolean;
   onReconfirm: () => void;
+  onOverwrite: () => void;
+  onKeepCopy: () => void;
 }) {
   const download = () => {
     const markdown = note.kind === 'markdown';
@@ -273,11 +282,22 @@ export function SaveErrorBar({
   return (
     <div className="save-error" role="alert">
       <span>{message}</span>
+      {conflict ? (
+        <>
+          <button className="text-button" disabled={busy} onClick={onOverwrite}>
+            用我的版本覆盖
+          </button>
+          <button className="text-button" disabled={busy} onClick={onKeepCopy}>
+            另存为新笔记
+          </button>
+        </>
+      ) : (
+        <button className="text-button" onClick={onReconfirm}>
+          重新确认编辑
+        </button>
+      )}
       <button className="text-button" onClick={download}>
         下载当前草稿
-      </button>
-      <button className="text-button" onClick={onReconfirm}>
-        重新确认编辑
       </button>
     </div>
   );
