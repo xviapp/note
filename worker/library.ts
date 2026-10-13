@@ -46,6 +46,10 @@ export const KEY_SQL = (alias: string) => `(WITH RECURSIVE up(id,parent_id,encry
   UNION ALL SELECT p.id,p.parent_id,p.encryption,u.depth+1 FROM nodes p JOIN up u ON p.id=u.parent_id
   WHERE u.encryption IS NULL AND u.depth<200
 ) SELECT NULLIF(encryption,'none') FROM up WHERE encryption IS NOT NULL ORDER BY depth LIMIT 1)`;
+// Below a journal or project: entries and items are written, not read.
+const IN_JOURNAL_OR_PROJECT = `EXISTS(WITH RECURSIVE up(id,depth) AS (
+  SELECT n.parent_id,0 UNION ALL SELECT p.parent_id,u.depth+1 FROM nodes p JOIN up u ON p.id=u.id WHERE u.depth<200
+) SELECT 1 FROM up WHERE up.id IN (SELECT node_id FROM journals) OR up.id IN (SELECT node_id FROM projects))`;
 export const NODE_COLUMNS = `n.*,${KEY_SQL('n')} key_id,(SELECT COUNT(*) FROM nodes c WHERE c.parent_id=n.id AND c.trash_id IS NULL AND ${NOT_DISCUSSION('c')}) child_count,
   EXISTS(SELECT 1 FROM favorites f WHERE f.node_id=n.id) favorite,
   ${VARIANT_SQL} variant,
@@ -75,6 +79,15 @@ export async function listNodes(
     params = [limit + 1, offset];
   } else if (view === 'recent') {
     query = `SELECT ${NODE_COLUMNS},r.position reading_position FROM nodes n JOIN reading_states r ON r.node_id=n.id WHERE n.trash_id IS NULL ORDER BY r.last_opened_at DESC,n.id LIMIT 20`;
+  } else if (view === 'continue') {
+    // The last thing read for 继续阅读: not folders or images, nothing written
+    // in a journal or project, and book pages named after their book.
+    query = `SELECT ${NODE_COLUMNS},r.position reading_position,b.title book_title,p.page book_page_number
+      FROM nodes n JOIN reading_states r ON r.node_id=n.id
+      LEFT JOIN book_pages p ON p.node_id=n.id LEFT JOIN books k ON k.node_id=n.parent_id AND p.node_id IS NOT NULL
+      LEFT JOIN nodes b ON b.id=k.node_id
+      WHERE n.trash_id IS NULL AND n.kind NOT IN ('folder','image') AND ${NOT_DISCUSSION('n')} AND NOT ${IN_JOURNAL_OR_PROJECT}
+      ORDER BY r.last_opened_at DESC,n.id LIMIT 1`;
   } else if (view === 'journals') {
     // The 今日记 journal chosen in settings comes first, then the journal written in most recently.
     query = `SELECT ${NODE_COLUMNS} FROM nodes n JOIN journals j ON j.node_id=n.id WHERE n.trash_id IS NULL
@@ -90,7 +103,7 @@ export async function listNodes(
     .bind(...params)
     .all<NoteNode>();
   // Recent items carry where reading stopped, for 继续阅读 on the home page.
-  if (view === 'recent')
+  if (view === 'recent' || view === 'continue')
     for (const node of result.results)
       node.reading_position = JSON.parse(node.reading_position as unknown as string);
   return {

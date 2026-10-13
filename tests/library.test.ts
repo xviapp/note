@@ -724,6 +724,37 @@ describe('private library behavior', () => {
     expect(recent[1].reading_position).toEqual({});
     expect(new Set(recent.map((n) => n.id)).size).toBe(20);
   });
+  it('continues reading past folders, images, journal entries and project items', async () => {
+    const open = (node: NoteNode) => ok(`/api/nodes/${node.id}/open`, 'POST', {}, { locked: true });
+    const continued = async () =>
+      (await ok<{ nodes: NoteNode[] }>('/api/nodes?view=continue')).nodes;
+    expect(await continued()).toEqual([]);
+    const note = await create('markdown', '读物');
+    await open(note);
+    const book = await create('folder', '人类简史', { book: {} });
+    const page = await create('markdown', '第 12 页', { parentId: book.id });
+    await bindings.DB.prepare('INSERT INTO book_pages(node_id,page,updated_at) VALUES(?,12,0)')
+      .bind(page.id)
+      .run();
+    await open(page);
+    expect(await continued()).toMatchObject([
+      { id: page.id, book_title: '人类简史', book_page_number: 12 },
+    ]);
+    const journal = await create('folder', '日记', { journal: true });
+    const month = await create('folder', '10 月', { parentId: journal.id });
+    const project = await create('folder', '开发', { project: true });
+    const todo = await create('folder', 'todo', { parentId: project.id });
+    for (const node of [
+      await create('markdown', '今天', { parentId: month.id }),
+      await create('markdown', '修复', { parentId: todo.id }),
+      await create('image', '照片', { fileId: (await file()).id }),
+      await create('folder', '目录'),
+    ])
+      await open(node);
+    expect(await continued()).toMatchObject([{ id: page.id }]);
+    await open(note);
+    expect(await continued()).toMatchObject([{ id: note.id, book_title: null, book_page_number: null }]);
+  });
   it('serves authenticated byte ranges and forces unknown active content to download', async () => {
     const asset = await file();
     const range = await SELF.fetch(`https://notes.test/api/files/${asset.id}`, {

@@ -65,8 +65,11 @@ export interface NoteNode {
   reference_target_id?: string | null;
   reference_kind?: NodeKind | null;
   project_category?: ProjectCategory | null;
-  // Only in the recent view: where reading stopped.
+  // Only in the recent and continue views: where reading stopped.
   reading_position?: ReadingPosition;
+  // Only in the continue view, for a book page: its book and page number.
+  book_title?: string | null;
+  book_page_number?: number | null;
   metadata_title?: string | null;
   metadata_status?: string | null;
   metadata_excerpt?: string | null;

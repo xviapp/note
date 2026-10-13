@@ -12,7 +12,7 @@ export type ListingCache = Map<string, CachedListing>;
 // reconnecting advance `refresh`, which revalidates it in place.
 export const ListingCacheContext = createContext<ListingCache | null>(null);
 // Opening any note reorders recent visits without a library change.
-const alwaysRevalidate = (query: string) => query === 'view=recent';
+const alwaysRevalidate = (query: string) => query === 'view=recent' || query === 'view=continue';
 
 // Several views can show the same folder (the sidebar and the page). The one that
 // has loaded more pages for the current revision keeps the shared entry.
