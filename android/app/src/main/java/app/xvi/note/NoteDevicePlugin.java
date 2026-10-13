@@ -131,8 +131,10 @@ public class NoteDevicePlugin extends Plugin {
 
     @PluginMethod
     public void appLockSetTimeout(PluginCall call) {
-        Long timeout = call.getLong("timeout");
-        if (timeout == null || !AppLock.validTimeout(timeout)) { call.reject("无效的上锁时间。"); return; }
+        // JSON keeps small numbers as Integer, which getLong() refuses.
+        Object value = call.getData().opt("timeout");
+        long timeout = value instanceof Number number ? number.longValue() : -1;
+        if (!AppLock.validTimeout(timeout)) { call.reject("无效的上锁时间。"); return; }
         new AppLock(getContext()).setTimeout(timeout);
         call.resolve();
     }
