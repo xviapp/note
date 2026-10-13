@@ -99,6 +99,12 @@ public class MainActivity extends NoteBridgeActivity {
     }
 
     @Override
+    public void onPause() {
+        if (lockView != null) lockView.paused();
+        super.onPause();
+    }
+
+    @Override
     public void onStop() {
         super.onStop();
         if (lock == null || isChangingConfigurations()) return;

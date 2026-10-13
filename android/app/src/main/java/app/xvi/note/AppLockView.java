@@ -9,7 +9,6 @@ import android.graphics.drawable.ColorDrawable;
 import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
-import android.os.CancellationSignal;
 import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
@@ -24,6 +23,7 @@ import androidx.core.view.ViewCompat;
 import androidx.core.view.WindowInsetsCompat;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
+import java.util.function.Consumer;
 
 /** The lock over the notebook: the PIN's dots, a number pad, the fingerprint
  * and 忘记 PIN. Opaque, so nothing of the page shows through. */
@@ -47,8 +47,8 @@ final class AppLockView extends FrameLayout {
     private final LinearLayout pad, keys, body;
     private final ScrollView pin;
     private final Drawable pinBackground, fingerprintBackground;
-    private boolean checking, prompted;
-    private CancellationSignal prompt;
+    private final AppLockFingerprint fingerprint;
+    private boolean checking;
 
     AppLockView(Activity activity, AppLock lock, Host host) {
         super(activity);
@@ -56,6 +56,19 @@ final class AppLockView extends FrameLayout {
         this.lock = lock;
         this.host = host;
         theme = WindowTheme.of(activity);
+        fingerprint = new AppLockFingerprint(new AppLockFingerprint.Host() {
+            @Override public boolean available() { return canPromptFingerprint(); }
+            @Override public void schedule(Runnable request) {
+                // Wait for window focus before opening the system prompt.
+                postDelayed(request, 150);
+            }
+            @Override public void unschedule(Runnable request) { removeCallbacks(request); }
+            @Override public Runnable authenticate(Consumer<Boolean> completed) {
+                return AppLock.authenticate(activity, "解锁页间", "使用 PIN", completed)::cancel;
+            }
+            @Override public void showPin(boolean visible) { AppLockView.this.showPin(visible); }
+            @Override public void unlocked() { host.unlocked(); }
+        });
         pinBackground = new ColorDrawable(theme.surface);
         fingerprintBackground = new ContextThemeWrapper(activity, WindowTheme.splashStyle(activity))
             .getDrawable(R.drawable.app_lock_splash);
@@ -209,7 +222,7 @@ final class AppLockView extends FrameLayout {
         } else if (lock.biometric() && AppLock.biometricAvailable(activity)) {
             icon.setImageResource(R.drawable.window_fingerprint);
             icon.setContentDescription("用指纹解锁");
-            icon.setOnClickListener(view -> promptFingerprint());
+            icon.setOnClickListener(view -> fingerprint.request());
         } else icon.setVisibility(INVISIBLE);
         return icon;
     }
@@ -266,15 +279,11 @@ final class AppLockView extends FrameLayout {
 
     /** Offers the fingerprint once each time the lock comes into view. */
     void resumed() {
-        if (prompted) return;
-        if (!canPromptFingerprint()) {
-            showPin(true);
-            return;
-        }
-        prompted = true;
-        showPin(false);
-        // After the window has focus, or the prompt can be dismissed at once.
-        postDelayed(this::promptFingerprint, 150);
+        fingerprint.resumed();
+    }
+
+    void paused() {
+        fingerprint.paused();
     }
 
     private boolean canPromptFingerprint() {
@@ -288,21 +297,6 @@ final class AppLockView extends FrameLayout {
 
     boolean awaitingFingerprint() {
         return pin.getVisibility() == GONE;
-    }
-
-    private void promptFingerprint() {
-        if (prompt != null || !isAttachedToWindow()) return;
-        if (!canPromptFingerprint()) {
-            showPin(true);
-            return;
-        }
-        showPin(false);
-        prompt = AppLock.authenticate(activity, "解锁页间", "使用 PIN", success -> {
-            prompt = null;
-            if (!isAttachedToWindow()) return;
-            if (success) host.unlocked();
-            else showPin(true);
-        });
     }
 
     private void confirmForgot() {
@@ -322,7 +316,7 @@ final class AppLockView extends FrameLayout {
     @Override
     protected void onDetachedFromWindow() {
         super.onDetachedFromWindow();
-        if (prompt != null) prompt.cancel();
+        fingerprint.paused();
         checker.shutdown();
     }
 }
