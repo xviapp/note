@@ -26,6 +26,11 @@
   box-shadow: var(--shadow-popover);
   font-size: 13px;
 }
+/* Opening focuses the panel itself; in a fresh WebView (问青藜 window) that
+   counts as focus-visible and drew the focus ring around the whole card. */
+.assistant-panel:focus {
+  outline: none;
+}
 .assistant-panel[hidden],
 .assistant-launcher[hidden] {
   display: none;
@@ -116,6 +121,25 @@
 }
 .assistant-maximized .assistant-heading {
   padding-top: max(12px, env(safe-area-inset-top));
+}
+/* Android's 问青藜 window: the heading of the 今日记 and 随手记 cards
+   (.share-window-header), which the native stand-in card also draws. */
+.assistant-centered:not(.assistant-maximized) .assistant-heading {
+  padding: 18px 20px 12px;
+}
+.assistant-centered .assistant-drag-handle {
+  padding-block: 0;
+}
+.assistant-centered .assistant-heading strong {
+  font-size: 17px;
+  font-weight: 600;
+}
+.assistant-centered .assistant-heading strong .qingli-icon {
+  display: none;
+}
+.assistant-centered .assistant-heading .assistant-note-title {
+  margin-top: 3px;
+  font-size: 12px;
 }
 .assistant-maximized .assistant-messages {
   padding: 20px max(24px, calc((100% - 860px) / 2));

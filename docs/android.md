@@ -93,6 +93,8 @@ pnpm test:android-startup --device emulator-5560 --theme system
 
 桌面小组件列表中的「页间快捷栏」占 4×1，像桌面图标一样排着「页间」「随手记」「今日记」「问青藜」四个入口，由 `QuickBarWidget` 分别打开主界面（已在运行时回到原处）、随手记窗口、今日记和问青藜浮窗。
 
-快捷栏和长按页间图标的「随手记」快捷方式直接打开原生 `ClipCaptureActivity`，不启动 `MainActivity` 或 WebView；仅提供文字输入、取消和保存。输入窗口跟随应用的白天、夜间或星空主题。
+快捷栏和长按页间图标的「随手记」快捷方式直接打开原生 `ClipCaptureActivity`，不启动 `MainActivity` 或 WebView；仅提供文字输入、关闭和保存。输入窗口跟随应用的白天、夜间或星空主题。
+
+随手记窗口、今日记和问青藜的原生占位卡片由 `WindowTheme` 绘制，颜色取自 `src/family-tokens.css` 和 `src/themes.css`，卡片和标题栏与网页的 `.share-window-sheet`、`.share-window-header` 一致（问青藜窗口的标题栏见 `src/assistant.css` 的 `.assistant-centered`）。修改这些样式时同步修改 `WindowTheme`，否则网页接替原生卡片时会跳动。
 
 保存先由 `ClipInbox` 使用 Android Keystore 加密并原子写入私有存储，再关闭窗口。`ClipUploadJob` 使用系统网络约束和退避重试，任务可跨重启恢复；使用当前站点登录会话及固定条目标识，成功后删除本机副本。没有登录、需要内容密钥或启用了应用代理时不直接上传，待应用下次打开、恢复连接或解锁时由 `src/widget-clips.ts` 同步。切换站点不会把旧站点的记录发给新站点。

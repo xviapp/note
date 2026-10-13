@@ -1,11 +1,8 @@
 package app.xvi.note;
 
 import android.content.Intent;
-import android.content.res.Configuration;
 import android.graphics.Color;
-import android.graphics.Typeface;
 import android.graphics.drawable.ColorDrawable;
-import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
@@ -15,7 +12,6 @@ import android.view.View;
 import android.view.ViewGroup;
 import android.widget.FrameLayout;
 import android.widget.LinearLayout;
-import android.widget.TextView;
 import android.widget.Toast;
 import com.getcapacitor.JSObject;
 import java.time.LocalDate;
@@ -55,41 +51,32 @@ abstract class PageWindowActivity extends NoteBridgeActivity {
     // drawn its card (finishBoot), the same card is drawn natively, so the
     // window appears at once like the native 随手记 window.
     private void showPlaceholder() {
-        String theme = getSharedPreferences("note-appearance", MODE_PRIVATE).getString("theme", "system");
-        boolean starry = "starry".equals(theme);
-        boolean dark = starry || "dark".equals(theme) || ("system".equals(theme)
-            && (getResources().getConfiguration().uiMode & Configuration.UI_MODE_NIGHT_MASK) == Configuration.UI_MODE_NIGHT_YES);
-        // --scrim, --surface-raised, --ink and --muted of src/family-tokens.css and themes.css.
-        int scrim = starry ? 0xB304081A : dark ? 0xB8000000 : 0x7A282019;
-        int raised = starry ? 0xFF282F47 : dark ? 0xFF302D29 : 0xFFFFFCF7;
-        int ink = dark ? 0xFFECE6DB : 0xFF302D28;
-        int muted = dark ? 0xFFAAA69F : 0xFF827A6E;
+        WindowTheme theme = WindowTheme.of(this);
         DisplayMetrics metrics = getResources().getDisplayMetrics();
         float dp = metrics.density;
         int width = Math.round(Math.min(560 * dp, metrics.widthPixels - 32 * dp));
         int height = Math.round(Math.min(maxHeightDp() * dp, metrics.heightPixels - 48 * dp));
         FrameLayout overlay = new FrameLayout(this);
-        overlay.setBackgroundColor(scrim);
+        overlay.setBackgroundColor(theme.scrim);
         overlay.setClickable(true);
-        LinearLayout card = new LinearLayout(this);
-        card.setOrientation(LinearLayout.VERTICAL);
-        card.setPadding(Math.round(20 * dp), Math.round(18 * dp), Math.round(20 * dp), Math.round(18 * dp));
-        GradientDrawable background = new GradientDrawable();
-        background.setColor(raised);
-        background.setCornerRadius(20 * dp); // --radius-panel
-        card.setBackground(background);
-        TextView heading = new TextView(this);
-        heading.setText(title());
-        heading.setTextColor(ink);
-        heading.setTextSize(17);
-        heading.setTypeface(Typeface.DEFAULT_BOLD);
-        card.addView(heading);
-        TextView sub = new TextView(this);
-        sub.setText(detail());
-        sub.setTextColor(muted);
-        sub.setTextSize(12);
-        sub.setPadding(0, Math.round(3 * dp), 0, 0);
-        card.addView(sub);
+        boolean journal = "journal".equals(kind());
+        LinearLayout header = theme.header(this, title(), detail(), journal, view -> finish());
+        LinearLayout card;
+        if (journal) {
+            card = theme.card(this);
+            card.addView(header);
+        } else {
+            // 青藜's panel: the heading on --surface-subtle above a line, the conversation on --surface.
+            card = theme.card(this, theme.surface);
+            card.setPadding(0, 0, 0, 0);
+            card.setClipToOutline(true);
+            header.setPadding(WindowTheme.dp(this, 20), WindowTheme.dp(this, 18), WindowTheme.dp(this, 20), WindowTheme.dp(this, 12));
+            header.setBackgroundColor(theme.subtle);
+            card.addView(header);
+            View line = new View(this);
+            line.setBackgroundColor(theme.line);
+            card.addView(line, new LinearLayout.LayoutParams(-1, Math.max(1, WindowTheme.dp(this, 1))));
+        }
         overlay.addView(card, new FrameLayout.LayoutParams(width, height, Gravity.CENTER));
         addContentView(overlay, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
         placeholder = overlay;
