@@ -105,6 +105,13 @@ abstract class NoteBridgeActivity extends BridgeActivity {
 
     void finishBoot() {}
 
+    // The app lock guards the notebook (MainActivity) only.
+    void appLockChanged() {}
+
+    void resetAppLock(Runnable done) {
+        done.run();
+    }
+
     /** Opens a web or mail link in another app; returns why it could not, or null. */
     String openExternal(Uri uri) {
         String scheme = uri.getScheme();

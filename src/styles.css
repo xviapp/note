@@ -3467,6 +3467,15 @@ button.node-list-toggle:focus-visible {
   color: var(--muted);
   margin-top: 5px;
 }
+.setting-row-actions {
+  display: flex;
+  flex-shrink: 0;
+  gap: 8px;
+}
+.setting-row > select {
+  width: auto;
+  flex-shrink: 0;
+}
 
 @media (min-width: 1450px) {
   .sidebar {

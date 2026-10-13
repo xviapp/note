@@ -7,6 +7,11 @@ import android.os.Build;
 import android.os.Bundle;
 import android.os.Handler;
 import android.os.Looper;
+import android.os.SystemClock;
+import android.view.ViewGroup;
+import android.view.inputmethod.InputMethodManager;
+import android.webkit.CookieManager;
+import androidx.activity.OnBackPressedCallback;
 import java.io.File;
 import androidx.core.graphics.ColorUtils;
 import androidx.core.splashscreen.SplashScreen;
@@ -26,6 +31,15 @@ public class MainActivity extends NoteBridgeActivity {
     private volatile boolean booting = true;
     // A page a floating window asked for, kept until the notebook takes it.
     private String launch;
+    // The app lock (AppLock): shown over the page while locked.
+    private AppLock lock;
+    private AppLockView lockView;
+    private OnBackPressedCallback lockedBack;
+    private long stoppedAt = -1;
+    // A picker or camera this activity started; returning from it is not a return to the app.
+    private boolean returningFromResult;
+    // How long 忘记 PIN waits for the page to sign out before doing it alone.
+    private static final long FORGOT_TIMEOUT_MS = 8000;
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -41,6 +55,16 @@ public class MainActivity extends NoteBridgeActivity {
         // every native surface now so the splash never reveals a light canvas.
         restoreThemeBackground();
         installWebView();
+        lock = new AppLock(this);
+        lockedBack = new OnBackPressedCallback(false) {
+            @Override
+            public void handleOnBackPressed() {
+                moveTaskToBack(true);
+            }
+        };
+        getOnBackPressedDispatcher().addCallback(this, lockedBack);
+        appLockChanged();
+        if (lock.enabled()) showLock();
         if (savedInstanceState == null) {
             receiveShare(getIntent());
             receiveLaunch(getIntent());
@@ -53,6 +77,97 @@ public class MainActivity extends NoteBridgeActivity {
         super.onNewIntent(intent);
         receiveShare(intent);
         if (receiveLaunch(intent)) dispatch("note:launch", null);
+    }
+
+    @Override
+    public void onStart() {
+        super.onStart();
+        if (lock == null || stoppedAt < 0) return;
+        long away = SystemClock.elapsedRealtime() - stoppedAt;
+        // A picker or camera may take a while; past five minutes it counts as leaving.
+        long allowed = returningFromResult ? Math.max(lock.timeout(), 5 * 60_000) : lock.timeout();
+        stoppedAt = -1;
+        returningFromResult = false;
+        if (lock.enabled() && away >= allowed) showLock();
+    }
+
+    @Override
+    public void onResume() {
+        super.onResume();
+        if (lockView != null) lockView.resumed();
+    }
+
+    @Override
+    public void onStop() {
+        super.onStop();
+        if (lock == null || isChangingConfigurations()) return;
+        stoppedAt = SystemClock.elapsedRealtime();
+        // Locked at once, so returning never shows the page first.
+        if (lock.enabled() && lock.timeout() == 0 && !returningFromResult) showLock();
+    }
+
+    @Override
+    @SuppressWarnings("deprecation")
+    public void startActivityForResult(Intent intent, int requestCode, Bundle options) {
+        returningFromResult = true;
+        super.startActivityForResult(intent, requestCode, options);
+    }
+
+    private void showLock() {
+        if (lockView != null || bridge == null) return;
+        android.view.View page = bridge.getWebView();
+        page.clearFocus();
+        InputMethodManager keyboard = getSystemService(InputMethodManager.class);
+        if (keyboard != null) keyboard.hideSoftInputFromWindow(page.getWindowToken(), 0);
+        lockView = new AppLockView(this, lock, new AppLockView.Host() {
+            @Override
+            public void unlocked() {
+                hideLock();
+            }
+
+            @Override
+            public void forgot() {
+                dispatch("note:app-lock-forgot", null);
+                // A page that never answers (not loaded, or broken) is signed out here.
+                new Handler(Looper.getMainLooper()).postDelayed(() -> {
+                    if (lockView != null) resetAppLock(() -> bridge.getWebView().reload());
+                }, FORGOT_TIMEOUT_MS);
+            }
+        });
+        addContentView(lockView, new ViewGroup.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT,
+            ViewGroup.LayoutParams.MATCH_PARENT));
+        lockedBack.setEnabled(true);
+    }
+
+    private void hideLock() {
+        if (lockView == null) return;
+        ((ViewGroup) lockView.getParent()).removeView(lockView);
+        lockView = null;
+        lockedBack.setEnabled(false);
+    }
+
+    // Recent apps shows no picture of the notebook while the app lock is on.
+    @Override
+    void appLockChanged() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) setRecentsScreenshotEnabled(!lock.enabled());
+    }
+
+    /** 忘记 PIN, after the page has signed out: no session cookie, no waiting
+     * 随手记 and no lock are left on this device. */
+    @Override
+    void resetAppLock(Runnable done) {
+        runOnUiThread(() -> {
+            try { ClipInbox.remove(this, ServerConfig.host(this), null); }
+            catch (Exception ignored) { /* Nothing to clear, or already gone. */ }
+            lock.clear();
+            appLockChanged();
+            CookieManager cookies = CookieManager.getInstance();
+            cookies.removeAllCookies(removed -> {
+                cookies.flush();
+                hideLock();
+                done.run();
+            });
+        });
     }
 
     private boolean receiveLaunch(Intent intent) {

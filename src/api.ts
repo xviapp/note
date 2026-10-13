@@ -186,6 +186,16 @@ async function signedOut() {
   await clearPrivateCache();
 }
 
+// Android's app lock, when its PIN is forgotten: ends the session if the
+// server answers in time, and signs this device out either way.
+export async function signOutHere() {
+  const ended = await Promise.race([
+    api('/api/auth/logout', 'POST', {}).then(() => true, () => false),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), 5000)),
+  ]);
+  if (!ended) await signedOut();
+}
+
 // The key a node's content is (or new content below it would be) sealed with.
 export async function scopeOf(id: string | null | undefined): Promise<string | null> {
   if (!id) return null;

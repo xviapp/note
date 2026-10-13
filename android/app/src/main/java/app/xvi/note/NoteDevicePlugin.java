@@ -74,6 +74,75 @@ public class NoteDevicePlugin extends Plugin {
         catch (Exception error) { call.reject("无法清除待发送的随手记。", error); }
     }
 
+    // The app lock (AppLock), set up in 设置 → 密码与设备.
+    @PluginMethod
+    public void appLockState(PluginCall call) {
+        AppLock lock = new AppLock(getContext());
+        call.resolve(new JSObject().put("enabled", lock.enabled()).put("pinLength", lock.pinLength())
+            .put("biometric", lock.biometric()).put("biometricAvailable", AppLock.biometricAvailable(getContext()))
+            .put("timeout", lock.timeout()));
+    }
+
+    // Changing or turning off the lock asks for the current PIN, with the lock screen's waits.
+    private boolean confirmPin(AppLock lock, PluginCall call) {
+        if (!lock.enabled()) return true;
+        AppLock.Result result = lock.check(call.getString("current", ""), System.currentTimeMillis());
+        if (result == AppLock.Result.OK) return true;
+        long wait = lock.waitMillis(System.currentTimeMillis());
+        call.reject(wait > 0 ? "PIN 错误次数过多，" + AppLock.waitMessage(wait) + "。" : "当前 PIN 不正确。");
+        return false;
+    }
+
+    @PluginMethod
+    public void appLockSetPin(PluginCall call) {
+        AppLock lock = new AppLock(getContext());
+        String pin = call.getString("pin", "");
+        if (!AppLock.validPin(pin)) { call.reject("PIN 需为 4 到 6 位数字。"); return; }
+        if (!confirmPin(lock, call)) return;
+        try { lock.setPin(pin); }
+        catch (Exception error) { call.reject("无法保存 PIN。", error); return; }
+        getActivity().runOnUiThread(() -> host().appLockChanged());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void appLockDisable(PluginCall call) {
+        AppLock lock = new AppLock(getContext());
+        if (!confirmPin(lock, call)) return;
+        lock.clear();
+        getActivity().runOnUiThread(() -> host().appLockChanged());
+        call.resolve();
+    }
+
+    @PluginMethod
+    public void appLockSetBiometric(PluginCall call) {
+        AppLock lock = new AppLock(getContext());
+        boolean enabled = call.getBoolean("enabled", false);
+        if (!lock.enabled()) { call.reject("请先设置 PIN。"); return; }
+        if (!enabled) { lock.setBiometric(false); call.resolve(); return; }
+        if (!AppLock.biometricAvailable(getContext())) { call.reject("本机没有可用的指纹，请先在系统设置中录入。"); return; }
+        // Turned on only after a fingerprint has been accepted once.
+        getActivity().runOnUiThread(() -> AppLock.authenticate(getActivity(), "验证指纹以启用", "取消", success -> {
+            if (!success) { call.reject("未启用指纹解锁。"); return; }
+            lock.setBiometric(true);
+            call.resolve();
+        }));
+    }
+
+    @PluginMethod
+    public void appLockSetTimeout(PluginCall call) {
+        Long timeout = call.getLong("timeout");
+        if (timeout == null || !AppLock.validTimeout(timeout)) { call.reject("无效的上锁时间。"); return; }
+        new AppLock(getContext()).setTimeout(timeout);
+        call.resolve();
+    }
+
+    // 忘记 PIN: the page has signed out; remove the session cookie and the lock.
+    @PluginMethod
+    public void appLockReset(PluginCall call) {
+        host().resetAppLock(call::resolve);
+    }
+
     @PluginMethod
     public void getPendingShare(PluginCall call) {
         try { call.resolve(new JSObject().put("share", java.util.Objects.requireNonNullElse(

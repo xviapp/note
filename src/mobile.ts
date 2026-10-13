@@ -31,6 +31,14 @@ export const device = registerPlugin<{
   // The server whose origin serves this UI; changing it restarts the app there.
   getServer(): Promise<import('./server').ServerInfo>;
   setServer(options: { url: string }): Promise<{ host: string; restarting: boolean }>;
+  // The app lock over the notebook: PIN, fingerprint and when it locks again.
+  appLockState(): Promise<AppLockState>;
+  appLockSetPin(options: { pin: string; current?: string }): Promise<void>;
+  appLockDisable(options: { current: string }): Promise<void>;
+  appLockSetBiometric(options: { enabled: boolean }): Promise<void>;
+  appLockSetTimeout(options: { timeout: number }): Promise<void>;
+  // 忘记 PIN, once this page has signed out: drops the session cookie and the lock.
+  appLockReset(): Promise<void>;
   saveFile(options: {
     url?: string;
     sha256?: string;
@@ -41,6 +49,14 @@ export const device = registerPlugin<{
 }>('NoteDevice');
 
 export type LaunchAction = 'open' | 'journal' | 'assistant';
+export interface AppLockState {
+  enabled: boolean;
+  pinLength: number;
+  biometric: boolean;
+  biometricAvailable: boolean;
+  // Milliseconds out of sight before it locks again.
+  timeout: number;
+}
 
 // Messages go to the notebook's notice line or status toast; outside the
 // notebook nothing listens and Android shows its own toast instead.
@@ -109,6 +125,16 @@ export function installMobile() {
   void App.addListener('backButton', ({ canGoBack }) => {
     const event = new CustomEvent('note:native-back', { detail: { canGoBack }, cancelable: true });
     if (window.dispatchEvent(event)) void App.minimizeApp();
+  });
+  // 忘记 PIN on the app lock: sign out here (even offline), then let Android
+  // drop the session cookie and the lock before the sign-in screen shows.
+  window.addEventListener('note:app-lock-forgot', () => {
+    void (async () => {
+      const { signOutHere } = await import('./api');
+      await signOutHere().catch(() => {});
+      await device.appLockReset();
+      window.dispatchEvent(new Event('note:unauthenticated'));
+    })();
   });
   void App.addListener('appStateChange', ({ isActive }) => {
     window.dispatchEvent(new Event(isActive ? 'focus' : 'pagehide'));
