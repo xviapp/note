@@ -52,6 +52,8 @@ import { watchWidgetClips } from './widget-clips';
 import { BootScreen } from './components/BootScreen';
 import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
+import { SyncStatus } from './components/SyncStatus';
+import { useOutboxSummary } from './outbox';
 import { SearchDialog } from './components/SearchDialog';
 import { AuthScreen } from './components/AuthScreen';
 import { translationWindowId } from './screen-link';
@@ -215,6 +217,7 @@ function Notebook({
     setGlobalSelection('');
   }, [navigation.key]);
   const toast = useToast();
+  const outbox = useOutboxSummary();
   const report = useCallback(
     (error: unknown) => setNotice(error instanceof Error ? error.message : String(error)),
     [],
@@ -614,6 +617,16 @@ function Notebook({
             onSearch={() => setSearchOpen(true)}
             onClose={() => setMobileOpen(false)}
             onView={(next) => void switchView(next)}
+            status={
+              <SyncStatus
+                count={outbox.count}
+                failed={outbox.failed}
+                onOpen={() => {
+                  setMobileOpen(false);
+                  openSettings('outbox');
+                }}
+              />
+            }
             tree={{
               refresh: revision,
               onRefresh: refreshLibrary,
@@ -800,10 +813,14 @@ function Notebook({
                 key={key}
                 className={view === key ? 'active' : ''}
                 aria-current={view === key ? 'page' : undefined}
+                aria-label={key === 'settings' && outbox.count ? `${label}，${outbox.count} 项待发送` : undefined}
                 onClick={() => switchView(key)}
               >
                 <span>
                   <Icon size={22} />
+                  {key === 'settings' && outbox.count > 0 && (
+                    <i className={`nav-badge${outbox.failed ? ' failed' : ''}`} aria-hidden="true" />
+                  )}
                 </span>
                 {label}
               </button>

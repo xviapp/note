@@ -22,8 +22,18 @@ test('a refused 随手记 shows in 待发送 with its reason, and can be retried
   await clips('第一条：被拒绝');
   await clips('第二条：也被拒绝');
 
+  // The main view says something needs handling, and leads to 待发送.
+  const status = page.locator('.sync-status');
+  if (info.project.name === 'mobile') {
+    await expect(page.getByRole('button', { name: '设置，2 项待发送' }).locator('.nav-badge.failed')).toBeVisible();
+  } else {
+    await expect(status).toHaveText('2 项未能同步，需要处理');
+    await status.click();
+    await expect(page).toHaveURL(/\/settings\/outbox$/);
+  }
+
   await page.goto('/settings');
-  const entry = page.getByRole('button', { name: /待发送/ });
+  const entry = page.locator('.settings-entry').filter({ hasText: '待发送' });
   await expect(entry.locator('.settings-badge')).toHaveText('2');
   await entry.click();
   const group = page.getByRole('region', { name: '随手记' });
@@ -39,6 +49,8 @@ test('a refused 随手记 shows in 待发送 with its reason, and can be retried
   refuse = false;
   await group.getByRole('button', { name: '重试' }).click();
   await expect(page.getByText('没有待发送的内容。')).toBeVisible();
+  await expect(status).toHaveCount(0);
+  await expect(page.locator('.nav-badge')).toHaveCount(0);
   const list = await (await page.request.get('/api/clips')).json();
   expect(list.items.map((item: { text: string }) => item.text)).toEqual(['第一条：被拒绝']);
 });

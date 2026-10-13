@@ -380,6 +380,23 @@ button:active:not(:disabled) {
     height: 28px;
     border-radius: var(--family-radius-pill);
   }
+  .phone-bottom-nav button > span {
+    position: relative;
+  }
+  /* Something waits in 待发送. */
+  .phone-bottom-nav .nav-badge {
+    position: absolute;
+    top: 2px;
+    right: 18px;
+    width: 8px;
+    height: 8px;
+    border-radius: 50%;
+    background: var(--blue);
+    box-shadow: 0 0 0 2px var(--surface);
+  }
+  .phone-bottom-nav .nav-badge.failed {
+    background: var(--danger);
+  }
   .phone-bottom-nav button.active {
     color: var(--blue);
     font-weight: 600;

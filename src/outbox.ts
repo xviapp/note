@@ -218,6 +218,11 @@ export function useOutbox() {
   return { groups, refresh };
 }
 export function useOutboxCount() {
+  return useOutboxSummary().count;
+}
+// How much waits, and how much of it was refused and needs the reader.
+export function useOutboxSummary() {
   const { groups } = useOutbox();
-  return groups?.reduce((total, group) => total + group.items.length, 0) ?? 0;
+  const items = groups?.flatMap((group) => group.items) ?? [];
+  return { count: items.length, failed: items.filter((item) => item.failed).length };
 }

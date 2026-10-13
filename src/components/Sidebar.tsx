@@ -13,6 +13,7 @@ import {
   Trash2,
   X,
 } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { openClips } from '../clips';
 import { settingsTitles, type SettingsSection, type View } from '../navigation';
 import { Brand } from './Brand';
@@ -36,6 +37,7 @@ export function Sidebar({
   onSearch,
   onClose,
   onView,
+  status,
   tree,
 }: {
   name: string;
@@ -44,6 +46,8 @@ export function Sidebar({
   onSearch: () => void;
   onClose: () => void;
   onView: (view: View) => void;
+  // What waits to be sent, shown only while something does.
+  status?: ReactNode;
   tree: TreeProps;
 }) {
   return (
@@ -90,6 +94,7 @@ export function Sidebar({
           </button>
         ))}
       </nav>
+      {status}
       <div className="sidebar-tree">
         <Tree {...tree} />
       </div>
