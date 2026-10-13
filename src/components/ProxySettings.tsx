@@ -7,6 +7,7 @@ import {
   saveProxySubscription,
   selectProxyNode,
   selectProxyAutomatically,
+  setProxyBypassOnVpn,
   proxyMessage,
   subscriptionError,
   updateProxySubscription,
@@ -71,6 +72,23 @@ export function ProxySettings() {
             checked={state.enabled}
             disabled={busy || subscription.updating || state.phase === 'starting'}
             onChange={(event) => void run(() => enableProxy(event.target.checked))}
+          />
+          <span className="toggle-switch-track" aria-hidden="true" />
+        </label>
+      </div>
+      <div className="setting-row">
+        <div>
+          <strong>连接 VPN 时直连</strong>
+          <p>{state.pausedByVpn ? '已连接 VPN，代理已暂停' : '开启 VPN 后不使用应用内代理'}</p>
+        </div>
+        <label className="toggle-switch">
+          <input
+            type="checkbox"
+            role="switch"
+            aria-label="连接 VPN 时直连"
+            checked={state.bypassOnVpn}
+            disabled={busy || !state.enabled}
+            onChange={(event) => void run(() => setProxyBypassOnVpn(event.target.checked))}
           />
           <span className="toggle-switch-track" aria-hidden="true" />
         </label>

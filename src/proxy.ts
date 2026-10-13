@@ -7,6 +7,10 @@ export type ProxyState = {
   errorCode: string;
   retryAtMillis: number;
   hasProfile: boolean;
+  /** Whether traffic connects directly while a VPN is on. */
+  bypassOnVpn: boolean;
+  /** Whether a VPN is pausing the running proxy right now. */
+  pausedByVpn: boolean;
   subscription: ProxySubscription;
 };
 
@@ -38,6 +42,7 @@ type NativeProxyPlugin = {
   getStatus(): Promise<ProxyState>;
   setEnabled(options: { enabled: boolean }): Promise<ProxyState>;
   retry(): Promise<ProxyState>;
+  setBypassOnVpn(options: { enabled: boolean }): Promise<ProxyState>;
   saveSubscription(options: { url: string; updateIntervalMinutes: number; testIntervalMinutes: number }): Promise<ProxyState>;
   updateSubscription(): Promise<ProxyState>;
   selectNextNode(): Promise<ProxyState>;
@@ -51,7 +56,7 @@ export const nativeProxy = registerPlugin<NativeProxyPlugin>('NoteProxy');
 export const hasNativeProxy = () => Capacitor.getPlatform() === 'android';
 
 let state: ProxyState = {
-  enabled: false, phase: 'off', errorCode: '', retryAtMillis: 0, hasProfile: false,
+  enabled: false, phase: 'off', errorCode: '', retryAtMillis: 0, hasProfile: false, bypassOnVpn: false, pausedByVpn: false,
   subscription: { updating: false, error: '', url: '', lastUpdated: -1, manualIndex: -1, fallback: false, nodes: [], updateIntervalMinutes: 1440, testIntervalMinutes: 5, testing: false, lastTested: 0, testError: '' },
 };
 const listeners = new Set<() => void>();
@@ -134,6 +139,7 @@ async function startProxy() {
 export async function refreshProxy() { receive(await nativeProxy.getStatus()); }
 export async function enableProxy(enabled: boolean) { receive(await nativeProxy.setEnabled({ enabled })); }
 export async function retryProxy() { receive(await nativeProxy.retry()); }
+export async function setProxyBypassOnVpn(enabled: boolean) { receive(await nativeProxy.setBypassOnVpn({ enabled })); }
 export async function saveProxySubscription(input: { url: string; updateIntervalMinutes: number; testIntervalMinutes: number }) {
   const next = await nativeProxy.saveSubscription(input);
   receive(next);

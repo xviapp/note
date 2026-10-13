@@ -14,6 +14,7 @@ const mock = vi.hoisted(() => ({
   selectNode: vi.fn(),
   selectAutomatically: vi.fn(),
   enable: vi.fn(),
+  bypass: vi.fn(),
 }));
 vi.mock('@capacitor/core', () => ({
   Capacitor: { getPlatform: () => mock.platform },
@@ -21,6 +22,7 @@ vi.mock('@capacitor/core', () => ({
     prepare: mock.prepare,
     retry: mock.retry,
     setEnabled: mock.enable,
+    setBypassOnVpn: mock.bypass,
     getStatus: mock.getStatus,
     saveSubscription: mock.saveSubscription,
     updateSubscription: mock.updateSubscription,
@@ -46,7 +48,8 @@ const emptySubscription: ProxySubscription = {
   manualIndex: -1, fallback: false,
   nodes: [],
 };
-const off: ProxyState = { enabled: false, phase: 'off', errorCode: '', retryAtMillis: 0, hasProfile: false, subscription: emptySubscription };
+const off: ProxyState = { enabled: false, phase: 'off', errorCode: '', retryAtMillis: 0, hasProfile: false,
+  bypassOnVpn: false, pausedByVpn: false, subscription: emptySubscription };
 const failed: ProxyState = {
   ...off,
   enabled: true,
@@ -252,11 +255,35 @@ describe('single subscription snapshot', () => {
     render(<ProxySettings />);
     await act(async () => fireEvent.click(screen.getByRole('switch', { name: '应用内代理' })));
     expect(mock.enable).toHaveBeenCalledWith({ enabled: true });
-    expect((screen.getByRole('switch') as HTMLInputElement).checked).toBe(true);
+    expect((screen.getByRole('switch', { name: '应用内代理' }) as HTMLInputElement).checked).toBe(true);
     act(() => mock.statusListener!({ ...populated, subscription: { ...populated.subscription, updating: true } }));
-    expect((screen.getByRole('switch') as HTMLInputElement).disabled).toBe(true);
+    expect((screen.getByRole('switch', { name: '应用内代理' }) as HTMLInputElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: '更换订阅' }) as HTMLButtonElement).disabled).toBe(true);
     expect((screen.getByRole('button', { name: '更新中…' }) as HTMLButtonElement).disabled).toBe(true);
+  });
+
+  it('skips the proxy on VPN only while the proxy is enabled and reports the pause', async () => {
+    render(<ProxySettings />);
+    const vpn = () => screen.getByRole('switch', { name: '连接 VPN 时直连' }) as HTMLInputElement;
+    expect(vpn().disabled).toBe(true);
+    act(() => mock.statusListener!({ ...off, enabled: true, phase: 'running' }));
+    expect(vpn().disabled).toBe(false);
+    mock.bypass.mockResolvedValue({ ...off, enabled: true, phase: 'running', bypassOnVpn: true, pausedByVpn: true });
+    await act(async () => fireEvent.click(vpn()));
+    expect(mock.bypass).toHaveBeenCalledWith({ enabled: true });
+    expect(vpn().checked).toBe(true);
+    expect(screen.getByText('已连接 VPN，代理已暂停')).toBeTruthy();
+    act(() => mock.statusListener!({ ...off, enabled: true, phase: 'running', bypassOnVpn: true }));
+    expect(screen.getByText('开启 VPN 后不使用应用内代理')).toBeTruthy();
+  });
+
+  it('keeps the VPN switch when the native call fails', async () => {
+    act(() => mock.statusListener!({ ...off, enabled: true, phase: 'running' }));
+    mock.bypass.mockRejectedValue(new Error('bridge'));
+    render(<ProxySettings />);
+    await act(async () => fireEvent.click(screen.getByRole('switch', { name: '连接 VPN 时直连' })));
+    expect((screen.getByRole('switch', { name: '连接 VPN 时直连' }) as HTMLInputElement).checked).toBe(false);
+    expect(screen.getByRole('alert').textContent).toBe('操作未完成，请重试。');
   });
 
   it('shows node information and refresh failures', async () => {

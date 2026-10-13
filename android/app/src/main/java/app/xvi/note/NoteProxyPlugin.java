@@ -23,6 +23,7 @@ public class NoteProxyPlugin extends Plugin {
     @PluginMethod public void getStatus(PluginCall call) { network.status(call::resolve); }
     @PluginMethod public void setEnabled(PluginCall call) { network.setEnabled(call.getBoolean("enabled", false), call::resolve); }
     @PluginMethod public void retry(PluginCall call) { network.retry(call::resolve); }
+    @PluginMethod public void setBypassOnVpn(PluginCall call) { network.setBypassOnVpn(call.getBoolean("enabled", false), call::resolve); }
     @PluginMethod public void saveSubscription(PluginCall call) {
         network.saveSubscription(call.getString("url", ""),
             call.getInt("updateIntervalMinutes", 1440), call.getInt("testIntervalMinutes", 5), call::resolve);
