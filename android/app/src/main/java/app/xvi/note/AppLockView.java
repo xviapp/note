@@ -5,9 +5,12 @@ import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.res.ColorStateList;
 import android.content.res.Configuration;
+import android.graphics.drawable.ColorDrawable;
+import android.graphics.drawable.Drawable;
 import android.graphics.drawable.GradientDrawable;
 import android.graphics.drawable.RippleDrawable;
 import android.os.CancellationSignal;
+import android.view.ContextThemeWrapper;
 import android.view.Gravity;
 import android.view.HapticFeedbackConstants;
 import android.view.View;
@@ -42,6 +45,8 @@ final class AppLockView extends FrameLayout {
     private final LinearLayout dots;
     private final TextView message;
     private final LinearLayout pad, keys, body;
+    private final ScrollView pin;
+    private final Drawable pinBackground, fingerprintBackground;
     private boolean checking, prompted;
     private CancellationSignal prompt;
 
@@ -51,7 +56,10 @@ final class AppLockView extends FrameLayout {
         this.lock = lock;
         this.host = host;
         theme = WindowTheme.of(activity);
-        setBackgroundColor(theme.surface);
+        pinBackground = new ColorDrawable(theme.surface);
+        fingerprintBackground = new ContextThemeWrapper(activity, WindowTheme.splashStyle(activity))
+            .getDrawable(R.drawable.app_lock_splash);
+        setBackground(pinBackground);
         setClickable(true);
         setFocusable(true);
         // The mark, title and dots above the pad, or beside it on a phone held sideways.
@@ -106,13 +114,13 @@ final class AppLockView extends FrameLayout {
         arrange();
 
         // Centered when it fits; scrolls on a short screen (a phone held sideways).
-        ScrollView scroll = new ScrollView(activity);
-        scroll.setFillViewport(true);
+        pin = new ScrollView(activity);
+        pin.setFillViewport(true);
         FrameLayout centered = new FrameLayout(activity);
         centered.setPadding(0, dp(24), 0, dp(24));
         centered.addView(body, new LayoutParams(-2, -2, Gravity.CENTER));
-        scroll.addView(centered, new LayoutParams(-1, -2));
-        addView(scroll, new LayoutParams(-1, -1));
+        pin.addView(centered, new LayoutParams(-1, -2));
+        addView(pin, new LayoutParams(-1, -1));
         ViewCompat.setOnApplyWindowInsetsListener(this, (view, insets) -> {
             Insets bars = insets.getInsets(WindowInsetsCompat.Type.systemBars());
             view.setPadding(bars.left, bars.top, bars.right, bars.bottom);
@@ -120,6 +128,8 @@ final class AppLockView extends FrameLayout {
         });
         showTyped();
         refreshWait();
+        // Hide the pad before the first frame, including the wait for window focus.
+        showPin(!canPromptFingerprint());
     }
 
     private int dp(float value) {
@@ -256,17 +266,42 @@ final class AppLockView extends FrameLayout {
 
     /** Offers the fingerprint once each time the lock comes into view. */
     void resumed() {
-        if (prompted || !lock.biometric() || !AppLock.biometricAvailable(activity)) return;
+        if (prompted) return;
+        if (!canPromptFingerprint()) {
+            showPin(true);
+            return;
+        }
         prompted = true;
+        showPin(false);
         // After the window has focus, or the prompt can be dismissed at once.
         postDelayed(this::promptFingerprint, 150);
     }
 
+    private boolean canPromptFingerprint() {
+        return lock.biometric() && AppLock.biometricAvailable(activity);
+    }
+
+    private void showPin(boolean visible) {
+        setBackground(visible ? pinBackground : fingerprintBackground);
+        pin.setVisibility(visible ? VISIBLE : GONE);
+    }
+
+    boolean awaitingFingerprint() {
+        return pin.getVisibility() == GONE;
+    }
+
     private void promptFingerprint() {
         if (prompt != null || !isAttachedToWindow()) return;
+        if (!canPromptFingerprint()) {
+            showPin(true);
+            return;
+        }
+        showPin(false);
         prompt = AppLock.authenticate(activity, "解锁页间", "使用 PIN", success -> {
             prompt = null;
-            if (success && isAttachedToWindow()) host.unlocked();
+            if (!isAttachedToWindow()) return;
+            if (success) host.unlocked();
+            else showPin(true);
         });
     }
 

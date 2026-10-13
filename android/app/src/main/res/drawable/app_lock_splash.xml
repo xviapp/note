@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Match Theme.SplashScreen's centered 288dp foreground without a launcher tile.
+     Both colors and artwork resolve from the same launch theme as the system splash. -->
+<layer-list xmlns:android="http://schemas.android.com/apk/res/android"
+    android:paddingLeft="0dp"
+    android:paddingTop="0dp"
+    android:paddingRight="0dp"
+    android:paddingBottom="0dp">
+    <item android:gravity="fill">
+        <color android:color="?attr/windowSplashScreenBackground" />
+    </item>
+    <item
+        android:drawable="?attr/windowSplashScreenAnimatedIcon"
+        android:gravity="center"
+        android:width="288dp"
+        android:height="288dp" />
+</layer-list>

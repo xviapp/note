@@ -43,9 +43,10 @@ public class MainActivity extends NoteBridgeActivity {
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
-        // Hold the splash until the UI reports its first screen, so the mark
-        // stays put instead of giving way to the page's smaller loading logo.
-        SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() -> booting);
+        // Keep the actual splash behind the first fingerprint prompt, then
+        // reveal the ready page or PIN without changing the waiting artwork.
+        SplashScreen.installSplashScreen(this).setKeepOnScreenCondition(() ->
+            booting || (lockView != null && lockView.awaitingFingerprint()));
         new Handler(Looper.getMainLooper()).postDelayed(this::finishBoot, BOOT_TIMEOUT_MS);
         registerNotePlugins();
         config = ServerConfig.load(this);
@@ -221,21 +222,15 @@ public class MainActivity extends NoteBridgeActivity {
             default -> R.color.note_surface;
         };
         applyThemeBackground(getColor(background));
-        updateSplashTheme(preference);
+        updateSplashTheme();
     }
 
     // The system draws the next cold start's splash before any app code runs.
     // Android 13+ remembers a chosen splash theme, so it matches the app theme;
     // older versions keep the manifest theme, which follows the system.
-    private void updateSplashTheme(String preference) {
+    private void updateSplashTheme() {
         if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) return;
-        int theme = switch (preference) {
-            case "light" -> R.style.AppTheme_NoActionBarLaunch_Light;
-            case "dark" -> R.style.AppTheme_NoActionBarLaunch_Dark;
-            case "starry" -> R.style.AppTheme_NoActionBarLaunch_Starry;
-            default -> R.style.AppTheme_NoActionBarLaunch;
-        };
-        getSplashScreen().setSplashScreenTheme(theme);
+        getSplashScreen().setSplashScreenTheme(WindowTheme.splashStyle(this));
     }
 
     @Override
@@ -245,7 +240,7 @@ public class MainActivity extends NoteBridgeActivity {
         getSharedPreferences(APPEARANCE_PREFS, MODE_PRIVATE).edit()
             .putString("theme", preference).apply();
         applyThemeBackground(color);
-        updateSplashTheme(preference);
+        updateSplashTheme();
     }
 
     private void applyThemeBackground(int color) {

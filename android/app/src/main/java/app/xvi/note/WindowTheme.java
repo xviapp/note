@@ -42,6 +42,18 @@ final class WindowTheme {
         return Math.round(value * context.getResources().getDisplayMetrics().density);
     }
 
+    /** The same launch palette for the system splash and the fingerprint backdrop. */
+    static int splashStyle(Context context) {
+        String preference = context.getSharedPreferences("note-appearance", Context.MODE_PRIVATE)
+            .getString("theme", "system");
+        return switch (preference) {
+            case "light" -> R.style.AppTheme_NoActionBarLaunch_Light;
+            case "dark" -> R.style.AppTheme_NoActionBarLaunch_Dark;
+            case "starry" -> R.style.AppTheme_NoActionBarLaunch_Starry;
+            default -> R.style.AppTheme_NoActionBarLaunch;
+        };
+    }
+
     /** Text as the page sets it: a size and the page's line-height of 1.57. */
     static TextView text(Context context, String value, float size, int color, boolean strong) {
         TextView view = new TextView(context);
