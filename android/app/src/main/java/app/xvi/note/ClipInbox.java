@@ -16,7 +16,7 @@ import javax.crypto.spec.GCMParameterSpec;
 import org.json.JSONArray;
 import org.json.JSONObject;
 
-/** Durable widget outbox. Device encryption is independent of the library key;
+/** Durable outbox of the native 随手记 window. Device encryption is independent of the library key;
  * a locked library can therefore accept input without exposing it on disk. */
 final class ClipInbox {
     private static final String ALIAS = "note-widget-clips";

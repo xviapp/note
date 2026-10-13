@@ -82,7 +82,7 @@
         </activity>
 
         <activity android:name=".ClipCaptureActivity" android:theme="@style/ClipCaptureTheme"
-            android:label="@string/clip_widget_label" android:exported="false"
+            android:label="@string/shortcut_clip" android:exported="false"
             android:excludeFromRecents="true" android:taskAffinity="app.xvi.note.capture"
             android:windowSoftInputMode="adjustResize" />
         <!-- "存入随手记" in the text selection menu of other apps. -->
@@ -94,14 +94,9 @@
                 <data android:mimeType="text/plain" />
             </intent-filter>
         </activity-alias>
-        <service android:name=".ClipTileService" android:exported="true"
-            android:label="@string/clip_widget_label" android:icon="@drawable/tile_clip"
-            android:permission="android.permission.BIND_QUICK_SETTINGS_TILE">
-            <intent-filter><action android:name="android.service.quicksettings.action.QS_TILE" /></intent-filter>
-        </service>
-        <receiver android:name=".ClipWidget" android:exported="false" android:label="@string/clip_widget_label">
+        <receiver android:name=".QuickBarWidget" android:exported="false" android:label="@string/quick_bar_label">
             <intent-filter><action android:name="android.appwidget.action.APPWIDGET_UPDATE" /></intent-filter>
-            <meta-data android:name="android.appwidget.provider" android:resource="@xml/clip_widget" />
+            <meta-data android:name="android.appwidget.provider" android:resource="@xml/quick_bar" />
         </receiver>
         <service android:name=".ClipUploadJob" android:permission="android.permission.BIND_JOB_SERVICE" android:exported="false" />
 

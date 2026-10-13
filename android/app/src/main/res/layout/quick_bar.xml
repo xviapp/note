@@ -1,0 +1,26 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Four entries laid out like launcher icons: no panel, labels on the wallpaper. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent" android:layout_height="match_parent"
+    android:orientation="horizontal" android:gravity="center_vertical">
+    <LinearLayout android:id="@+id/quick_bar_app" style="@style/QuickBarItem"
+        android:contentDescription="@string/quick_bar_app">
+        <ImageView style="@style/QuickBarIcon" android:src="@mipmap/ic_launcher_round" />
+        <TextView style="@style/QuickBarLabel" android:text="@string/quick_bar_app" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/quick_bar_clip" style="@style/QuickBarItem"
+        android:contentDescription="@string/shortcut_clip">
+        <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_clip" />
+        <TextView style="@style/QuickBarLabel" android:text="@string/shortcut_clip" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/quick_bar_journal" style="@style/QuickBarItem"
+        android:contentDescription="@string/shortcut_journal">
+        <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_journal" />
+        <TextView style="@style/QuickBarLabel" android:text="@string/shortcut_journal" />
+    </LinearLayout>
+    <LinearLayout android:id="@+id/quick_bar_qingli" style="@style/QuickBarItem"
+        android:contentDescription="@string/shortcut_qingli">
+        <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_qingli" />
+        <TextView style="@style/QuickBarLabel" android:text="@string/shortcut_qingli" />
+    </LinearLayout>
+</LinearLayout>

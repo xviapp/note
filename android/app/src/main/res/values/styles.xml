@@ -50,4 +50,29 @@
         <item name="android:windowCloseOnTouchOutside">false</item>
         <item name="android:fontFamily">sans</item>
     </style>
+    <!-- QuickBarWidget: each entry looks like a launcher icon on the wallpaper. -->
+    <style name="QuickBarItem">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">match_parent</item>
+        <item name="android:layout_weight">1</item>
+        <item name="android:orientation">vertical</item>
+        <item name="android:gravity">center</item>
+    </style>
+    <style name="QuickBarIcon">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
+    <style name="QuickBarLabel">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">4dp</item>
+        <item name="android:textSize">12sp</item>
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:maxLines">1</item>
+        <item name="android:shadowColor">#99000000</item>
+        <item name="android:shadowRadius">3</item>
+        <item name="android:shadowDy">1</item>
+        <item name="android:importantForAccessibility">no</item>
+    </style>
 </resources>

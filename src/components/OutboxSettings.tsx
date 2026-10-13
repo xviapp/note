@@ -7,7 +7,7 @@ const time = (value: number) =>
   new Date(value).toLocaleString('zh-CN', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' });
 
 // 设置 → 待发送: what was saved on this device but has not reached the server,
-// from every outbox (今日记 for a locked journal, 随手记, the Android widget).
+// from every outbox (今日记 for a locked journal, 随手记, Android's 随手记 window).
 export function OutboxSettings({ confirm, onNavigate }: { confirm: Confirm; onNavigate: (id: string) => void }) {
   const { groups, refresh } = useOutbox();
   const [busy, setBusy] = useState('');

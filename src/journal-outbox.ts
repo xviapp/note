@@ -7,7 +7,7 @@ import { draftEpoch } from './note-drafts';
 // 今日记 for an encrypted journal that is not unlocked on this device. The
 // record cannot be sealed with the journal's key yet, so it waits here, sealed
 // with a key that never leaves this device (a non-extractable WebCrypto key,
-// like the Android widget's Keystore inbox). Once the journal is unlocked the
+// like the Android 随手记 window's Keystore inbox). Once the journal is unlocked the
 // record and its photos are sealed with the journal key, uploaded, and added
 // to the day they were written. Cleared on sign-out with the drafts.
 export interface OutboxRecord {

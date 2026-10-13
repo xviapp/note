@@ -19,7 +19,7 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 /** A native capture window: no WebView, note list, or MainActivity. Opened by the
- * widget, the launcher shortcut, the Quick Settings tile and selected text. */
+ * launcher shortcut, the quick bar widget and selected text. */
 public class ClipCaptureActivity extends Activity {
     private final ExecutorService writer = Executors.newSingleThreadExecutor();
     private boolean saving;
