@@ -123,7 +123,6 @@ test('随手记 images go into the note being edited and become notes; clips can
   // Into the note being edited, at the cursor.
   await page.goto(`/n/${note.id}`);
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
   const source = page.getByRole('textbox', { name: 'Markdown 源码' });
   await expect(source).toBeVisible();
   await source.click();

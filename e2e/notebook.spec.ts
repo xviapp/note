@@ -2,7 +2,7 @@ import { expect, test } from './fixtures';
 import { noteAction } from './note-actions';
 import { expectPreview, login, createNote, edit, nav, assistantSeed } from './notebook-helpers';
 
-test('default preview, per-file edit confirmation, save/history, favorites, trash and restore', async ({
+test('default preview, editing, save/history, favorites, trash and restore', async ({
   page,
 }, info) => {
   const errors: string[] = [];
@@ -10,13 +10,9 @@ test('default preview, per-file edit confirmation, save/history, favorites, tras
   await login(page);
   await createNote(page, `阅读手记 · ${info.project.name}`);
   await expect(page.locator('.cm-editor')).toHaveCount(0);
-  await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page
-    .getByRole('dialog', { name: '编辑这篇笔记？' })
-    .getByRole('button', { name: '取消', exact: true })
-    .click();
-  await expectPreview(page);
+  // Clicking 编辑正文 opens the editor without another question.
   await edit(page);
+  await expect(page.getByRole('dialog')).toHaveCount(0);
   const content =
     '# 一个安静的阅读空间\n\n把想法留在页间，让资料有迹可循。\n\n## 本周的阅读\n\n- [x] 整理手边的资料\n- [ ] 留一点时间给思考\n\n> 阅读，是与自己的一次长谈。\n\n## 一些值得记住的事\n\n| 内容 | 状态 |\n| --- | --- |\n| 随手笔记 | 已整理 |\n| 收藏资料 | 继续读 |\n\n```js\nconst nextPage = () => keepReading();\n```\n\n## 下一页\n\n按自己的节奏，慢慢读。\n';
   await page.getByRole('textbox', { name: 'Markdown 源码' }).fill(content);

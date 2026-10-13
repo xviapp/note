@@ -34,12 +34,6 @@ export async function createNote(page: Page, title: string) {
 }
 export async function edit(page: Page) {
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await expect(page.getByRole('dialog')).toHaveCount(1);
-  await expect(page.locator('.cm-editor')).toHaveCount(0);
-  await page
-    .getByRole('dialog', { name: '编辑这篇笔记？' })
-    .getByRole('button', { name: '开始编辑' })
-    .click();
   await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toBeVisible();
 }
 export async function selectTheme(page: Page, value: string) {

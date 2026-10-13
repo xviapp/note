@@ -99,7 +99,6 @@ export function useNoteEditor({
   // refused one comes back into the editor with the draft and the reason.
   const editingNow = useRef(editing);
   editingNow.current = editing;
-  const startAttempt = useRef(0);
   useEffect(() => {
     const saved = (event: Event) => {
       const detail = (event as CustomEvent<NoteDetail>).detail;
@@ -265,28 +264,12 @@ export function useNoteEditor({
     setLeaveGuard(leave);
     return () => setLeaveGuard(async () => true);
   });
-  // A new, empty note opens for writing without asking.
-  const start = async (confirm = true) => {
-    // The edit token is requested while the question is open, so confirming
-    // starts editing without another round trip. Not while a save is on its
-    // way: that save holds the note's token.
-    const attempt = ++startAttempt.current;
+  // Clicking 编辑正文 (or pressing E) is the confirmation; the server still
+  // requires the edit token. Not requested while a save is on its way: that
+  // save holds the note's token.
+  const start = async () => {
     const unlocking = pendingSave(id) && !pendingSave(id)!.error ? null : unlockNote(id);
     unlocking?.catch(() => {});
-    if (
-      confirm &&
-      !(await question.confirm(
-        '编辑这篇笔记？',
-        '确认后可以修改正文和附件。按 Ctrl+S 保存后继续编辑，点「保存」后回到只读预览。',
-        '开始编辑',
-      ))
-    ) {
-      // Only if nothing newer (another start, an edit, a save) needs the token.
-      void unlocking?.then(() => {
-        if (startAttempt.current === attempt && !editingNow.current && !pendingSave(id)) lockNote(id);
-      }, () => {});
-      return;
-    }
     try {
       // A save still on its way sets the revision this edit starts from.
       await waitForSave(id);

@@ -213,7 +213,7 @@ export default function NotePane(props: Props) {
       return;
     onAutoEdit?.();
     if (note.journal_entry) return;
-    void startEdit(false);
+    void startEdit();
     // startEdit is recreated each render; this runs once the new note has loaded.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [autoEdit, note, editing, onAutoEdit]);

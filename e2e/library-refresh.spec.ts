@@ -235,10 +235,6 @@ test('directory refresh leaves an unsaved editor and current note intact', async
   });
   await page.goto(`/n/${note.id}`);
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page
-    .getByRole('dialog', { name: '编辑这篇笔记？' })
-    .getByRole('button', { name: '开始编辑' })
-    .click();
   const editor = page.getByRole('textbox', { name: 'Markdown 源码' });
   await editor.fill('还没有保存的修改');
   await openSidebar(page);

@@ -148,7 +148,6 @@ test('selection toolbar copies, offers translation, and dismisses without editin
   });
   await page.screenshot({ path: info.outputPath('selection-starry.png') });
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
   const editor = page.getByRole('textbox', { name: 'Markdown 源码' });
   await editor.click();
   await page.keyboard.press('ControlOrMeta+A');

@@ -121,7 +121,6 @@ test('back restores the originating list and cancelled edits preserve browser hi
   await page.locator('.node-list-main').filter({ hasText: node.title }).click();
   await expect(page).toHaveURL(new RegExp(`/n/${node.id}$`));
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
   await page.getByRole('textbox', { name: 'Markdown 源码' }).fill('# 保留这份草稿');
   await page.getByRole('button', { name: '返回', exact: true }).click();
   const dialog = page.getByRole('dialog', { name: '还有未保存的修改' });

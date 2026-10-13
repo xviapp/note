@@ -67,7 +67,6 @@ test('Save returns to the note at once and finishes in the background', async ({
   const node = await create(page, { kind: 'markdown', title: '后台保存', content: '原文' });
   await page.goto(`/n/${node.id}`);
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
   await writeSource(page, '后台提交的正文');
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
@@ -95,7 +94,6 @@ test('typing during Ctrl+S survives completion and reload', async ({ page }) => 
   const node = await create(page, { kind: 'markdown', title: '保存中的草稿', content: '原文' });
   await page.goto(`/n/${node.id}`);
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
   const source = page.getByRole('textbox', { name: 'Markdown 源码' });
   await writeSource(page, '提交的正文');
   let release!: () => void;
@@ -237,7 +235,6 @@ test('creation and editing layouts fit all themes and keep header action gaps eq
     await page.setViewportSize({ width, height: width < 400 ? 844 : 960 });
     await page.goto(`/n/${node.id}`);
     await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-    await page.getByRole('button', { name: '开始编辑', exact: true }).click();
     await writeSource(page, '未提交正文');
     for (const theme of ['light', 'dark', 'starry']) {
       await page.evaluate((value) => {

@@ -21,7 +21,6 @@ async function create(page: Page, data: object) {
 const source = (page: Page) => page.getByRole('textbox', { name: 'Markdown 源码' });
 async function startEditing(page: Page) {
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
-  await page.getByRole('button', { name: '开始编辑', exact: true }).click();
   await expect(source(page)).toBeVisible();
 }
 const png = Buffer.from(
@@ -148,8 +147,9 @@ test('search jumps to a note by title words and shows where it lives', async ({ 
     // E edits the open note; / opens search when no field has focus.
     await page.locator('.read-content').click();
     await page.keyboard.press('e');
-    await expect(page.getByRole('dialog', { name: '编辑这篇笔记？' })).toBeVisible();
+    await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toBeVisible();
     await page.getByRole('button', { name: '取消', exact: true }).click();
+    await expect(page.locator('.cm-editor')).toHaveCount(0);
     await page.keyboard.press('/');
     await expect(dialog).toBeVisible();
     await field.fill('没有这样的标题');
