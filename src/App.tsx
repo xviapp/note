@@ -33,6 +33,7 @@ import { refreshCatalog, subscribeKeys } from './keyring';
 import { flushJournalOutbox } from './journal-outbox';
 import { flushQuickRecords } from './quick-journal';
 import { flushSaves } from './save-outbox';
+import { fillSearchIndex } from './search-index';
 import { settleChange, showChange } from './optimistic';
 import { NodeForm } from './components/NodeForm';
 import { NodeList } from './components/NodeList';
@@ -356,6 +357,8 @@ function Notebook({
     const flush = () => {
       // Note bodies saved in the background that are still on their way.
       void flushSaves();
+      // Bodies not yet in the server's search index.
+      fillSearchIndex();
       void flushJournalOutbox().then((sent) => {
         if (sent) {
           showToast(`${sent} 条今日记已记入日记`);

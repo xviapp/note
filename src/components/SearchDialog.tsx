@@ -5,10 +5,32 @@ import { searchCachedTitles } from '../offline-cache';
 import type { NoteNode, SearchResult } from '../../shared/types';
 import { Modal, NodeIcon } from './Primitives';
 import { requestAnnotation } from '../annotations';
+import { requestFind } from '../find-request';
+import { searchEncryptedBodies } from '../local-search';
 
-// Jump to a note by title, or to one of its highlights and notes: Ctrl+K or /
-// on computers, the search button on phones. With nothing typed it lists
-// recent visits.
+const wordsOf = (query: string) => query.trim().split(/\s+/).filter(Boolean).slice(0, 8);
+// Server results first, then encrypted notes found on this device.
+const merge = (server: SearchResult[], local: SearchResult[]) => [
+  ...server,
+  ...local.filter((node) => !server.some((other) => other.id === node.id)),
+];
+// The excerpt with the searched words marked.
+function marked(text: string, words: string[]) {
+  const pattern = words.map((word) => word.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')).join('|');
+  if (!pattern) return text;
+  return text.split(new RegExp(`(${pattern})`, 'gi')).map((part, index) =>
+    index % 2 ? <mark key={index}>{part}</mark> : part,
+  );
+}
+// Opening a result goes to what matched: the annotation, or the word in the body.
+function goTo(node: SearchResult, query: string) {
+  if (node.annotation) requestAnnotation(node.id, node.annotation.id);
+  else if (node.excerpt) requestFind(node.id, wordsOf(query)[0]!);
+}
+
+// Jump to a note by title or body, or to one of its highlights and notes:
+// Ctrl+K or / on computers, the search button on phones. With nothing typed it
+// lists recent visits. Encrypted bodies are searched on this device only.
 export function SearchDialog({
   onOpen,
   onClose,
@@ -43,13 +65,14 @@ export function SearchDialog({
     let answered = false;
     // Titles this device has seen show at once; the server's results replace them.
     if (term)
-      void searchCachedTitles(term.split(/\s+/).filter(Boolean).slice(0, 8)).then((found) => {
+      void searchCachedTitles(wordsOf(term)).then((found) => {
         if (!live || answered || !found.length) return;
         setResults(found.map((node): SearchResult => ({ ...node, path: [] })));
         setState('local');
       });
     const timer = setTimeout(
       () => {
+        const local = term ? searchEncryptedBodies(wordsOf(term)).catch(() => []) : Promise.resolve([]);
         const request = term
           ? api<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term)}`).then(
               (data) => data.results,
@@ -58,13 +81,14 @@ export function SearchDialog({
               data.nodes.map((node): SearchResult => ({ ...node, path: [] })),
             );
         request
-          .then((found) => {
+          .then(async (server) => {
+            const found = merge(server, await local);
             answered = true;
             if (!live) return;
             if (pendingEnter.current && found[0]) {
               pendingEnter.current = false;
               handlers.current.onClose();
-              if (found[0].annotation) requestAnnotation(found[0].id, found[0].annotation.id);
+              goTo(found[0], term);
               handlers.current.onOpen(found[0]);
               return;
             }
@@ -73,12 +97,14 @@ export function SearchDialog({
             setActive(0);
             setState('ready');
           })
-          .catch((e) => {
+          .catch(async (e) => {
             answered = true;
+            const found = await local;
             if (!live) return;
             setError((e as Error).message);
             pendingEnter.current = false;
-            // Titles found on this device stay, marked as such.
+            // Titles and encrypted notes found on this device stay, marked as such.
+            if (found.length) setResults((shown) => merge(shown, found));
             setState('error');
           });
       },
@@ -98,7 +124,7 @@ export function SearchDialog({
     // Results always belong to the current query: they are cleared when it changes.
     if (state === 'loading') return;
     onClose();
-    if (node.annotation) requestAnnotation(node.id, node.annotation.id);
+    goTo(node, query);
     onOpen(node);
   };
   const optionId = (index: number) => `${list}-${index}`;
@@ -112,11 +138,11 @@ export function SearchDialog({
           enterKeyHint="go"
           autoComplete="off"
           role="combobox"
-          aria-label="搜索笔记标题或批注"
+          aria-label="搜索笔记标题、正文或批注"
           aria-expanded={results.length > 0}
           aria-controls={list}
           aria-activedescendant={results.length ? optionId(active) : undefined}
-          placeholder="输入标题或批注中的文字，多个词用空格分开"
+          placeholder="输入标题、正文或批注中的文字，多个词用空格分开"
           value={query}
           maxLength={200}
           onChange={(event) => {
@@ -151,10 +177,10 @@ export function SearchDialog({
             : query.trim()
               ? results.length
                 ? `找到 ${results.length} 项${results.length >= 30 ? '（只显示最近修改的 30 项）' : ''}`
-                : '没有标题或批注匹配的笔记'
+                : '没有标题、正文或批注匹配的笔记'
               : results.length
                 ? '最近访问'
-                : '输入标题或批注中的文字开始搜索'}
+                : '输入标题、正文或批注中的文字开始搜索'}
       </p>
       <ul id={list} ref={listRef} className="search-results" role="listbox" aria-label="搜索结果">
         {results.map((node, index) => (
@@ -181,6 +207,12 @@ export function SearchDialog({
                   ) : (
                     <q>{node.annotation.quote}</q>
                   )}
+                </span>
+              )}
+              {node.excerpt && !node.annotation && (
+                <span className="search-excerpt">
+                  {node.local && <span className="search-local">本机</span>}
+                  {marked(node.excerpt, wordsOf(query))}
                 </span>
               )}
               {node.path.length > 0 && <small>{node.path.join(' / ')}</small>}

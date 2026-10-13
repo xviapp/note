@@ -4,6 +4,7 @@ import { AppError, integer } from './http';
 import { getNode } from './library';
 import { UNREFERENCED } from './storage';
 import { pruneClips } from './clips';
+import { indexPending } from './note-text';
 
 export async function deletePreview(
   env: Env,
@@ -124,6 +125,8 @@ export async function cleanup(
     id: string;
   }>();
   for (const batch of batches.results) await purgeBatch(env, batch.id);
+  // A few notes per run; the app fills the rest through POST /api/search/index.
+  await indexPending(env, 5).catch(() => {});
   if (!files) return { removed: 0 };
   // Select once, then delete in bounded batches without rescanning referenced blobs.
   // Keep D1 calls below the Free plan per-invocation limit, including maintenance above.

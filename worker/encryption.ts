@@ -1,3 +1,4 @@
+import { forgetSubtree } from './note-text';
 import {
   fromBase64Url,
   importContentKey,
@@ -164,7 +165,9 @@ export async function setEncryption(
       throw new AppError(404, '密钥不存在，请重新设置密码。');
   }
   await env.DB.prepare('UPDATE nodes SET encryption=? WHERE id=?').bind(value, id).run();
-  return getNode(env, id);
+  const node = await getNode(env, id);
+  if (node.key_id) await forgetSubtree(env, id);
+  return node;
 }
 // The keys along a note's path, nearest last: what an AI request on it needs.
 export async function nodeKeys(env: Env, id: string) {

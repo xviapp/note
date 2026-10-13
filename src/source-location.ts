@@ -142,6 +142,10 @@ export function textSourceRange(
     !!location.versionId && root.dataset.versionId === location.versionId,
   );
   if (offset === null) return '原文已修改或删除，无法准确定位。';
+  return rangeAt(root, offset, location.exact.length) ?? '原文暂时无法定位，请等待正文加载完成后重试。';
+}
+// The range of `length` characters at `offset` in the root's text.
+function rangeAt(root: HTMLElement, offset: number, size: number): Range | null {
   const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
   const range = document.createRange();
   let position = 0,
@@ -152,13 +156,26 @@ export function textSourceRange(
       range.setStart(node, offset - position);
       started = true;
     }
-    if (started && position + length >= offset + location.exact.length) {
-      range.setEnd(node, offset + location.exact.length - position);
+    if (started && position + length >= offset + size) {
+      range.setEnd(node, offset + size - position);
       return range;
     }
     position += length;
   }
-  return '原文暂时无法定位，请等待正文加载完成后重试。';
+  return null;
+}
+
+/** Highlights and scrolls to the first occurrence of a search word (ASCII case ignored). */
+export function locateWord(root: HTMLElement, word: string): boolean {
+  const text = (root.textContent || '').toLowerCase();
+  const offset = text.indexOf(word.toLowerCase());
+  const range = offset < 0 ? null : rangeAt(root, offset, word.length);
+  if (!range) return false;
+  clearSourceHighlight();
+  if (typeof Highlight !== 'undefined' && CSS.highlights)
+    CSS.highlights.set('translation-source', new Highlight(range));
+  revealRange(root, range);
+  return true;
 }
 
 /** Scrolls a range into the reading area, a little below its top edge. */

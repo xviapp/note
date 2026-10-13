@@ -2661,6 +2661,28 @@ button.node-list-toggle:focus-visible {
 .search-annotation q {
   color: var(--muted);
 }
+/* The words around a body match, two lines at most. */
+.search-excerpt {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--muted);
+  font-size: 12px;
+  line-height: 1.5;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+.search-excerpt mark {
+  background: none;
+  color: var(--ink);
+  font-weight: 600;
+}
+.search-local {
+  margin-right: 6px;
+  padding: 0 5px;
+  border: 1px solid var(--line);
+  border-radius: 4px;
+  font-size: 11px;
+}
 .kind-choices {
   display: grid;
   grid-template-columns: 1fr 1fr;

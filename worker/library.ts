@@ -1,3 +1,4 @@
+import { forgetStatement, forgetSubtree, indexStatement } from './note-text';
 import type { Env } from './types';
 import type { FileInfo, NoteDetail, NoteNode, NodeKind, VersionInfo } from '../shared/types';
 import { PARENT_KINDS, TEXT_KINDS, UNTITLED_NAMES } from '../shared/types';
@@ -401,6 +402,9 @@ export async function createNode(
               : await metadataStatement(env, id, version, content, scope),
           ]
         : []),
+      ...(isText && !paper && !sealedBody && !scope
+        ? [indexStatement(env, id, version, kind, content)]
+        : []),
     );
   try {
     await env.DB.batch(statements);
@@ -495,6 +499,9 @@ export async function saveNote(
       env.DB.prepare(
         'DELETE FROM versions WHERE node_id=? AND id NOT IN (SELECT id FROM versions WHERE node_id=? ORDER BY sequence DESC LIMIT 6)',
       ).bind(id, id),
+      known && !scope && !node.arxiv_id
+        ? indexStatement(env, id, version, node.kind, content)
+        : forgetStatement(env, id),
     ]);
   } catch (error) {
     if (fresh) await discardFile(env, fresh.id).catch(() => {});
@@ -546,7 +553,10 @@ export async function updateNode(
   if (!result) throw new AppError(409, '节点已在其他页面更新，请刷新后重试。', 'VERSION_CONFLICT');
   if (node.icon_blob_id && node.icon_blob_id !== icon.fileId)
     await discardFile(env, node.icon_blob_id).catch(() => {});
-  return getNode(env, id);
+  const updated = await getNode(env, id);
+  // Moved into an encrypted folder: its plain text leaves the search index.
+  if (moving && updated.key_id) await forgetSubtree(env, id);
+  return updated;
 }
 export async function versionsList(env: Env, id: string): Promise<VersionInfo[]> {
   const node = await getNode(env, id);

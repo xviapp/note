@@ -9,6 +9,7 @@ import type {
   StorageInfo,
   VersionInfo,
   ShareSettings,
+  SearchResult,
 } from '../shared/types';
 import { cleanup } from '../worker/recovery';
 import { discardFile, storeText, uploadFile } from '../worker/storage';
@@ -140,6 +141,60 @@ describe('private library behavior', () => {
     expect((await request('/api/search?q=x', 'GET', undefined, { anonymous: true })).status).toBe(
       401,
     );
+  });
+
+  it('searches note bodies with context, short words, saves, restores and trash', async () => {
+    type Results = { results: SearchResult[] };
+    const search = (q: string) => ok<Results>(`/api/search?q=${encodeURIComponent(q)}`);
+    const note = await create('markdown', '周记', {
+      content: '# 本周\n\n读完了 **注意力机制** 一章，[论文](https://example.com/attention) 还要再看。',
+    });
+    const plain = await create('text', '摘抄', { content: 'Attention is all you need.' });
+    let found = (await search('注意力机制')).results;
+    expect(found.map((node) => node.id)).toEqual([note.id]);
+    // Markup and link targets are left out of what is searched and shown.
+    expect(found[0].excerpt).toBe('本周 读完了 注意力机制 一章，论文 还要再看。');
+    expect((await search('example.com')).results).toEqual([]);
+    // Two-character words scan instead of using the trigram index.
+    expect((await search('读完 论文')).results.map((node) => node.id)).toEqual([note.id]);
+    expect((await search('ATTENTION')).results.map((node) => node.id)).toEqual([plain.id]);
+    // A title match gains the body's context instead of a second result.
+    found = (await search('周记')).results;
+    expect(found).toHaveLength(1);
+    expect(found[0].excerpt).toBeUndefined();
+    const saved = await save(note, '换了内容：周记里写自注意力。');
+    found = (await search('周记')).results;
+    expect(found).toHaveLength(1);
+    expect(found[0].excerpt).toBe('换了内容：周记里写自注意力。');
+    expect((await search('注意力机制')).results).toEqual([]);
+    const { versions } = await ok<{ versions: VersionInfo[] }>(`/api/nodes/${note.id}/versions`);
+    await ok(`/api/nodes/${note.id}/versions/${versions.at(-1)!.id}/restore`, 'POST', {
+      revision: saved.revision,
+    });
+    expect((await search('注意力机制')).results.map((node) => node.id)).toEqual([note.id]);
+    await trash(plain);
+    expect((await search('attention')).results).toEqual([]);
+  });
+
+  it('indexes bodies saved before the index in small batches', async () => {
+    for (let i = 0; i < 12; i++) await create('markdown', `旧笔记 ${i}`, { content: `历史正文 ${i}` });
+    await bindings.DB.prepare('DELETE FROM note_text').run();
+    const search = () => ok<{ results: SearchResult[] }>('/api/search?q=历史正文');
+    expect((await search()).results).toEqual([]);
+    expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 10, more: true });
+    expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 2, more: false });
+    expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 0, more: false });
+    expect((await search()).results).toHaveLength(12);
+    // The scheduled cleanup fills the index too.
+    await bindings.DB.prepare('DELETE FROM note_text').run();
+    await cleanup(bindings, { files: false });
+    expect((await search()).results).toHaveLength(5);
+    // Deleting a note for good removes its text.
+    const [first] = (await search()).results;
+    await bindings.DB.prepare('DELETE FROM nodes WHERE id=?').bind(first.id).run();
+    expect(
+      await bindings.DB.prepare('SELECT COUNT(*) count FROM note_text WHERE node_id=?').bind(first.id).first('count'),
+    ).toBe(0);
   });
 
   it('creates untitled notes and folders while keeping uploaded filenames and rename validation', async () => {

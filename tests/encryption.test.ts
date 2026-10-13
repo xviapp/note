@@ -309,6 +309,44 @@ describe('encrypted notes', () => {
       .first<{ search_text: string }>();
     expect(row!.search_text).toBe('');
   });
+  it('keeps encrypted notes out of body search', async () => {
+    const indexed = async () =>
+      (await bindings.DB.prepare('SELECT node_id FROM note_text ORDER BY node_id').all<{ node_id: string }>())
+        .results.map((row) => row.node_id);
+    const search = async (q: string) =>
+      (await ok<{ results: NoteNode[] }>(`/api/search?q=${encodeURIComponent(q)}`)).results.map((n) => n.id);
+    const folder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '私人' });
+    const note = await ok<NoteNode>('/api/nodes', 'POST', {
+      kind: 'markdown',
+      parentId: folder.id,
+      content: '不想被搜到的正文',
+    });
+    const loose = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'markdown', content: '移进去的正文' });
+    expect(await search('的正文')).toHaveLength(2);
+    // Setting a password drops the plain text at once, before re-encryption.
+    const { id, key, header } = await newKey();
+    await ok(`/api/nodes/${folder.id}/encryption`, 'PUT', { encryption: id });
+    expect(await indexed()).toEqual([loose.id]);
+    expect(await search('不想被搜到')).toEqual([]);
+    // So does moving a note into the encrypted folder.
+    await ok(`/api/nodes/${loose.id}`, 'PATCH', { revision: loose.revision, parentId: folder.id });
+    expect(await indexed()).toEqual([]);
+    // Still-plain bodies below an encrypted folder are not indexed again.
+    expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 0, more: false });
+    // Text the Worker writes with the folder's key is not indexed either.
+    const sealed = await uploadSealed(key, id, '设备加密的正文');
+    await ok(
+      '/api/nodes',
+      'POST',
+      { kind: 'markdown', parentId: folder.id, bodyBlobId: sealed.id },
+      header,
+    );
+    expect(await indexed()).toEqual([]);
+    // A note set back to plain is indexed again once its body is plain.
+    await ok(`/api/nodes/${note.id}/encryption`, 'PUT', { encryption: 'none' });
+    expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 1, more: false });
+    expect(await search('不想被搜到')).toEqual([note.id]);
+  });
   it('re-encrypts existing content in place', async () => {
     const folder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '旧笔记' });
     const note = await ok<NoteNode>('/api/nodes', 'POST', {

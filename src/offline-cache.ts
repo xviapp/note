@@ -556,6 +556,14 @@ export async function searchCachedTitles(words: string[], limit = 30): Promise<N
   }).catch(() => {});
   return [...found.values()].sort((a, b) => b.updated_at - a.updated_at).slice(0, limit);
 }
+// Encrypted notes kept here (bodies still sealed), for searching on the device.
+export async function cachedSealedNotes(): Promise<NoteDetail[]> {
+  return transaction('readonly', async (tx) =>
+    (await request<CachedNote[]>(tx.objectStore('notes').getAll()))
+      .map((note) => note.detail)
+      .filter((detail) => typeof detail.sealed === 'string' && !!detail.key_id && !detail.trash_id),
+  ).catch(() => []);
+}
 // Whether a note has a copy here, without counting as reading it.
 export async function hasCachedNote(id: string) {
   return transaction('readonly', async (tx) => !!(await request(tx.objectStore('notes').getKey(id)))).catch(() => true);

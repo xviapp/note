@@ -25,6 +25,7 @@ Cron 仍每 30 分钟触发，会话、回收站、备份任务等常规维护�
 
 - **D1 迁移解析**：云端对触发器中未加括号的 `CASE … END` 报 `incomplete input`，本地却能通过。迁移里的 CASE 表达式一律加括号，见 [workers-sdk#4727](https://github.com/cloudflare/workers-sdk/issues/4727)。
 - **PBKDF2 次数上限**：云端 Workers 最多 100,000 次（[workerd 限制](https://github.com/cloudflare/workerd/blob/main/src/workerd/io/limit-enforcer.h)），本地不受限。因此 600,000 次 PBKDF2 在浏览器中计算，服务端用 `APP_SECRET` 做带域标识的 HMAC-SHA256 校验；不要为通过限制而降低次数。
+- **D1 全文索引**：正文搜索用 FTS5 虚拟表（`note_text_index`，trigram 分词）。`wrangler d1 export` 不支持导出含虚拟表的数据库，需要导出时先删除该虚拟表，导入后由迁移重建并重新补建索引；页间自己的备份不受影响。
 - **D1 单次限制**：免费方案每次调用最多 50 条查询、单个绑定值 2 MB，备份恢复按此分块（见 `worker/backups.ts`）。
 
 ## 免费额度与 CPU

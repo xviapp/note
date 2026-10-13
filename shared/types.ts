@@ -108,6 +108,10 @@ export interface SearchResult extends NoteNode {
   path: string[];
   // Set when the match is in one of the file's highlights or notes.
   annotation?: { id: string; quote: string; note: string };
+  // Set when the match is in the body: the words around it.
+  excerpt?: string;
+  // Found on this device (an encrypted note), not by the server.
+  local?: boolean;
 }
 export const SEARCH_LIMIT = 30;
 export interface ShareSettings {

@@ -33,6 +33,7 @@ import { uploadChatFile } from './chat-files';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import { arxivPreview, continueArxiv, importArxiv } from './arxiv';
 import { searchNodes } from './search';
+import { indexPending } from './note-text';
 import { deleteTranslation, getTranslation, translate, translationHistory } from './translation';
 import {
   extractGlossary,
@@ -176,6 +177,7 @@ export default {
         return json(await generateRolePrompt(env, await body(request)));
       if (path === '/api/nodes' && method === 'GET') return json(await listNodes(env, url));
       if (path === '/api/search' && method === 'GET') return json(await searchNodes(env, url));
+      if (path === '/api/search/index' && method === 'POST') return json(await indexPending(env, 10));
       if (path === '/api/nodes' && method === 'POST') {
         return json(await createNode(env, await body(request), operationKey(request)), 201);
       }

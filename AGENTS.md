@@ -22,6 +22,8 @@
 
 **Shared contracts.** `shared/` is imported by both `src/` and `worker/`: API types, limits, SVG sanitizer, SSE parsing, assistant token budgeting (`shared/ai-context.ts`) and the backup format. Change limits and types there. New tables need entries in `shared/backup.ts` and restore in `worker/backups.ts`.
 
+**Search.** `/api/search` matches titles, bodies and annotations. Unencrypted Markdown/text bodies are kept as plain text in `note_text` with an FTS5 trigram index (`worker/note-text.ts`), written in the same batch as each new version and backfilled by `indexPending()`; encrypted bodies are never indexed and are searched on the device (`src/local-search.ts`). Details in `docs/search.md`.
+
 **AI.** `worker/deepseek.ts` stores the API key encrypted with a key derived from `APP_SECRET` and makes provider calls. `worker/assistant.ts` handles per-node threads plus a global thread (`GLOBAL_ASSISTANT_ID = 'qingli-global'`), streamed over SSE. Budgets are checked before any paid call; paid requests are never retried automatically.
 
 **Frontend.** All API calls go through `api()` in `src/api.ts`, which waits for the Android proxy (`proxyReady`) and falls back to the IndexedDB cache (`src/offline-cache.ts`) for whitelisted GETs when offline. `NotePane` shows a cached copy of a note first and swaps in the server's answer, holding edits until then. Papers are sanitized once per content and cached (`preparePaper` in `PaperView.tsx`). `scripts/offline-shell.ts` generates `/sw.js` for the web build only. Cache invariants are in `docs/offline-reading.md`.
@@ -51,7 +53,7 @@ All application source and assets are maintained in this repository. Edit local 
 - User-facing text, error messages, README and `docs/` are Simplified Chinese; code comments and commits are English.
 - Match surrounding code. Base styles live in `src/styles.css`; `src/shell.css` only adds family-specific rules.
 - Docs describe current behavior. Do not add dated validation logs or version histories; release notes go in `docs/releases/<version>.txt`.
-- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
+- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
 
 ## Testing
 

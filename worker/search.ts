@@ -1,11 +1,13 @@
 import { SEARCH_FIELD } from '../shared/annotations';
 import { SEARCH_LIMIT, type NoteNode, type SearchResult } from '../shared/types';
-import { NODE_COLUMNS, NOT_DISCUSSION } from './library';
+import { KEY_SQL, NODE_COLUMNS, NOT_DISCUSSION } from './library';
+import { bodyMatch, EXCERPT_SQL, excerpt } from './note-text';
 import type { Env } from './types';
 
-// Title search for quick jumps, then highlights and notes. Every
-// space-separated word must appear in the title, or in one annotation
-// (case-insensitive for ASCII); newest edits come first.
+// Title search for quick jumps, then note bodies, then highlights and notes.
+// Every space-separated word must appear in the title, the body (unencrypted
+// notes, see note-text.ts) or one annotation (case-insensitive for ASCII);
+// newest edits come first.
 export async function searchNodes(env: Env, url: URL): Promise<{ results: SearchResult[] }> {
   const words = (url.searchParams.get('q') || '')
     .trim()
@@ -15,12 +17,22 @@ export async function searchNodes(env: Env, url: URL): Promise<{ results: Search
     .slice(0, 8);
   if (!words.length) return { results: [] };
   const pattern = (word: string) => `%${word.replace(/[\\%_]/g, (c) => `\\${c}`)}%`;
-  const [titles, annotated] = await env.DB.batch<NoteNode & { search_text?: string }>([
+  const body = bodyMatch(words),
+    context = EXCERPT_SQL(words[0]);
+  const [titles, bodies, annotated] = await env.DB.batch<
+    NoteNode & { search_text?: string; excerpt?: string; excerpt_at?: number; body_length?: number }
+  >([
     env.DB.prepare(
       `SELECT ${NODE_COLUMNS} FROM nodes n WHERE n.trash_id IS NULL AND ${NOT_DISCUSSION('n')} AND ${words
         .map(() => "n.title LIKE ? ESCAPE '\\'")
         .join(' AND ')} ORDER BY n.updated_at DESC,n.id LIMIT ?`,
     ).bind(...words.map(pattern), SEARCH_LIMIT),
+    env.DB.prepare(
+      `SELECT ${NODE_COLUMNS},${context.sql} FROM ${body.from} JOIN nodes n ON n.id=t.node_id
+       WHERE ${body.where.join(' AND ')} AND n.trash_id IS NULL AND ${NOT_DISCUSSION('n')}
+         AND t.version_id=n.current_version_id AND ${KEY_SQL('n')} IS NULL
+       ORDER BY n.updated_at DESC,n.id LIMIT ?`,
+    ).bind(...context.params, ...body.params, SEARCH_LIMIT),
     env.DB.prepare(
       `SELECT ${NODE_COLUMNS},a.search_text FROM annotations a JOIN nodes n ON n.id=a.node_id
        WHERE n.trash_id IS NULL AND ${words
@@ -30,7 +42,16 @@ export async function searchNodes(env: Env, url: URL): Promise<{ results: Search
   ]);
   // The first annotation of each file that holds every word.
   const lower = words.map((word) => word.toLowerCase());
-  const hits: (NoteNode & { annotation?: SearchResult['annotation'] })[] = [...titles.results];
+  const hits: (NoteNode & Pick<SearchResult, 'annotation' | 'excerpt'>)[] = [...titles.results];
+  // A body match adds its context, or the note when its title did not match.
+  const found = new Map(hits.map((node) => [node.id, node]));
+  for (const row of bodies.results) {
+    const { excerpt: piece = '', excerpt_at: at = 0, body_length: length = 0, ...node } = row;
+    const text = excerpt(piece, at, length);
+    const known = found.get(node.id);
+    if (known) known.excerpt = text;
+    else if (hits.length < SEARCH_LIMIT) hits.push({ ...node, excerpt: text });
+  }
   for (const row of annotated.results) {
     const { search_text: text = '', ...node } = row;
     const line = text

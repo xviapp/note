@@ -38,7 +38,8 @@ import { SelectionToolbar } from './SelectionToolbar';
 import { TranslationPanel } from './TranslationPanel';
 import type { TranslationLaunch } from '../translation';
 import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
-import { clearSourceHighlight, locateTextSource } from '../source-location';
+import { clearSourceHighlight, locateTextSource, locateWord } from '../source-location';
+import { takeRequestedFind } from '../find-request';
 import { exportAnnotations, useAnnotations } from '../annotations';
 import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
@@ -248,6 +249,23 @@ export default function NotePane(props: Props) {
     setPdfLocation({ ...location });
     if (note?.file?.id !== file.id) setPdf(file);
   };
+  // A body match from search: once the text is shown, go to the first word.
+  useEffect(() => {
+    if (note?.id !== id || editing) return;
+    const word = takeRequestedFind(id);
+    if (!word) return;
+    let tries = 0,
+      timer = 0;
+    const attempt = () => {
+      const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
+      if (root && locateWord(root, word)) touched.current = restored.current = true;
+      else if (++tries < 20) timer = window.setTimeout(attempt, 150);
+    };
+    timer = window.setTimeout(attempt, 100);
+    return () => window.clearTimeout(timer);
+    // Runs once the note is there; the refs hold the latest reading state.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [id, note?.id === id]);
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
   const previewFile = (file: FileInfo) => {
     if (file.mime.startsWith('image/')) showImage(fileUrl(file.id), file.name);
