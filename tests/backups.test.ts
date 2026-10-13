@@ -7,7 +7,7 @@ import type { NoteDetail, NoteNode } from '../shared/types';
 import type { AnnotationList } from '../shared/annotations';
 import type { LibraryBackup } from '../shared/backup';
 import { createNode } from '../worker/library';
-import { readText, storeChatBody, storeText, uploadFile } from '../worker/storage';
+import { LIBRARY_UNREFERENCED, readText, storeChatBody, storeText, uploadFile } from '../worker/storage';
 import { cleanup, purgeTrash, trashNode } from '../worker/recovery';
 import { startRestore, finishRestore } from '../worker/backups';
 
@@ -276,6 +276,12 @@ it('round-trips the whole library, versions, paper assets, chats and translation
   expect(JSON.parse(await readText(bindings, translated!.body_blob_id)).location.fileId).toBe(
     restoredPdf.file_blob_id,
   );
+  // Every restored reference releases its blob's reservation.
+  expect(
+    (await bindings.DB.prepare(
+      `SELECT COUNT(*) count FROM blobs WHERE draft_until IS NOT NULL AND NOT (${LIBRARY_UNREFERENCED})`,
+    ).first<{ count: number }>())!.count,
+  ).toBe(0);
   expect((await ok<NoteDetail>(`/api/nodes/${note.id}`)).content).toContain(pdf.id); // Original survives.
   expect(
     (await bindings.DB.prepare('SELECT COUNT(*) count FROM backup_restore_nodes').first<{
