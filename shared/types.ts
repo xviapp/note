@@ -65,6 +65,8 @@ export interface NoteNode {
   reference_target_id?: string | null;
   reference_kind?: NodeKind | null;
   project_category?: ProjectCategory | null;
+  // Only in the recent view: where reading stopped.
+  reading_position?: ReadingPosition;
   metadata_title?: string | null;
   metadata_status?: string | null;
   metadata_excerpt?: string | null;

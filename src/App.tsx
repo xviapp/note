@@ -53,6 +53,7 @@ import { BootScreen } from './components/BootScreen';
 import { preloadMarkdown } from './components/LazyMarkdown';
 import { AppHeader, Sidebar } from './components/Sidebar';
 import { SyncStatus } from './components/SyncStatus';
+import { ContinueReading } from './components/ContinueReading';
 import { useOutboxSummary } from './outbox';
 import { SearchDialog } from './components/SearchDialog';
 import { AuthScreen } from './components/AuthScreen';
@@ -741,6 +742,7 @@ function Notebook({
               ) : (
                 <section className="collection-page library-home">
                   <h1 className="sr-only">全部笔记</h1>
+                  <ContinueReading refresh={revision} onOpen={openNode} />
                   <nav className="library-shortcuts" aria-label="笔记快捷入口">
                     <button onClick={() => switchView('recent')}>
                       <Clock3 size={16} />

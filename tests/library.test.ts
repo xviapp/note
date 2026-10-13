@@ -665,6 +665,8 @@ describe('private library behavior', () => {
     const recent = (await ok<{ nodes: NoteNode[] }>('/api/nodes?view=recent')).nodes;
     expect(recent).toHaveLength(20);
     expect(recent[0].id).toBe(node.id);
+    expect(recent[0].reading_position).toEqual({ ratio: 0.6, heading: 'heading-0' });
+    expect(recent[1].reading_position).toEqual({});
     expect(new Set(recent.map((n) => n.id)).size).toBe(20);
   });
   it('serves authenticated byte ranges and forces unknown active content to download', async () => {

@@ -73,7 +73,7 @@ export async function listNodes(
     query = `SELECT ${NODE_COLUMNS} FROM nodes n JOIN favorites f ON f.node_id=n.id WHERE n.trash_id IS NULL ORDER BY f.created_at DESC,n.id LIMIT ? OFFSET ?`;
     params = [limit + 1, offset];
   } else if (view === 'recent') {
-    query = `SELECT ${NODE_COLUMNS} FROM nodes n JOIN reading_states r ON r.node_id=n.id WHERE n.trash_id IS NULL ORDER BY r.last_opened_at DESC,n.id LIMIT 20`;
+    query = `SELECT ${NODE_COLUMNS},r.position reading_position FROM nodes n JOIN reading_states r ON r.node_id=n.id WHERE n.trash_id IS NULL ORDER BY r.last_opened_at DESC,n.id LIMIT 20`;
   } else if (view === 'journals') {
     // The 今日记 journal chosen in settings comes first, then the journal written in most recently.
     query = `SELECT ${NODE_COLUMNS} FROM nodes n JOIN journals j ON j.node_id=n.id WHERE n.trash_id IS NULL
@@ -88,6 +88,10 @@ export async function listNodes(
   const result = await env.DB.prepare(query)
     .bind(...params)
     .all<NoteNode>();
+  // Recent items carry where reading stopped, for 继续阅读 on the home page.
+  if (view === 'recent')
+    for (const node of result.results)
+      node.reading_position = JSON.parse(node.reading_position as unknown as string);
   return {
     nodes: result.results.slice(0, limit),
     nextOffset: result.results.length > limit ? offset + limit : null,
