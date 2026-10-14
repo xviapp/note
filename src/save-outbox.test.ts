@@ -1,3 +1,4 @@
+import { readSentHistory } from './sent-history';
 import { beforeEach, expect, it, vi } from 'vitest';
 import type { NoteDetail } from '../shared/types';
 import { readDraft } from './note-drafts';
@@ -35,6 +36,7 @@ it('sends the body in the background and clears the draft once saved', async () 
   await flushSaves();
   expect(api).toHaveBeenCalledWith('/api/nodes/n1/content', 'PUT', { content: '新正文', attachments: [], revision: 3 }, expect.any(String));
   expect(pendingSave('n1')).toBeUndefined();
+  expect(readSentHistory()).toEqual([expect.objectContaining({ summary: '读书笔记', detail: '笔记修改' })]);
   expect(await readDraft('n1')).toBeNull();
   expect((saved.mock.calls[0]![0] as CustomEvent<NoteDetail>).detail.revision).toBe(4);
 });
@@ -43,6 +45,7 @@ it('waits after a lost connection and resends with the same operation', async ()
   api.mockRejectedValue(new ApiError('连接已中断', 0));
   await queueSave(note, '新正文', []);
   await flushSaves();
+  expect(readSentHistory()).toEqual([]);
   expect(pendingSave('n1')).toMatchObject({ id: 'n1' });
   expect(pendingSave('n1')!.error).toBeUndefined();
   const key = api.mock.calls[0]![3];

@@ -89,7 +89,7 @@ export const backupColumns = {
   journals: ['node_id'],
   journal_entries: ['node_id', 'journal_id', 'date', 'created_at'],
   node_references: ['node_id', 'target_id'],
-  clips: ['id', 'text', 'key_id', 'source_id', 'pinned', 'created_at', 'blob_id'],
+  clips: ['id', 'text', 'key_id', 'source_id', 'pinned', 'created_at', 'blob_id', 'archived'],
   trash_batches: [
     'id',
     'root_id',
@@ -219,6 +219,7 @@ export function validateBackup(input: unknown): LibraryBackup {
       if (table === 'annotations' && row.search_text === undefined) row.search_text = '';
       if (table === 'books' && row.note_id === undefined) row.note_id = null;
       if (table === 'books' && row.cover_blob_id === undefined) row.cover_blob_id = null;
+      if (table === 'clips' && row.archived === undefined) row.archived = 0;
       if (table === 'clips' && row.blob_id === undefined) row.blob_id = null;
       // Older v1 archives predate custom folder icons.
       if (table === 'nodes') {
@@ -458,6 +459,7 @@ export function validateBackup(input: unknown): LibraryBackup {
       (row.key_id !== null && !keys.has(String(row.key_id))) ||
       (row.source_id !== null && !id(row.source_id)) ||
       (row.pinned !== 0 && row.pinned !== 1) ||
+      (row.archived !== 0 && row.archived !== 1) ||
       !Number.isSafeInteger(row.created_at)
     )
       invalid('随手记信息不正确。');

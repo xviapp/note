@@ -66,7 +66,41 @@ final class ClipInbox {
         JSONArray all = read(context), result = new JSONArray();
         for (int i = 0; i < all.length(); i++) {
             JSONObject item = all.getJSONObject(i);
-            if (host.equals(item.getString("host"))) result.put(item);
+            if (host.equals(item.getString("host")) && !item.has("sentAt")) result.put(item);
+        }
+        return result;
+    }
+    static synchronized void sent(Context context, String host, String id, boolean encrypted) throws Exception {
+        JSONArray all = read(context);
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject item = all.getJSONObject(i);
+            if (host.equals(item.getString("host")) && id.equals(item.getString("id"))) {
+                if (!item.has("sentAt")) item.put("sentAt", System.currentTimeMillis());
+                String text = encrypted ? "（加密内容）" : item.getString("text");
+                item.put("text", text.substring(0, Math.min(60, text.length())));
+            }
+        }
+        write(context, prune(all));
+    }
+    private static JSONArray prune(JSONArray all) throws Exception {
+        java.util.List<JSONObject> sent = new java.util.ArrayList<>();
+        JSONArray keep = new JSONArray();
+        long cutoff = System.currentTimeMillis() - 30L * 24 * 60 * 60 * 1000;
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject item = all.getJSONObject(i);
+            if (!item.has("sentAt")) keep.put(item);
+            else if (item.optLong("sentAt") > cutoff) sent.add(item);
+        }
+        sent.sort((a, b) -> Long.compare(b.optLong("sentAt"), a.optLong("sentAt")));
+        for (int i = 0; i < Math.min(500, sent.size()); i++) keep.put(sent.get(i));
+        return keep;
+    }
+    static synchronized JSONArray history(Context context, String host) throws Exception {
+        JSONArray all = prune(read(context)), result = new JSONArray();
+        write(context, all);
+        for (int i = 0; i < all.length(); i++) {
+            JSONObject item = all.getJSONObject(i);
+            if (host.equals(item.getString("host")) && item.has("sentAt")) result.put(item);
         }
         return result;
     }

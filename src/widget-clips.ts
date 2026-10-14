@@ -21,7 +21,7 @@ async function send() {
     for (const item of items) {
       const text = keyId ? await sealString(keyId, item.text) : item.text;
       await api('/api/clips', 'POST', { id: item.id, text, createdAt: item.createdAt }, item.id);
-      await device.removeWidgetClip({ id: item.id });
+      await device.markWidgetClipSent({ id: item.id, encrypted: !!keyId });
     }
     window.dispatchEvent(new Event('note:widget-clips-sent'));
   } catch {

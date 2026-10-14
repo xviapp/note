@@ -17,6 +17,8 @@ Android 彩色前景使用 `drawable-nodpi/brand_clay.png`，内缩 16%；网页
 
 桌面图标缓存的刷新时间由系统决定；已安装的网页快捷方式是否刷新图标由浏览器及系统决定。
 
+启动图标略高于中心：Android 使用独立的 `splash_icon.xml`，保持图案大小，将图案在系统 288 dp 画布内上移约 23 dp；指纹等待背景复用同一图稿。网页加载页将图标、名称和加载提示整体上移 24 px。桌面图标仍保持居中。
+
 ## 青藜图标
 
 `assets/qingli/original.png` 保存用户确认的短发带读书人物图稿，`assets/qingli/mark.svg` 是从图稿直接提取的深色轮廓，`assets/qingli/mark.png` 为透明栅格图形，处理方式见[资源记录](../assets/qingli/README.md)。发布用的 `public/qingli/mark-128.png` 仅缩小尺寸并移除元数据，不重绘图案。

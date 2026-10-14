@@ -122,6 +122,14 @@ await writeFile(path.join(native, 'drawable/ic_launcher_foreground.xml'), `<?xml
     <bitmap android:src="@drawable/brand_clay" android:gravity="fill" />
 </inset>
 `);
+// Keep the launcher centered; lift only the splash artwork within its masked canvas.
+await writeFile(path.join(native, 'drawable/splash_icon.xml'), `<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:insetLeft="16%" android:insetRight="16%"
+    android:insetTop="8%" android:insetBottom="24%">
+    <bitmap android:src="@drawable/brand_clay" android:gravity="fill" />
+</inset>
+`);
 
 const qingli = path.join(root, 'public/qingli');
 await mkdir(qingli, { recursive: true });

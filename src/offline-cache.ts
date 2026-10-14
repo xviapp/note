@@ -390,6 +390,7 @@ export const cacheablePath = (path: string) =>
   path === '/api/storage' ||
   path === '/api/storage/usage' ||
   path === '/api/clips' ||
+  path === '/api/clips?view=archived' ||
   // 青藜's global conversation (its latest page) and whether it is set up, so
   // the 问青藜 window and panel open with the last conversation.
   path === '/api/nodes/qingli-global/assistant' ||

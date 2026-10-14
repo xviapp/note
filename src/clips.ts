@@ -1,3 +1,4 @@
+import { recordSent, sentExcerpt } from './sent-history';
 import { useSyncExternalStore } from 'react';
 import { api, ApiError, cachedApi, parse, uncertainFailure, upload, uploadSealed } from './api';
 import {
@@ -9,7 +10,7 @@ import {
 } from '../shared/clips';
 import { isSealedText, openText, sealedTextKeyId } from '../shared/encryption';
 import { keyOrThrow, plainUpload, reveal, sealData, sealString } from './encryption';
-import { DRAFT_PREFIX } from './note-drafts';
+import { DRAFT_PREFIX, draftEpoch } from './note-drafts';
 import { isOffline } from './connectivity';
 import { proxyReady } from './proxy';
 
@@ -29,6 +30,7 @@ export interface PendingClip {
   file?: Clip['file'];
   // Why the server refused it; it stays until removed or sent.
   error?: string;
+  archived?: boolean;
 }
 const OUTBOX = `${DRAFT_PREFIX}clips`;
 const listeners = new Set<() => void>();
@@ -83,6 +85,7 @@ export async function revealPending(items: PendingClip[]): Promise<(Clip & { pen
       source_id: item.sourceId,
       source_title: item.sourceTitle ?? null,
       pinned: false,
+      archived: item.archived ?? false,
       created_at: item.createdAt,
       file: item.file ?? null,
       pending: item,
@@ -111,7 +114,7 @@ export async function addClip(
   text: string,
   source: { id: string; title: string } | null = null,
   // Restoring a deleted clip reuses its ID, time and image.
-  restore?: { id: string; createdAt: number; file?: Clip['file'] },
+  restore?: { id: string; createdAt: number; file?: Clip['file']; archived?: boolean },
   image?: Blob & { name?: string },
 ) {
   const value = text.replace(/\r\n?/g, '\n').trim();
@@ -128,6 +131,7 @@ export async function addClip(
     sourceTitle: source?.title ?? null,
     createdAt: restore?.createdAt ?? Date.now(),
     file,
+    archived: restore?.archived ?? false,
   };
   writeOutbox([...outbox, item]);
   void flushClips();
@@ -197,6 +201,7 @@ export function onClipsSent(listener: () => void) {
 }
 // 'stop' when it cannot go yet, which holds back the rest.
 async function send(item: PendingClip): Promise<'sent' | 'kept' | 'stop'> {
+  const started = draftEpoch();
   let current = item;
   for (let attempt = 0; attempt < 2; attempt++) {
     try {
@@ -209,9 +214,11 @@ async function send(item: PendingClip): Promise<'sent' | 'kept' | 'stop'> {
           sourceId: current.sourceId,
           createdAt: current.createdAt,
           blobId: current.file?.id ?? null,
+          ...(current.archived ? { archived: true } : {}),
         },
         current.id,
       );
+      recordSent({ id: `clips:${item.id}`, summary: sealedTextKeyId(current.text) || current.file?.key_id ? '（加密内容）' : sentExcerpt(current.text) || '（只有图片）', detail: '随手记' }, started);
       saved.forEach((listener) => listener(clip));
       writeOutbox(outbox.filter((entry) => entry.id !== item.id));
       return 'sent';
@@ -267,10 +274,10 @@ export async function setClipEncryption(target: string | null, progress?: (done:
   await api('/api/clips/encryption', 'PUT', { keyId: target, items: [] });
   keyId = target;
   const all: Clip[] = [];
-  let list = await api<ClipList>('/api/clips');
+  let list = await api<ClipList>('/api/clips?view=all');
   all.push(...list.pinned, ...list.items);
   while (list.next) {
-    list = await api<ClipList>(`/api/clips?before=${encodeURIComponent(list.next)}`);
+    list = await api<ClipList>(`/api/clips?view=all&before=${encodeURIComponent(list.next)}`);
     all.push(...list.items);
   }
   // Responses arrive opened while the keys are unlocked.

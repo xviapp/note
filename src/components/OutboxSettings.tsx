@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { RotateCcw, Trash2, UploadCloud } from 'lucide-react';
+import { useSentHistory } from '../sent-history';
+import { ArrowLeft, History, RotateCcw, Trash2, UploadCloud } from 'lucide-react';
 import { useOutbox, type OutboxGroup, type OutboxItem } from '../outbox';
 import { Spinner, type Confirm } from './Primitives';
 
@@ -10,6 +11,8 @@ const time = (value: number) =>
 // from every outbox (今日记 for a locked journal, 随手记, Android's 随手记 window).
 export function OutboxSettings({ confirm, onNavigate }: { confirm: Confirm; onNavigate: (id: string) => void }) {
   const { groups, refresh } = useOutbox();
+  const [history, setHistory] = useState(false);
+  const sent = useSentHistory();
   const [busy, setBusy] = useState('');
   const run = async (key: string, task: () => Promise<unknown>) => {
     setBusy(key);
@@ -25,14 +28,46 @@ export function OutboxSettings({ confirm, onNavigate }: { confirm: Confirm; onNa
       return;
     await run(`${group.source.key}:${item.id}`, () => group.source.remove(item.id));
   };
+  if (history) return (
+    <section className="settings-section outbox-settings">
+      <header className="outbox-heading">
+        <h2>
+          <button className="icon-button" aria-label="返回待发送" title="返回待发送" onClick={() => setHistory(false)}>
+            <ArrowLeft size={19} />
+          </button>
+          已发送
+        </h2>
+      </header>
+      <p className="field-hint">本机最近 30 天的发送记录，最多保留 500 条。</p>
+      {!sent.length ? <p className="outbox-empty">暂无发送记录</p> : (
+        <section className="outbox-group" aria-label="发送历史">
+          <ul>
+            {sent.map((item) => (
+              <li key={item.id}>
+                <div>
+                  <strong>{item.summary}</strong>
+                  <small>{item.detail} · {time(item.sentAt)} 已发送</small>
+                </div>
+              </li>
+            ))}
+          </ul>
+        </section>
+      )}
+    </section>
+  );
   if (!groups) return <Spinner />;
   const filled = groups.filter((group) => group.items.length);
   return (
     <section className="settings-section outbox-settings">
-      <h2>
-        <UploadCloud size={19} />
-        待发送
-      </h2>
+      <header className="outbox-heading">
+        <h2>
+          <UploadCloud size={19} />
+          待发送
+        </h2>
+        <button className="icon-button" aria-label="发送历史" title="发送历史" onClick={() => setHistory(true)}>
+          <History size={19} />
+        </button>
+      </header>
       <p className="field-hint">
         这些内容还没传到服务器，联网后会自动发送。
       </p>

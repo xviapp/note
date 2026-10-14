@@ -61,6 +61,20 @@ public class NoteDevicePlugin extends Plugin {
     }
 
     @PluginMethod
+    public void sentWidgetClips(PluginCall call) {
+        try { call.resolve(new JSObject().put("items", ClipInbox.history(getContext(), ServerConfig.host(getContext())))); }
+        catch (Exception error) { call.reject("无法读取发送历史。", error); }
+    }
+
+    @PluginMethod
+    public void markWidgetClipSent(PluginCall call) {
+        String id = call.getString("id");
+        if (id == null) { call.reject("缺少随手记标识。"); return; }
+        try { ClipInbox.sent(getContext(), ServerConfig.host(getContext()), id, call.getBoolean("encrypted", false)); call.resolve(); }
+        catch (Exception error) { call.reject("无法保存发送历史。", error); }
+    }
+
+    @PluginMethod
     public void removeWidgetClip(PluginCall call) {
         String id = call.getString("id");
         if (id == null) { call.reject("缺少随手记标识。"); return; }

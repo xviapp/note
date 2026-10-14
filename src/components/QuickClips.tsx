@@ -10,6 +10,8 @@ import {
   type FormEvent,
 } from 'react';
 import {
+  Archive,
+  ArrowLeft,
   ImagePlus,
   Lock,
   LockOpen,
@@ -70,6 +72,10 @@ export function QuickClips({
   const toast = useToast();
   const outbox = usePendingClips();
   const editor = useInsertTarget();
+  const [archived, setArchived] = useState(false);
+  const path = archived ? '/api/clips?view=archived' : '/api/clips';
+  const request = useRef(0);
+  const lastKey = useRef<string | null>(null);
   const [list, setList] = useState<ClipList | null>(null);
   const [more, setMore] = useState<Clip[]>([]);
   const [next, setNext] = useState<string | null>(null);
@@ -87,19 +93,35 @@ export function QuickClips({
   const field = useRef<HTMLTextAreaElement>(null);
 
   const load = useCallback(async () => {
+    const current = ++request.current;
     try {
-      const fresh = await api<ClipList>('/api/clips');
+      const fresh = await api<ClipList>(path);
+      if (request.current !== current) return;
       rememberClipKey(fresh.keyId);
+      lastKey.current = fresh.keyId;
       setList(fresh);
       setMore([]);
       setNext(fresh.next);
       setError('');
     } catch (reason) {
-      setError((reason as Error).message);
+      if (request.current === current) setError((reason as Error).message);
     }
-  }, []);
+  }, [path]);
+  const latestLoad = useRef(load);
+  latestLoad.current = load;
+  const switchArchive = (value: boolean) => {
+    request.current++;
+    setArchived(value);
+    setView('list');
+    setList(null);
+    setMore([]);
+    setNext(null);
+    setFilter('');
+    setError('');
+  };
   useEffect(() => {
     const unsaved = onClipSaved((clip) => {
+      if (!!clip.archived !== archived) return;
       setList((current) => {
         if (!current) return current;
         const place = clip.pinned ? 'pinned' : 'items';
@@ -122,18 +144,22 @@ export function QuickClips({
       unsaved();
       window.removeEventListener('note:widget-clips-sent', reload);
     };
-  }, [load]);
+  }, [load, archived]);
   // The copy kept on this device shows first, then the server's answer.
   useEffect(() => {
     let live = true;
-    void cachedApi<ClipList>('/api/clips').then((cached) => {
-      if (live && cached) setList((current) => current ?? cached);
+    void cachedApi<ClipList>(path).then((cached) => {
+      if (live && cached) setList((current) => {
+        if (current) return current;
+        lastKey.current = cached.keyId;
+        return cached;
+      });
     });
     void load();
     return () => {
       live = false;
     };
-  }, [load]);
+  }, [load, path]);
   useEffect(() => {
     let live = true;
     void revealPending(outbox).then((items) => live && setPending(items));
@@ -142,7 +168,19 @@ export function QuickClips({
     };
   }, [outbox, keys]);
 
-  const keyId = list?.keyId ?? null;
+  useEffect(() => {
+    if (!archived || !filter.trim() || !next || offline) return;
+    let live = true;
+    const current = request.current;
+    void api<ClipList>(`${path}&before=${encodeURIComponent(next)}`).then((page) => {
+      if (!live || current !== request.current) return;
+      setMore((items) => [...items, ...page.items.filter((item) => !items.some((entry) => entry.id === item.id))]);
+      setNext(page.next);
+    }).catch((reason) => { if (live) setError((reason as Error).message); });
+    return () => { live = false; };
+  }, [archived, filter, next, offline, path, list]);
+
+  const keyId = list ? list.keyId : lastKey.current;
   const keyLocked = !!keyId && !isUnlocked(keyId);
   const sourceId = source?.id ?? null;
   useEffect(() => {
@@ -194,7 +232,7 @@ export function QuickClips({
   const pinned = (list?.pinned ?? []).filter(match);
   // Decryption finishes asynchronously; stop rendering a pending copy as soon
   // as it leaves the outbox, in the same render that shows its saved record.
-  const waiting = pending.filter((item) => outbox.some((entry) => entry.id === item.id));
+  const waiting = archived ? [] : pending.filter((item) => !item.archived && outbox.some((entry) => entry.id === item.id));
   const recent = [...waiting, ...saved].filter(match);
   const total = (list?.pinned.length ?? 0) + waiting.length + saved.length;
 
@@ -231,10 +269,14 @@ export function QuickClips({
     pick(file);
   };
   const run = async (action: () => Promise<void>) => {
+    if (busy) return;
+    setBusy(true);
     try {
       await action();
     } catch (reason) {
       toast.show((reason as Error).message);
+    } finally {
+      setBusy(false);
     }
   };
   const copy = (item: Item) =>
@@ -268,6 +310,20 @@ export function QuickClips({
         return { ...current, [place]: [updated, ...current[place]].sort(newestFirst) };
       });
     });
+  const archive = (item: Clip) =>
+    run(async () => {
+      request.current++;
+      await api<Clip>(`/api/clips/${item.id}`, 'PATCH', { archived: !item.archived });
+      without(item.id);
+      await latestLoad.current();
+      toast.show(item.archived ? '已恢复到随手记' : '已归档', async () => {
+        await run(async () => {
+          await api(`/api/clips/${item.id}`, 'PATCH', { archived: !!item.archived });
+          if (item.pinned) await api(`/api/clips/${item.id}`, 'PATCH', { pinned: true });
+          await latestLoad.current();
+        });
+      });
+    });
   const remove = (item: Item) =>
     run(async () => {
       if (item.pending) {
@@ -281,7 +337,7 @@ export function QuickClips({
           await addClip(
             item.text,
             item.source_id ? { id: item.source_id, title: item.source_title ?? '' } : null,
-            { id: item.id, createdAt: item.created_at, file: item.file },
+            { id: item.id, createdAt: item.created_at, file: item.file, archived: item.archived },
           ).catch((reason) => toast.show((reason as Error).message));
         });
     });
@@ -294,8 +350,10 @@ export function QuickClips({
   const older = () =>
     run(async () => {
       if (!next) return;
-      const page = await api<ClipList>(`/api/clips?before=${encodeURIComponent(next)}`);
-      setMore((current) => [...current, ...page.items]);
+      const current = request.current;
+      const page = await api<ClipList>(`${path}${archived ? '&' : '?'}before=${encodeURIComponent(next)}`);
+      if (current !== request.current) return;
+      setMore((items) => [...items, ...page.items.filter((item) => !items.some((entry) => entry.id === item.id))]);
       setNext(page.next);
     });
 
@@ -317,6 +375,7 @@ export function QuickClips({
       }
       onView={() => setViewing(item.file)}
       onPin={() => void pin(item)}
+      onArchive={() => void archive(item)}
       onRemove={() => void remove(item)}
       onInsert={editor ? () => void insert(item, editor) : undefined}
       onConvert={() => setView(item)}
@@ -366,7 +425,8 @@ export function QuickClips({
             />
           </div>
         )}
-        <form className="clips-compose" onSubmit={save}>
+        {archived && <p className="field-hint">已处理的内容留在这里，随时可以恢复，不会自动清理。</p>}
+        {!archived && <form className="clips-compose" onSubmit={save}>
           <textarea
             ref={field}
             aria-label="随手记内容"
@@ -425,7 +485,7 @@ export function QuickClips({
               {busy && image ? '上传中…' : '保存'}
             </button>
           </div>
-        </form>
+        </form>}
         {error && !locked && (
           <p className="inline-error" role="alert">
             {error}
@@ -436,12 +496,12 @@ export function QuickClips({
             插入位置：「{editor.title}」的光标处
           </p>
         )}
-        {total > 5 && (
+        {(archived || total > 5) && (
           <label className="clips-filter">
             <Search size={15} aria-hidden="true" />
             <input
-              aria-label="筛选随手记"
-              placeholder="筛选"
+              aria-label={archived ? "搜索已归档" : "筛选随手记"}
+              placeholder={archived ? "搜索已归档内容" : "筛选"}
               value={filter}
               onChange={(event) => setFilter(event.target.value)}
             />
@@ -459,12 +519,13 @@ export function QuickClips({
             <ul className="clips-list">{recent.map(row)}</ul>
           </section>
         ) : (
-          list &&
+          list && !(archived && filter && next && !error && !offline) &&
           !pinned.length && (
-            <p className="clips-empty">{filter ? '没有匹配的随手记。' : '还没有随手记。'}</p>
+            <p className="clips-empty">{filter ? '没有匹配的随手记。' : archived ? '暂无归档内容。' : '还没有随手记。'}</p>
           )
         )}
-        {next && !filter && (
+        {archived && filter && next && !error && !offline && <p className="field-hint" role="status">正在搜索更早的归档…</p>}
+        {next && !(archived && filter && !error && !offline) && (
           <button
             className="text-button clips-more"
             disabled={offline}
@@ -477,11 +538,18 @@ export function QuickClips({
     );
   return (
     <Modal
-      title="随手记"
+      title={archived && view === 'list' ? '已归档' : '随手记'}
       className="clips-modal"
       onClose={() => { if (!busy) onClose(); }}
       actions={
-        // Whether clips are encrypted, and the way to their password.
+        <>
+        {view === 'list' && (
+          <button className="icon-button" aria-label={archived ? '返回随手记' : '已归档'}
+            title={archived ? '返回随手记' : '已归档'} disabled={busy}
+            onClick={() => switchArchive(!archived)}>
+            {archived ? <ArrowLeft size={17} /> : <Archive size={17} />}
+          </button>
+        )}
         <button
           className={`icon-button clips-lock${keyId ? ' is-encrypted' : ''}${view === 'settings' ? ' is-active' : ''}`}
           aria-label={`加密设置（${keyId ? '已加密' : '未加密'}）`}
@@ -491,6 +559,7 @@ export function QuickClips({
         >
           {keyId ? <Lock size={17} /> : <LockOpen size={17} />}
         </button>
+        </>
       }
     >
       {body}

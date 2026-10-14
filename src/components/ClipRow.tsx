@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Copy, FilePlus2, Lock, Pin, PinOff, TextCursorInput, Trash2 } from 'lucide-react';
+import { Archive, ArchiveRestore, Copy, FilePlus2, Lock, Pin, PinOff, TextCursorInput, Trash2 } from 'lucide-react';
 import type { Clip } from '../../shared/clips';
 import type { PendingClip } from '../clips';
 import { fileUrl, formatDate } from '../api';
@@ -16,6 +16,7 @@ export function ClipRow({
   onCopyImage,
   onView,
   onPin,
+  onArchive,
   onRemove,
   onInsert,
   onConvert,
@@ -27,6 +28,7 @@ export function ClipRow({
   onCopyImage: () => void;
   onView: () => void;
   onPin: () => void;
+  onArchive: () => void;
   onRemove: () => void;
   onInsert?: () => void;
   onConvert: () => void;
@@ -109,7 +111,7 @@ export function ClipRow({
               <FilePlus2 size={15} />
             </button>
           )}
-          {!item.pending && (
+          {!item.pending && !item.archived && (
             <button
               className="icon-button"
               aria-label={item.pinned ? '取消置顶' : '置顶'}
@@ -118,6 +120,12 @@ export function ClipRow({
               onClick={onPin}
             >
               {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}
+            </button>
+          )}
+          {!item.pending && (
+            <button className="icon-button" aria-label={item.archived ? '恢复随手记' : '归档'}
+              title={item.archived ? '恢复到随手记' : '归档'} disabled={offline} onClick={onArchive}>
+              {item.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
             </button>
           )}
           <button

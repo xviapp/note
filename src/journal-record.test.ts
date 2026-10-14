@@ -1,3 +1,4 @@
+import { readSentHistory } from './sent-history';
 import { beforeEach, expect, it, vi } from 'vitest';
 import { api, ApiError } from './api';
 import { createJournalRecorder } from './journal-record';
@@ -6,7 +7,7 @@ vi.mock('./api', async (original) => {
   const actual = await original<typeof import('./api')>();
   return { ...actual, api: vi.fn(), unlockNote: vi.fn(), lockNote: vi.fn() };
 });
-beforeEach(() => vi.mocked(api).mockReset());
+beforeEach(() => { vi.mocked(api).mockReset(); localStorage.clear(); });
 
 it('does not create a note before a nonempty first record is submitted', async () => {
   const record = createJournalRecorder('journal', '2026-10-07');
@@ -54,4 +55,14 @@ it('sends selected attachments when creating the first entry', async () => {
     content: expect.stringMatching(/!\[photo\]\(\/api\/files\/photo\)/),
     attachments: ['photo'],
   }, 'operation');
+});
+
+it('keeps encrypted journal text out of history and excludes failed sends', async () => {
+  vi.mocked(api).mockRejectedValueOnce(new Error('未发送'));
+  await expect(createJournalRecorder('journal', '2026-10-14')('秘密', '正文', 'key')).rejects.toThrow();
+  expect(readSentHistory()).toEqual([]);
+  vi.mocked(api).mockResolvedValueOnce({ node: { id: 'entry', key_id: 'sealed-key' }, created: true });
+  await createJournalRecorder('journal', '2026-10-14')('秘密', '正文', 'key');
+  expect(readSentHistory()[0]!.summary).toBe('（加密内容）');
+  expect(JSON.stringify(readSentHistory())).not.toContain('秘密');
 });

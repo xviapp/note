@@ -16,21 +16,23 @@ import { getBlob } from './storage';
 import { swapObject } from './encryption';
 import type { Env } from './types';
 
-type Row = Omit<Clip, 'pinned' | 'file'> & {
+type Row = Omit<Clip, 'pinned' | 'archived' | 'file'> & {
   pinned: number;
+  archived: number;
   blob_id: string | null;
   file_name: string | null;
   file_mime: string | null;
   file_size: number | null;
   file_key_id: string | null;
 };
-const SELECT = `SELECT c.id,c.text,c.key_id,c.source_id,c.pinned,c.created_at,c.blob_id,
+const SELECT = `SELECT c.id,c.text,c.key_id,c.source_id,c.pinned,c.archived,c.created_at,c.blob_id,
   b.name file_name,b.mime file_mime,b.size file_size,b.key_id file_key_id,
   (SELECT n.title FROM nodes n WHERE n.id=c.source_id AND n.trash_id IS NULL) source_title
   FROM clips c LEFT JOIN blobs b ON b.id=c.blob_id`;
 const clip = ({ blob_id, file_name, file_mime, file_size, file_key_id, ...row }: Row): Clip => ({
   ...row,
   pinned: !!row.pinned,
+  archived: !!row.archived,
   file: blob_id
     ? { id: blob_id, name: file_name ?? '', mime: file_mime ?? '', size: file_size ?? 0, key_id: file_key_id }
     : null,
@@ -50,8 +52,8 @@ export async function getClipKey(env: Env) {
 // images are left to the blob sweep that follows.
 export const pruneClips = (env: Env) =>
   env.DB.prepare(
-    `DELETE FROM clips WHERE pinned=0 AND id IN (
-       SELECT id FROM clips WHERE pinned=0 ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET ?)`,
+    `DELETE FROM clips WHERE pinned=0 AND archived=0 AND id IN (
+       SELECT id FROM clips WHERE pinned=0 AND archived=0 ORDER BY created_at DESC,id DESC LIMIT -1 OFFSET ?)`,
   ).bind(CLIP_KEEP);
 // Text in the form the setting asks for: sealed with the clip key, or plain.
 // A device with an old idea of the setting learns it and seals again. An
@@ -72,16 +74,19 @@ function checkedText(value: unknown, keyId: string | null, image = false) {
 }
 
 export async function listClips(env: Env, url: URL): Promise<ClipList> {
+  const view = url.searchParams.get('view') ?? 'active';
+  if (!['active', 'archived', 'all'].includes(view)) throw new AppError(400, '随手记视图不正确。');
+  const scope = view === 'all' ? '1=1' : `c.archived=${view === 'archived' ? 1 : 0}`;
   const before = url.searchParams.get('before');
   const cursor = before ? before.match(CURSOR) : null;
   if (before && !cursor) throw new AppError(400, '分页位置不正确。');
   const page = cursor
     ? env.DB.prepare(
-        `${SELECT} WHERE c.pinned=0 AND (c.created_at<? OR (c.created_at=? AND c.id<?))
+        `${SELECT} WHERE ${scope} AND c.pinned=0 AND (c.created_at<? OR (c.created_at=? AND c.id<?))
          ORDER BY c.created_at DESC,c.id DESC LIMIT ?`,
       ).bind(Number(cursor[1]), Number(cursor[1]), cursor[2], CLIP_PAGE + 1)
     : env.DB.prepare(
-        `${SELECT} WHERE c.pinned=0 ORDER BY c.created_at DESC,c.id DESC LIMIT ?`,
+        `${SELECT} WHERE ${scope} AND c.pinned=0 ORDER BY c.created_at DESC,c.id DESC LIMIT ?`,
       ).bind(CLIP_PAGE + 1);
   // Later pages leave out the pinned clips, which the first one carries.
   const [items, site, pinned] = await env.DB.batch<Row & { clip_key_id: string | null }>([
@@ -89,7 +94,7 @@ export async function listClips(env: Env, url: URL): Promise<ClipList> {
     env.DB.prepare(KEY),
     ...(cursor
       ? []
-      : [env.DB.prepare(`${SELECT} WHERE c.pinned=1 ORDER BY c.created_at DESC,c.id DESC`)]),
+      : [env.DB.prepare(`${SELECT} WHERE ${scope} AND c.pinned=1 ORDER BY c.created_at DESC,c.id DESC`)]),
   ]);
   const rows = items.results.slice(0, CLIP_PAGE);
   const last = rows.at(-1);
@@ -105,6 +110,8 @@ export async function listClips(env: Env, url: URL): Promise<ClipList> {
 // returns the clip it saved the first time.
 export async function createClip(env: Env, data: Record<string, unknown>): Promise<Clip> {
   const id = idValue(data.id);
+  if (data.archived !== undefined && typeof data.archived !== 'boolean')
+    throw new AppError(400, '归档状态不正确。');
   const [existing, site] = await env.DB.batch<Row & { clip_key_id: string | null }>([
     env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
     env.DB.prepare(KEY),
@@ -129,10 +136,10 @@ export async function createClip(env: Env, data: Record<string, unknown>): Promi
   // The key is checked again in the write, in case the setting changed meanwhile.
   const [inserted, saved] = await env.DB.batch<Row>([
     env.DB.prepare(
-      `INSERT INTO clips(id,text,key_id,source_id,pinned,created_at,blob_id)
-       SELECT ?,?,?,?,0,?,? WHERE (SELECT clip_key_id FROM site WHERE id=1) IS ?
+      `INSERT INTO clips(id,text,key_id,source_id,pinned,created_at,blob_id,archived)
+       SELECT ?,?,?,?,0,?,?,? WHERE (SELECT clip_key_id FROM site WHERE id=1) IS ?
        ON CONFLICT(id) DO NOTHING RETURNING id`,
-    ).bind(id, text, keyId, source, created, blobId, keyId),
+    ).bind(id, text, keyId, source, created, blobId, data.archived ? 1 : 0, keyId),
     env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
   ]);
   const row = saved.results[0];
@@ -147,19 +154,33 @@ export async function updateClip(
   id: string,
   data: Record<string, unknown>,
 ): Promise<Clip> {
+  if ('archived' in data) {
+    if (typeof data.archived !== 'boolean' || 'pinned' in data)
+      throw new AppError(400, '请指定是否归档，置顶需单独操作。');
+    const [, current] = await env.DB.batch<Row>([
+      env.DB.prepare(`UPDATE clips SET archived=?1,
+        pinned=CASE WHEN ?1=1 THEN 0 ELSE pinned END,
+        created_at=CASE WHEN archived=1 AND ?1=0 THEN ?2 ELSE created_at END
+        WHERE id=?3`).bind(data.archived ? 1 : 0, Date.now(), id),
+      env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
+    ]);
+    if (!current.results[0]) throw new AppError(404, '这条随手记不存在或已删除。');
+    return clip(current.results[0]);
+  }
   if (typeof data.pinned !== 'boolean') throw new AppError(400, '请指定是否置顶。');
   // Pinning stops at CLIP_PINNED. An unpinned clip counts as created now, so
   // it is not dropped at once as the oldest.
   const [updated, current] = await env.DB.batch<Row>([
     env.DB.prepare(
       `UPDATE clips SET pinned=?1,created_at=CASE WHEN pinned=1 AND ?1=0 THEN ?2 ELSE created_at END
-       WHERE id=?3 AND (?1=0 OR pinned=1 OR (SELECT COUNT(*) FROM clips WHERE pinned=1)<?4)
+       WHERE id=?3 AND archived=0 AND (?1=0 OR pinned=1 OR (SELECT COUNT(*) FROM clips WHERE pinned=1 AND archived=0)<?4)
        RETURNING id`,
     ).bind(data.pinned ? 1 : 0, Date.now(), id, CLIP_PINNED),
     env.DB.prepare(`${SELECT} WHERE c.id=?`).bind(id),
   ]);
   const row = current.results[0];
   if (!row) throw new AppError(404, '这条随手记不存在或已删除。');
+  if (row.archived) throw new AppError(400, '请先恢复这条随手记，再置顶。');
   if (!updated.results.length) throw new AppError(400, `最多置顶 ${CLIP_PINNED} 条。`);
   return clip(row);
 }

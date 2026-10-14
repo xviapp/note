@@ -39,7 +39,8 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
-.clips-filter {
+.clips-modal .clips-filter {
+  flex-direction: row;
   display: flex;
   align-items: center;
   gap: 8px;
@@ -49,7 +50,7 @@
   border-radius: var(--radius-control);
   color: var(--muted);
 }
-.clips-filter input {
+.clips-filter input:not([type='checkbox']):not([type='radio']):not([type='file']) {
   flex: 1;
   min-width: 0;
   border: 0;

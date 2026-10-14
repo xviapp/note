@@ -1,7 +1,8 @@
+import { recordSent } from './sent-history';
 import { api, lockNote, uncertainFailure, unlockNote } from './api';
 import { isOffline } from './connectivity';
 import { isUnlocked } from './keyring';
-import { DRAFT_PREFIX, readDraft, removeDraft, writeDraft } from './note-drafts';
+import { DRAFT_PREFIX, draftEpoch, readDraft, removeDraft, writeDraft } from './note-drafts';
 import type { FileInfo, NoteDetail, NoteNode } from '../shared/types';
 
 // 保存 returns to the note at once; the body is sent from here. The draft
@@ -105,6 +106,7 @@ export function flushSaves(retryRefused = false): Promise<void> {
 }
 // False stops the round: the connection is lost and later saves wait too.
 async function send(item: PendingSave): Promise<boolean> {
+  const started = draftEpoch();
   const draft = await readDraft(item.id);
   // The body saved with this entry, or a later edit of it; never an older draft.
   if (!draft || draft.savedAt < (item.draftAt ?? 0)) {
@@ -119,6 +121,7 @@ async function send(item: PendingSave): Promise<boolean> {
       attachments: draft.attachments.map((file) => file.id),
       revision: item.revision,
     }, item.key);
+    recordSent({ id: `saves:${item.key}`, summary: item.keyId ? '（加密内容）' : item.title || '无标题笔记', detail: '笔记修改' }, started);
     const detail = await api<NoteDetail>(`/api/nodes/${item.id}`);
     // The save may be newer than this entry: another one replaced it meanwhile.
     if (pendingSave(item.id)?.key !== item.key) return true;

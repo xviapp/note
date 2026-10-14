@@ -74,7 +74,7 @@ public class ClipUploadJob extends JobService {
                             .put("createdAt", item.getLong("createdAt")).toString().getBytes(StandardCharsets.UTF_8);
                         try (var output = connection.getOutputStream()) { output.write(body); }
                         int status = connection.getResponseCode();
-                        if (status >= 200 && status < 300) ClipInbox.remove(this, host, item.getString("id"));
+                        if (status >= 200 && status < 300) ClipInbox.sent(this, host, item.getString("id"), false);
                         else { retry = true; break; }
                     } finally { connection.disconnect(); }
                 }

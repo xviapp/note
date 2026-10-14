@@ -140,6 +140,54 @@ describe('clips', () => {
     expect((await ok<ClipList>('/api/clips')).items.map((clip) => clip.id)).toEqual([second.id]);
   });
 
+  it('archives across lists, survives cleanup, and restores to recent without a pin', async () => {
+    const item = await add('长期保留', { createdAt: Date.now() - 100000 });
+    await ok(`/api/clips/${item.id}`, 'PATCH', { pinned: true });
+    const archived = await ok<Clip>(`/api/clips/${item.id}`, 'PATCH', { archived: true });
+    expect(archived).toMatchObject({ archived: true, pinned: false });
+    expect((await ok<ClipList>('/api/clips')).items).toEqual([]);
+    expect((await ok<ClipList>('/api/clips')).pinned).toEqual([]);
+    expect((await ok<ClipList>('/api/clips?view=archived')).items[0].id).toBe(item.id);
+    expect((await request(`/api/clips/${item.id}`, 'PATCH', { pinned: true })).status).toBe(400);
+    await bindings.DB.batch(Array.from({ length: CLIP_KEEP + 1 }, (_, index) =>
+      bindings.DB.prepare('INSERT INTO clips(id,text,created_at) VALUES(?,?,?)').bind(`new-${index}`, '新内容', Date.now() + index)));
+    await cleanup(bindings);
+    expect((await ok<ClipList>('/api/clips?view=archived')).items[0].id).toBe(item.id);
+    const restored = await ok<Clip>(`/api/clips/${item.id}`, 'PATCH', { archived: false });
+    expect(restored).toMatchObject({ archived: false, pinned: false });
+    expect(restored.created_at).toBeGreaterThan(item.created_at);
+    expect((await ok<ClipList>('/api/clips?view=archived')).items).toEqual([]);
+    expect((await request(`/api/clips/${item.id}`, 'PATCH', { archived: 'yes' })).status).toBe(400);
+    expect((await request('/api/clips/missing', 'PATCH', { archived: true })).status).toBe(404);
+    expect((await request('/api/clips?view=unknown')).status).toBe(400);
+  });
+
+  it('pages archived clips separately and includes them in the encryption scan and backups', async () => {
+    await bindings.DB.batch(Array.from({ length: CLIP_PAGE + 1 }, (_, index) =>
+      bindings.DB.prepare('INSERT INTO clips(id,text,created_at,archived) VALUES(?,?,?,1)').bind(`archive-${index}`, '归档', index)));
+    const first = await ok<ClipList>('/api/clips?view=archived');
+    expect(first.items).toHaveLength(CLIP_PAGE);
+    const last = await ok<ClipList>(`/api/clips?view=archived&before=${first.next}`);
+    expect(last.items).toHaveLength(1);
+    expect(last.next).toBeNull();
+    expect((await ok<ClipList>('/api/clips')).items).toEqual([]);
+    expect((await ok<ClipList>('/api/clips?view=all')).items).toHaveLength(CLIP_PAGE);
+    const snapshot = await ok<{ archive: LibraryBackup }>('/api/backups', 'POST', {});
+    expect(snapshot.archive.tables.clips.every((row) => row.archived === 1)).toBe(true);
+    await bindings.DB.prepare('DELETE FROM clips').run();
+    const stage = await ok<{ id: string }>('/api/backups/restore', 'POST', snapshot.archive);
+    await ok(`/api/backups/${stage.id}/commit`, 'POST', {});
+    expect((await ok<ClipList>('/api/clips?view=archived')).items).toHaveLength(CLIP_PAGE);
+    expect((await ok<ClipList>('/api/clips')).items).toEqual([]);
+    // Older backups have no archive flag and restore to the ordinary list.
+    for (const row of snapshot.archive.tables.clips) delete row.archived;
+    await bindings.DB.prepare('DELETE FROM clips').run();
+    const old = await ok<{ id: string }>('/api/backups/restore', 'POST', snapshot.archive);
+    await ok(`/api/backups/${old.id}/commit`, 'POST', {});
+    expect((await ok<ClipList>('/api/clips?view=archived')).items).toEqual([]);
+    expect((await ok<ClipList>('/api/clips')).items).toHaveLength(CLIP_PAGE);
+  });
+
   it('stops pinning at the limit and still unpins', async () => {
     const now = Date.now();
     await bindings.DB.batch(
@@ -298,7 +346,8 @@ describe('clips', () => {
       (await request('/api/clips', 'POST', { id: crypto.randomUUID(), text: 'x', blobId: 'missing' }))
         .status,
     ).toBe(404);
-    // Referenced, the image survives cleanup; deleted, it goes.
+    await ok(`/api/clips/${clip.id}`, 'PATCH', { archived: true });
+    // Archived images survive cleanup too; deleted, they go.
     await bindings.DB.prepare('UPDATE blobs SET draft_until=0 WHERE id=?').bind(document.id).run();
     await cleanup(bindings);
     expect(await bindings.DB.prepare('SELECT 1 FROM blobs WHERE id=?').bind(image.id).first()).not.toBeNull();

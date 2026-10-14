@@ -283,7 +283,7 @@ progress::-moz-progress-bar {
   align-items: center;
   justify-content: center;
   flex-direction: column;
-  padding: 0 16px 8vh;
+  padding: 0 16px calc(8dvh + 48px);
   text-align: center;
   animation: boot-in 420ms ease-out both;
 }
@@ -2806,6 +2806,16 @@ button.node-list-toggle:focus-visible {
   pointer-events: none;
 }
 /* 设置 → 待发送 */
+.outbox-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.settings-section .outbox-heading h2 {
+  margin: 0;
+}
 .outbox-empty {
   color: var(--muted);
 }

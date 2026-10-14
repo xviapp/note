@@ -24,6 +24,7 @@ export interface Clip {
   // The source page's title while it exists outside the trash.
   source_title: string | null;
   pinned: boolean;
+  archived: boolean;
   created_at: number;
   // The image, sealed with `key_id` when there is one.
   file: { id: string; name: string; mime: string; size: number; key_id: string | null } | null;

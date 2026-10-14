@@ -6,6 +6,8 @@ import { sealedFileId } from './sealed-download';
 
 export const device = registerPlugin<{
   pendingWidgetClips(): Promise<{ items: { id: string; text: string; createdAt: number }[] }>;
+  sentWidgetClips(): Promise<{ items: { id: string; text: string; sentAt: number }[] }>;
+  markWidgetClipSent(options: { id: string; encrypted: boolean }): Promise<void>;
   removeWidgetClip(options: { id: string }): Promise<void>;
   clearWidgetClips(): Promise<void>;
   getPendingShare(): Promise<{ share: import('./shared-import').IncomingShare | null }>;

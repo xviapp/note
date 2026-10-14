@@ -199,3 +199,22 @@ test('随手记 images go into the note being edited and become notes; clips can
     '插入用的一句话',
   ]);
 });
+
+test('随手记 archives, searches and restores from the header entry', async ({ page }) => {
+  await login(page);
+  await page.request.post('/api/clips', { headers, data: { id: 'archive-e2e', text: '已整理的读书想法' } });
+  await page.locator('.app-header').getByRole('button', { name: '随手记' }).click();
+  const active = page.getByRole('dialog', { name: '随手记', exact: true });
+  await expect(active.getByText('已整理的读书想法')).toBeVisible();
+  await active.getByRole('button', { name: '归档', exact: true }).click();
+  await expect(active.getByText('已整理的读书想法')).toHaveCount(0);
+  await active.getByRole('button', { name: '已归档', exact: true }).click();
+  const archive = page.getByRole('dialog', { name: '已归档', exact: true });
+  await expect(archive.getByText('已整理的读书想法')).toBeVisible();
+  await archive.getByRole('textbox', { name: '搜索已归档' }).fill('读书');
+  await expect(archive.getByText('已整理的读书想法')).toBeVisible();
+  await archive.getByRole('button', { name: '恢复随手记' }).click();
+  await expect(archive.getByText('已恢复到随手记')).toBeVisible();
+  await archive.getByRole('button', { name: '返回随手记' }).click();
+  await expect(active.getByText('已整理的读书想法')).toBeVisible();
+});

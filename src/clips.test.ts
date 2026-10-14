@@ -30,6 +30,20 @@ describe('clip outbox', () => {
     upload.mockReset();
   });
 
+  it('traverses archived pages too when changing encryption', async () => {
+    const clips = await load();
+    api.mockImplementation(async (path: string, method = 'GET') => {
+      if (method === 'PUT') return {};
+      return { pinned: [], items: [{ id: path.includes('before') ? 'archived' : 'active', text: '内容', key_id: null, file: null }],
+        next: path.includes('before') ? null : '123_archive', keyId: null };
+    });
+    await clips.setClipEncryption('new-key');
+    expect(api).toHaveBeenCalledWith('/api/clips?view=all');
+    expect(api).toHaveBeenCalledWith('/api/clips?view=all&before=123_archive');
+    const batches = api.mock.calls.filter(([, method, body]) => method === 'PUT' && body.items?.length);
+    expect(batches[0][2].items.map((item: { id: string }) => item.id)).toEqual(['active', 'archived']);
+  });
+
   it('uploads an image first and sends the clip naming it', async () => {
     api.mockImplementation(async (_path: string, method = 'GET') =>
       method === 'GET' ? { keyId: null, pinned: [], items: [], next: null } : {},
