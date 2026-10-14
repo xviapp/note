@@ -8,6 +8,7 @@ export const settingsTitles = {
   offline: '离线缓存',
   share: '保存位置',
   outbox: '待发送',
+  sent: '已发送',
   backup: '备份与恢复',
   storage: '存储空间',
   encryption: '本地加密',
@@ -94,7 +95,7 @@ export function useNotebookNavigation(guard: { current: () => Promise<boolean> }
   const back = useCallback(() => {
     if (busy.current) return;
     if (active.current.index > 0) history.back();
-    else void go(active.current.path.startsWith('/settings/') ? '/settings' : '/', true);
+    else void go(active.current.path === '/settings/sent' ? '/settings/outbox' : active.current.path.startsWith('/settings/') ? '/settings' : '/', true);
   }, [go]);
 
   useEffect(() => {

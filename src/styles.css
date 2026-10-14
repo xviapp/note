@@ -2806,16 +2806,6 @@ button.node-list-toggle:focus-visible {
   pointer-events: none;
 }
 /* 设置 → 待发送 */
-.outbox-heading {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  margin-bottom: 16px;
-}
-.settings-section .outbox-heading h2 {
-  margin: 0;
-}
 .outbox-empty {
   color: var(--muted);
 }

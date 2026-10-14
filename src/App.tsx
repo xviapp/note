@@ -648,6 +648,7 @@ function Notebook({
           <AppHeader
             view={view}
             section={settingsSection}
+            onSentHistory={() => openSettings('sent')}
             showBack={subpage}
             showMenu={!android}
             menuOpen={mobileOpen}

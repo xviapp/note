@@ -81,7 +81,9 @@ export function Settings({
       )}
       {section === 'offline' && <CacheSettings />}
       {section === 'share' && <ShareSettings />}
-      {section === 'outbox' && <OutboxSettings confirm={confirm} onNavigate={onNavigate} />}
+      {(section === 'outbox' || section === 'sent') && (
+        <OutboxSettings confirm={confirm} onNavigate={onNavigate} history={section === 'sent'} />
+      )}
       {section === 'backup' && <BackupSettings confirm={confirm} onChanged={onChanged} />}
       {section === 'ai' && <AiSettings confirm={confirm} />}
       {section === 'encryption' && <EncryptionSettings />}

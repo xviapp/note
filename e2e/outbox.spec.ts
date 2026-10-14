@@ -54,3 +54,29 @@ test('a refused 随手记 shows in 待发送 with its reason, and can be retried
   const list = await (await page.request.get('/api/clips')).json();
   expect(list.items.map((item: { text: string }) => item.text)).toEqual(['第一条：被拒绝']);
 });
+
+test('outbox and sent history share the app header and navigation', async ({ page }, info) => {
+  await login(page);
+  await page.goto('/settings');
+  await page.locator('.settings-entry').filter({ hasText: '待发送' }).click();
+  const header = page.locator('.app-header');
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => { document.documentElement.dataset.theme = value; }, theme);
+    await expect(header.locator('.header-title')).toHaveText('待发送');
+    await expect(page.locator('.outbox-heading')).toHaveCount(0);
+    await header.getByRole('button', { name: '发送历史' }).click();
+    await expect(header.locator('.header-title')).toHaveText('已发送');
+    await expect(page.getByText('暂无发送记录')).toBeVisible();
+    await page.screenshot({ animations: 'disabled', path: `test-results/sent-${theme}-${info.project.name}.png` });
+    await header.getByRole('button', { name: '返回', exact: true }).click();
+    await expect(header.locator('.header-title')).toHaveText('待发送');
+    await page.screenshot({ animations: 'disabled', path: `test-results/pending-${theme}-${info.project.name}.png` });
+  }
+  await header.getByRole('button', { name: '发送历史' }).click();
+  await page.reload();
+  await expect(header.locator('.header-title')).toHaveText('已发送');
+  await page.goBack();
+  await expect(header.locator('.header-title')).toHaveText('待发送');
+  await page.goForward();
+  await expect(header.locator('.header-title')).toHaveText('已发送');
+});

@@ -4,6 +4,7 @@ import {
   Feather,
   FolderOpen,
   HardDriveDownload,
+  History,
   Menu,
   Plus,
   Search,
@@ -122,6 +123,7 @@ export function AppHeader({
   onMenu,
   onNew,
   onSearch,
+  onSentHistory,
 }: {
   view: View;
   section: SettingsSection | null;
@@ -132,6 +134,7 @@ export function AppHeader({
   onMenu: () => void;
   onNew?: () => void;
   onSearch: () => void;
+  onSentHistory?: () => void;
 }) {
   return (
     <header className="app-header">
@@ -156,6 +159,11 @@ export function AppHeader({
           {view === 'settings' ? (section ? settingsTitles[section] : '设置') : titles[view]}
         </span>
       </div>
+      {view === 'settings' && section === 'outbox' && onSentHistory && (
+        <button className="icon-button" aria-label="发送历史" title="发送历史" onClick={onSentHistory}>
+          <History size={19} />
+        </button>
+      )}
       {view !== 'settings' && (
         <button
           className="icon-button header-search"
