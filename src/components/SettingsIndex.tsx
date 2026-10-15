@@ -59,7 +59,7 @@ export function SettingsIndex({ onOpen }: { onOpen: (section: SettingsSection) =
             {group.items
               .filter(
                 ({ key }) =>
-                  key !== 'server' || nativeServer,
+                  (key !== 'server' || nativeServer) && (key !== 'backup' || !nativeServer),
               )
               .map(({ key, icon: Icon }) => (
                 <button key={key} className="settings-entry" onClick={() => onOpen(key)}>

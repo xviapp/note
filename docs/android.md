@@ -10,7 +10,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`，共用�
 
 `OriginPolicy` 限制站内页面和文件下载地址，外部页面在系统浏览器中打开。下载先让用户在系统文档选择器中选位置，再由原生层流式写入；只有本站文件接口携带登录 Cookie，且不跟随重定向。无需全盘存储权限。客户端与系统浏览器分别保存会话，服务端「退出所有设备」同时撤销两者。
 
-应用切到后台时补写阅读进度。青藜回复途中切到后台，回到前台后只要回复流停顿，就定时向服务端查询，直到服务端结束这次回复，然后直接显示服务端保存的内容（中断的回复可「继续生成」），不会一直停在生成中；再次切到后台、停止生成或关闭对话时停止查询。系统返回键先关闭浮层、弹窗、菜单和青藜，再按带草稿保护的页面导航后退；首页返回则最小化应用；清单启用 `enableOnBackInvokedCallback`，Android 13+ 的预测性返回由 Capacitor 的 `OnBackPressedCallback` 统一接管。系统备份和设备迁移排除本地会话、缓存与草稿。
+应用切到后台时补写阅读进度。青藜回复途中切到后台，回到前台后只要回复流停顿，就定时向服务端查询，直到服务端结束这次回复，然后直接显示服务端保存的内容（中断的回复可「继续生成」），不会一直停在生成中；再次切到后台、停止生成或关闭对话时停止查询。系统返回键先关闭浮层、弹窗、菜单和青藜，再按带草稿保护的页面导航后退；首页返回则最小化应用；清单启用 `enableOnBackInvokedCallback`，Android 13+ 的预测性返回由 Capacitor 的 `OnBackPressedCallback` 统一接管。系统备份和设备迁移排除本地会话、缓存与草稿。Android 客户端不提供整库备份与恢复入口，需要时请在网页版设置中操作。
 
 ## 启动与主题
 
@@ -82,7 +82,7 @@ pnpm run deploy
 pnpm android:publish --apk artifacts/yejian-<版本>-android-debug.apk --notes docs/releases/<版本>.txt --remote
 ```
 
-每次发布递增 `android/app/build.gradle` 的 `versionCode`。调试包沿用开发机调试签名以便覆盖升级；正式签名用 `pnpm android:release`，需设置 `NOTE_ANDROID_KEYSTORE`（绝对路径）、`NOTE_ANDROID_STORE_PASSWORD`、`NOTE_ANDROID_KEY_ALIAS` 和 `NOTE_ANDROID_KEY_PASSWORD`，缺少即停止。换用其他证书后不能直接覆盖升级，应先整库备份；应用也会阻止证书不同的版本作为普通更新安装。密钥和密码不进入仓库。
+每次发布递增 `android/app/build.gradle` 的 `versionCode`。调试包沿用开发机调试签名以便覆盖升级；正式签名用 `pnpm android:release`，需设置 `NOTE_ANDROID_KEYSTORE`（绝对路径）、`NOTE_ANDROID_STORE_PASSWORD`、`NOTE_ANDROID_KEY_ALIAS` 和 `NOTE_ANDROID_KEY_PASSWORD`，缺少即停止。换用其他证书后不能直接覆盖升级，应先在网页版进行整库备份；应用也会阻止证书不同的版本作为普通更新安装。密钥和密码不进入仓库。
 
 ## 验证
 

@@ -64,7 +64,7 @@ async function destination(name: string): Promise<Destination | null> {
       write(chunk: Uint8Array<ArrayBuffer>) {
         size += chunk.length;
         if (size > limit)
-          throw new Error('请使用 Android 客户端或桌面 Chrome 保存超过 256 MiB 的备份。');
+          throw new Error('请使用桌面 Chrome 保存超过 256 MiB 的备份。');
         chunks.push(chunk);
       },
     }),
@@ -99,7 +99,7 @@ export async function exportLibrary(progress: (message: string) => void, signal:
       sink.limit &&
       archive.files.reduce((sum, file) => sum + file.size, 0) + BACKUP_METADATA_LIMIT > sink.limit
     )
-      throw new Error('此备份较大，请使用 Android 客户端或桌面 Chrome 保存。');
+      throw new Error('此备份较大，请使用桌面 Chrome 保存。');
     const { ZipWriter } = await import('@zip.js/zip.js');
     const zip = new ZipWriter(sink.stream, {
       level: 0,

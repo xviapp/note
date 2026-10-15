@@ -55,7 +55,7 @@ export function Settings({
     [newPassword, setNewPassword] = useState(''),
     [repeat, setRepeat] = useState(''),
     [error, setError] = useState('');
-  if (!section) return <SettingsIndex onOpen={onOpen} />;
+  if (!section || (section === 'backup' && nativeServer)) return <SettingsIndex onOpen={onOpen} />;
   return (
     <section className="collection-page settings-page settings-detail">
       <h1>{settingsTitles[section]}</h1>
