@@ -31,7 +31,7 @@
 - `NoteProxyPlugin`（Capacitor 插件 `NoteProxy`）提供 `prepare`、`getStatus`、`check({ force })`、`setEnabled`、`setUrl`、`setBypassOnVpn` 和 `status` 事件。地址无效时 `setUrl` 拒绝并返回错误码 `INVALID`、`SCHEME`、`AUTH` 或 `PORT`，中文提示由 `src/proxy.ts` 生成。
 - `src/proxy.ts` 维护前端状态、请求前检测和切换提示；设置界面在 `src/components/ProxySettings.tsx`。
 
-从旧版本升级后，旧的内置代理数据（`files/mmkv`、WorkManager 数据库）会在首次启动时清理一次。旧的订阅和开关不会迁移，需要重新填写代理地址。
+从旧版本升级后，旧的内置代理数据（`files/mmkv`、`files/routing` 规则文件、WorkManager 数据库和通知渠道）会在首次启动时清理一次。旧的订阅和开关不会迁移，需要重新填写代理地址。
 
 ```bash
 node scripts/android.mjs testDebugUnitTest   # 包含地址解析和检测的单元测试

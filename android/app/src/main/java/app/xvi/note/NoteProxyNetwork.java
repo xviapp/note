@@ -1,5 +1,6 @@
 package app.xvi.note;
 
+import android.app.NotificationManager;
 import android.content.Context;
 import android.content.SharedPreferences;
 import android.net.ConnectivityManager;
@@ -52,7 +53,8 @@ final class NoteProxyNetwork {
     private static final String ENABLED = "enabled";
     private static final String URL = "url";
     private static final String BYPASS_ON_VPN = "bypass_on_vpn";
-    private static final String LEGACY_CLEARED = "legacy_core_cleared";
+    /** Renamed when the cleanup grows, so devices that ran an earlier one run it again. */
+    private static final String LEGACY_CLEARED = "legacy_core_cleared_2";
     private static final long HEALTHY_FOR_MS = 60_000;
     private static final long FAILED_FOR_MS = 15_000;
     /** Longer than one probe, so a native caller gets the fresh answer. */
@@ -102,6 +104,9 @@ final class NoteProxyNetwork {
         if (preferences.getBoolean(LEGACY_CLEARED, false)) return;
         new Thread(() -> {
             delete(new File(context.getFilesDir(), "mmkv"));
+            delete(new File(context.getFilesDir(), "routing"));
+            NotificationManager notifications = context.getSystemService(NotificationManager.class);
+            if (notifications != null) notifications.deleteNotificationChannel("embedded-proxy");
             for (String name : new String[] { "androidx.work.workdb", "androidx.work.workdb-shm", "androidx.work.workdb-wal" })
                 context.deleteDatabase(name);
             preferences.edit().putBoolean(LEGACY_CLEARED, true).apply();
