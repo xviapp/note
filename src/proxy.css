@@ -28,7 +28,6 @@
   margin: 8px 0;
 }
 .proxy-actions {
-  margin: 12px 0;
   display: flex;
   flex-wrap: wrap;
   gap: 12px;
@@ -37,7 +36,7 @@
 .proxy-form {
   display: grid;
   gap: 10px;
-  margin-top: 12px;
+  margin: 12px 0;
 }
 .proxy-form > label {
   display: grid;
@@ -53,22 +52,10 @@
   border: 1px solid var(--line);
   border-radius: 8px;
 }
-.proxy-subscription-actions {
-  justify-content: space-between;
-}
 body:has(.proxy-status) .app-header,
 body:has(.proxy-status) .note-toolbar {
   padding-right: 58px;
 }
 body:has(.proxy-status) .auth-theme {
   right: 58px;
-}
-
-.proxy-nodes {
-  margin: 16px 0;
-}
-.proxy-nodes select {
-  width: 100%;
-  min-width: 0;
-  min-height: 44px;
 }

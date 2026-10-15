@@ -1,5 +1,0 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-    <application android:networkSecurityConfig="@xml/proxy_test_network_security">
-        <activity android:name=".ProxyTestActivity" android:exported="false" />
-    </application>
-</manifest>

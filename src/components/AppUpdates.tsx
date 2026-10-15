@@ -4,7 +4,6 @@ import { Download, Info, RefreshCw } from 'lucide-react';
 import { version } from '../../package.json';
 import { api, formatBytes } from '../api';
 import { useOffline } from '../connectivity';
-import { nativeProxy } from '../proxy';
 import { releasePath, validRelease, type AndroidRelease } from '../../shared/release';
 
 export function AppUpdates() {
@@ -14,11 +13,6 @@ export function AppUpdates() {
     version: string;
     build: number;
     certificate: string;
-  }>();
-  const [proxyInfo, setProxyInfo] = useState<{
-    sourceVersion: string;
-    sourceCommit: string;
-    coreVersion: string;
   }>();
   const [release, setRelease] = useState<AndroidRelease | null>(null);
   const [checked, setChecked] = useState(false);
@@ -30,11 +24,6 @@ export function AppUpdates() {
         .then(({ device }) => device.getBuildInfo())
         .then(setInstalled)
         .catch(() => setMessage('无法读取安装版本，请重新打开应用。'));
-    if (android)
-      void nativeProxy
-        .getInfo()
-        .then(setProxyInfo)
-        .catch(() => {});
   }, [android]);
   const newer = android && release && installed && release.build > installed.build;
   const compatible = !release || installed?.certificate === release.certificate;
@@ -113,19 +102,6 @@ export function AppUpdates() {
             <Download size={15} />
             下载安装包
           </button>
-        </div>
-      )}
-      {android && (
-        <div className="setting-row">
-          <div>
-            <strong>内置网络代理</strong>
-            <p>
-              {proxyInfo
-                ? `v2rayNG ${proxyInfo.sourceVersion} · ${proxyInfo.coreVersion}`
-                : 'v2rayNG · Xray'}
-            </p>
-            <p>随页间更新；来源与许可证保留。</p>
-          </div>
         </div>
       )}
       {message && (

@@ -348,11 +348,20 @@ public class NoteDevicePlugin extends Plugin {
             try {
                 InputStream source;
                 if (url != null) {
-                    connection = (HttpURLConnection) URI.create(url).toURL().openConnection(NoteProxyNetwork.get(getContext()).proxy());
-                    connection.setInstanceFollowRedirects(false);
-                    connection.setConnectTimeout(15_000);
-                    connection.setReadTimeout(60_000);
-                    if (cookie != null) connection.setRequestProperty("Cookie", cookie);
+                    connection = NoteProxyNetwork.get(getContext()).call(proxy -> {
+                        HttpURLConnection opened = (HttpURLConnection) URI.create(url).toURL().openConnection(proxy);
+                        opened.setInstanceFollowRedirects(false);
+                        opened.setConnectTimeout(15_000);
+                        opened.setReadTimeout(60_000);
+                        if (cookie != null) opened.setRequestProperty("Cookie", cookie);
+                        try {
+                            opened.getResponseCode();
+                        } catch (java.io.IOException error) {
+                            opened.disconnect();
+                            throw error;
+                        }
+                        return opened;
+                    });
                     int status = connection.getResponseCode();
                     if (status != 200) throw new java.io.IOException(status == 401 ? "登录已失效，请重新登录。" : "文件下载失败，请重试。");
                     source = connection.getInputStream();

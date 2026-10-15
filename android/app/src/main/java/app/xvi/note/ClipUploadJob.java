@@ -7,7 +7,6 @@ import android.app.job.JobService;
 import android.content.ComponentName;
 import android.content.Context;
 import android.webkit.CookieManager;
-import com.v2ray.ang.api.EmbeddedProxyController;
 import java.io.ByteArrayOutputStream;
 import java.net.HttpURLConnection;
 import java.net.URI;
@@ -35,17 +34,21 @@ public class ClipUploadJob extends JobService {
         executor.execute(() -> {
             boolean retry = false;
             try {
-                // Never silently bypass the configured proxy. Its foreground
-                // lifetime is owned by the app; a later app visit can sync too.
-                if (EmbeddedProxyController.isEnabled()) { jobFinished(params, true); return; }
+                // Same route as the app: the configured proxy, or direct while it is
+                // down or a VPN stands in for it.
+                NoteProxyNetwork network = NoteProxyNetwork.get(this);
                 String host = ServerConfig.host(this), origin = "https://" + host;
                 String cookie = CookieManager.getInstance().getCookie(origin);
                 if (cookie == null) { jobFinished(params, true); return; }
-                HttpURLConnection settings = (HttpURLConnection) URI.create(origin + "/api/clips/key").toURL().openConnection();
+                HttpURLConnection settings = network.call(proxy -> {
+                    HttpURLConnection opened = (HttpURLConnection) URI.create(origin + "/api/clips/key").toURL().openConnection(proxy);
+                    opened.setInstanceFollowRedirects(false);
+                    opened.setConnectTimeout(15000); opened.setReadTimeout(15000);
+                    opened.setRequestProperty("Cookie", cookie);
+                    try { opened.getResponseCode(); } catch (java.io.IOException error) { opened.disconnect(); throw error; }
+                    return opened;
+                });
                 try {
-                    settings.setInstanceFollowRedirects(false);
-                    settings.setConnectTimeout(15000); settings.setReadTimeout(15000);
-                    settings.setRequestProperty("Cookie", cookie);
                     if (settings.getResponseCode() != 200) { jobFinished(params, true); return; }
                     try (var input = settings.getInputStream()) {
                         ByteArrayOutputStream response = new ByteArrayOutputStream();
@@ -61,22 +64,26 @@ public class ClipUploadJob extends JobService {
                 JSONArray items = ClipInbox.list(this, host);
                 for (int i = 0; i < items.length() && !stopped; i++) {
                     JSONObject item = items.getJSONObject(i);
-                    HttpURLConnection connection = (HttpURLConnection) URI.create(origin + "/api/clips").toURL().openConnection();
-                    try {
-                        connection.setInstanceFollowRedirects(false);
-                        connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
-                        connection.setRequestMethod("POST"); connection.setDoOutput(true);
-                        connection.setRequestProperty("Origin", origin);
-                        connection.setRequestProperty("Cookie", cookie);
-                        connection.setRequestProperty("Content-Type", "application/json");
-                        connection.setRequestProperty("x-idempotency-key", item.getString("id"));
-                        byte[] body = new JSONObject().put("id", item.getString("id")).put("text", item.getString("text"))
-                            .put("createdAt", item.getLong("createdAt")).toString().getBytes(StandardCharsets.UTF_8);
-                        try (var output = connection.getOutputStream()) { output.write(body); }
-                        int status = connection.getResponseCode();
-                        if (status >= 200 && status < 300) ClipInbox.sent(this, host, item.getString("id"), false);
-                        else { retry = true; break; }
-                    } finally { connection.disconnect(); }
+                    String id = item.getString("id");
+                    byte[] body = new JSONObject().put("id", id).put("text", item.getString("text"))
+                        .put("createdAt", item.getLong("createdAt")).toString().getBytes(StandardCharsets.UTF_8);
+                    // The idempotency key makes a repeat over a direct route safe.
+                    int status = network.call(proxy -> {
+                        HttpURLConnection connection = (HttpURLConnection) URI.create(origin + "/api/clips").toURL().openConnection(proxy);
+                        try {
+                            connection.setInstanceFollowRedirects(false);
+                            connection.setConnectTimeout(15000); connection.setReadTimeout(15000);
+                            connection.setRequestMethod("POST"); connection.setDoOutput(true);
+                            connection.setRequestProperty("Origin", origin);
+                            connection.setRequestProperty("Cookie", cookie);
+                            connection.setRequestProperty("Content-Type", "application/json");
+                            connection.setRequestProperty("x-idempotency-key", id);
+                            try (var output = connection.getOutputStream()) { output.write(body); }
+                            return connection.getResponseCode();
+                        } finally { connection.disconnect(); }
+                    });
+                    if (status >= 200 && status < 300) ClipInbox.sent(this, host, id, false);
+                    else { retry = true; break; }
                 }
                 retry |= ClipInbox.list(this, host).length() > 0;
             } catch (Exception error) { retry = true; }

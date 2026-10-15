@@ -4,9 +4,6 @@
     <string name="title_activity_main">页间</string>
     <string name="package_name">app.xvi.note</string>
     <string name="custom_url_scheme">app.xvi.note</string>
-    <string name="proxy_start_failed">代理启动失败，当前使用直连。</string>
-    <string name="proxy_reconnecting">代理连接异常，%d 秒后重连。</string>
-    <string name="proxy_webview_unsupported">当前 WebView 不支持应用内代理，当前使用直连。</string>
     <string name="quick_bar_label">页间快捷栏</string>
     <string name="quick_bar_description">进入页间，或打开随手记、今日记、问青藜</string>
     <string name="quick_bar_app">页间</string>

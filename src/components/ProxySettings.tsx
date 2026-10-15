@@ -1,57 +1,50 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { CircleAlert, Network } from 'lucide-react';
 import {
+  addressError,
   enableProxy,
   hasNativeProxy,
+  proxyError,
+  proxyLabel,
   retryProxy,
-  saveProxySubscription,
-  selectProxyNode,
-  selectProxyAutomatically,
   setProxyBypassOnVpn,
-  proxyMessage,
-  subscriptionError,
-  updateProxySubscription,
+  setProxyUrl,
   useProxyState,
-  useProxySubscription,
 } from '../proxy';
-import { Modal } from './Primitives';
 import '../proxy.css';
 
-const labels = {
-  off: '已关闭，使用直连',
-  starting: '正在启动…',
-  running: '已开启',
-  reconnecting: '连接中断，正在重连…',
-  failed: '代理不可用，当前使用直连',
-};
+const time = (millis: number) =>
+  new Date(millis).toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
 
 export function ProxySettings() {
   const state = useProxyState();
-  const subscription = useProxySubscription();
-  const [url, setUrl] = useState(subscription.url);
-  const [updateInterval, setUpdateInterval] = useState(String(subscription.updateIntervalMinutes));
-  const [testInterval, setTestInterval] = useState(String(subscription.testIntervalMinutes));
-  const [editingSubscription, setEditingSubscription] = useState(false);
+  const [url, setUrl] = useState(state.url);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // A saved address comes back normalized and replaces the draft; other status events leave it.
+  useEffect(() => setUrl(state.url), [state.url]);
 
   if (!hasNativeProxy()) return <p className="field-hint">网络代理仅在 Android 应用中提供。</p>;
 
-  const run = async (action: () => Promise<unknown>) => {
+  const run = async (
+    action: () => Promise<unknown>,
+    failure: (caught: unknown) => string = () => '操作未完成，请重试。',
+  ) => {
     setBusy(true);
     setError('');
     try {
       await action();
-    } catch {
-      setError('操作未完成，请重试。');
+    } catch (caught) {
+      setError(failure(caught));
     } finally {
       setBusy(false);
     }
   };
-
-  const locked = busy || subscription.updating || subscription.testing;
-  const message = proxyMessage(state);
-  const inUse = subscription.nodes.find((node) => node.selected);
+  const save = () =>
+    run(() => setProxyUrl(url.trim()), (caught) =>
+      addressError((caught as { code?: string } | undefined)?.code ?? ''));
+  const dirty = url.trim() !== state.url;
+  const reason = state.route === 'direct' ? proxyError(state.error) : '';
 
   return (
     <section className="settings-section">
@@ -61,25 +54,59 @@ export function ProxySettings() {
       </h2>
       <div className="setting-row">
         <div>
-          <strong>应用内代理</strong>
-          <p>{labels[state.phase]}</p>
+          <strong>使用代理</strong>
+          <p>{proxyLabel(state)}</p>
         </div>
         <label className="toggle-switch">
           <input
             type="checkbox"
             role="switch"
-            aria-label="应用内代理"
+            aria-label="使用代理"
             checked={state.enabled}
-            disabled={busy || subscription.updating || state.phase === 'starting'}
+            disabled={busy || (!state.enabled && !state.url)}
             onChange={(event) => void run(() => enableProxy(event.target.checked))}
           />
           <span className="toggle-switch-track" aria-hidden="true" />
         </label>
       </div>
+      <form
+        className="proxy-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy && dirty) void save();
+        }}
+      >
+        <label>
+          代理地址
+          <input
+            type="text"
+            inputMode="url"
+            autoCapitalize="off"
+            autoCorrect="off"
+            spellCheck={false}
+            value={url}
+            onChange={(event) => setUrl(event.target.value)}
+            placeholder="socks5://127.0.0.1:7890"
+            disabled={busy}
+          />
+        </label>
+        <p className="field-hint">支持 socks5:// 和 http://，只写“地址:端口”时按 SOCKS5 处理；不支持用户名和密码。</p>
+        <div className="proxy-actions">
+          <button type="submit" className="button" disabled={busy || !dirty}>
+            {busy && dirty ? '保存中…' : '保存地址'}
+          </button>
+          {state.enabled && state.url && state.route !== 'vpn' && (
+            <button type="button" className="button" disabled={busy || state.route === 'checking'}
+              onClick={() => void run(retryProxy)}>
+              检测
+            </button>
+          )}
+        </div>
+      </form>
       <div className="setting-row">
         <div>
           <strong>连接 VPN 时直连</strong>
-          <p>{state.pausedByVpn ? '已连接 VPN，代理已暂停' : '开启 VPN 后不使用应用内代理'}</p>
+          <p>{state.route === 'vpn' ? '已连接 VPN，代理已暂停' : '开启 VPN 后不使用代理'}</p>
         </div>
         <label className="toggle-switch">
           <input
@@ -93,126 +120,30 @@ export function ProxySettings() {
           <span className="toggle-switch-track" aria-hidden="true" />
         </label>
       </div>
-      {message && <p className="field-hint">{message}</p>}
-      {error && !editingSubscription && <p className="field-hint" role="alert">{error}</p>}
-
-      {state.phase === 'failed' && (
-        <button className="button" disabled={locked} onClick={() => void run(retryProxy)}>
-          重试启动
-        </button>
+      {reason && (
+        <p className="field-hint" role="status">
+          {reason}
+          {state.checkedAt > 0 && `（上次检测 ${time(state.checkedAt)}）`}
+        </p>
       )}
-
-      {subscription.nodes.length > 0 && (
-        <div className="proxy-nodes">
-          <label>
-            节点
-            <select aria-label="节点" value={subscription.manualIndex} disabled={locked}
-              onChange={(event) => {
-                const index = Number(event.target.value);
-                void run(index < 0 ? selectProxyAutomatically : () => selectProxyNode(index));
-              }}>
-              <option value={-1}>自动</option>
-              {subscription.nodes.map((node, index) => (
-                <option key={node.id} value={index}>{node.name}</option>
-              ))}
-            </select>
-          </label>
-          {subscription.fallback && inUse && (
-            <p className="field-hint" role="status">所选节点不可用，暂用 {inUse.name}，恢复后自动切回。</p>
-          )}
-        </div>
-      )}
-      {subscription.testing && <p className="field-hint" role="status">正在检测节点连通性…</p>}
-      {!subscription.testing && subscription.testError && <p className="field-hint" role="status">{subscription.testError === 'CONNECTIVITY_SLOW' ? '当前节点延迟较高。' : '节点连通性检测失败，请检查网络。'}</p>}
-      <div className="proxy-actions proxy-subscription-actions">
-        <button
-          className="button"
-          disabled={locked}
-          onClick={() => {
-            setUrl(subscription.url);
-            setUpdateInterval(String(subscription.updateIntervalMinutes));
-            setTestInterval(String(subscription.testIntervalMinutes));
-            setError('');
-            setEditingSubscription(true);
-          }}
-        >
-          {subscription.url ? '更换订阅' : '添加订阅'}
-        </button>
-        <button className="button" disabled={locked || !subscription.url} onClick={() => void run(updateProxySubscription)}>
-          {subscription.updating ? '更新中…' : '立即更新'}
-        </button>
-      </div>
-      {((subscription.error && !editingSubscription) || subscription.updating) && (
-        <p className="field-hint">{subscriptionError(subscription.error) || '正在更新订阅…'}</p>
-      )}
-      {editingSubscription && (
-        <Modal title={subscription.url ? '更换订阅' : '添加订阅'} onClose={() => {
-          if (!locked) setEditingSubscription(false);
-        }}>
-          <form className="proxy-form" onSubmit={(event) => {
-            event.preventDefault();
-            if (locked || !url.trim()) return;
-            void run(async () => {
-              const updateIntervalMinutes = Number(updateInterval), testIntervalMinutes = Number(testInterval);
-              if (!Number.isInteger(updateIntervalMinutes) || updateIntervalMinutes < 15 || updateIntervalMinutes > 2147483647
-                || !Number.isInteger(testIntervalMinutes) || testIntervalMinutes < 1 || testIntervalMinutes > 2147483647) {
-                setError(subscriptionError('INVALID_INTERVAL'));
-                return;
-              }
-              const next = await saveProxySubscription({ url: url.trim(), updateIntervalMinutes, testIntervalMinutes });
-              if (!next.subscription.error) setEditingSubscription(false);
-            });
-          }}>
-            <label>
-              订阅地址
-              <input
-                type="url"
-                value={url}
-                onChange={(event) => setUrl(event.target.value)}
-                placeholder="https://…"
-                required
-                disabled={locked}
-              />
-            </label>
-            <label>
-              订阅更新间隔（分钟）
-              <input type="number" min={15} max={2147483647} step={1} required value={updateInterval}
-                disabled={locked} onChange={(event) => setUpdateInterval(event.target.value)} />
-            </label>
-            <label>
-              连通性测试间隔（分钟）
-              <input type="number" min={1} max={2147483647} step={1} required value={testInterval}
-                disabled={locked} onChange={(event) => setTestInterval(event.target.value)} />
-            </label>
-            <p className="field-hint">保存后点击「立即更新」下载订阅。</p>
-            {error && <p className="field-hint" role="alert">{error}</p>}
-            {subscription.error && <p className="field-hint" role="alert">{subscriptionError(subscription.error)}</p>}
-            <div className="dialog-actions">
-              <button type="button" className="button" disabled={locked} onClick={() => setEditingSubscription(false)}>取消</button>
-              <button type="submit" className="button primary" disabled={locked || !url.trim()}>
-                {busy ? '保存中…' : '保存订阅'}
-              </button>
-            </div>
-          </form>
-        </Modal>
-      )}
+      {error && <p className="field-hint" role="alert">{error}</p>}
     </section>
   );
 }
 
-/** A quiet, persistent indicator; details appear only when the user opens it. */
+/** A quiet, persistent indicator while traffic goes direct; details appear only when opened. */
 export function ProxyStatus() {
   const state = useProxyState();
   const [open, setOpen] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  if (!hasNativeProxy() || state.phase !== 'failed') return null;
+  if (!hasNativeProxy() || state.route !== 'direct') return null;
   return (
     <aside className="proxy-status">
       <button
         className="icon-button proxy-warning"
-        aria-label="代理不可用，当前使用直连"
-        title="代理不可用，当前使用直连"
+        aria-label="代理无法连接，当前使用直连"
+        title="代理无法连接，当前使用直连"
         aria-expanded={open}
         onClick={() => setOpen(!open)}
       >
@@ -221,7 +152,7 @@ export function ProxyStatus() {
       {open && (
         <div className="proxy-details">
           <strong>当前使用直连</strong>
-          <p>{proxyMessage(state)}</p>
+          <p>{proxyError(state.error) || '代理无法连接。'}代理恢复后会自动切回。</p>
           {error && <p>{error}</p>}
           <button
             className="text-button"
@@ -232,13 +163,13 @@ export function ProxyStatus() {
               try {
                 await retryProxy();
               } catch {
-                setError('重试未完成，请再试一次。');
+                setError('检测未完成，请再试一次。');
               } finally {
                 setBusy(false);
               }
             }}
           >
-            重试启动
+            重新检测
           </button>
         </div>
       )}

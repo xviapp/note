@@ -25,7 +25,7 @@ import {
   removeCachedNote,
 } from './offline-cache';
 import { isOffline, setOffline } from './connectivity';
-import { proxyReady } from './proxy';
+import { proxyReady, reportNetworkFailure } from './proxy';
 import { sseData } from '../shared/sse';
 export class ApiError extends Error {
   constructor(
@@ -117,6 +117,9 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
   } catch {
     if (signal.aborted && method !== 'GET')
       throw new ApiError('请求超时，尚无法确认是否保存成功。请保留当前内容并重试。', 0, 'REQUEST_TIMEOUT');
+    // A proxy that went away moves traffic to direct; a read is safe to repeat at once.
+    if (!signal.aborted && (await reportNetworkFailure()) && method === 'GET')
+      return request<T>(path, method, data, key, remember);
     setOffline(true);
     const cached = method === 'GET' ? await cachedResponse<T>(path) : undefined;
     if (cached !== undefined) return reveal(cached);
@@ -403,6 +406,9 @@ export async function streamApi<TEvent>(options: StreamRequest<TEvent>): Promise
       ...(await keyHeaders(options.path)),
     },
     body: JSON.stringify(options.data),
+  }).catch((error: unknown) => {
+    if (!options.signal.aborted) void reportNetworkFailure();
+    throw error;
   });
   if (!response.ok) await parse(response);
   if (options.allowJson && response.headers.get('content-type')?.includes('application/json')) {
@@ -471,6 +477,7 @@ export async function uploadRequest(path: string, body: BodyInit, signal?: Abort
     });
   } catch (error) {
     if (signal?.aborted) throw error;
+    if (!controller.signal.aborted) void reportNetworkFailure();
     throw new ApiError('文件上传超时或连接中断，请保留原文件并重试。', 0, 'UPLOAD_INTERRUPTED');
   } finally {
     clearTimeout(timer);

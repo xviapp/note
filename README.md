@@ -85,13 +85,12 @@ Android 客户端使用 Capacitor，工程位于 `android/`，共用 React 界�
 本机构建需要 Node.js 22.12+、JDK 21、Android SDK Platform 37 和 Build Tools 37：
 
 ```bash
-git clone https://github.com/xviapp/proxy-core.git ../proxy-core # 已有共享目录则跳过
 npm ci
 npm run android:apk        # 默认 arm64-v8a 调试包，输出到 artifacts/
 pnpm install:android       # 连接手机后构建并覆盖安装，保留应用数据
 ```
 
-修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。代理核心为同级独立仓库，接入及接口见[共享代理核心](docs/proxy-core-api.md)。其他架构、签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
+修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。其他架构、签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
 
 ## 本地运行
 
@@ -208,7 +207,6 @@ npx wrangler deploy --dry-run
 | `worker/backups.ts`     | 整库备份导出与恢复                        |
 | `shared/`               | 前后端共用的类型、限制与备份格式          |
 | `android/`              | Capacitor 原生工程与服务器、下载、分享    |
-| `../proxy-core/`        | note 与 web 共用的内置 v2rayNG 网络代理模块（GPL-3.0） |
 | `migrations/`           | D1 schema、索引与事务保护触发器           |
 | `scripts/`              | 开发环境、密码重置和测试服务              |
 

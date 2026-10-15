@@ -1,6 +1,6 @@
 # Android 客户端
 
-Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`，共用网页的 React 界面。阅读排版、本机缓存和离线阅读见[阅读设置与本机缓存](offline-reading.md)；编辑、青藜和翻译需联网。应用内网络代理见[网络代理](network-proxy.md)，图标与启动画面见[应用图标](branding.md)。iOS 工程暂未添加。
+Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`，共用网页的 React 界面。阅读排版、本机缓存和离线阅读见[阅读设置与本机缓存](offline-reading.md)；编辑、青藜和翻译需联网。外部网络代理设置见[网络代理](network-proxy.md)，图标与启动画面见[应用图标](branding.md)。iOS 工程暂未添加。
 
 ## 服务与会话
 
@@ -16,7 +16,7 @@ Capacitor 客户端，应用名称「页间」，包名 `app.xvi.note`，共用�
 
 `MainActivity` 在首帧前按保存的主题设置窗口、DecorView 和 WebView 的背景，夜间、星空主题冷启动不露浅色底；`NoteDevice.setBackground` 在同一次原生更新里保存主题并设置系统栏图标明暗。不要从 JS 调用 `SystemBars.setStyle`，它会把背景改回系统主题色；背景用同一个 `ColorDrawable` 改色，反复替换窗口背景会清除系统栏边距、引起高度抖动。
 
-启动画面保留到界面完成首屏（已登录页、登录页或连接错误）后退出，由 `NoteDevice.finishBoot` 通知，5 秒未收到时也结束首屏等待；应用锁正在等待指纹时，启动画面继续保留到验证结束或切回 PIN。登录过的设备首屏直接用本机缓存的笔记库，不等代理和登录验证（见[本机缓存](offline-reading.md)）。代理由网页在加载完成后启动：在原生 `onCreate` 中提前设置 WebView 代理会让包内资源加载停顿数秒。Android 13+ 的启动画面背景跟随 App 主题，见[应用图标](branding.md)。
+启动画面保留到界面完成首屏（已登录页、登录页或连接错误）后退出，由 `NoteDevice.finishBoot` 通知，5 秒未收到时也结束首屏等待；应用锁正在等待指纹时，启动画面继续保留到验证结束或切回 PIN。登录过的设备首屏直接用本机缓存的笔记库，不等代理和登录验证（见[本机缓存](offline-reading.md)）。WebView 代理在网页加载完成后才设置：在原生 `onCreate` 中提前设置会让包内资源加载停顿数秒。Android 13+ 的启动画面背景跟随 App 主题，见[应用图标](branding.md)。
 
 ## 分享与打开方式
 
@@ -58,7 +58,6 @@ PDF 双指缩放先变换现有画布，手指离开后再渲染清晰页面；�
 
 ## 构建
 
-- 从 note 根目录运行 `git clone https://github.com/xviapp/proxy-core.git ../proxy-core` 获取同级共享核心；已有目录则跳过。接口和原生依赖说明见[共享代理核心](proxy-core-api.md)。
 - JDK 21、Node.js 22.12+、Android SDK Platform 37 / Build Tools 37。构建脚本依次查找 `ANDROID_SDK_ROOT`、`ANDROID_HOME` 和常见 SDK 目录，并写入 Git 忽略的 `android/local.properties`。
 - `npm run android:apk`：构建前端、同步 Capacitor、编译调试 APK 并复制到 `artifacts/`。默认只构建 `arm64-v8a`；`node scripts/android.mjs assembleDebug --abi <架构>` 构建 `armeabi-v7a`、`x86_64` 或 `x86`，`--abi all` 生成四种架构包和通用包。
 - `pnpm install:android`：选定唯一可用设备（多个时用 `--device <序列号>` 或 `ANDROID_SERIAL`），构建后覆盖安装并保留数据；构建失败不会安装旧包，`--abi` 安装前检查设备兼容性。
@@ -108,4 +107,4 @@ pnpm test:android-startup --device emulator-5560 --theme system
 
 随手记窗口、今日记和问青藜的原生占位卡片由 `WindowTheme` 绘制，颜色取自 `src/family-tokens.css` 和 `src/themes.css`，卡片和标题栏与网页的 `.share-window-sheet`、`.share-window-header` 一致（问青藜窗口的标题栏见 `src/assistant.css` 的 `.assistant-centered`）。修改这些样式时同步修改 `WindowTheme`，否则网页接替原生卡片时会跳动。
 
-保存先由 `ClipInbox` 使用 Android Keystore 加密并原子写入私有存储，再关闭窗口。`ClipUploadJob` 使用系统网络约束和退避重试，任务可跨重启恢复；使用当前站点登录会话及固定条目标识，成功后删除本机副本。没有登录、需要内容密钥或启用了应用代理时不直接上传，待应用下次打开、恢复连接或解锁时由 `src/widget-clips.ts` 同步。切换站点不会把旧站点的记录发给新站点。
+保存先由 `ClipInbox` 使用 Android Keystore 加密并原子写入私有存储，再关闭窗口。`ClipUploadJob` 使用系统网络约束和退避重试，任务可跨重启恢复；使用当前站点登录会话及固定条目标识，成功后删除本机副本。上传使用与应用相同的线路：代理开启且能连上时走代理，代理断开或 VPN 代替代理时直连。没有登录或需要内容密钥时不直接上传，待应用下次打开、恢复连接或解锁时由 `src/widget-clips.ts` 同步。切换站点不会把旧站点的记录发给新站点。

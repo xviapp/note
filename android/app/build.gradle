@@ -23,7 +23,7 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
-    // The UI is Simplified Chinese; drop the embedded proxy's and libraries' other translations.
+    // The UI is Simplified Chinese; drop the libraries' other translations.
     androidResources { localeFilters += ['zh-rCN'] }
     splits {
         abi {
@@ -71,7 +71,6 @@ dependencies {
     implementation "androidx.coordinatorlayout:coordinatorlayout:$androidxCoordinatorLayoutVersion"
     implementation "androidx.core:core-splashscreen:$coreSplashScreenVersion"
     implementation project(':capacitor-android')
-    implementation project(':v2ray')
     implementation "androidx.webkit:webkit:$androidxWebkitVersion"
     coreLibraryDesugaring 'com.android.tools:desugar_jdk_libs:2.1.5'
     testImplementation "junit:junit:$junitVersion"

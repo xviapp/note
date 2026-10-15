@@ -28,7 +28,7 @@
 
 **Frontend.** All API calls go through `api()` in `src/api.ts`, which waits for the Android proxy (`proxyReady`) and falls back to the IndexedDB cache (`src/offline-cache.ts`) for whitelisted GETs when offline. `NotePane` shows a cached copy of a note first and swaps in the server's answer, holding edits until then. Papers are sanitized once per content and cached (`preparePaper` in `PaperView.tsx`). `scripts/offline-shell.ts` generates `/sw.js` for the web build only. Cache invariants are in `docs/offline-reading.md`.
 
-**Android.** `vite build --mode android` writes `dist-android/` (PDF.js `legacy` build). The WebView serves bundled assets at the chosen server's HTTPS origin (`ServerConfig.java` rewrites Capacitor's hostname; default `note.xvi.app`); only same-origin `/api/` goes to the network. The workspace-level `../proxy-core/` embeds v2rayNG; `NoteProxyNetwork` points the WebView at its loopback proxy. Details in `docs/android.md` and `docs/network-proxy.md`.
+**Android.** `vite build --mode android` writes `dist-android/` (PDF.js `legacy` build). The WebView serves bundled assets at the chosen server's HTTPS origin (`ServerConfig.java` rewrites Capacitor's hostname; default `note.xvi.app`); only same-origin `/api/` goes to the network. `NoteProxyNetwork` routes the WebView and native requests through a user-configured external SOCKS5/HTTP proxy, checked on use, falling back to direct while it is down. Details in `docs/android.md` and `docs/network-proxy.md`.
 
 **Testing.** The `worker` Vitest project runs in workerd via `@cloudflare/vitest-pool-workers` with migrations from `TEST_MIGRATIONS`; tests call the worker directly or via `SELF.fetch`, reset tables in `beforeEach`, and run serially. The `client` project runs `src/**/*.test.ts(x)` with fake-indexeddb (`src/test-setup.ts`). E2E specs import `test` from `e2e/fixtures.ts` (see `e2e/AGENTS.md`).
 
@@ -65,4 +65,4 @@ Concise imperative subjects, usually `feat:` / `fix:` / `perf:` / `refactor:` wi
 
 ## Security
 
-Keep secrets, signing keys, `.dev.vars` and generated APKs out of Git. The workspace-level `../proxy-core/` module is GPL-3.0 and its proxy settings may contain node credentials: never commit exported proxy configurations.
+Keep secrets, signing keys, `.dev.vars` and generated APKs out of Git.
