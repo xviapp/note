@@ -34,7 +34,6 @@ const record = name => fs.appendFileSync(process.env.FIXTURE_LOG, JSON.stringify
 ${helper}
 record('adb');
 if (args[0] === 'devices') console.log('List of devices attached\\n' + process.env.FIXTURE_DEVICES);
-else if (args.includes('getprop')) console.log(process.env.FIXTURE_ABIS ?? 'arm64-v8a,armeabi-v7a');
 else process.exit(Number(process.env.FIXTURE_INSTALL_EXIT || 0));
 `,
       { mode: 0o755 },
@@ -55,13 +54,8 @@ record('gradle');
 if (process.env.FIXTURE_GRADLE_EXIT) process.exit(Number(process.env.FIXTURE_GRADLE_EXIT));
 const variant = args[0] === 'assembleRelease' ? 'release' : 'debug';
 fs.mkdirSync('app/build/outputs/apk/' + variant, { recursive: true });
-const requestedAbi = args.find(arg => arg.startsWith('-PnoteAbi=')).split('=')[1];
-const elements = (requestedAbi === 'all' ? ['arm64-v8a', 'armeabi-v7a', 'x86_64', 'x86', null] : [requestedAbi]).map(abi => ({
-  filters: abi ? [{ filterType: 'ABI', value: abi }] : [],
-  outputFile: 'app-' + (abi ? abi + '-' : 'universal-') + variant + '.apk',
-}));
-for (const element of elements)
-  fs.writeFileSync('app/build/outputs/apk/' + variant + '/' + element.outputFile, 'fresh APK');
+const elements = [{ filters: [], outputFile: 'app-' + variant + '.apk' }];
+fs.writeFileSync('app/build/outputs/apk/' + variant + '/' + elements[0].outputFile, 'fresh APK');
 fs.writeFileSync('app/build/outputs/apk/' + variant + '/output-metadata.json', JSON.stringify({ elements }));
 if (variant === 'release') {
   fs.mkdirSync('app/build/outputs/mapping/release', { recursive: true });
@@ -108,17 +102,17 @@ cliTest('builds and installs a fresh APK only on the one selected device', () =>
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(
       result.calls.map((call) => call.name),
-      ['adb', 'adb', 'frontend', 'gradle', 'adb'],
+      ['adb', 'frontend', 'gradle', 'adb'],
     );
-    assert.deepEqual(result.calls[2].args, ['run', 'build:android']);
-    assert.deepEqual(result.calls[3].args, ['assembleDebug', '--console=plain', '-PnoteAbi=arm64-v8a']);
-    const apk = path.join(root, 'artifacts/yejian-0.2.1-android-arm64-v8a-debug.apk');
-    assert.deepEqual(result.calls[4].args, ['-s', 'phone-one', 'install', '-r', apk]);
+    assert.deepEqual(result.calls[1].args, ['run', 'build:android']);
+    assert.deepEqual(result.calls[2].args, ['assembleDebug', '--console=plain']);
+    const apk = path.join(root, 'artifacts/yejian-0.2.1-android-debug.apk');
+    assert.deepEqual(result.calls[3].args, ['-s', 'phone-one', 'install', '-r', apk]);
     assert.equal(await readFile(apk, 'utf8'), 'fresh APK');
   }),
 );
 
-cliTest('release installation checks signing, builds the selected ABI and installs only the release APK', () =>
+cliTest('release installation checks signing and installs only the release APK', () =>
   fixture(async ({ execute, root }) => {
     const missing = await execute([], { NOTE_ANDROID_KEYSTORE: '' }, 'installRelease');
     assert.notEqual(missing.status, 0);
@@ -134,21 +128,20 @@ cliTest('release installation checks signing, builds the selected ABI and instal
       NOTE_ANDROID_KEY_ALIAS: 'fixture',
       NOTE_ANDROID_KEY_PASSWORD: 'fixture-only',
       FIXTURE_DEVICES: 'phone-one\tdevice\nemulator-one\tdevice',
-      FIXTURE_ABIS: 'x86_64,x86',
     };
-    const args = ['--device', 'emulator-one', '--abi', 'x86_64'];
+    const args = ['--device', 'emulator-one'];
     const result = await execute(args, env, 'installRelease');
     assert.equal(result.status, 0, result.stderr);
-    assert.deepEqual(result.calls.map(call => call.name), ['adb', 'adb', 'frontend', 'gradle', 'adb']);
-    assert.deepEqual(result.calls[2].args, ['run', 'build:android']);
-    assert.deepEqual(result.calls[3].args, ['assembleRelease', '--console=plain', '-PnoteAbi=x86_64']);
-    const apk = path.join(root, 'artifacts/yejian-0.2.1-android-x86_64-release.apk');
-    assert.deepEqual(result.calls[4].args, ['-s', 'emulator-one', 'install', '-r', apk]);
+    assert.deepEqual(result.calls.map(call => call.name), ['adb', 'frontend', 'gradle', 'adb']);
+    assert.deepEqual(result.calls[1].args, ['run', 'build:android']);
+    assert.deepEqual(result.calls[2].args, ['assembleRelease', '--console=plain']);
+    const apk = path.join(root, 'artifacts/yejian-0.2.1-android-release.apk');
+    assert.deepEqual(result.calls[3].args, ['-s', 'emulator-one', 'install', '-r', apk]);
     assert.equal(await readFile(apk, 'utf8'), 'fresh APK');
-    assert.equal(await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-x86_64-release-mapping.txt'), 'utf8'), 'matching R8 mapping');
+    assert.equal(await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-release-mapping.txt'), 'utf8'), 'matching R8 mapping');
     const failed = await execute(args, { ...env, FIXTURE_GRADLE_EXIT: '8' }, 'installRelease');
     assert.equal(failed.status, 8);
-    assert.deepEqual(failed.calls.map(call => call.name), ['adb', 'adb', 'frontend', 'gradle']);
+    assert.deepEqual(failed.calls.map(call => call.name), ['adb', 'frontend', 'gradle']);
   }),
 );
 
@@ -170,14 +163,14 @@ cliTest('release refuses missing signing configuration and copies the signed bui
     );
     assert.equal(release.status, 0, release.stderr);
     assert.deepEqual(release.calls, [
-      { name: 'gradle', args: ['assembleRelease', '--console=plain', '-PnoteAbi=arm64-v8a'] },
+      { name: 'gradle', args: ['assembleRelease', '--console=plain'] },
     ]);
     assert.equal(
-      await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-arm64-v8a-release.apk'), 'utf8'),
+      await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-release.apk'), 'utf8'),
       'fresh APK',
     );
     assert.equal(
-      await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-arm64-v8a-release-mapping.txt'), 'utf8'),
+      await readFile(path.join(root, 'artifacts/yejian-0.2.1-android-release-mapping.txt'), 'utf8'),
       'matching R8 mapping',
     );
   }),
@@ -192,7 +185,7 @@ cliTest('loads release signing values from the ignored local env file', () =>
     const result = await execute([], {}, 'assembleRelease');
     assert.equal(result.status, 0, result.stderr);
     assert.deepEqual(result.calls, [
-      { name: 'gradle', args: ['assembleRelease', '--console=plain', '-PnoteAbi=arm64-v8a'] },
+      { name: 'gradle', args: ['assembleRelease', '--console=plain'] },
     ]);
   }),
 );
@@ -242,45 +235,16 @@ cliTest('failed frontend or Gradle build never installs an old APK; adb failures
     assert.equal(frontend.status, 7);
     assert.deepEqual(
       frontend.calls.map((call) => call.name),
-      ['adb', 'adb', 'frontend'],
+      ['adb', 'frontend'],
     );
     const gradle = await execute([], { FIXTURE_GRADLE_EXIT: '8' });
     assert.equal(gradle.status, 8);
     assert.deepEqual(
       gradle.calls.map((call) => call.name),
-      ['adb', 'adb', 'frontend', 'gradle'],
+      ['adb', 'frontend', 'gradle'],
     );
     const install = await execute([], { FIXTURE_INSTALL_EXIT: '9' });
     assert.equal(install.status, 9);
     assert.doesNotMatch(install.stdout, /已安装页间/);
-  }),
-);
-
-cliTest('copies every architecture and selects the first compatible ABI or universal fallback', () =>
-  fixture(async ({ execute, root }) => {
-    for (const [abis, expected] of [
-      ['x86_64,x86', 'x86_64-'],
-      ['armeabi-v7a', 'armeabi-v7a-'],
-      ['unknown', ''],
-    ]) {
-      const result = await execute(['--abi', 'all'], { FIXTURE_ABIS: abis });
-      assert.equal(result.status, 0, result.stderr);
-      assert.equal(result.calls.at(-1).args.at(-1),
-        path.join(root, `artifacts/yejian-0.2.1-android-${expected}debug.apk`));
-    }
-    for (const abi of ['arm64-v8a-', 'armeabi-v7a-', 'x86_64-', 'x86-', ''])
-      assert.equal(await readFile(path.join(root, `artifacts/yejian-0.2.1-android-${abi}debug.apk`), 'utf8'), 'fresh APK');
-  }),
-);
-
-cliTest('other architectures require explicit selection; incompatible defaults stop before building', () =>
-  fixture(async ({ execute }) => {
-    const incompatible = await execute([], { FIXTURE_ABIS: 'x86_64,x86' });
-    assert.notEqual(incompatible.status, 0);
-    assert.match(incompatible.stderr, /--abi/);
-    assert.deepEqual(incompatible.calls.map(call => call.name), ['adb', 'adb']);
-    const selected = await execute(['--abi', 'x86_64'], { FIXTURE_ABIS: 'x86_64,x86' });
-    assert.equal(selected.status, 0, selected.stderr);
-    assert.match(selected.calls.at(-1).args.at(-1), /android-x86_64-debug\.apk$/);
   }),
 );

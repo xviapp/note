@@ -86,11 +86,11 @@ Android 客户端使用 Capacitor，工程位于 `android/`，共用 React 界�
 
 ```bash
 npm ci
-npm run android:apk        # 默认 arm64-v8a 调试包，输出到 artifacts/
+npm run android:apk        # 调试包，输出到 artifacts/
 pnpm install:android       # 连接手机后构建并覆盖安装，保留应用数据
 ```
 
-修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。其他架构、签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
+修改客户端后需要重新构建并安装 APK，部署网站不会替换已安装包内的界面。签名、发布和原生测试见 [Android 客户端](docs/android.md)，图标见[应用图标](docs/branding.md)。
 
 ## 本地运行
 

@@ -59,10 +59,10 @@ PDF 双指缩放先变换现有画布，手指离开后再渲染清晰页面；�
 ## 构建
 
 - JDK 21、Node.js 22.12+、Android SDK Platform 37 / Build Tools 37。构建脚本依次查找 `ANDROID_SDK_ROOT`、`ANDROID_HOME` 和常见 SDK 目录，并写入 Git 忽略的 `android/local.properties`。
-- `npm run android:apk`：构建前端、同步 Capacitor、编译调试 APK 并复制到 `artifacts/`。默认只构建 `arm64-v8a`；`node scripts/android.mjs assembleDebug --abi <架构>` 构建 `armeabi-v7a`、`x86_64` 或 `x86`，`--abi all` 生成四种架构包和通用包。
-- `pnpm install:android`：选定唯一可用设备（多个时用 `--device <序列号>` 或 `ANDROID_SERIAL`），构建后覆盖安装并保留数据；构建失败不会安装旧包，`--abi` 安装前检查设备兼容性。
-- `pnpm build:android:release`：构建、同步包内资源并生成签名正式版 APK 和 R8 mapping，输出到 `artifacts/`，等同于 `pnpm android:release`；支持 `--abi`。
-- `pnpm install:android:release`：构建签名正式版并覆盖安装到选定设备，支持相同的 `--device`、`ANDROID_SERIAL` 和 `--abi`。签名配置可放在仓库根目录 `.env`（已被 Git 忽略，环境变量优先），也可直接设置环境变量。
+- `npm run android:apk`：构建前端、同步 Capacitor、编译调试 APK 并复制到 `artifacts/`。应用不含原生库，一个 APK 适用于所有 CPU 架构。
+- `pnpm install:android`：选定唯一可用设备（多个时用 `--device <序列号>` 或 `ANDROID_SERIAL`），构建后覆盖安装并保留数据；构建失败不会安装旧包。
+- `pnpm build:android:release`：构建、同步包内资源并生成签名正式版 APK 和 R8 mapping，输出到 `artifacts/`，等同于 `pnpm android:release`。
+- `pnpm install:android:release`：构建签名正式版并覆盖安装到选定设备，支持相同的 `--device` 和 `ANDROID_SERIAL`。签名配置可放在仓库根目录 `.env`（已被 Git 忽略，环境变量优先），也可直接设置环境变量。
 - `npm run build:android` 只构建与同步包内资源；`npm run android:open` 用 Android Studio 打开工程。
 - `node scripts/android.mjs testDebugUnitTest`、`lintDebug`：原生单元测试与 Android Lint；`pnpm test:android-cli` 用临时 SDK 验证设备选择与安装顺序。
 
@@ -76,7 +76,6 @@ Android 构建为 PDF.js 主库和 worker 选择 `legacy` 包以兼容 WebView 1
 
 ```bash
 pnpm android:apk
-node scripts/android.mjs assembleDebug --abi all
 pnpm run deploy
 pnpm android:publish --apk artifacts/yejian-<版本>-android-debug.apk --notes docs/releases/<版本>.txt --remote
 ```
