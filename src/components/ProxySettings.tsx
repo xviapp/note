@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import { CircleAlert, Network } from 'lucide-react';
+import { CircleAlert, LoaderCircle, Network } from 'lucide-react';
 import {
   addressError,
   enableProxy,
@@ -21,6 +21,8 @@ export function ProxySettings() {
   const [url, setUrl] = useState(state.url);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
+  // Set by the 检测 button: whether a check is running, then that it finished so its result shows.
+  const [check, setCheck] = useState<'' | 'running' | 'done'>('');
   // A saved address comes back normalized and replaces the draft; other status events leave it.
   useEffect(() => setUrl(state.url), [state.url]);
 
@@ -43,8 +45,16 @@ export function ProxySettings() {
   const save = () =>
     run(() => setProxyUrl(url.trim()), (caught) =>
       addressError((caught as { code?: string } | undefined)?.code ?? ''));
+  const runCheck = async () => {
+    setCheck('running');
+    await run(retryProxy, () => '检测未完成，请重试。');
+    setCheck('done');
+  };
   const dirty = url.trim() !== state.url;
-  const reason = state.route === 'direct' ? proxyError(state.error) : '';
+  const reason = state.route === 'direct' ? proxyError(state.error) || '代理无法连接。'
+    : check === 'done' && !error && state.route === 'proxy' ? '代理连接正常。' : '';
+
+  const checkable = state.enabled && !!state.url && state.route !== 'vpn';
 
   return (
     <section className="settings-section">
@@ -52,10 +62,56 @@ export function ProxySettings() {
         <Network size={19} />
         网络代理
       </h2>
+      <form
+        className="proxy-form"
+        onSubmit={(event) => {
+          event.preventDefault();
+          if (!busy && dirty) void save();
+        }}
+      >
+        <div className="server-address-row">
+          <label>
+            代理地址
+            <input
+              type="text"
+              inputMode="url"
+              autoCapitalize="off"
+              autoCorrect="off"
+              spellCheck={false}
+              value={url}
+              onChange={(event) => {
+                setUrl(event.target.value);
+                setCheck('');
+              }}
+              placeholder="socks5://127.0.0.1:7890"
+              disabled={busy}
+            />
+          </label>
+          <button type="submit" className="button primary" disabled={busy || !dirty}>
+            {busy && dirty ? '保存中…' : '保存'}
+          </button>
+        </div>
+        <p className="field-hint">支持 socks5:// 和 http://，只写“地址:端口”时按 SOCKS5 处理；不支持用户名和密码。</p>
+      </form>
       <div className="setting-row">
         <div>
           <strong>使用代理</strong>
-          <p>{proxyLabel(state)}</p>
+          <p className="proxy-route">
+            {proxyLabel(state)}
+            {checkable && (
+              <button type="button" className="text-button" disabled={busy || state.route === 'checking'}
+                onClick={() => void runCheck()}>
+                {check === 'running' && <LoaderCircle size={13} className="spin" aria-hidden="true" />}
+                {check === 'running' ? '检测中…' : '检测'}
+              </button>
+            )}
+          </p>
+          {reason && (
+            <p className={state.route === 'direct' ? 'proxy-result failed' : 'proxy-result'} role="status">
+              {reason}
+              {state.checkedAt > 0 && `（上次检测 ${time(state.checkedAt)}）`}
+            </p>
+          )}
         </div>
         <label className="toggle-switch">
           <input
@@ -69,40 +125,6 @@ export function ProxySettings() {
           <span className="toggle-switch-track" aria-hidden="true" />
         </label>
       </div>
-      <form
-        className="proxy-form"
-        onSubmit={(event) => {
-          event.preventDefault();
-          if (!busy && dirty) void save();
-        }}
-      >
-        <label>
-          代理地址
-          <input
-            type="text"
-            inputMode="url"
-            autoCapitalize="off"
-            autoCorrect="off"
-            spellCheck={false}
-            value={url}
-            onChange={(event) => setUrl(event.target.value)}
-            placeholder="socks5://127.0.0.1:7890"
-            disabled={busy}
-          />
-        </label>
-        <p className="field-hint">支持 socks5:// 和 http://，只写“地址:端口”时按 SOCKS5 处理；不支持用户名和密码。</p>
-        <div className="proxy-actions">
-          <button type="submit" className="button" disabled={busy || !dirty}>
-            {busy && dirty ? '保存中…' : '保存地址'}
-          </button>
-          {state.enabled && state.url && state.route !== 'vpn' && (
-            <button type="button" className="button" disabled={busy || state.route === 'checking'}
-              onClick={() => void run(retryProxy)}>
-              检测
-            </button>
-          )}
-        </div>
-      </form>
       <div className="setting-row">
         <div>
           <strong>连接 VPN 时直连</strong>
@@ -120,13 +142,7 @@ export function ProxySettings() {
           <span className="toggle-switch-track" aria-hidden="true" />
         </label>
       </div>
-      {reason && (
-        <p className="field-hint" role="status">
-          {reason}
-          {state.checkedAt > 0 && `（上次检测 ${time(state.checkedAt)}）`}
-        </p>
-      )}
-      {error && <p className="field-hint" role="alert">{error}</p>}
+      {error && <p className="inline-error" role="alert">{error}</p>}
     </section>
   );
 }

@@ -111,6 +111,8 @@ describe('external proxy state', () => {
     act(() => mock.statusListener!(proxied));
     act(() => mock.statusListener!(direct));
     act(() => mock.statusListener!({ ...direct, checkedAt: Date.now() }));
+    // Vitest can hand a second concurrent dynamic import the real module; let the first settle.
+    await flush();
     act(() => mock.statusListener!(proxied));
     act(() => mock.statusListener!(proxied));
     await flush();
@@ -127,7 +129,7 @@ describe('proxy settings', () => {
     render(<ProxySettings />);
     expect((screen.getByRole('switch', { name: '使用代理' }) as HTMLInputElement).disabled).toBe(true);
     fireEvent.change(screen.getByLabelText('代理地址'), { target: { value: ' 127.0.0.1:7890 ' } });
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: '保存地址' })));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '保存' })));
     expect(mock.setUrl).toHaveBeenCalledWith({ url: '127.0.0.1:7890' });
     expect((screen.getByLabelText('代理地址') as HTMLInputElement).value).toBe(url);
     expect((screen.getByRole('switch', { name: '使用代理' }) as HTMLInputElement).disabled).toBe(false);
@@ -137,7 +139,7 @@ describe('proxy settings', () => {
     mock.setUrl.mockRejectedValue(Object.assign(new Error('AUTH'), { code: 'AUTH' }));
     render(<ProxySettings />);
     fireEvent.change(screen.getByLabelText('代理地址'), { target: { value: 'socks5://a:b@host:1' } });
-    await act(async () => fireEvent.click(screen.getByRole('button', { name: '保存地址' })));
+    await act(async () => fireEvent.click(screen.getByRole('button', { name: '保存' })));
     expect(screen.getByRole('alert').textContent).toBe('不支持带用户名和密码的代理地址。');
     expect((screen.getByLabelText('代理地址') as HTMLInputElement).value).toBe('socks5://a:b@host:1');
   });
@@ -149,6 +151,13 @@ describe('proxy settings', () => {
     await act(async () => fireEvent.click(screen.getByRole('switch', { name: '使用代理' })));
     expect(mock.enable).toHaveBeenCalledWith({ enabled: true });
     expect(screen.getByText('已连接 127.0.0.1:7890')).toBeTruthy();
+    expect(screen.queryByRole('status')).toBeNull();
+    let answer!: (value: typeof proxied) => void;
+    mock.check.mockReturnValue(new Promise((resolve) => { answer = resolve; }));
+    act(() => fireEvent.click(screen.getByRole('button', { name: '检测' })));
+    expect((screen.getByRole('button', { name: '检测中…' }) as HTMLButtonElement).disabled).toBe(true);
+    await act(async () => answer(proxied));
+    expect(screen.getByRole('status').textContent).toContain('代理连接正常。');
     mock.check.mockResolvedValue(direct);
     await act(async () => fireEvent.click(screen.getByRole('button', { name: '检测' })));
     expect(mock.check).toHaveBeenCalledWith({ force: true });

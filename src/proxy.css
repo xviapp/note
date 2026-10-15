@@ -27,18 +27,25 @@
   line-height: 1.6;
   margin: 8px 0;
 }
-.proxy-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 12px;
-  align-items: center;
+.proxy-route .text-button {
+  min-height: 0;
+  margin: -6px 0 -6px 10px;
+  padding: 6px 0;
+  font-size: inherit;
+  vertical-align: baseline;
+}
+.server-settings .setting-row p.proxy-result {
+  color: var(--ink);
+}
+.server-settings .setting-row p.proxy-result.failed {
+  color: var(--warning);
 }
 .proxy-form {
   display: grid;
   gap: 10px;
   margin: 12px 0;
 }
-.proxy-form > label {
+.proxy-form label {
   display: grid;
   gap: 5px;
 }
