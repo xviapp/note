@@ -549,21 +549,16 @@ button:active:not(:disabled) {
   .quota-form {
     flex-wrap: wrap;
   }
-  .modal {
-    margin: auto auto 0;
-    width: 100%;
-    max-width: 100%;
-    max-height: calc(100dvh - 24px);
-    border-radius: var(--radius-panel) var(--radius-panel) 0 0;
-    padding: 24px 20px max(24px, env(safe-area-inset-bottom));
+  /* Reading surfaces keep their drawer/full-screen geometry. */
+  .modal:not(.toc-modal):not(.pdf-modal) {
+    margin: auto;
+    max-width: calc(100vw - 32px);
+    max-height: calc(100dvh - max(16px, env(safe-area-inset-top)) - max(16px, env(safe-area-inset-bottom)));
+    border-radius: var(--radius-panel);
+    padding: 24px 20px;
   }
   .modal-heading {
     margin-bottom: 16px;
-  }
-  .modal.reading-settings-dialog {
-    width: 100%;
-    margin: auto auto 0;
-    max-height: calc(100dvh - 24px);
   }
   .assistant-heading {
     padding: max(8px, env(safe-area-inset-top)) 12px 8px;

@@ -1,4 +1,4 @@
-/* 随手记: a persistent clipboard in a dialog (a bottom sheet on phones). */
+/* 随手记: a persistent clipboard in a centered dialog. */
 .modal.clips-modal {
   width: 520px;
   display: flex;
