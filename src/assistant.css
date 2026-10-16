@@ -704,6 +704,10 @@
   border-radius: 16px 16px 0 0;
   box-shadow: 0 -8px 24px var(--shadow-soft);
 }
+.assistant-sheet-handle,
+.assistant-sheet .assistant-heading {
+  background: var(--surface-subtle);
+}
 .assistant-sheet-handle {
   display: flex;
   justify-content: center;
