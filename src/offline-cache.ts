@@ -2,6 +2,7 @@ import type { AuthStatus, FileInfo, NoteDetail, NoteNode } from '../shared/types
 import { FOLDER_ICON_MAX_BYTES } from '../shared/folder-icons';
 import { clearDrafts } from './note-drafts';
 import { openBlob } from './encryption';
+import { withRequestTimeout } from './request-timeout';
 
 // Private content lives in IndexedDB, never the public service-worker cache.
 // A document and all its files are committed as one snapshot. An interrupted
@@ -308,21 +309,23 @@ export function rawFile(id: string, { cached = true } = {}): Promise<Blob> {
     const saved = cached ? await cachedFile(id) : null;
     if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
     if (saved) return saved;
-    const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
-      credentials: 'same-origin',
-      redirect: 'error',
-      signal: AbortSignal.any([signal, AbortSignal.timeout(90_000)]),
-    });
-    if (response.status === 401) {
-      await clearPrivateCache();
-      window.dispatchEvent(new Event('note:unauthenticated'));
-    }
-    if (response.status !== 200) throw new Error('文件尚未缓存，请联网后重试。');
-    const blob = await response.blob();
-    if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
-    const expected = Number(response.headers.get('content-length'));
-    if (expected && blob.size !== expected) throw new Error('文件下载不完整，请重试。');
-    return blob;
+    return withRequestTimeout(90_000, async (requestSignal) => {
+      const response = await fetch(`/api/files/${encodeURIComponent(id)}`, {
+        credentials: 'same-origin',
+        redirect: 'error',
+        signal: requestSignal,
+      });
+      if (response.status === 401) {
+        await clearPrivateCache();
+        window.dispatchEvent(new Event('note:unauthenticated'));
+      }
+      if (response.status !== 200) throw new Error('文件尚未缓存，请联网后重试。');
+      const blob = await response.blob();
+      if (epoch !== privateGeneration) throw new Error('缓存操作已取消。');
+      const expected = Number(response.headers.get('content-length'));
+      if (expected && blob.size !== expected) throw new Error('文件下载不完整，请重试。');
+      return blob;
+    }, signal);
   })();
   fileRequests.set(key, result);
   void result.finally(() => fileRequests.delete(key)).catch(() => {});

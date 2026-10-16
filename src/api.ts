@@ -27,6 +27,7 @@ import {
 import { isOffline, setOffline } from './connectivity';
 import { proxyReady, reportNetworkFailure } from './proxy';
 import { sseData } from '../shared/sse';
+import { withRequestTimeout } from './request-timeout';
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -104,67 +105,68 @@ async function request<T>(path: string, method: string, data: unknown, key?: str
   if (node && noteTokens.has(node)) headers['x-note-edit'] = noteTokens.get(node)!;
   if (method !== 'GET') headers['x-idempotency-key'] = key ?? crypto.randomUUID();
   Object.assign(headers, await keyHeaders(path));
-  let response: Response;
-  const signal = AbortSignal.timeout(requestTimeout(path, method));
-  try {
-    response = await fetch(path, {
-      method,
-      headers,
-      credentials: 'same-origin',
-      signal,
-      body: data === undefined ? undefined : JSON.stringify(data),
-    });
-  } catch {
-    if (signal.aborted && method !== 'GET')
-      throw new ApiError('请求超时，尚无法确认是否保存成功。请保留当前内容并重试。', 0, 'REQUEST_TIMEOUT');
-    // A proxy that went away moves traffic to direct; a read is safe to repeat at once.
-    if (!signal.aborted && (await reportNetworkFailure()) && method === 'GET')
-      return request<T>(path, method, data, key, remember);
-    setOffline(true);
-    const cached = method === 'GET' ? await cachedResponse<T>(path) : undefined;
-    if (cached !== undefined) return reveal(cached);
-    throw new ApiError(
-      method === 'GET'
-        ? '无法连接，且此内容尚未缓存。请联网后重试。'
-        : '连接已中断，请联网后重试。',
-      0,
-      'OFFLINE',
-    );
-  }
-  // An HTTP denial/deletion must never fall back to a stale private snapshot.
-  // A note fetched ahead (remember = false) that is gone is only skipped: it was
-  // never shown, and dropping every snapshot would cancel requests on their way.
-  if (
-    remember &&
-    method === 'GET' &&
-    /^\/api\/nodes\/[\w-]+$/.test(path) &&
-    [404, 410].includes(response.status)
-  )
-    await removeCachedNote(node!).catch(() => {});
-  const value = await parse<T>(response);
-  if (
-    authProbe &&
-    (typeof (value as AuthStatus).authenticated !== 'boolean' ||
-      typeof (value as AuthStatus).initialized !== 'boolean')
-  )
-    throw new ApiError('登录状态暂时无法读取，请稍后重试。', 502, 'INVALID_RESPONSE');
-  if (authProbe && epoch !== cacheEpoch())
-    throw new ApiError('会话已更新，请重新连接。', 409, 'SESSION_CHANGED');
-  if (authProbe && !(value as AuthStatus).authenticated) await signedOut();
-  else {
-    if (method === 'GET' && remember) {
-      await rememberResponse(path, value, epoch).catch(() => {});
-      if (/^\/api\/nodes\/[\w-]+$/.test(path))
-        void rememberNote(value as NoteDetail, false, epoch).catch(() => {});
-    } else if (method === 'GET' && /^\/api\/nodes\/[\w-]+$/.test(path))
-      await rememberPrefetched(value as NoteDetail, epoch).catch(() => {});
-    if (/^\/api\/auth\/(logout|logout-all|password)$/.test(path) && method === 'POST')
-      await signedOut();
-    if (node && method === 'DELETE' && path === `/api/nodes/${node}`)
-      await removeCachedNote(node).catch(() => {});
-  }
-  if (authProbe) setOffline(false);
-  return reveal(value);
+  return withRequestTimeout(requestTimeout(path, method), async (signal) => {
+    let response: Response;
+    try {
+      response = await fetch(path, {
+        method,
+        headers,
+        credentials: 'same-origin',
+        signal,
+        body: data === undefined ? undefined : JSON.stringify(data),
+      });
+    } catch {
+      if (signal.aborted && method !== 'GET')
+        throw new ApiError('请求超时，尚无法确认是否保存成功。请保留当前内容并重试。', 0, 'REQUEST_TIMEOUT');
+      // A proxy that went away moves traffic to direct; a read is safe to repeat at once.
+      if (!signal.aborted && (await reportNetworkFailure()) && method === 'GET')
+        return request<T>(path, method, data, key, remember);
+      setOffline(true);
+      const cached = method === 'GET' ? await cachedResponse<T>(path) : undefined;
+      if (cached !== undefined) return reveal(cached);
+      throw new ApiError(
+        method === 'GET'
+          ? '无法连接，且此内容尚未缓存。请联网后重试。'
+          : '连接已中断，请联网后重试。',
+        0,
+        'OFFLINE',
+      );
+    }
+    // An HTTP denial/deletion must never fall back to a stale private snapshot.
+    // A note fetched ahead (remember = false) that is gone is only skipped: it was
+    // never shown, and dropping every snapshot would cancel requests on their way.
+    if (
+      remember &&
+      method === 'GET' &&
+      /^\/api\/nodes\/[\w-]+$/.test(path) &&
+      [404, 410].includes(response.status)
+    )
+      await removeCachedNote(node!).catch(() => {});
+    const value = await parse<T>(response);
+    if (
+      authProbe &&
+      (typeof (value as AuthStatus).authenticated !== 'boolean' ||
+        typeof (value as AuthStatus).initialized !== 'boolean')
+    )
+      throw new ApiError('登录状态暂时无法读取，请稍后重试。', 502, 'INVALID_RESPONSE');
+    if (authProbe && epoch !== cacheEpoch())
+      throw new ApiError('会话已更新，请重新连接。', 409, 'SESSION_CHANGED');
+    if (authProbe && !(value as AuthStatus).authenticated) await signedOut();
+    else {
+      if (method === 'GET' && remember) {
+        await rememberResponse(path, value, epoch).catch(() => {});
+        if (/^\/api\/nodes\/[\w-]+$/.test(path))
+          void rememberNote(value as NoteDetail, false, epoch).catch(() => {});
+      } else if (method === 'GET' && /^\/api\/nodes\/[\w-]+$/.test(path))
+        await rememberPrefetched(value as NoteDetail, epoch).catch(() => {});
+      if (/^\/api\/auth\/(logout|logout-all|password)$/.test(path) && method === 'POST')
+        await signedOut();
+      if (node && method === 'DELETE' && path === `/api/nodes/${node}`)
+        await removeCachedNote(node).catch(() => {});
+    }
+    if (authProbe) setOffline(false);
+    return reveal(value);
+  });
 }
 // This device's last copy of a whitelisted GET, shown while the server answers.
 export async function cachedApi<T>(path: string): Promise<T | undefined> {
