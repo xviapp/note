@@ -1,5 +1,5 @@
 import type { FileInfo } from './types';
-import type { ChatFile, ChatFileInput } from './chat-files';
+import type { ChatFile, ChatFileInput, ChatSource } from './chat-files';
 import type { ChatContextUsage } from './ai-context';
 
 // Reserved conversation scope; never a library node.
@@ -24,6 +24,7 @@ export interface AssistantSettings {
   thinkingLevel: ThinkingLevel;
 }
 export interface ChatMessage {
+  quoteSource?: ChatSource;
   id: string;
   sequence: number;
   role: 'user' | 'assistant';
@@ -41,6 +42,7 @@ export interface ChatMessage {
   createdAt: number;
 }
 export interface ChatInput {
+  quoteSource?: ChatSource;
   content: string;
   quote?: string;
   image?: string;

@@ -1,5 +1,6 @@
 import { test, expect } from './fixtures';
 import { login } from './notebook-helpers';
+import { noteAction } from './note-actions';
 
 // 设置 → 待发送: what was saved here but has not reached the server.
 test('a refused 随手记 shows in 待发送 with its reason, and can be retried or deleted', async ({ page }, info) => {
@@ -26,11 +27,11 @@ test('a refused 随手记 shows in 待发送 with its reason, and can be retried
   const status = page.locator('.sync-status');
   if (info.project.name === 'mobile') {
     await expect(page.getByRole('button', { name: '设置，2 项待发送' }).locator('.nav-badge.failed')).toBeVisible();
-  } else {
-    await expect(status).toHaveText('2 项未能同步，需要处理');
-    await status.click();
-    await expect(page).toHaveURL(/\/settings\/outbox$/);
   }
+  await expect(status).toBeInViewport();
+  await expect(status).toContainText('2 项未能同步，需要处理');
+  await status.click();
+  await expect(page).toHaveURL(/\/settings\/outbox$/);
 
   await page.goto('/settings');
   const entry = page.locator('.settings-entry').filter({ hasText: '待发送' });
@@ -79,4 +80,31 @@ test('outbox and sent history share the app header and navigation', async ({ pag
   await expect(header.locator('.header-title')).toHaveText('待发送');
   await page.goForward();
   await expect(header.locator('.header-title')).toHaveText('已发送');
+});
+
+test('Android exposes a refused sync from an open note without a sidebar', async ({ page }) => {
+  await page.addInitScript(() => { (window as any).androidBridge = {}; });
+  await login(page);
+  const response = await page.request.post('/api/nodes', {
+    headers: { origin: 'http://127.0.0.1:8799' },
+    data: { kind: 'markdown', title: 'Android 同步提示', content: '正文' },
+  });
+  expect(response.ok()).toBeTruthy();
+  const note = await response.json();
+  await page.goto(`/n/${note.id}`);
+  await page.route('**/api/clips', (route) => route.request().method() === 'POST'
+    ? route.fulfill({ status: 409, json: { error: '暂不接受这条内容' } })
+    : route.continue());
+  await noteAction(page, '随手记');
+  const dialog = page.getByRole('dialog', { name: '随手记', exact: true });
+  await dialog.getByLabel('随手记内容').fill('仍保存在本机的内容');
+  await dialog.getByLabel('随手记内容').press('ControlOrMeta+Enter');
+  await expect(dialog.locator('.clip-item')).toHaveCount(1);
+  await dialog.getByRole('button', { name: '关闭', exact: true }).first().click();
+  await expect(page.locator('.sidebar')).toHaveCount(0);
+  await expect(page.locator('.sync-status')).toBeInViewport();
+  await expect(page.locator('.sync-status')).toContainText('1 项未能同步，需要处理');
+  await page.locator('.sync-status').click();
+  await expect(page).toHaveURL(/\/settings\/outbox$/);
+  await expect(page.getByText('没能发送：暂不接受这条内容')).toBeVisible();
 });

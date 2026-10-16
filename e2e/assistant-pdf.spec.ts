@@ -76,6 +76,11 @@ test('PDF attachments select pages, extract text and send page images with sourc
   await expect(
     page.getByRole('dialog', { name: 'charts.pdf · 第 4 页', exact: true }),
   ).toBeVisible();
+  await page.getByRole('dialog', { name: 'charts.pdf · 第 4 页', exact: true }).getByRole('button', { name: '关闭', exact: true }).click();
+  const source = page.locator('.chat-file-card').first();
+  await source.locator('summary').click();
+  await source.getByRole('button', { name: '返回原文', exact: true }).click();
+  await expect(page.getByLabel('PDF 页码', { exact: true })).toHaveValue('2');
   expect(errors).toEqual([]);
 });
 
@@ -169,11 +174,13 @@ test('PDF assistant can select text and crop the continuous viewer', async ({ pa
   await page.getByRole('button', { name: '发送', exact: true }).click();
   await expect(page.locator('.chat-assistant')).toContainText('结构要点');
   expect(fixture.sent[0].quote).toBe('A quiet page - 1');
+  expect(fixture.sent[0].quoteSource).toMatchObject({ nodeId: node.id, page: 1 });
   await page.getByRole('button', { name: '保存为子笔记', exact: true }).click();
   await expect(page.getByRole('button', { name: '打开子笔记', exact: true })).toBeVisible();
   const saved = fixture.threads.get(node.id)!.messages[1].exportedNodeId!;
   expect((await (await page.request.get(`/api/nodes/${saved}`)).json()).parent_id).toBe(node.id);
-  await page.getByRole('button', { name: '关闭青藜', exact: true }).click();
+  await page.locator('.chat-user .chat-quote > summary').click();
+  await page.locator('.chat-user .chat-quote').getByRole('button', { name: '返回原文', exact: true }).click();
   await expect(page.locator('.pdf-scroll')).toBeVisible();
   await expect(page.locator('iframe,embed,object')).toHaveCount(0);
   await page.screenshot({ path: `test-results/pdf-assistant-${info.project.name}.png` });

@@ -262,8 +262,8 @@ test('search finds a note by its annotation and opens it there', async ({ page }
   await page.keyboard.press('Control+k');
   const search = page.getByRole('dialog', { name: '搜索笔记' });
   if (!(await search.isVisible())) await page.getByRole('button', { name: /搜索/ }).first().click();
-  await search.getByRole('combobox').fill(`独特标记${info.project.name}`);
-  const option = search.getByRole('option').filter({ hasText: note.title });
+  await search.getByRole('combobox', { name: '搜索笔记标题、正文或批注' }).fill(`独特标记${info.project.name}`);
+  const option = search.getByRole('listbox', { name: '搜索结果' }).getByRole('option').filter({ hasText: note.title });
   await expect(option.locator('.search-annotation')).toContainText(quote);
   await option.click();
   await expect(page).toHaveURL(new RegExp(note.id));

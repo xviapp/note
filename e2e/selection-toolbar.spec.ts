@@ -176,7 +176,8 @@ test('selection quotes open the current assistant, retain a draft, and work in m
   await panel.getByRole('button', { name: '关闭青藜', exact: true }).click();
   await selectText(page, page.locator('.read-content p').nth(1));
   await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
-  await expect(panel.locator('.context-quote')).toHaveText('公式 $E=mc^2$。');
+  await expect(panel.locator('.context-quote-text > span')).toHaveText('公式 $E=mc^2$。');
+  await expect(panel.locator('.context-quote').getByRole('button', { name: '返回原文', exact: true })).toBeVisible();
   await expect(input).toHaveValue('这个问题先留在草稿里');
   if (info.project.name === 'desktop')
     await panel.getByRole('button', { name: '最大化青藜', exact: true }).click();
@@ -185,6 +186,7 @@ test('selection quotes open the current assistant, retain a draft, and work in m
   await page.screenshot({ path: info.outputPath('selection-chat.png') });
   await toolbar(page).getByRole('button', { name: '问青藜', exact: true }).click();
   await expect(panel.locator('.context-quote')).toContainText('这里是助手的一段回复');
+  await expect(panel.locator('.context-quote').getByRole('button', { name: '返回原文', exact: true })).toHaveCount(0);
   await expect(input).toHaveValue('这个问题先留在草稿里');
   expect(posts).toEqual([]);
   // A different file must not inherit the quote or the previous selection.

@@ -25,7 +25,7 @@ import { keyFor, requireKey } from './encryption';
 import { openBytes } from '../shared/encryption';
 import { aiSettings, deepseekReply, readApiKey, toBase64, type ProviderMessage } from './deepseek';
 import { CHAT_CONTEXT_IMAGE_LIMIT } from '../shared/chat-files';
-import { fileContext, validateChatFiles } from './chat-files';
+import { fileContext, validateChatFiles, validateChatSource } from './chat-files';
 import {
   AI_CONTEXT_WINDOW,
   AI_CONTEXT_MESSAGE_LIMIT,
@@ -69,7 +69,7 @@ export async function assistantNode(
   return node;
 }
 async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
-  let body: Pick<ChatMessage, 'content' | 'reasoning' | 'quote' | 'files' | 'annotations' | 'continueFrom'> = {
+  let body: Pick<ChatMessage, 'content' | 'reasoning' | 'quote' | 'quoteSource' | 'files' | 'annotations' | 'continueFrom'> = {
     content: '',
   };
   if (row.body_key) {
@@ -345,6 +345,7 @@ export async function sendChat(
   const keyId = node.key_id ?? null;
   const prompt = textValue(data.content, '问题', AI_PROMPT_LIMIT).trim();
   const quote = data.quote == null ? '' : textValue(data.quote, '引用文字', AI_QUOTE_LIMIT, true);
+  const quoteSource = validateChatSource(data.quoteSource);
   const apiKey = await readApiKey(env);
   const { maxTokens, thinkingLevel } = await aiSettings(env);
   const timeout = Math.max(300_000, Math.ceil(maxTokens / 8192) * 300_000);
@@ -431,6 +432,7 @@ export async function sendChat(
         content: prompt,
         ...(continuation ? { continueFrom: continuation.id } : {}),
         ...(quote ? { quote } : {}),
+        ...(quote && quoteSource ? { quoteSource } : {}),
         ...(annotations ? { annotations } : {}),
         ...(attachments.files.length ? { files: attachments.files } : {}),
       }),

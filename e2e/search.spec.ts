@@ -18,7 +18,7 @@ test('body search shows context and goes to the word', async ({ page }, info) =>
   const dialog = page.getByRole('dialog', { name: '搜索笔记', exact: true });
   if (!(await dialog.isVisible())) await page.locator('.app-header').getByRole('button', { name: '搜索笔记' }).click();
   await dialog.getByRole('combobox', { name: '搜索笔记标题、正文或批注' }).fill('关键的结论');
-  const option = dialog.getByRole('option').filter({ hasText: '长篇读书笔记' });
+  const option = dialog.getByRole('listbox', { name: '搜索结果' }).getByRole('option').filter({ hasText: '长篇读书笔记' });
   await expect(option.locator('.search-excerpt')).toContainText('最后写下关键的结论在这里。');
   await expect(option.locator('.search-excerpt mark')).toHaveText('关键的结论');
   await page.screenshot({ path: info.outputPath('search-excerpt.png') });

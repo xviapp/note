@@ -7,6 +7,8 @@ import { Modal, NodeIcon } from './Primitives';
 import { requestAnnotation } from '../annotations';
 import { requestFind } from '../find-request';
 import { searchEncryptedBodies } from '../local-search';
+import { compareSearch, searchTypes, type SearchType, type SearchSort } from '../../shared/search';
+import { SEARCH_LIMIT } from '../../shared/types';
 
 const wordsOf = (query: string) => query.trim().split(/\s+/).filter(Boolean).slice(0, 8);
 // Server results first, then encrypted notes found on this device.
@@ -34,10 +36,16 @@ function goTo(node: SearchResult, query: string) {
 export function SearchDialog({
   onOpen,
   onClose,
+  directory,
 }: {
   onOpen: (node: NoteNode) => void;
   onClose: () => void;
+  directory?: { id: string; title: string };
 }) {
+  const [currentDirectory, setCurrentDirectory] = useState(false),
+    [type, setType] = useState<SearchType>('all'),
+    [sort, setSort] = useState<SearchSort>('relevance');
+  const parent = currentDirectory ? directory?.id : undefined;
   const [query, setQuery] = useState(''),
     [results, setResults] = useState<SearchResult[]>([]),
     [active, setActive] = useState(0),
@@ -59,30 +67,35 @@ export function SearchDialog({
   useEffect(() => {
     let live = true;
     const term = query.trim();
+    const options = { type, sort, parent };
+    const ordered = (items: SearchResult[]) => items.sort((a, b) => compareSearch(a, b, wordsOf(term), sort)).slice(0, SEARCH_LIMIT);
     setState('loading');
     setResults([]);
     setActive(0);
     let answered = false;
     // Titles this device has seen show at once; the server's results replace them.
     if (term)
-      void searchCachedTitles(wordsOf(term)).then((found) => {
+      void searchCachedTitles(wordsOf(term), SEARCH_LIMIT, options).then((found) => {
         if (!live || answered || !found.length) return;
         setResults(found.map((node): SearchResult => ({ ...node, path: [] })));
         setState('local');
       });
     const timer = setTimeout(
       () => {
-        const local = term ? searchEncryptedBodies(wordsOf(term)).catch(() => []) : Promise.resolve([]);
+        const local = term ? searchEncryptedBodies(wordsOf(term), options).catch(() => []) : Promise.resolve([]);
+        const params = new URLSearchParams({ q: term, type, sort });
+        if (parent) params.set('parent', parent);
         const request = term
-          ? api<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(term)}`).then(
+          ? api<{ results: SearchResult[] }>(`/api/search?${params}`).then(
               (data) => data.results,
             )
+          : parent || type !== 'all' ? Promise.resolve([] as SearchResult[])
           : api<{ nodes: NoteNode[] }>('/api/nodes?view=recent').then((data) =>
               data.nodes.map((node): SearchResult => ({ ...node, path: [] })),
             );
         request
           .then(async (server) => {
-            const found = merge(server, await local);
+            const found = term ? ordered(merge(server, await local)) : server;
             answered = true;
             if (!live) return;
             if (pendingEnter.current && found[0]) {
@@ -104,7 +117,7 @@ export function SearchDialog({
             setError((e as Error).message);
             pendingEnter.current = false;
             // Titles and encrypted notes found on this device stay, marked as such.
-            if (found.length) setResults((shown) => merge(shown, found));
+            if (found.length) setResults((shown) => ordered(merge(shown, found)));
             setState('error');
           });
       },
@@ -114,7 +127,8 @@ export function SearchDialog({
       live = false;
       clearTimeout(timer);
     };
-  }, [query]);
+  }, [query, type, sort, parent]);
+  const changeFilters = () => { pendingEnter.current = false; };
   useEffect(() => {
     listRef.current
       ?.querySelector(`[data-index="${active}"]`)
@@ -165,6 +179,18 @@ export function SearchDialog({
           }}
         />
       </label>
+      <div className="search-filters">
+        <label>范围<select aria-label="搜索范围" value={currentDirectory ? 'current' : 'all'} onChange={(event) => { changeFilters(); setCurrentDirectory(event.target.value === 'current'); }}>
+          <option value="all">全部笔记</option>
+          <option value="current" disabled={!directory}>{directory ? `当前目录：${directory.title}` : '当前目录'}</option>
+        </select></label>
+        <label>类型<select aria-label="搜索类型" value={type} onChange={(event) => { changeFilters(); setType(event.target.value as SearchType); }}>
+          {Object.entries(searchTypes).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
+        </select></label>
+        <label>排序<select aria-label="搜索排序" value={sort} onChange={(event) => { changeFilters(); setSort(event.target.value as SearchSort); }}>
+          <option value="relevance">相关度</option><option value="updated">最近更新</option>
+        </select></label>
+      </div>
       <p className="search-caption" aria-live="polite">
         {state === 'error'
           ? results.length
@@ -176,7 +202,7 @@ export function SearchDialog({
               ? `找到 ${results.length} 项，继续查找中…`
             : query.trim()
               ? results.length
-                ? `找到 ${results.length} 项${results.length >= 30 ? '（只显示最近修改的 30 项）' : ''}`
+                ? `找到 ${results.length} 项${results.length >= SEARCH_LIMIT ? `（最多显示${sort === 'relevance' ? '最相关' : '最近修改'}的 ${SEARCH_LIMIT} 项）` : ''}`
                 : '没有标题、正文或批注匹配的笔记'
               : results.length
                 ? '最近访问'

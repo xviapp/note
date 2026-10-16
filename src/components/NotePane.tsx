@@ -5,7 +5,7 @@ import {
   useEffect,
   useRef,
   useState,
-  useSyncExternalStore,
+  type ReactNode,
 } from 'react';
 import { FileText, X } from 'lucide-react';
 import { api, ApiError, fileUrl, lockNote, unlockNote } from '../api';
@@ -39,7 +39,7 @@ import { TranslationPanel } from './TranslationPanel';
 import type { TranslationLaunch } from '../translation';
 import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
 import { clearSourceHighlight, locateTextSource, locateWord } from '../source-location';
-import { takeRequestedFind } from '../find-request';
+import { takeRequestedFind, takeRequestedPage } from '../find-request';
 import { exportAnnotations, useAnnotations } from '../annotations';
 import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
@@ -53,7 +53,6 @@ import { useNoteReading } from '../use-note-reading';
 import { useNoteAnnotationPosition } from '../use-note-annotation-position';
 import { useReadingWindow } from '../reading-window';
 import { settleChange, showChange } from '../optimistic';
-import { pendingSaves, subscribeSaves } from '../save-outbox';
 
 const Editor = lazy(() => import('./Editor'));
 const SplitView = lazy(() => import('./SplitView'));
@@ -61,6 +60,7 @@ const PdfView = lazy(() => import('./PdfView'));
 const ImageViewer = lazy(() => import('./ImageViewer'));
 
 interface Props {
+  status?: ReactNode;
   id: string;
   projectContext?: ProjectContext;
   refresh: number;
@@ -124,6 +124,7 @@ export default function NotePane(props: Props) {
     tab: editTab,
     setTab: setEditTab,
     dirty,
+    draftStatus,
     reset,
     save,
     leave,
@@ -163,9 +164,6 @@ export default function NotePane(props: Props) {
     reset,
     onLoaded: props.onLoaded,
   });
-  // This note's body on its way to the server (保存 returned at once).
-  const saves = useSyncExternalStore(subscribeSaves, pendingSaves);
-  const sending = saves.find((item) => item.id === id && !item.error);
   // Android: the screen stays on, encrypted notes block screenshots, volume keys page.
   useReadingWindow(!!note, !!note?.key_id, !!note && !editing);
   // While editing, 随手记 can insert a clip at the cursor.
@@ -252,20 +250,31 @@ export default function NotePane(props: Props) {
   // A body match from search: once the text is shown, go to the first word.
   useEffect(() => {
     if (note?.id !== id || editing) return;
-    const word = takeRequestedFind(id);
-    if (!word) return;
-    let tries = 0,
-      timer = 0;
-    const attempt = () => {
-      const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
-      if (root && locateWord(root, word)) touched.current = restored.current = true;
-      else if (++tries < 20) timer = window.setTimeout(attempt, 150);
+    let timer = 0;
+    const find = () => {
+      window.clearTimeout(timer);
+      const page = takeRequestedPage(id);
+      if (page && note.file && note.kind === 'pdf') {
+        touched.current = restored.current = true;
+        setPdfLocation({ kind: 'pdf', fileId: note.file.id, page, endPage: page, rects: [] });
+      }
+      const word = takeRequestedFind(id);
+      if (!word) return;
+      let tries = 0;
+      const attempt = () => {
+        const root = readingRoot.current?.querySelector<HTMLElement>('.read-content');
+        if (root && locateWord(root, word)) touched.current = restored.current = true;
+        else if (++tries < 20) timer = window.setTimeout(attempt, 150);
+        else props.onNotice?.(root ? '原文可能已修改，暂时无法定位这段文字。' : '正文尚未加载完成，请稍后再定位。');
+      };
+      timer = window.setTimeout(attempt, 100);
     };
-    timer = window.setTimeout(attempt, 100);
-    return () => window.clearTimeout(timer);
+    find();
+    window.addEventListener('note:find', find);
+    return () => { window.clearTimeout(timer); window.removeEventListener('note:find', find); };
     // Runs once the note is there; the refs hold the latest reading state.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
-  }, [id, note?.id === id]);
+  }, [id, note?.id === id, editing]);
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
   const previewFile = (file: FileInfo) => {
     if (file.mime.startsWith('image/')) showImage(fileUrl(file.id), file.name);
@@ -373,6 +382,7 @@ export default function NotePane(props: Props) {
     return (
       <div className="note-pane">
         <div className="note-toolbar">{navigation}</div>
+        {props.status}
         {loadError ? (
           <Empty
             icon={<FileText />}
@@ -412,6 +422,7 @@ export default function NotePane(props: Props) {
             <NodeMenu node={note} onAction={props.onAction} />
           </div>
         </div>
+        {props.status}
         <div className="note-scroll">
           <LockedNote note={note} keyId={lockedKey} />
         </div>
@@ -483,15 +494,12 @@ export default function NotePane(props: Props) {
           onAction={props.onAction}
         />
       </div>
-      {sending && !editing && (
-        <p className="save-pending" role="status">
-          {offline ? '离线中，联网后自动保存' : '正在保存…'}
-        </p>
-      )}
+      {props.status}
       {editing && (
         <EditToolbar
           kind={note.kind}
           dirty={dirty}
+          draftStatus={draftStatus}
           tab={editTab}
           busy={busy}
           uploading={uploading}
@@ -501,6 +509,11 @@ export default function NotePane(props: Props) {
           onCancel={() => void leave()}
           onSave={() => void save()}
         />
+      )}
+      {editing && dirty && draftStatus === 'error' && (
+        <p className="draft-warning" role="alert">
+          草稿暂时无法保存在本机，请保持页面打开，清理本机存储空间后再保存。
+        </p>
       )}
       {saveError && (
         <SaveErrorBar

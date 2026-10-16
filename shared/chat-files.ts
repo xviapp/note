@@ -10,7 +10,14 @@ export const CHAT_FILE_IMAGE_LIMIT = 6;
 export const CHAT_PDF_PAGE_LIMIT = 200;
 export const CHAT_CONTEXT_IMAGE_LIMIT = 8;
 export type ChatFileKind = 'markdown' | 'text' | 'pdf' | 'image';
+export interface ChatSource {
+  nodeId: string;
+  title: string;
+  section?: string;
+  page?: number;
+}
 export interface ChatFileInput {
+  origin?: ChatSource;
   name: string;
   kind: ChatFileKind;
   text: string;
@@ -21,6 +28,7 @@ export interface ChatFileInput {
   images: { blobId: string; page?: number }[];
 }
 export interface ChatFile {
+  origin?: ChatSource;
   name: string;
   kind: ChatFileKind;
   text: string;

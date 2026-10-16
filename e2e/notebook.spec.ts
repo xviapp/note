@@ -29,12 +29,12 @@ test('default preview, editing, save/history, favorites, trash and restore', asy
     page.locator('.read-content').getByRole('heading', { name: '本周的阅读' }),
   ).toBeVisible();
   await expect(page.locator('.read-content input[type=checkbox]').first()).toBeDisabled();
-  await page.getByRole('button', { name: '收藏笔记', exact: true }).click();
+  await noteAction(page, '收藏笔记');
   const url = page.url();
   await page.reload();
   await expectPreview(page);
   await expect(page.locator('.cm-editor')).toHaveCount(0);
-  await expect(page.getByRole('button', { name: '取消收藏', exact: true })).toBeVisible();
+  await expect(page.locator('.note-actions .is-favorite')).toHaveCount(1);
   if (info.project.name === 'mobile') {
     await page.getByRole('button', { name: '标题目录', exact: true }).click();
     await page

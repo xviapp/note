@@ -1,3 +1,4 @@
+import { noteAction } from './note-actions';
 import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 
@@ -123,7 +124,7 @@ test('settings and offline list deep links can be reloaded without a network', a
   await context.setOffline(false);
 });
 
-test('320px reading controls keep menus and bottom sheets accessible', async ({ page }, info) => {
+test('320px reading controls keep menus and dialogs accessible', async ({ page }, info) => {
   test.skip(info.project.name !== 'mobile', 'Narrow phone layout');
   await login(page);
   const note = await (
@@ -134,11 +135,13 @@ test('320px reading controls keep menus and bottom sheets accessible', async ({ 
   ).json();
   await page.setViewportSize({ width: 320, height: 640 });
   await page.goto(`/n/${note.id}`);
-  await page.getByRole('button', { name: '阅读设置', exact: true }).click();
+  await noteAction(page, '阅读设置');
   const sheet = page.getByRole('dialog', { name: '阅读设置', exact: true });
+  await expect(sheet).toBeVisible();
   const box = (await sheet.boundingBox())!;
-  expect(box.width).toBe(320);
-  expect(box.y + box.height).toBeCloseTo(640, 0);
+  expect(box.x).toBeGreaterThanOrEqual(16);
+  expect(box.width).toBeLessThanOrEqual(288);
+  expect(box.y + box.height).toBeLessThanOrEqual(624);
   await page.keyboard.press('Escape');
   const menu = page.locator('.note-actions .node-menu');
   await menu.getByRole('button', { name: '管理 小屏阅读', exact: true }).click();

@@ -5,6 +5,7 @@ import {
   CHAT_SOURCE_TEXT_BYTE_LIMIT,
   type ChatFileInput,
   type ChatFileKind,
+  type ChatSource,
 } from '../shared/chat-files';
 import type { FileInfo, NoteDetail } from '../shared/types';
 import { fileUrl, parse, scopeOf, uploadRequest } from './api';
@@ -17,6 +18,7 @@ export type AttachmentSource =
   | { type: 'stored'; file: FileInfo }
   | { type: 'local'; file: File };
 export interface PreparedChatFile {
+  origin?: ChatSource;
   id: string;
   name: string;
   kind: ChatFileKind;
@@ -30,6 +32,7 @@ export interface PreparedChatFile {
   uploaded?: ChatFileInput;
 }
 export function sourceDescription(source: AttachmentSource): {
+  origin?: ChatSource;
   name: string;
   kind: ChatFileKind;
   sourceId?: string;
@@ -39,6 +42,7 @@ export function sourceDescription(source: AttachmentSource): {
     const note = source.note;
     if (note.kind === 'folder') throw new Error('请打开一个文件。');
     return {
+      origin: { nodeId: note.id, title: note.title.slice(0, 200) },
       name: note.title.slice(0, 200),
       kind: note.kind === 'link' ? 'text' : note.kind,
       ...(note.file ? { sourceId: note.file.id } : {}),
@@ -199,6 +203,7 @@ export async function uploadPreparedFile(
     images.push({ blobId: stored.id, ...(image.page ? { page: image.page } : {}) });
   }
   file.uploaded = {
+    ...(file.origin ? { origin: file.origin } : {}),
     name: file.name,
     kind: file.kind,
     text: file.text,

@@ -89,6 +89,9 @@ test('family navigation, setting routes and all palettes remain usable on narrow
   await expect(page).toHaveURL(/\/settings$/);
   await tab(page, mobile ? '笔记' : '全部笔记', mobile);
   await expect(page.locator('.library-home .loading')).toHaveCount(0);
+  if (mobile) await page.getByRole('button', { name: '打开笔记目录', exact: true }).click();
+  await expect(page.locator('.main-nav button span')).toHaveText(['全部笔记', '收藏', '最近访问', '离线阅读', '回收站', '设置']);
+  if (mobile) await page.getByRole('button', { name: '关闭侧栏' }).click();
   await page.screenshot({ path: `test-results/family-home-${info.project.name}.png` });
   if (mobile) {
     await page.setViewportSize({ width: 320, height: 640 });

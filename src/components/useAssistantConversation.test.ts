@@ -35,6 +35,22 @@ const conversation = () =>
     }),
   );
 
+it('keeps the source selected with a quote when a global conversation changes the current file', async () => {
+  streamChat.mockResolvedValue(undefined);
+  const origin = { nodeId: 'original', title: '原文' };
+  const view = renderHook(({ source }) => useAssistantConversation({
+    scopeId: 'qingli-global', visible: true, quoteOrigin: source,
+    onSend: () => {}, onChanged: () => {}, onNavigate: () => {},
+  }), { initialProps: { source: origin } });
+  await waitFor(() => expect(view.result.current.settings?.configured).toBe(true));
+  act(() => { view.result.current.addQuote('回复中的文字', null); });
+  expect(view.result.current.composer.quoteSource).toBeUndefined();
+  act(() => { view.result.current.addQuote('选中的原文'); view.result.current.composer.setPrompt('解释'); });
+  view.rerender({ source: { nodeId: 'another', title: '另一份文件' } });
+  await act(() => view.result.current.send());
+  expect(streamChat.mock.calls[0][1]).toMatchObject({ quote: '选中的原文', quoteSource: origin });
+});
+
 it('keeps streamed reasoning separate from the answer and preserves it if saving failed', async () => {
   let emit!: (event: ChatEvent) => void;
   let finish!: () => void;

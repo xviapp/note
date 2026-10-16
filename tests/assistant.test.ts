@@ -165,6 +165,22 @@ afterEach(async () => {
 });
 
 describe('per-file DeepSeek assistant', () => {
+  it('retains explicit quote and file origins without adding navigation metadata to the provider prompt', async () => {
+    const node = await create();
+    await configure();
+    const origin = { nodeId: node.id, title: '引用时的标题', section: '第一章', page: 2 };
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+    await chat(node, { content: '解释', quote: '选中文字', quoteSource: origin,
+      files: [{ name: '原文', kind: 'markdown', text: '完整原文', images: [], origin }] });
+    const user = (await history(node)).messages.find((message) => message.role === 'user')!;
+    expect(user.quoteSource).toEqual(origin);
+    expect(user.files![0].origin).toEqual(origin);
+    expect(JSON.stringify(JSON.parse(String(fetch.mock.calls[0][1]?.body)).messages)).not.toContain('nodeId');
+    fetch.mockClear();
+    expect((await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '解释', quote: '选文', quoteSource: { nodeId: '../bad', title: '无效' } })).status).toBe(400);
+    expect((await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '解释', quote: '选文', quoteSource: { ...origin, page: 0 } })).status).toBe(400);
+    expect(fetch).not.toHaveBeenCalled();
+  });
   it('accepts private file uploads while read-only and refuses unsupported files', async () => {
     const node = await create(),
       bytes = new TextEncoder().encode('资料文本');

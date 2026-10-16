@@ -1,4 +1,4 @@
-import { chooseNodeType } from './note-actions';
+import { chooseNodeType, noteAction } from './note-actions';
 import { test, expect, type Page } from './fixtures';
 import { readFile } from 'node:fs/promises';
 import { BlobReader, ZipReader } from '@zip.js/zip.js';
@@ -369,7 +369,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   expect((await (await page.request.get(`/api/nodes/${nodeId}`)).json()).icon_blob_id).toBe(
     node.icon_blob_id,
   );
-  await page.getByRole('button', { name: '收藏笔记', exact: true }).click();
+  await noteAction(page, '收藏笔记');
   const nav = page.getByRole('button', { name: '打开笔记目录', exact: true });
   if (await nav.isVisible()) await nav.click();
   const treeImage = page

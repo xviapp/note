@@ -53,8 +53,9 @@ export function settleChange(withdraw: () => void, delay = 5000) {
 // A listing (see useNodeListing's queries) with the pending changes applied.
 export function applyChanges(query: string, nodes: NoteNode[]): NoteNode[] {
   if (!changes.size) return nodes;
-  const parent = query.startsWith('parent=') ? query.slice('parent='.length) || null : undefined;
-  const favorites = query === 'view=favorites';
+  const params = new URLSearchParams(query);
+  const parent = params.has('parent') ? params.get('parent') || null : undefined;
+  const favorites = params.get('view') === 'favorites';
   const fits = (node: NoteNode) =>
     (parent === undefined || (node.parent_id ?? null) === parent) && (!favorites || !!node.favorite);
   const result: NoteNode[] = [];

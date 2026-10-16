@@ -4,8 +4,10 @@ import type { NoteNode } from '../../shared/types';
 import { api, cachedApi } from '../api';
 import { streamChat } from '../assistant';
 import { uploadPreparedFile, validatePreparedFiles, type PreparedChatFile } from '../chat-files';
+import type { ChatSource } from '../../shared/chat-files';
 
 interface Options {
+  quoteOrigin?: ChatSource;
   scopeId: string;
   visible: boolean;
   initialQuote?: string;
@@ -41,6 +43,7 @@ export function useAssistantConversation(props: Options) {
   const [exporting, setExporting] = useState('');
   const [files, setFiles] = useState<PreparedChatFile[]>([]),
     [uploading, setUploading] = useState(false);
+  const [quoteSource, setQuoteSource] = useState<ChatSource | undefined>(props.initialQuote ? props.quoteOrigin : undefined);
   const abort = useRef<AbortController | null>(null),
     mounted = useRef(true);
   const requestKey = useRef<{ payload: string; key: string } | null>(null);
@@ -195,6 +198,7 @@ export function useAssistantConversation(props: Options) {
         data = {
           content: text,
           ...(quoted ? { quote: quoted } : {}),
+          ...(quoted && (initial ? props.quoteOrigin : quoteSource) ? { quoteSource: initial ? props.quoteOrigin : quoteSource } : {}),
           ...(image ? { image } : {}),
           ...(withNotes && props.annotationCount ? { annotations: true } : {}),
           ...(attached.length ? { files: attached } : {}),
@@ -218,6 +222,7 @@ export function useAssistantConversation(props: Options) {
           if (!continueFrom) {
             setPrompt('');
             setQuote('');
+            setQuoteSource(undefined);
             setImage('');
             setWithNotes(false);
             setFiles([]);
@@ -298,11 +303,12 @@ export function useAssistantConversation(props: Options) {
       setExporting('');
     }
   };
-  const addQuote = (text: string) => {
+  const addQuote = (text: string, origin: ChatSource | null = props.quoteOrigin ?? null) => {
     if (sending || abort.current) return '正在回复，请结束后再加入引用。';
     if (text.length > AI_QUOTE_LIMIT)
       return `引用最多 ${AI_QUOTE_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`;
     setQuote(text);
+    setQuoteSource(origin ?? undefined);
     setError('');
   };
   const clear = async () => {
@@ -320,7 +326,7 @@ export function useAssistantConversation(props: Options) {
   return {
     messages, nextBefore, settings, loading, sending, remoteBusy, uploading,
     error, setError, contextNotice, exporting,
-    composer: { prompt, setPrompt, quote, setQuote, image, setImage, withNotes, setWithNotes, files, setFiles },
+    composer: { prompt, setPrompt, quote, setQuote, quoteSource, image, setImage, withNotes, setWithNotes, files, setFiles },
     addQuote, load, send, save, clear,
     cancel: () => abort.current?.abort(),
   };

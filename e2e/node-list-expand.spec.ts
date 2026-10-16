@@ -1,3 +1,4 @@
+import { noteAction } from './note-actions';
 import { expect, test, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 
@@ -94,10 +95,10 @@ test('a note opens its children from the toolbar, while a folder lists them on t
   await page.goto(`/n/${note.id}`);
   await expect(page.getByRole('heading', { name: note.title, exact: true })).toBeVisible();
   await expect(page.locator('.children-section')).toHaveCount(0);
-  // Kept on the toolbar on phones too, ahead of the outline toggle.
+  // The outline stays on the toolbar; child notes move into the phone menu.
   const actions = page.locator('.note-actions');
   await expect(actions.locator('.has-badge + .toc-toggle')).toBeVisible();
-  await actions.getByRole('button', { name: '下级笔记（2）' }).click();
+  await noteAction(page, '下级笔记（2）');
   const dialog = page.getByRole('dialog', { name: '下级笔记（2）', exact: true });
   await expect(dialog.locator('.node-list-main')).toHaveCount(2);
   await dialog

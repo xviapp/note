@@ -130,7 +130,7 @@ export function NoteHeading({
         )}
         {/* A project creates its items from its own panel. */}
         {noteType(note).newChild && variantOf(note) !== 'project' && !note.journal_entry && !editing && (
-          <button className="text-button" onClick={onNew}>
+          <button className={`text-button new-child${note.kind === 'folder' ? ' is-folder' : ''}`} onClick={onNew}>
             <Plus size={14} />
             新建
           </button>
@@ -143,6 +143,7 @@ export function NoteHeading({
 export function EditToolbar({
   kind,
   dirty,
+  draftStatus,
   tab,
   busy,
   uploading,
@@ -154,6 +155,7 @@ export function EditToolbar({
 }: {
   kind: NoteDetail['kind'];
   dirty: boolean;
+  draftStatus: 'pending' | 'stored' | 'error';
   tab: 'source' | 'preview';
   busy: boolean;
   uploading: boolean;
@@ -176,9 +178,9 @@ export function EditToolbar({
   };
   return (
     <div className="edit-toolbar">
-      <span className="editing-label" role="status">
+      <span className={`editing-label${dirty && draftStatus === 'error' ? ' draft-error' : ''}`} role="status">
         {busy || uploading ? <LoaderCircle size={14} className="spin" aria-hidden="true" /> : <Pencil size={14} />}
-        {busy ? '正在保存…' : uploading ? '正在上传…' : dirty ? '未保存' : '已保存'}
+        {busy ? '正在同步…' : uploading ? '正在上传…' : !dirty ? '已同步' : draftStatus === 'stored' ? '草稿已存本机' : draftStatus === 'error' ? '草稿暂存失败' : '正在暂存草稿…'}
       </span>
       <div className="edit-tabs">
         <button aria-pressed={tab === 'source'} className={tab === 'source' ? 'active' : ''} onClick={() => onTab('source')}>

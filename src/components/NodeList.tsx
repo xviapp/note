@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useState, type ReactNode } from 'react';
 import { ArrowUpRight, ChevronRight, History, Star } from 'lucide-react';
 import { formatDate } from '../api';
 import type { NoteNode } from '../../shared/types';
 import { Empty, EmptyDirectory, NodeIcon, Spinner } from './Primitives';
 import { NodeMenu, type NodeAction } from './Tree';
 import { useNodeListing } from '../use-node-listing';
-import { typeLabel } from '../note-types/registry';
+import { nodeDescription, useListPreferences } from '../list-preferences';
+import { ListControls } from './ListControls';
 import { LockBadge } from './LockBadge';
 
 type NodeListProps = {
@@ -20,25 +21,30 @@ export function NodeList({
   onNew,
   ...props
 }: NodeListProps & { view?: 'favorites' | 'recent'; parent?: string | null; onNew?: () => void }) {
-  const query = view ? `view=${view}` : `parent=${parent || ''}`;
+  const preferences = useListPreferences();
+  const query = (view ? `view=${view}` : `parent=${parent || ''}`)
+    + (props.onAction && preferences.sort !== 'default' ? `&sort=${preferences.sort}` : '');
   const { listing, error, loading, more } = useNodeListing(query, props.refresh);
+  const wrap = (children: ReactNode) => <div className={`node-list${props.onAction && preferences.compact ? ' is-compact' : ''}`} aria-busy={loading}>
+    {props.onAction && <ListControls />}{children}
+  </div>;
   if (!listing)
-    return error ? (
+    return wrap(error ? (
       <p className="inline-error" role="status">
         {error}
       </p>
     ) : (
       <Spinner />
-    );
+    ));
   const items = listing.nodes;
   if (error && !items.length)
-    return (
+    return wrap(
       <p className="inline-error" role="status">
         {error}
       </p>
     );
   if (!items.length)
-    return view ? (
+    return wrap(view ? (
       <Empty
         icon={view === 'favorites' ? <Star /> : <History />}
         title={view === 'favorites' ? '暂无收藏' : '暂无阅读记录'}
@@ -47,16 +53,16 @@ export function NodeList({
       </Empty>
     ) : onNew ? <EmptyDirectory onNew={onNew} /> : (
       <p className="children-empty">此目录还没有内容</p>
-    );
-  return (
-    <div className="node-list" aria-busy={loading}>
+    ));
+  return wrap(
+    <>
       <NodeRows {...props} items={items} error={error} />
       {listing.nextOffset !== null && (
         <button className="text-button load-more" onClick={more} disabled={loading}>
           {loading ? '正在加载…' : '加载更多'}
         </button>
       )}
-    </div>
+    </>
   );
 }
 // A shallow look inside: rows that have children can be expanded in place.
@@ -109,11 +115,7 @@ function NodeRows({
                     <LockBadge keyId={node.key_id} />
                   </strong>
                   <small>
-                    {node.arxiv_id
-                      ? `arXiv 论文 · ${node.arxiv_id}`
-                      : node.kind === 'link'
-                        ? node.url
-                        : typeLabel(node)}
+                    {nodeDescription(node)}
                   </small>
                 </span>
                 {node.kind === 'link' && !node.arxiv_id ? (
@@ -136,7 +138,8 @@ function NodeChildren({
   depth,
   ...props
 }: NodeListProps & { parent: string; depth: number }) {
-  const { listing, error, loading, more } = useNodeListing(`parent=${parent}`, props.refresh);
+  const preferences = useListPreferences();
+  const { listing, error, loading, more } = useNodeListing(`parent=${parent}${props.onAction && preferences.sort !== 'default' ? `&sort=${preferences.sort}` : ''}`, props.refresh);
   return (
     <div className="node-list-children" role="group" aria-busy={loading}>
       {!listing ? (

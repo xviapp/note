@@ -46,6 +46,12 @@ export function useNoteEditor({
     // Another page saved first; the editor still holds this page's text.
     [conflict, setConflict] = useState(false);
   const [tab, setTab] = useState<'source' | 'preview'>('source');
+  const [storedDraft, setStoredDraft] = useState<{
+    content: string;
+    assets: FileInfo[];
+    keyId: string | null;
+    stored: boolean;
+  } | null>(null);
   const draftUploads = useRef(new Set<string>());
   const saveRequest = useRef<{ payload: string; key: string } | null>(null);
   const currentDraft = useRef({ content, assets });
@@ -77,27 +83,35 @@ export function useNoteEditor({
   const baseRevision = useRef(0);
   // An encrypted note's draft is sealed with its key.
   const keyId = note?.key_id ?? null;
+  const draftStatus: 'pending' | 'stored' | 'error' = storedDraft?.content === content && storedDraft.assets === assets && storedDraft.keyId === keyId
+    ? storedDraft.stored ? 'stored' : 'error'
+    : 'pending';
   useEffect(() => {
     if (!editing) return;
     if (!dirty) {
       removeDraft(id);
       return;
     }
-    const timer = setTimeout(
-      () =>
-        writeDraft(
-          id,
-          {
-            content,
-            attachments: assets,
-            revision: baseRevision.current,
-            savedAt: Date.now(),
-          },
-          keyId,
-        ),
-      600,
-    );
-    return () => clearTimeout(timer);
+    let live = true;
+    const timer = setTimeout(() => {
+      void Promise.resolve(writeDraft(
+        id,
+        {
+          content,
+          attachments: assets,
+          revision: baseRevision.current,
+          savedAt: Date.now(),
+        },
+        keyId,
+      )).then((stored) => {
+        // A slow encrypted write must not report a newer edit as stored.
+        if (live) setStoredDraft({ content, assets, keyId, stored });
+      });
+    }, 600);
+    return () => {
+      live = false;
+      clearTimeout(timer);
+    };
   }, [id, editing, dirty, content, assets, keyId, note?.revision]);
 
   // A background save of this note: its result replaces the shown copy, and a
@@ -419,6 +433,7 @@ export function useNoteEditor({
     tab,
     setTab,
     dirty,
+    draftStatus,
     reset,
     save,
     leave,

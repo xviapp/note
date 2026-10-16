@@ -70,6 +70,9 @@ export interface NoteNode {
   // Only in the continue view, for a book page: its book and page number.
   book_title?: string | null;
   book_page_number?: number | null;
+  book_total_pages?: number | null;
+  // A short excerpt from the current, unencrypted search index.
+  preview?: string | null;
   metadata_title?: string | null;
   metadata_status?: string | null;
   metadata_excerpt?: string | null;
@@ -109,6 +112,7 @@ export interface ArxivImportProgress {
 // A title match, with the titles of its ancestors from the root down.
 export interface SearchResult extends NoteNode {
   path: string[];
+  ancestor_ids?: string[];
   // Set when the match is in one of the file's highlights or notes.
   annotation?: { id: string; quote: string; note: string };
   // Set when the match is in the body: the words around it.

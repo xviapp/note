@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useRef, useState } from 'react';
+import { createPortal } from 'react-dom';
 import { Capacitor } from '@capacitor/core';
 import { RotateCcw } from 'lucide-react';
 import { Modal } from './Primitives';
@@ -140,27 +141,37 @@ function DeviceReadingControls() {
   );
 }
 
-export function ReadingSettingsButton({ beforeChange }: { beforeChange: () => void }) {
+export function ReadingSettingsButton({ beforeChange, menu = false }: { beforeChange: () => void; menu?: boolean }) {
   const [open, setOpen] = useState(false);
+  const returnFocus = useRef<HTMLElement | null>(null);
   return (
     <>
       <button
-        className="icon-button reading-settings-toggle"
+        className={menu ? 'menu-compact-only' : 'icon-button reading-settings-toggle toolbar-secondary'}
         aria-label="阅读设置"
         title="阅读设置"
         aria-haspopup="dialog"
         aria-expanded={open}
-        onClick={() => {
+        onClick={(event) => {
+          if (menu) {
+            const details = event.currentTarget.closest('details');
+            returnFocus.current = details?.querySelector('summary') ?? null;
+            if (details) details.open = false;
+          }
           beforeChange();
           setOpen(true);
         }}
       >
-        <span aria-hidden="true">Aa</span>
+        {menu ? '阅读设置' : <span aria-hidden="true">Aa</span>}
       </button>
-      {open && (
-        <Modal title="阅读设置" className="reading-settings-dialog" onClose={() => setOpen(false)}>
+      {open && createPortal(
+        <Modal title="阅读设置" className="reading-settings-dialog" onClose={() => {
+          setOpen(false);
+          if (menu) requestAnimationFrame(() => returnFocus.current?.focus());
+        }}>
           <ReadingControls />
-        </Modal>
+        </Modal>,
+        document.body,
       )}
     </>
   );

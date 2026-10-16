@@ -118,6 +118,41 @@ async function file(name = 'picture.png'): Promise<FileInfo> {
 }
 
 describe('private library behavior', () => {
+  it('sorts the complete directory before pagination and only previews the current indexed body', async () => {
+    const folder = await create('folder', '排序');
+    await bindings.DB.batch(Array.from({ length: 105 }, (_, index) => bindings.DB.prepare(
+      'INSERT INTO nodes(id,parent_id,kind,title,position,created_at,updated_at) VALUES(?,?,\'folder\',?,?,?,?)',
+    ).bind(crypto.randomUUID(), folder.id, `条目 ${String(104 - index).padStart(3, '0')}`, index, index, index)));
+    const first = await ok<{ nodes: NoteNode[]; nextOffset: number }>(`/api/nodes?parent=${folder.id}&sort=title`);
+    expect(first.nodes).toHaveLength(100);
+    expect(first.nodes[0].title).toBe('条目 000');
+    const last = await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${folder.id}&sort=title&offset=${first.nextOffset}`);
+    expect(last.nodes.map((node) => node.title)).toEqual(['条目 100', '条目 101', '条目 102', '条目 103', '条目 104']);
+    const note = await create('markdown', '摘要', { content: '# 标题\n\n**摘要文字**' });
+    const listed = (await ok<{ nodes: NoteNode[] }>('/api/nodes?parent=')).nodes.find((node) => node.id === note.id)!;
+    expect(listed.preview).toContain('摘要文字');
+    expect(listed.preview).not.toContain('**');
+    await bindings.DB.prepare("UPDATE note_text SET version_id='stale-version' WHERE node_id=?").bind(note.id).run();
+    expect((await ok<{ nodes: NoteNode[] }>('/api/nodes?parent=')).nodes.find((node) => node.id === note.id)!.preview).toBeNull();
+  });
+  it('filters search across descendants and types before limiting, and ranks exact titles ahead of newer partial matches', async () => {
+    const folder = await create('folder', '范围');
+    const nested = await create('folder', '内层', { parentId: folder.id });
+    const exact = await create('markdown', '线索', { parentId: nested.id, content: '正文内容' });
+    await bindings.DB.prepare('UPDATE nodes SET updated_at=1 WHERE id=?').bind(exact.id).run();
+    const outside = await create('markdown', '线索 外部');
+    for (let i = 0; i < 32; i++) await create('folder', `线索 ${i}`);
+    const relevant = await ok<{ results: SearchResult[] }>('/api/search?q=线索');
+    expect(relevant.results[0].id).toBe(exact.id);
+    const filtered = await ok<{ results: SearchResult[] }>(`/api/search?q=线索&parent=${folder.id}&type=note`);
+    expect(filtered.results.map((node) => node.id)).toEqual([exact.id]);
+    expect(filtered.results[0].ancestor_ids).toEqual([folder.id, nested.id]);
+    expect(filtered.results.some((node) => node.id === outside.id)).toBe(false);
+    expect((await request('/api/search?q=线索&type=invalid')).status).toBe(400);
+    const body = await create('markdown', '只有正文匹配', { content: '线索在这里' });
+    await bindings.DB.prepare('UPDATE nodes SET updated_at=9999999999999 WHERE id=?').bind(body.id).run();
+    expect((await ok<{ results: SearchResult[] }>('/api/search?q=线索&sort=updated')).results[0].id).toBe(body.id);
+  });
   it('searches titles by every word, with ancestor paths, skipping trash and escaping wildcards', async () => {
     const folder = await create('folder', '读书');
     const book = await create('markdown', 'Deep Learning 笔记', { parentId: folder.id });

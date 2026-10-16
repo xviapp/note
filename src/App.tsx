@@ -352,6 +352,14 @@ function Notebook({
     };
   }, [android]);
   const showToast = toast.show;
+  useEffect(() => {
+    const saved = (event: Event) => {
+      const note = (event as CustomEvent<NoteDetail>).detail;
+      if (note.id === selectedRef.current) showToast('正文已同步');
+    };
+    window.addEventListener('note:saved', saved);
+    return () => window.removeEventListener('note:saved', saved);
+  }, [showToast]);
   // 今日记 kept on this device for a locked journal goes out once it is unlocked.
   useEffect(() => {
     const flush = () => {
@@ -594,6 +602,7 @@ function Notebook({
       report(e);
     }
   };
+  const syncStatus = <SyncStatus count={outbox.count} failed={outbox.failed} onOpen={() => openSettings('outbox')} />;
   return (
     <div
       className={`app-shell ${android ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
@@ -621,16 +630,6 @@ function Notebook({
             onSearch={() => setSearchOpen(true)}
             onClose={() => setMobileOpen(false)}
             onView={(next) => void switchView(next)}
-            status={
-              <SyncStatus
-                count={outbox.count}
-                failed={outbox.failed}
-                onOpen={() => {
-                  setMobileOpen(false);
-                  openSettings('outbox');
-                }}
-              />
-            }
             tree={{
               refresh: revision,
               onRefresh: refreshLibrary,
@@ -658,6 +657,7 @@ function Notebook({
             onSearch={() => setSearchOpen(true)}
           />
         )}
+        {!(view === 'tree' && selected) && syncStatus}
         {offline && (
           <div className="offline-banner" role="status">
             <WifiOff size={14} />
@@ -707,6 +707,7 @@ function Notebook({
               selected ? (
                 <NotePane
                   key={selected}
+                  status={syncStatus}
                   id={selected}
                   projectContext={navigation.route.project}
                   refresh={detailRevision}
@@ -763,6 +764,7 @@ function Notebook({
                   </nav>
                   {android ? (
                     <Tree
+                      browsing
                       refresh={revision}
                       onNew={() => void newNode()}
                       onRefresh={refreshLibrary}
@@ -940,6 +942,7 @@ function Notebook({
       )}
       {searchOpen && (
         <SearchDialog
+          directory={loaded ? loaded.kind === 'folder' ? { id: loaded.reference?.target?.id ?? loaded.id, title: loaded.title } : loaded.parent_id ? { id: loaded.parent_id, title: loaded.breadcrumbs.at(-2)?.title ?? '上级目录' } : undefined : undefined}
           onOpen={(node) => {
             setMobileOpen(false);
             openNode(node);

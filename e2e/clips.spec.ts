@@ -1,4 +1,4 @@
-import { editorAction } from './note-actions';
+import { editorAction, noteAction } from './note-actions';
 import { test, expect, type Page } from './fixtures';
 
 const headers = { origin: 'http://127.0.0.1:8799' };
@@ -44,7 +44,7 @@ test('随手记 keeps, copies, pins and deletes clips from any page', async ({ p
   // From a note page, with the note as its source.
   await page.goto(`/n/${note.id}`);
   await expect(page.locator('.read-content')).toContainText('落笔于页');
-  await page.locator('.note-location').getByRole('button', { name: '随手记' }).click();
+  await noteAction(page, '随手记');
   dialog = page.getByRole('dialog', { name: '随手记' });
   await dialog.getByLabel('随手记内容').fill('第二条：从笔记里记下');
   await dialog.getByLabel('附上来源「读书摘录」').check();
@@ -87,7 +87,7 @@ test('随手记 keeps, copies, pins and deletes clips from any page', async ({ p
   if (testInfo.project.name === 'desktop') {
     await page.locator('.read-content').click();
     await page.keyboard.press('q');
-  } else await page.locator('.note-location').getByRole('button', { name: '随手记' }).click();
+  } else await noteAction(page, '随手记');
   dialog = page.getByRole('dialog', { name: '随手记' });
   await expect(
     dialog.getByRole('region', { name: '最近' }).locator('.clip-item').first(),
@@ -149,7 +149,7 @@ test('随手记 images go into the note being edited and become notes; clips can
   await expect(page.locator('.read-content img')).toBeVisible();
 
   // An image clip becomes a note of its own, and leaves 随手记.
-  await page.locator('.note-location').getByRole('button', { name: '随手记' }).click();
+  await noteAction(page, '随手记');
   await dialog
     .locator('.clip-item')
     .filter({ hasText: '图配文' })
@@ -163,7 +163,7 @@ test('随手记 images go into the note being edited and become notes; clips can
   await expect(page.locator('.read-content')).toContainText('图配文');
 
   // Encrypt: existing clips are re-sealed here and still read back.
-  await page.locator('.note-location').getByRole('button', { name: '随手记' }).click();
+  await noteAction(page, '随手记');
   await expect(dialog.locator('.clip-item').filter({ hasText: '图配文' })).toHaveCount(0);
   await dialog.getByRole('button', { name: '加密设置' }).click();
   await dialog.getByLabel('密码', { exact: true }).fill('clip-secret');

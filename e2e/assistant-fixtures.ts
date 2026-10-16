@@ -55,10 +55,12 @@ export async function assistantFixture(page: Page, options: { interruptFirst?: b
       status: 'completed',
       content: data.content,
       quote: data.quote,
+      quoteSource: data.quoteSource,
       createdAt: Date.now(),
     };
     if (data.files)
       user.files = data.files.map((file) => ({
+        origin: file.origin,
         name: file.name,
         kind: file.kind,
         text: file.text,

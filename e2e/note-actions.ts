@@ -4,7 +4,7 @@ import type { Page, Locator } from '@playwright/test';
 // ⋯ menu on phones; both use the same accessible name.
 export async function noteAction(page: Page, name: string | RegExp) {
   const actions = page.locator('.note-actions');
-  const target = actions.getByRole('button', { name, exact: typeof name === 'string' });
+  const target = page.locator('.note-toolbar').getByRole('button', { name, exact: typeof name === 'string' });
   if (!(await target.first().isVisible())) await actions.locator('.node-menu > summary').click();
   await target.first().click();
 }

@@ -151,6 +151,7 @@ export function ChatFileDialog({
                       part
                         ? {
                             ...meta.current!,
+                            origin: meta.current!.origin ? { ...meta.current!.origin, ...(part.id === 'all' ? {} : { section: part.title.slice(0, 300) }) } : undefined,
                             name: `${meta.current!.name}${part.id === 'all' ? '' : ` · ${part.title}`}`.slice(
                               0,
                               200,

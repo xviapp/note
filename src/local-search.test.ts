@@ -67,4 +67,11 @@ describe('searching encrypted bodies on this device', () => {
     const bodies = vi.mocked(reveal).mock.calls.filter(([value]) => 'sealed' in (value as object));
     expect(bodies).toHaveLength(1);
   });
+  it('applies directory and type filters before the result limit', async () => {
+    const outside = Array.from({ length: 35 }, (_, i) => ({ ...note(`outside-${i}`, 'k1', '共同关键词', 100), breadcrumbs: [{ id: 'outside', title: '其他目录' }] }));
+    vi.mocked(cachedSealedNotes).mockResolvedValue([...outside, note('inside-scope', 'k1', '共同关键词', 1)]);
+    vi.mocked(isUnlocked).mockReturnValue(true);
+    expect((await searchEncryptedBodies(['共同关键词'], { parent: 'folder', type: 'note' })).map((item) => item.id)).toEqual(['inside-scope']);
+    expect(await searchEncryptedBodies(['共同关键词'], { parent: 'folder', type: 'book' })).toEqual([]);
+  });
 });

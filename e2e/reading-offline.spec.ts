@@ -1,3 +1,4 @@
+import { noteAction } from './note-actions';
 import { test, expect, type Page } from './fixtures';
 import { preparePassword } from '../shared/password';
 import { paperHtml, paperPng } from '../tests/fixtures/arxiv';
@@ -127,7 +128,7 @@ test('reading preferences apply live, preserve formula/code spacing, and survive
     content: '# 阅读\n\n把文字留在页间。\n\n$x^2 + y^2 = 1$\n\n`const page = 1`',
   });
   await page.goto(`/n/${note.id}`);
-  await page.getByRole('button', { name: '阅读设置', exact: true }).click();
+  await noteAction(page, '阅读设置');
   const panel = page.getByRole('dialog', { name: '阅读设置' });
   await panel.getByText('宋体', { exact: true }).click();
   const size = panel.getByRole('slider', { name: '正文字号' });
@@ -146,7 +147,7 @@ test('reading preferences apply live, preserve formula/code spacing, and survive
   await page.reload();
   await expect(page.locator('.read-content .markdown-body')).toHaveCSS('font-size', '28px');
   await expect(page.locator('html')).toHaveAttribute('data-reading-font', 'serif');
-  await page.getByRole('button', { name: '阅读设置', exact: true }).click();
+  await noteAction(page, '阅读设置');
   await panel.getByRole('button', { name: '恢复默认' }).click();
   await expect(page.locator('.read-content .markdown-body')).toHaveCSS('font-size', '16px');
   await page.keyboard.press('Escape');
@@ -314,6 +315,9 @@ test('saved arXiv body and local figures remain readable offline', async ({ page
   await context.setOffline(true);
   await page.reload();
   await expect(page.locator('.paper-body')).toContainText('Reading a mathematical paper.');
+  // A real navigation key takes over from automatic position restoration;
+  // otherwise a late image load can move this programmatic scroll back up.
+  await page.locator('.note-scroll').press('End');
   await page.locator('.paper-body img[alt="论文插图"]').scrollIntoViewIfNeeded();
   await expect
     .poll(() =>
@@ -322,7 +326,7 @@ test('saved arXiv body and local figures remain readable offline', async ({ page
         .evaluate((img: HTMLImageElement) => img.naturalWidth),
     )
     .toBeGreaterThan(0);
-  await page.getByRole('button', { name: '阅读设置', exact: true }).click();
+  await noteAction(page, '阅读设置');
   await page.getByRole('dialog').getByText('黑体', { exact: true }).click();
   await expect(page.locator('html')).toHaveAttribute('data-reading-font', 'sans');
   await context.setOffline(false);

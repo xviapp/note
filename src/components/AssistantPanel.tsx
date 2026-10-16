@@ -25,7 +25,7 @@ import {
 } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
 import type { NoteDetail } from '../../shared/types';
-import { CHAT_FILE_LIMIT, pageLabel } from '../../shared/chat-files';
+import { CHAT_FILE_LIMIT, pageLabel, type ChatSource } from '../../shared/chat-files';
 import { fileUrl } from '../api';
 import { CachedImage } from './CachedImage';
 import { useAssistantConversation } from './useAssistantConversation';
@@ -36,6 +36,7 @@ import { AssistantWindow, type AssistantMode } from './AssistantWindow';
 import { MarkdownView } from './LazyMarkdown';
 import { ScreenshotCrop } from './ScreenshotCrop';
 import { ActivityDots, Spinner, useQuestion } from './Primitives';
+import { requestFind, requestPage } from '../find-request';
 
 export interface AssistantHandle {
   addQuote: (text: string) => string | undefined;
@@ -82,6 +83,7 @@ interface Props {
 }
 export function AssistantPanel(props: Props) {
   const { node, visible } = props;
+  const currentFile = props.fileNode ?? node;
   const scopeId = props.global ? GLOBAL_ASSISTANT_ID : node!.id;
   const [capturing, setCapturing] = useState(false),
     [canvas, setCanvas] = useState<HTMLCanvasElement | null>(null),
@@ -95,6 +97,7 @@ export function AssistantPanel(props: Props) {
     follow = useRef(true);
   const conversation = useAssistantConversation({
     ...props,
+    quoteOrigin: currentFile ? { nodeId: currentFile.id, title: currentFile.title.slice(0, 200) } : undefined,
     scopeId,
     onSend: () => { follow.current = true; },
   });
@@ -102,10 +105,34 @@ export function AssistantPanel(props: Props) {
     messages, nextBefore, settings, loading, sending, remoteBusy, uploading,
     error, setError, contextNotice, exporting, load, send, save, clear, cancel,
   } = conversation;
-  const { prompt, setPrompt, quote, setQuote, image, setImage, withNotes, setWithNotes, files, setFiles } = conversation.composer;
+  const { prompt, setPrompt, quote, setQuote, quoteSource, image, setImage, withNotes, setWithNotes, files, setFiles } = conversation.composer;
+  const scopeLabel = (file: { kind: string; pages?: number[]; pageCount?: number; origin?: ChatSource }) =>
+    file.kind === 'image' ? '图片' : file.pages ? file.pages.length === file.pageCount ? '全部页' : `第 ${pageLabel(file.pages)} 页` : file.origin?.section ? `章节：${file.origin.section}` : '全文';
+  const currentFiles = files.filter((file) => currentFile && file.origin?.nodeId === currentFile.id);
+  const materials = [
+    props.context ? '书籍上下文' : '',
+    ...currentFiles.map((file) => `已附${scopeLabel(file)}`),
+    quote ? '已附选文' : '', withNotes && props.annotationCount ? '已附批注' : '', image ? '已附截图' : '',
+    files.length > currentFiles.length ? `另附 ${files.length - currentFiles.length} 个文件` : '',
+  ].filter(Boolean).join(' · ') || (currentFile ? '未附正文' : '未附材料');
+  const returnToSource = (source: ChatSource, text?: string, page = source.page) => {
+    if (page) requestPage(source.nodeId, page);
+    else if (text || source.section) requestFind(source.nodeId, text || source.section!);
+    props.onClose();
+    props.onNavigate(source.nodeId);
+  };
   const question = useQuestion();
   const addQuote = (text: string) => {
-    const error = conversation.addQuote(text);
+    const selection = window.getSelection();
+    const range = selection?.rangeCount ? selection.getRangeAt(0) : null;
+    const start = range?.startContainer;
+    const element = start instanceof Element ? start : start?.parentElement;
+    const inOriginal = range && element?.closest('.read-content, .pdf-view')
+      && props.readingRoot.current?.contains(range.startContainer)
+      && props.readingRoot.current.contains(range.endContainer);
+    const page = Number(element?.closest<HTMLElement>('.pdf-page')?.dataset.page);
+    const error = conversation.addQuote(text, inOriginal && currentFile
+      ? { nodeId: currentFile.id, title: currentFile.title.slice(0, 200), ...(page > 0 ? { page } : {}) } : null);
     if (error) return error;
     // On phones the keyboard would cover the sheet; a tap on the field starts typing.
     if (!matchMedia('(pointer: coarse)').matches)
@@ -253,6 +280,7 @@ export function AssistantPanel(props: Props) {
                 <details className="chat-quote">
                   <summary>引用文字</summary>
                   <blockquote>{message.quote}</blockquote>
+                  {message.quoteSource && <button className="text-button source-link" title={message.quoteSource.title} onClick={() => returnToSource(message.quoteSource!, message.quote)}>返回原文</button>}
                 </details>
               )}
               {message.annotations && (
@@ -313,6 +341,7 @@ export function AssistantPanel(props: Props) {
                       下载原文件
                     </a>
                   )}
+                  {file.origin && <button className="text-button source-link" title={file.origin.title} onClick={() => returnToSource(file.origin!, undefined, file.pages?.[0])}>返回原文</button>}
                 </details>
               ))}
               {message.role === 'assistant' && message.reasoning && (
@@ -394,10 +423,13 @@ export function AssistantPanel(props: Props) {
             void send();
           }}
         >
+          <div className="assistant-materials" role="status" title={materials}><span>本次参考</span><strong>{materials}</strong></div>
           {quote && (
             <div className="context-quote">
               <Quote size={14} />
-              <span>{quote}</span>
+              <div className="context-quote-text"><span>{quote}</span>
+                {quoteSource && <button type="button" className="text-button source-link" title={quoteSource.title} onClick={() => returnToSource(quoteSource, quote)}>返回原文</button>}
+              </div>
               <button
                 type="button"
                 className="icon-button"
@@ -448,11 +480,13 @@ export function AssistantPanel(props: Props) {
                   <div>
                     <strong>{file.name}</strong>
                     <small>
+                      {scopeLabel(file)} ·{' '}
                       {file.pages
                         ? `第 ${pageLabel(file.pages)} 页 · ${file.mode === 'images' ? '整页图片' : '文字优先'}`
                         : `${file.text.length.toLocaleString()} 字符`}
                       {file.images.length ? ` · ${file.images.length} 张图片` : ''}
                     </small>
+                    {file.origin && <button type="button" className="text-button source-link" title={file.origin.title} onClick={() => returnToSource(file.origin!, undefined, file.pages?.[0])}>返回原文</button>}
                   </div>
                   <button
                     type="button"

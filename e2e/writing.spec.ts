@@ -74,7 +74,7 @@ test('Ctrl+S keeps editing, images and links go to the cursor, and pasted images
     .toHaveLength(2);
   await page.waitForTimeout(900);
   await expect(source(page)).toContainText('继续写');
-  await expect(page.locator('.editing-label')).toContainText('未保存');
+  await expect(page.locator('.editing-label')).toHaveText('草稿已存本机');
   await page.getByRole('button', { name: '保存', exact: true }).click();
   await expect(page.locator('.cm-editor')).toHaveCount(0);
   await expect(page.locator('.read-content')).toContainText('继续写');
@@ -136,10 +136,10 @@ test('search jumps to a note by title words and shows where it lives', async ({ 
   const field = dialog.getByRole('combobox', { name: '搜索笔记标题、正文或批注' });
   await expect(field).toBeFocused();
   await field.fill(`transformer ${info.project.name}`);
-  const option = dialog.getByRole('option').filter({ hasText: target.title });
+  const option = dialog.getByRole('listbox', { name: '搜索结果' }).getByRole('option').filter({ hasText: target.title });
   await expect(option).toBeVisible();
   await expect(option).toContainText(folder.title);
-  await expect(dialog.getByRole('option')).toHaveCount(1);
+  await expect(dialog.getByRole('listbox', { name: '搜索结果' }).getByRole('option')).toHaveCount(1);
   await field.press('Enter');
   await expect(dialog).toHaveCount(0);
   await expect(page).toHaveURL(new RegExp(`/n/${target.id}$`));

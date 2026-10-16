@@ -546,21 +546,27 @@ progress::-moz-progress-bar {
 }
 
 .main-nav {
-  display: flex;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 2px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--line);
 }
 .main-nav button {
   display: flex;
-  flex: 1;
+  flex-direction: column;
   align-items: center;
   justify-content: center;
+  gap: 4px;
   min-width: 0;
-  padding: 0;
+  padding: 6px 2px;
   border-radius: var(--radius-control);
   color: var(--muted);
-  min-height: 40px;
+  min-height: 56px;
+}
+.main-nav button span {
+  font-size: 12px;
+  white-space: nowrap;
 }
 .main-nav button:hover {
   background: var(--hover);
@@ -576,9 +582,10 @@ progress::-moz-progress-bar {
   align-items: center;
   gap: 8px;
   width: 100%;
-  margin-top: 10px;
-  padding: 7px 10px;
-  border-radius: var(--radius-control);
+  flex-shrink: 0;
+  min-height: 40px;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--line);
   background: var(--selected);
   color: var(--blue);
   font-size: 13px;
@@ -593,9 +600,15 @@ progress::-moz-progress-bar {
 }
 .sync-status > span {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+}
+.sync-status > svg,
+.sync-status-action {
+  flex-shrink: 0;
+}
+.sync-status-action {
+  margin-left: auto;
+  text-decoration: underline;
+  text-underline-offset: 3px;
 }
 .sidebar-tree {
   margin: 10px -9px 0;
@@ -1210,6 +1223,94 @@ html[data-tree-drag='blocked'] .tree-drag-card {
   margin-left: auto;
   white-space: nowrap;
 }
+.list-controls {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 16px;
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.list-controls label {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+}
+.list-controls select {
+  width: 132px;
+  min-height: 36px;
+  padding: 6px 8px;
+}
+.list-controls .text-button {
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+}
+.list-controls button[aria-pressed='true'] {
+  background: var(--selected);
+  color: var(--blue);
+}
+.node-list.is-compact .node-list-main {
+  padding-block: 8px;
+  min-height: 48px;
+}
+.node-list.is-compact .node-list-main small,
+.browsing-tree.is-compact .tree-label small {
+  display: none;
+}
+.browsing-tree .tree-label {
+  padding-block: 8px;
+}
+.browsing-tree .tree-label small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  color: var(--muted);
+  font-size: 12px;
+  font-weight: 400;
+  margin-top: 3px;
+}
+.browsing-tree.is-compact .tree-label {
+  padding-block: 4px;
+}
+.search-filters {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  flex-shrink: 0;
+}
+.search-filters label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+  color: var(--muted);
+  font-size: 12px;
+}
+.search-filters select {
+  width: 100%;
+  min-width: 0;
+  padding: 8px;
+}
+@media (max-width: 760px) {
+  .list-controls select {
+    min-height: 48px;
+    font-size: 16px;
+  }
+  .search-filters {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .search-filters > label:first-child {
+    grid-column: 1 / -1;
+  }
+  .node-list.is-compact .node-list-main {
+    padding-block: 8px;
+  }
+}
 .load-more {
   margin: 14px;
 }
@@ -1361,6 +1462,9 @@ button.node-list-toggle:focus-visible {
 }
 .is-favorite {
   color: var(--favorite);
+}
+.edit-label-short {
+  display: none;
 }
 .note-workspace {
   position: relative;
@@ -2252,6 +2356,18 @@ button.node-list-toggle:focus-visible {
   margin-right: 12px;
   white-space: nowrap;
 }
+.editing-label.draft-error {
+  color: var(--danger);
+}
+.draft-warning {
+  margin: 0;
+  padding: 8px 24px;
+  border-bottom: 1px solid var(--warning-line);
+  background: var(--warning-bg);
+  color: var(--warning);
+  font-size: 12px;
+  flex-shrink: 0;
+}
 .edit-insert-actions {
   display: flex;
   align-items: center;
@@ -2789,15 +2905,6 @@ button.node-list-toggle:focus-visible {
 .share-setting-row > div {
   flex: 1;
   min-width: min(180px, 100%);
-}
-/* A note body saved in the background, still on its way. */
-.save-pending {
-  margin: 0;
-  padding: 6px 24px;
-  border-bottom: 1px solid var(--line);
-  background: var(--surface-subtle);
-  color: var(--muted);
-  font-size: 12px;
 }
 /* A note shown before the server has created it. */
 [role='treeitem'][aria-busy='true'],

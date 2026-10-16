@@ -1,3 +1,4 @@
+import { noteAction } from './note-actions';
 import { test, expect } from './fixtures';
 import { login } from './notebook-helpers';
 
@@ -16,10 +17,10 @@ test('favorite shows at once and is withdrawn when refused', async ({ page }) =>
     const status = await reply;
     await (status === 200 ? route.continue() : route.fulfill({ status, json: { error: '收藏暂时失败' } }));
   });
-  await page.getByRole('button', { name: '收藏笔记' }).click();
-  await expect(page.getByRole('button', { name: '取消收藏' })).toBeVisible();
+  await noteAction(page, '收藏笔记');
+  await expect(page.locator('.note-actions .is-favorite')).toHaveCount(1);
   answer(503);
-  await expect(page.getByRole('button', { name: '收藏笔记' })).toBeVisible();
+  await expect(page.locator('.note-actions .is-favorite')).toHaveCount(0);
   await expect(page.getByRole('alert').first()).toContainText('收藏暂时失败');
 });
 
@@ -28,7 +29,7 @@ test('a deleted note leaves the list before the server answers', async ({ page }
   await create(page, '马上删除的笔记');
   await page.goto('/');
   const list = page.locator('.main-content');
-  const row = list.getByText('马上删除的笔记');
+  const row = list.locator('.node-list-main strong').filter({ hasText: '马上删除的笔记' });
   await expect(row).toBeVisible();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
@@ -47,7 +48,7 @@ test('search shows titles from this device while the server searches', async ({ 
   await login(page);
   await create(page, '本机能找到的标题');
   await page.goto('/');
-  await expect(page.locator('.main-content').getByText('本机能找到的标题')).toBeVisible();
+  await expect(page.locator('.main-content .node-list-main strong').filter({ hasText: '本机能找到的标题' })).toBeVisible();
   let release!: () => void;
   const gate = new Promise<void>((resolve) => (release = resolve));
   await page.route('**/api/search?q=*', async (route) => {
@@ -57,9 +58,9 @@ test('search shows titles from this device while the server searches', async ({ 
   await page.locator('.app-header').getByRole('button', { name: '搜索笔记' }).click();
   const dialog = page.getByRole('dialog', { name: '搜索笔记', exact: true });
   const searching = page.waitForRequest('**/api/search?q=*');
-  await dialog.getByRole('combobox').fill('本机 标题');
+  await dialog.getByRole('combobox', { name: '搜索笔记标题、正文或批注' }).fill('本机 标题');
   await expect(dialog.locator('.search-caption')).toHaveText('找到 1 项，继续查找中…');
-  await expect(dialog.getByRole('option')).toHaveText(['本机能找到的标题']);
+  await expect(dialog.getByRole('listbox', { name: '搜索结果' }).getByRole('option')).toHaveText(['本机能找到的标题']);
   await searching;
   release();
   await expect(dialog.locator('.search-caption')).toHaveText('找到 1 项');

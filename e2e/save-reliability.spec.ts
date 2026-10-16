@@ -88,6 +88,7 @@ test('Save returns to the note at once and finishes in the background', async ({
   await page.goto(`/n/${node.id}`);
   await page.getByRole('button', { name: '编辑正文', exact: true }).click();
   await writeSource(page, '后台提交的正文');
+  await expect(page.locator('.editing-label')).toHaveText('草稿已存本机');
   let release!: () => void;
   const gate = new Promise<void>((resolve) => { release = resolve; });
   await page.route(`**/api/nodes/${node.id}/content`, async (route) => {
@@ -98,14 +99,39 @@ test('Save returns to the note at once and finishes in the background', async ({
   // The editor closes while the request is still held.
   await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toHaveCount(0);
   await expect(page.locator('.read-content')).toContainText('后台提交的正文');
-  await expect(page.locator('.save-pending')).toHaveText('正在保存…');
+  await expect(page.locator('.sync-status')).toContainText('1 项已存本机，等待同步');
+  await expect(page.locator('.sync-status')).toBeInViewport();
   release();
-  await expect(page.locator('.save-pending')).toHaveCount(0);
+  await expect(page.locator('.sync-status')).toHaveCount(0);
+  await expect(page.getByText('正文已同步', { exact: true })).toBeVisible();
   await expect.poll(async () => (await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe('后台提交的正文');
   await expect.poll(() => page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toBeNull();
   await page.reload();
   await expect(page.locator('.read-content')).toContainText('后台提交的正文');
   await expect(page.getByRole('button', { name: '恢复草稿', exact: true })).toHaveCount(0);
+});
+
+test('a failed local draft stays in the editor and never claims to be stored', async ({ page }) => {
+  await login(page);
+  const node = await create(page, { kind: 'markdown', title: '本机草稿状态', content: '原文' });
+  await page.goto(`/n/${node.id}`);
+  await page.getByRole('button', { name: '编辑正文', exact: true }).click();
+  await expect(page.locator('.editing-label')).toHaveText('已同步');
+  await page.evaluate((id) => {
+    const original = Storage.prototype.setItem;
+    Storage.prototype.setItem = function (key, value) {
+      if (key === `note-draft:${id}`) throw new DOMException('Storage full', 'QuotaExceededError');
+      original.call(this, key, value);
+    };
+  }, node.id);
+  await writeSource(page, '没有写进本机存储的修改');
+  await expect(page.locator('.editing-label')).toHaveText('草稿暂存失败');
+  await expect(page.locator('.draft-warning')).toBeVisible();
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(page.locator('.save-error')).toContainText('无法在本机暂存正文');
+  await expect(page.getByRole('textbox', { name: 'Markdown 源码' })).toContainText('没有写进本机存储的修改');
+  expect(await page.evaluate((id) => localStorage.getItem(`note-draft:${id}`), node.id)).toBeNull();
+  expect((await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toBe('原文');
 });
 
 // Ctrl+S keeps editing, so it still waits for the new revision.
@@ -175,14 +201,14 @@ test('failed searches cannot open results from a different query', async ({ page
   await page.goto('/');
   await page.locator('.app-header').getByRole('button', { name: '搜索笔记' }).click();
   const dialog = page.getByRole('dialog', { name: '搜索笔记', exact: true });
-  const field = dialog.getByRole('combobox');
+  const field = dialog.getByRole('combobox', { name: '搜索笔记标题、正文或批注' });
   await field.fill('甲搜索测试');
-  await expect(dialog.getByRole('option')).toHaveCount(1);
+  await expect(dialog.getByRole('listbox', { name: '搜索结果' }).getByRole('option')).toHaveCount(1);
   await page.route('**/api/search?q=*', (route) => route.fulfill({ status: 503, json: { error: '搜索暂时失败' } }), { times: 1 });
   await field.fill('乙搜索测试');
   // Only this device's titles for the current query remain, marked as such.
   await expect(dialog.locator('.search-caption')).toHaveText('搜索暂时失败，先显示已找到的');
-  await expect(dialog.getByRole('option')).toHaveText(['乙搜索测试']);
+  await expect(dialog.getByRole('listbox', { name: '搜索结果' }).getByRole('option')).toHaveText(['乙搜索测试']);
 });
 
 test('an unsubmitted clip survives closing and reloading without being sent', async ({ page }) => {
@@ -260,7 +286,7 @@ test('creation and editing layouts fit all themes and keep header action gaps eq
       await page.evaluate((value) => {
         window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
       }, theme);
-      await expect(page.locator('.editing-label')).toHaveText('未保存');
+      await expect(page.locator('.editing-label')).toHaveText('草稿已存本机');
       const save = await page.getByRole('button', { name: '保存', exact: true }).boundingBox();
       const tabs = await (width < 400 ? page.locator('.edit-tabs') : page.getByRole('button', { name: '取消', exact: true })).boundingBox();
       expect(Math.abs(save!.y - tabs!.y)).toBeLessThan(6);

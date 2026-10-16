@@ -537,11 +537,16 @@ export async function rememberPrefetched(detail: NoteDetail, epoch: string) {
 // Notes whose titles hold every word, from what this device has seen: cached
 // directory listings and note copies. Shown while the server searches, and
 // alone when it cannot be reached.
-export async function searchCachedTitles(words: string[], limit = 30): Promise<NoteNode[]> {
+export async function searchCachedTitles(words: string[], limit = 30, options: import('../shared/search').SearchOptions = {}): Promise<(NoteNode & { ancestor_ids?: string[] })[]> {
+  const { compareSearch, matchesSearchType } = await import('../shared/search');
   const lower = words.map((word) => word.toLowerCase());
   const found = new Map<string, NoteNode>();
+  const catalog = new Map<string, NoteNode>();
+  const paths = new Map<string, string[]>();
   const consider = (node: NoteNode | undefined) => {
-    if (!node?.id || found.has(node.id) || node.trash_id) return;
+    if (!node?.id || node.trash_id) return;
+    if (!catalog.has(node.id)) catalog.set(node.id, node);
+    if (found.has(node.id)) return;
     const title = (node.title ?? '').toLowerCase();
     if (lower.every((word) => title.includes(word))) found.set(node.id, node);
   };
@@ -551,6 +556,7 @@ export async function searchCachedTitles(words: string[], limit = 30): Promise<N
       request<CachedNote[]>(tx.objectStore('notes').getAll()),
     ]);
     for (const note of notes) {
+      paths.set(note.id, note.detail.breadcrumbs.slice(0, -1).map((part) => part.id));
       const { content: _content, attachments: _attachments, breadcrumbs: _breadcrumbs, file: _file, ...node } = note.detail;
       consider(node as NoteNode);
     }
@@ -558,7 +564,19 @@ export async function searchCachedTitles(words: string[], limit = 30): Promise<N
       if (/^\/api\/nodes(?:\?|$)/.test(response.path))
         for (const node of (response.value as { nodes?: NoteNode[] })?.nodes ?? []) consider(node);
   }).catch(() => {});
-  return [...found.values()].sort((a, b) => b.updated_at - a.updated_at).slice(0, limit);
+  const ancestors = (node: NoteNode) => {
+    if (paths.has(node.id)) return paths.get(node.id)!;
+    const ids: string[] = [];
+    let parent = node.parent_id;
+    while (parent && ids.length < 200 && !ids.includes(parent)) {
+      ids.push(parent);
+      parent = catalog.get(parent)?.parent_id ?? null;
+    }
+    return ids;
+  };
+  return [...found.values()].map((node) => ({ ...node, ancestor_ids: ancestors(node) }))
+    .filter((node) => matchesSearchType(node, options.type) && (!options.parent || node.ancestor_ids.includes(options.parent)))
+    .sort((a, b) => compareSearch(a, b, words, options.sort)).slice(0, limit);
 }
 // Encrypted notes kept here (bodies still sealed), for searching on the device.
 export async function cachedSealedNotes(): Promise<NoteDetail[]> {

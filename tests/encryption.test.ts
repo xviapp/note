@@ -364,6 +364,12 @@ describe('encrypted notes', () => {
     const { id, key, header } = await newKey();
     await ok(`/api/nodes/${folder.id}/encryption`, 'PUT', { encryption: id });
     expect(await indexed()).toEqual([loose.id]);
+    // Even a stale plaintext index may never become a listing preview.
+    await bindings.DB.prepare('INSERT INTO note_text(node_id,version_id,body) VALUES(?,?,?)')
+      .bind(note.id, note.current_version_id, '不应出现在摘要里的明文').run();
+    const listing = await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${folder.id}`);
+    expect(listing.nodes.find((node) => node.id === note.id)!.preview).toBeNull();
+    await bindings.DB.prepare('DELETE FROM note_text WHERE node_id=?').bind(note.id).run();
     expect(await search('不想被搜到')).toEqual([]);
     // So does moving a note into the encrypted folder.
     await ok(`/api/nodes/${loose.id}`, 'PATCH', { revision: loose.revision, parentId: folder.id });

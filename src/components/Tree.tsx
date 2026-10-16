@@ -21,9 +21,13 @@ import { ghostTransform, ROOT_TARGET, useTreeDrag, type TreeDrag } from '../use-
 import { noteType } from '../note-types/registry';
 import { LockBadge, useKeys } from './LockBadge';
 import { isUnlocked, lock } from '../keyring';
+import { nodeDescription, useListPreferences, type ListSort } from '../list-preferences';
+import { ListControls } from './ListControls';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon' | 'encryption';
 export interface TreeProps {
+  browsing?: boolean;
+  listSort?: ListSort;
   onNew?: () => void;
   expansionState?: Set<string>;
   showRefresh?: boolean;
@@ -97,7 +101,7 @@ function Branch({
   depth?: number;
   onLoading: (request: symbol, loading: boolean) => void;
 }) {
-  const { listing, error, loading, more } = useNodeListing(`parent=${parent || ''}`, props.refresh);
+  const { listing, error, loading, more } = useNodeListing(`parent=${parent || ''}${props.listSort && props.listSort !== 'default' ? `&sort=${props.listSort}` : ''}`, props.refresh);
   const [expanded, setExpanded] = useState<Set<string>>(() => {
     if (props.expansionState) return new Set(props.expansionState);
     try {
@@ -234,11 +238,12 @@ function Branch({
                 </button>
                 <button
                   className="tree-label"
+                  aria-label={node.title}
                   onClick={() => props.onOpen(node)}
                   title={node.title}
                 >
                   <NodeIcon node={node} />
-                  <span>{node.title}</span>
+                  <span>{node.title}{props.browsing && <small>{nodeDescription(node)}</small>}</span>
                   <LockBadge keyId={node.key_id} />
                 </button>
                 <NodeMenu node={node} onAction={props.onAction} />
@@ -261,6 +266,7 @@ function Branch({
   );
 }
 export function Tree(props: TreeProps) {
+  const preferences = useListPreferences();
   const offline = useOffline();
   const [requests, setRequests] = useState(new Set<symbol>());
   const [manualBusy, setManualBusy] = useState(false);
@@ -353,7 +359,8 @@ export function Tree(props: TreeProps) {
     }
   };
   return (
-    <div ref={root} className={`tree${drag ? ' is-dragging' : ''}`}>
+    <div ref={root} className={`tree${drag ? ' is-dragging' : ''}${props.browsing ? ` browsing-tree${preferences.compact ? ' is-compact' : ''}` : ''}`}>
+      {props.browsing && <ListControls />}
       <div
         className={[
           'section-label',
@@ -397,7 +404,7 @@ export function Tree(props: TreeProps) {
         </p>
       )}
       <DragContext.Provider value={view}>
-        <Branch {...props} onLoading={onLoading} parent={null} />
+        <Branch {...props} listSort={props.browsing ? preferences.sort : undefined} onLoading={onLoading} parent={null} />
       </DragContext.Provider>
       {drag &&
         createPortal(

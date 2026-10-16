@@ -107,7 +107,7 @@ export function NoteActions({
         </button>
       )}
       <button
-        className={`icon-button ${note.favorite ? 'is-favorite' : ''}`}
+        className={`icon-button toolbar-secondary ${note.favorite ? 'is-favorite' : ''}`}
         aria-label={note.favorite ? '取消收藏' : '收藏笔记'}
         disabled={offline}
         title={note.favorite ? '取消收藏' : '收藏'}
@@ -117,7 +117,7 @@ export function NoteActions({
       </button>
       {note.kind === 'folder' && (
         <button
-          className="icon-button"
+          className="icon-button toolbar-secondary"
           aria-label="随手记"
           title="随手记（Q）"
           onClick={openClips}
@@ -140,7 +140,7 @@ export function NoteActions({
           before the outline. */}
       {!editing && hasChildren && !projectItem && (
         <button
-          className="icon-button has-badge"
+          className="icon-button has-badge toolbar-secondary"
           aria-label={`下级笔记（${note.child_count}）`}
           title="下级笔记"
           aria-haspopup="dialog"
@@ -199,20 +199,28 @@ export function NoteActions({
       )}
       {!editing && TEXT_KINDS.includes(note.kind) && !projectItem && (
         <button
-          className="button compact edit-note-button"
+          className={`button compact edit-note-button${extra ? ' toolbar-secondary' : ''}`}
           aria-label="编辑正文"
           disabled={offline}
           title="编辑正文"
           onClick={onEdit}
         >
           <Pencil size={15} />
-          <span>编辑正文</span>
+          <span className="edit-label-full">编辑正文</span>
+          <span className="edit-label-short" aria-hidden="true">编辑</span>
         </button>
       )}
       {!editing && (
         <NodeMenu node={note} onAction={onAction}>
-          {projectItem && <button disabled={offline} onClick={(event) => { closeMenu(event.currentTarget); onEdit(); }}>编辑正文</button>}
-          {projectItem && hasChildren && <button onClick={(event) => { closeMenu(event.currentTarget); onChildren(); }}>下级笔记（{note.child_count}）</button>}
+          {(TEXT_KINDS.includes(note.kind) || note.arxiv_id) && (
+            <ReadingSettingsButton beforeChange={onReadingChange} menu />
+          )}
+          <button className="menu-compact-only" disabled={offline} onClick={(event) => { closeMenu(event.currentTarget); onFavorite(); }}>
+            {note.favorite ? '取消收藏' : '收藏笔记'}
+          </button>
+          <button className="menu-compact-only" onClick={(event) => { closeMenu(event.currentTarget); openClips(); }}>随手记</button>
+          {(projectItem || (extra && TEXT_KINDS.includes(note.kind))) && <button className={projectItem ? undefined : 'menu-compact-only'} disabled={offline} onClick={(event) => { closeMenu(event.currentTarget); onEdit(); }}>编辑正文</button>}
+          {hasChildren && <button className={projectItem ? undefined : 'menu-compact-only'} onClick={(event) => { closeMenu(event.currentTarget); onChildren(); }}>下级笔记（{note.child_count}）</button>}
           {/* On phones these leave the toolbar so it stays on one row. */}
           {note.kind !== 'folder' && (
             <button

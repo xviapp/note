@@ -7,6 +7,7 @@ import {
   pageLabel,
   type ChatFile,
   type ChatFileKind,
+  type ChatSource,
 } from '../shared/chat-files';
 import type { FileInfo } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
@@ -20,6 +21,17 @@ const info = (file: BlobRow): FileInfo => ({
   size: file.size,
   ...(file.key_id ? { key_id: file.key_id } : {}),
 });
+export function validateChatSource(value: unknown): ChatSource | undefined {
+  if (value === undefined) return undefined;
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AppError(400, '引用来源格式不正确。');
+  const source = value as Record<string, unknown>;
+  return {
+    nodeId: idValue(source.nodeId),
+    title: textValue(source.title, '来源标题', 200),
+    ...(source.section === undefined ? {} : { section: textValue(source.section, '来源章节', 300) }),
+    ...(source.page === undefined ? {} : { page: integer(source.page, '来源页码', 1, 1_000_000) }),
+  };
+}
 function supportsSource(file: BlobRow): boolean {
   return (
     file.mime === 'application/pdf' ||
@@ -57,6 +69,8 @@ export async function validateChatFiles(
     if (typeof input.text !== 'string') throw new AppError(400, '文件文字格式不正确。');
     const text = input.text;
     const file: ChatFile = { name, kind, text, images: [] };
+    const origin = validateChatSource(input.origin);
+    if (origin) file.origin = origin;
     if (kind === 'pdf') {
       file.pageCount = integer(input.pageCount, 'PDF 总页数', 1, 1_000_000);
       if (
