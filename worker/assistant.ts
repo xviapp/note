@@ -19,7 +19,6 @@ import {
   readBytes,
   storeBytes,
   storeChatBody,
-  storeText,
   uploadFile,
 } from './storage';
 import { keyFor, requireKey } from './encryption';
@@ -70,7 +69,7 @@ export async function assistantNode(
   return node;
 }
 async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
-  let body: Pick<ChatMessage, 'content' | 'quote' | 'files' | 'annotations' | 'continueFrom'> = {
+  let body: Pick<ChatMessage, 'content' | 'reasoning' | 'quote' | 'files' | 'annotations' | 'continueFrom'> = {
     content: '',
   };
   if (row.body_key) {
@@ -282,6 +281,7 @@ async function context(
         break history;
       }
       for (const value of values) {
+        if (value.role === 'assistant' && !value.content.trim()) continue;
         const item = contextMessage(value);
         branch.push(item);
         tokens += item.tokens;
@@ -462,6 +462,7 @@ export async function sendChat(
     execution,
     async (signal, emit) => {
       let content = '',
+        reasoning = '',
         error = '',
         status: ChatMessage['status'] = 'completed';
       try {
@@ -478,6 +479,10 @@ export async function sendChat(
           maxTokens,
           false,
           thinkingLevel,
+          (delta) => {
+            reasoning += delta;
+            emit({ type: 'reasoning', content: delta });
+          },
         )) {
           content += delta;
           emit({ type: 'delta', content: delta });
@@ -492,7 +497,10 @@ export async function sendChat(
       }
       let stored: BlobRow | null = null;
       try {
-        if (content) stored = await storeText(env, JSON.stringify({ content }), keyId);
+        if (content || reasoning)
+          stored = await storeChatBody(
+            env, JSON.stringify({ content, ...(reasoning ? { reasoning } : {}) }), keyId,
+          );
         await env.DB.prepare(
           "UPDATE assistant_messages SET status=?,body_blob_id=?,error=? WHERE id=? AND status='pending'",
         )

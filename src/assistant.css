@@ -230,6 +230,26 @@
 .chat-message .markdown-body pre {
   font-size: 11px;
 }
+.chat-reasoning {
+  margin: 0 0 12px;
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--surface-subtle);
+  color: var(--muted);
+  font-size: 12px;
+}
+.chat-reasoning summary {
+  padding: 9px 12px;
+  cursor: pointer;
+}
+.chat-reasoning-content {
+  padding: 0 12px 12px;
+  max-height: min(40vh, 320px);
+  overflow: auto;
+  overscroll-behavior: contain;
+  white-space: pre-wrap;
+  line-height: 1.75;
+}
 .chat-message-actions {
   display: flex;
   flex-wrap: wrap;

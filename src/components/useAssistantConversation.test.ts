@@ -35,6 +35,39 @@ const conversation = () =>
     }),
   );
 
+it('keeps streamed reasoning separate from the answer and preserves it if saving failed', async () => {
+  let emit!: (event: ChatEvent) => void;
+  let finish!: () => void;
+  streamChat.mockImplementation(
+    (_id: string, _data: unknown, _key: string, _signal: AbortSignal, onEvent: typeof emit) => {
+      emit = onEvent;
+      onEvent({ type: 'start', user: message('u1', 'user', 'completed', '问'), assistant: reply });
+      return new Promise<void>((resolve) => { finish = resolve; });
+    },
+  );
+  const view = conversation();
+  await waitFor(() => expect(view.result.current.settings?.configured).toBe(true));
+  act(() => view.result.current.composer.setPrompt('问'));
+  act(() => void view.result.current.send());
+  await waitFor(() => expect(emit).toBeDefined());
+  act(() => {
+    emit({ type: 'reasoning', content: '先分析，' });
+    emit({ type: 'reasoning', content: '再比较。' });
+  });
+  expect(view.result.current.messages.at(-1)).toMatchObject({ content: '', reasoning: '先分析，再比较。', status: 'pending' });
+  act(() => emit({ type: 'delta', content: '正式回答' }));
+  expect(view.result.current.messages.at(-1)).toMatchObject({ content: '正式回答', reasoning: '先分析，再比较。' });
+  reply = message('a1', 'assistant', 'failed', '');
+  act(() => {
+    emit({ type: 'error', error: '回复未能保存' });
+    finish();
+  });
+  await waitFor(() => expect(view.result.current.sending).toBe(false));
+  await waitFor(() => expect(view.result.current.messages.at(-1)).toMatchObject({
+    content: '正式回答', reasoning: '先分析，再比较。', status: 'failed',
+  }));
+});
+
 it('shows the saved reply when the stream died while the app was in the background', async () => {
   const view = conversation();
   await waitFor(() => expect(view.result.current.settings?.configured).toBe(true));

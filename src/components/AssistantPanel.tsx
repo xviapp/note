@@ -315,6 +315,15 @@ export function AssistantPanel(props: Props) {
                   )}
                 </details>
               ))}
+              {message.role === 'assistant' && message.reasoning && (
+                <details className="chat-reasoning">
+                  <summary>
+                    查看思考过程
+                    {message.status === 'pending' && !message.content && <span> · 思考中…</span>}
+                  </summary>
+                  <div className="chat-reasoning-content">{message.reasoning}</div>
+                </details>
+              )}
               {message.role === 'user' ? (
                 <p className="chat-user-content">{message.content}</p>
               ) : message.content ? (

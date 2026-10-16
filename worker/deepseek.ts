@@ -4,6 +4,7 @@ import {
   AI_REPLY_LIMITS,
   AI_DEFAULT_THINKING_LEVEL,
   AI_THINKING_LEVELS,
+  AI_RESPONSE_CHARACTER_LIMIT,
   type AssistantSettings,
   type ThinkingLevel,
 } from '../shared/assistant';
@@ -179,6 +180,7 @@ export async function* deepseekReply(
   // Ask for a JSON object reply (the prompt must describe its shape).
   json = false,
   thinkingLevel: ThinkingLevel = AI_DEFAULT_THINKING_LEVEL,
+  onReasoning?: (content: string) => void,
 ): AsyncGenerator<string> {
   const response = await providerFetch('/chat/completions', key, signal, {
     model: AI_MODEL,
@@ -192,7 +194,8 @@ export async function* deepseekReply(
   if (!response.body) throw new AppError(502, 'DeepSeek 没有返回回复。');
   let ended = false,
     finish = '',
-    length = 0;
+    length = 0,
+    reasoningLength = 0;
   for await (const data of sseData(response.body)) {
     if (data === '[DONE]') {
       ended = true;
@@ -200,15 +203,23 @@ export async function* deepseekReply(
     }
     const chunk = JSON.parse(data) as {
       error?: unknown;
-      choices?: { delta?: { content?: string }; finish_reason?: string }[];
+      choices?: { delta?: { content?: string; reasoning_content?: string }; finish_reason?: string }[];
     };
     if (chunk.error) throw new AppError(502, 'DeepSeek 生成失败，请稍后重试。');
     const choice = chunk.choices?.[0];
     if (choice?.finish_reason) finish = choice.finish_reason;
+    const reasoning = choice?.delta?.reasoning_content;
+    if (typeof reasoning === 'string' && reasoning) {
+      reasoningLength += reasoning.length;
+      if (reasoningLength + length > AI_RESPONSE_CHARACTER_LIMIT)
+        throw new AppError(502, '回复内容过大，已停止生成，可查看已有内容。');
+      onReasoning?.(reasoning);
+    }
     const value = choice?.delta?.content;
     if (typeof value === 'string' && value) {
       length += value.length;
-      if (length > 262_144) throw new AppError(502, '回复内容过大，已停止生成，可保存已有内容。');
+      if (reasoningLength + length > AI_RESPONSE_CHARACTER_LIMIT)
+        throw new AppError(502, '回复内容过大，已停止生成，可查看已有内容。');
       yield value;
     }
   }

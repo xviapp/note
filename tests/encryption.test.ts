@@ -5,11 +5,13 @@ import {
   createExecutionContext,
   waitOnExecutionContext,
 } from 'cloudflare:test';
-import { afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/types';
 import type { FileInfo, NoteDetail, NoteNode } from '../shared/types';
 import type { AnnotationList } from '../shared/annotations';
+import type { ChatEvent, ChatHistory } from '../shared/assistant';
+import { sseData } from '../shared/sse';
 import {
   DecryptionError,
   exportContentKey,
@@ -122,6 +124,7 @@ beforeEach(async () => {
     bindings.DB.prepare('DELETE FROM idempotency'),
     bindings.DB.prepare('DELETE FROM sessions'),
     bindings.DB.prepare('DELETE FROM login_attempts'),
+    bindings.DB.prepare('DELETE FROM ai_settings'),
     bindings.DB.prepare(
       'UPDATE site SET password_hash=NULL,password_salt=NULL,auth_epoch=0,quota_bytes=8000000000,allocated_bytes=0 WHERE id=1',
     ),
@@ -137,6 +140,7 @@ beforeEach(async () => {
 });
 afterEach(async () => {
   await Promise.all(contexts.map(waitOnExecutionContext));
+  vi.restoreAllMocks();
 });
 
 describe('sealed format', () => {
@@ -270,6 +274,39 @@ describe('encrypted notes', () => {
     });
     expect(bad.status).toBe(400);
     expect(await ok(`/api/nodes/${note.id}/keys`)).toEqual({ key_id: id, chain: [id] });
+  });
+  it('seals reasoning with the reply and requires the note key to read it', async () => {
+    const { folder, id, key, header } = await encryptedFolder();
+    const body = await uploadSealed(key, id, '正文');
+    const note = await ok<NoteNode>('/api/nodes', 'POST', {
+      kind: 'text', parentId: folder.id, bodyBlobId: body.id,
+    });
+    await ok('/api/ai/settings', 'PUT', { apiKey: 'sk-encryption-test-only', thinkingLevel: 'high' });
+    const reasoning = '这段思考需要与正式回答一起加密。';
+    vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '正式回答' } }] })}\n\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+      { headers: { 'content-type': 'text/event-stream' } },
+    ));
+    const response = await request(`/api/nodes/${note.id}/assistant`, 'POST', { content: '解释一下' }, header);
+    expect(response.status).toBe(200);
+    const events: ChatEvent[] = [];
+    for await (const event of sseData(response.body!)) events.push(JSON.parse(event));
+    expect(events.at(-1)).toMatchObject({ type: 'done', message: { content: '正式回答', reasoning } });
+    expect((await request(`/api/nodes/${note.id}/assistant`)).status).toBe(423);
+    const history = await ok<ChatHistory>(`/api/nodes/${note.id}/assistant`, 'GET', undefined, header);
+    expect(history.messages.at(-1)).toMatchObject({ content: '正式回答', reasoning });
+    const stored = await bindings.DB.prepare(
+      "SELECT b.key_id,b.object_key FROM blobs b JOIN assistant_messages m ON m.body_blob_id=b.id WHERE m.node_id=? AND m.role='assistant'",
+    ).bind(note.id).first<{ key_id: string; object_key: string }>();
+    expect(stored?.key_id).toBe(id);
+    const bytes = new Uint8Array(await (await bindings.FILES.get(stored!.object_key))!.arrayBuffer());
+    expect(sealedKeyId(bytes)).toBe(id);
+    expect(new TextDecoder().decode(bytes)).not.toContain(reasoning);
+    expect(JSON.parse(new TextDecoder().decode(await openBytes(key, bytes)))).toEqual({
+      content: '正式回答', reasoning,
+    });
   });
   it('keeps encrypted highlights out of the search index', async () => {
     const { folder, id, key } = await encryptedFolder();

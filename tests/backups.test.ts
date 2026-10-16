@@ -165,7 +165,7 @@ it('round-trips the whole library, versions, paper assets, chats and translation
       files: [{ source: { id: pdf.id, name: 'paper.pdf' }, text: '原文' }],
     }),
   );
-  const answer = await storeText(bindings, JSON.stringify({ content: '解释正文' }));
+  const answer = await storeChatBody(bindings, JSON.stringify({ content: '解释正文', reasoning: '先分析正文中的条件。' }));
   const translation = await storeText(
     bindings,
     JSON.stringify({
@@ -268,6 +268,9 @@ it('round-trips the whole library, versions, paper assets, chats and translation
     restoredPdf.file_blob_id,
   );
   expect(messages.results[1].exported_node_id).toBe(restoredNote.id);
+  expect(JSON.parse(await readText(bindings, messages.results[1].body_blob_id))).toEqual({
+    content: '解释正文', reasoning: '先分析正文中的条件。',
+  });
   const translated = await bindings.DB.prepare(
     'SELECT body_blob_id FROM translations WHERE node_id=?',
   )

@@ -35,6 +35,10 @@ const mock = createServer((request, response) => {
             })
           : '先回答：作者是说个体的生活变差了。';
     response.writeHead(200, { 'content-type': 'text/event-stream' });
+    if (body.thinking?.type === 'enabled') {
+      const reasoning = '先检查提问中的条件，再比较原文中的观点。\n\n最后整理结论与依据，避免混淆作者观点和事实。';
+      response.write(`data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n`);
+    }
     response.write(`data: ${JSON.stringify({ choices: [{ delta: { content: reply } }] })}\n\n`);
     response.write(
       `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,

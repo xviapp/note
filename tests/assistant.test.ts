@@ -1,4 +1,4 @@
-import { GLOBAL_ASSISTANT_ID } from '../shared/assistant';
+import { AI_RESPONSE_CHARACTER_LIMIT, GLOBAL_ASSISTANT_ID } from '../shared/assistant';
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import {
   env,
@@ -82,8 +82,8 @@ async function create(title = '资料 A', extra = {}) {
 async function configure() {
   await ok('/api/ai/settings', 'PUT', { apiKey: key });
 }
-function provider(content = '# 阅读结论\n\n解释所选文字。', complete: boolean | 'length' = true) {
-  const data = `: keepalive\r\n\r\ndata: ${JSON.stringify({ choices: [{ delta: { content } }] })}\r\n\r\n${complete ? `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: complete === 'length' ? 'length' : 'stop' }] })}\n\ndata: [DONE]\n\n` : ''}`;
+function provider(content = '# 阅读结论\n\n解释所选文字。', complete: boolean | 'length' = true, reasoning = '') {
+  const data = `: keepalive\r\n\r\n${reasoning ? `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n` : ''}data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\r\n\r\n${complete ? `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: complete === 'length' ? 'length' : 'stop' }] })}\n\ndata: [DONE]\n\n` : ''}`;
   const bytes = new TextEncoder().encode(data);
   return new Response(
     new ReadableStream<Uint8Array>({
@@ -635,31 +635,37 @@ describe('per-file DeepSeek assistant', () => {
     expect(await ok('/api/ai/settings')).toMatchObject({ configured: false, maxTokens: 8192 });
   });
 
-  it('persists thinking depth and applies it to file and global chats without storing reasoning', async () => {
+  it('streams and saves reasoning in file and global chats without adding it to later prompts', async () => {
     expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel: 'none' });
     await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'high' });
     const encrypted = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first();
     const node = await create();
-    const reasoning = '仅供模型内部思考，不应保存或发送到会话。';
-    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(
-      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n` +
-      `data: ${JSON.stringify({ choices: [{ delta: { content: '正式回答。' } }] })}\n\n` +
-      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
-      { headers: { 'content-type': 'text/event-stream' } },
-    ));
+    const reasoning = '先检查问题中的条件，再逐步比较。';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) =>
+      provider('正式回答。', true,
+        JSON.parse(String(init?.body)).thinking.type === 'enabled' ? reasoning : ''),
+    );
     for (const thinkingLevel of ['low', 'high', 'max', 'none']) {
       expect(await ok('/api/ai/settings', 'PUT', { thinkingLevel })).toMatchObject({ thinkingLevel });
       expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel, maxTokens: 8192 });
       for (const id of [node.id, GLOBAL_ASSISTANT_ID]) {
         const result = await events(await request(`/api/nodes/${id}/assistant`, 'POST', { content: '解释一下。' }));
         expect(result.at(-1)).toMatchObject({ type: 'done', message: { content: '正式回答。' } });
-        expect(JSON.stringify(result)).not.toContain(reasoning);
+        const saved = (await ok<ChatHistory>(`/api/nodes/${id}/assistant`)).messages.at(-1)!;
+        expect(saved.content).toBe('正式回答。');
+        if (thinkingLevel === 'none') {
+          expect(result.some((event) => event.type === 'reasoning')).toBe(false);
+          expect(saved.reasoning).toBeUndefined();
+        } else {
+          expect(result).toContainEqual({ type: 'reasoning', content: reasoning });
+          expect(result.at(-1)).toMatchObject({ message: { reasoning } });
+          expect(saved.reasoning).toBe(reasoning);
+        }
         const sent = JSON.parse(String(fetch.mock.lastCall?.[1]?.body));
         expect(sent.thinking).toEqual({ type: thinkingLevel === 'none' ? 'disabled' : 'enabled' });
         if (thinkingLevel === 'none') expect(sent).not.toHaveProperty('reasoning_effort');
         else expect(sent.reasoning_effort).toBe(thinkingLevel);
         expect(JSON.stringify(sent.messages)).not.toContain(reasoning);
-        expect(JSON.stringify(await ok(`/api/nodes/${id}/assistant`))).not.toContain(reasoning);
       }
     }
     expect(await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first()).toEqual(encrypted);
@@ -669,6 +675,9 @@ describe('per-file DeepSeek assistant', () => {
     expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel: 'max', maxTokens: 16384 });
     await ok('/api/ai/settings', 'DELETE');
     expect(await ok('/api/ai/settings')).toMatchObject({ configured: false, thinkingLevel: 'none' });
+    const answer = (await history(node)).messages.find((message) => message.reasoning)!;
+    const exported = await ok<NoteNode>(`/api/nodes/${node.id}/assistant/${answer.id}/export`, 'POST', {});
+    expect((await ok<NoteDetail>(`/api/nodes/${exported.id}`)).content).toBe('正式回答。');
   });
 
   it('rejects unsupported thinking depths without changing the saved configuration', async () => {
@@ -687,14 +696,76 @@ describe('per-file DeepSeek assistant', () => {
   it('explains a thinking-only length limit and does not retry the paid request', async () => {
     await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'max' });
     const node = await create();
-    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider('', 'length'));
+    const reasoning = '需要进一步检查假设。';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider('', 'length', reasoning));
     const result = await chat(node);
     expect(result.at(-1)).toMatchObject({
       type: 'error', error: expect.stringContaining('降低思考深度'),
-      message: { status: 'failed', content: '' },
+      message: { status: 'failed', content: '', reasoning },
     });
     expect(fetch).toHaveBeenCalledTimes(1);
     expect((await history(node)).busy).toBe(false);
+    expect((await history(node)).messages.at(-1)?.reasoning).toBe(reasoning);
+  });
+
+  it('retains received reasoning after a provider disconnect and bounds combined generation size', async () => {
+    await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'high' });
+    const node = await create();
+    const reasoning = '已收到的思考内容';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider('', false, reasoning));
+    expect((await chat(node)).at(-1)).toMatchObject({
+      type: 'error', message: { content: '', reasoning, status: 'failed' },
+    });
+    expect((await history(node)).messages.at(-1)?.reasoning).toBe(reasoning);
+    fetch.mockImplementation(async () => new Response(
+      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: { content: 'x'.repeat(AI_RESPONSE_CHARACTER_LIMIT) } }] })}\n\n`,
+      { headers: { 'content-type': 'text/event-stream' } },
+    ));
+    expect((await chat(node)).at(-1)).toMatchObject({
+      type: 'error', error: expect.stringContaining('内容过大'),
+      message: { content: '', reasoning },
+    });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect((await history(node)).busy).toBe(false);
+  });
+
+  it('keeps reasoning when stopped before the answer without sending an empty assistant turn later', async () => {
+    await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'high' });
+    const node = await create();
+    const reasoning = '停止前已收到的思考。';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async (_url, init) => new Response(
+      new ReadableStream<Uint8Array>({
+        start(stream) {
+          stream.enqueue(new TextEncoder().encode(
+            `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n`,
+          ));
+          init?.signal?.addEventListener('abort', () => stream.error(new DOMException('Aborted', 'AbortError')), { once: true });
+        },
+      }),
+      { headers: { 'content-type': 'text/event-stream' } },
+    ));
+    const controller = new AbortController();
+    const response = await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '先思考' }, { signal: controller.signal });
+    const result: ChatEvent[] = [];
+    for await (const line of sseData(response.body!)) {
+      const event = JSON.parse(line) as ChatEvent;
+      result.push(event);
+      if (event.type === 'reasoning') controller.abort();
+    }
+    expect(result.at(-1)).toMatchObject({
+      type: 'error', message: { status: 'interrupted', content: '', reasoning },
+    });
+    const saved = (await history(node)).messages.at(-1)!;
+    expect(saved.reasoning).toBe(reasoning);
+    expect((await request(`/api/nodes/${node.id}/assistant/${saved.id}/export`, 'POST', {})).status).toBe(400);
+    expect((await request(`/api/nodes/${node.id}/assistant`, 'POST', { content: '继续生成', continueFrom: saved.id })).status).toBe(400);
+    fetch.mockImplementation(async () => provider('新的回答'));
+    expect((await chat(node)).at(-1)).toMatchObject({ type: 'done' });
+    const messages = JSON.parse(String(fetch.mock.lastCall?.[1]?.body)).messages;
+    expect(messages.some((message: { role: string; content: string }) => message.role === 'assistant')).toBe(false);
+    expect(JSON.stringify(messages)).not.toContain(reasoning);
+    expect(fetch).toHaveBeenCalledTimes(2);
   });
 
   it('continues a length-limited reply with its original context and exports the partial reply once', async () => {

@@ -69,9 +69,12 @@ export function useAssistantConversation(props: Options) {
                 const local = old.find((m) => m.id === message.id);
                 // Keep received text available to copy if saving failed or the
                 // server is still finishing a cancelled request.
-                return local?.content && !message.content && message.role === 'assistant'
-                  ? { ...message, content: local.content }
-                  : message;
+                if (!local || message.role !== 'assistant') return message;
+                return {
+                  ...message,
+                  ...(!message.content && local.content ? { content: local.content } : {}),
+                  ...(!message.reasoning && local.reasoning ? { reasoning: local.reasoning } : {}),
+                };
               }),
         );
         setNextBefore(history.nextBefore);
@@ -224,6 +227,12 @@ export function useAssistantConversation(props: Options) {
             event.user,
             event.assistant,
           ]);
+        } else if (event.type === 'reasoning') {
+          setMessages((old) =>
+            old.map((m) => m.id === replyId
+              ? { ...m, reasoning: (m.reasoning ?? '') + event.content }
+              : m),
+          );
         } else if (event.type === 'delta') {
           setMessages((old) =>
             old.map((m) => (m.id === replyId ? { ...m, content: m.content + event.content } : m)),

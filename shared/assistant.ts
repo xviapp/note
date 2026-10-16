@@ -9,6 +9,8 @@ export const AI_MODEL = 'deepseek-flash';
 export const AI_PROMPT_LIMIT = 8_000;
 export const AI_QUOTE_LIMIT = 20_000;
 export const AI_IMAGE_LIMIT = 1_048_576;
+// Bound the combined reasoning and answer held while streaming.
+export const AI_RESPONSE_CHARACTER_LIMIT = 262_144;
 export const AI_DEFAULT_MAX_TOKENS = 8192;
 export const AI_REPLY_LIMITS = [2048, 4096, 8192, 16384, 32768] as const;
 export const AI_THINKING_LEVELS = ['none', 'low', 'high', 'max'] as const;
@@ -27,6 +29,7 @@ export interface ChatMessage {
   role: 'user' | 'assistant';
   status: 'pending' | 'completed' | 'interrupted' | 'failed';
   content: string;
+  reasoning?: string;
   quote?: string;
   image?: FileInfo;
   files?: ChatFile[];
@@ -54,5 +57,6 @@ export interface ChatHistory {
 export type ChatEvent =
   | { type: 'start'; user: ChatMessage; assistant: ChatMessage; context?: ChatContextUsage }
   | { type: 'delta'; content: string }
+  | { type: 'reasoning'; content: string }
   | { type: 'done'; message: ChatMessage }
   | { type: 'error'; error: string; message?: ChatMessage };
