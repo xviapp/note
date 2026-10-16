@@ -479,9 +479,9 @@ export default function NotePane(props: Props) {
           onAnnotations={() => setAnnotationsOpen((open) => !(open && !toc.compact))}
           onEdit={() => void startEdit()}
           menu={typeView.menu}
+          extra={typeView.toolbar}
           onAction={props.onAction}
         />
-        {typeView.toolbar}
       </div>
       {sending && !editing && (
         <p className="save-pending" role="status">

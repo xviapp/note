@@ -61,7 +61,7 @@ export interface TypeView {
   hideHeading?: string;
   // How the body lays out records appended below it.
   records?: RecordStyle;
-  // Beside the note actions in the toolbar.
+  // Among the note actions in the toolbar.
   toolbar?: ReactNode;
   // Extra items in the note's ⋯ menu.
   menu?: ReactNode;

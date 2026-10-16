@@ -1,6 +1,6 @@
 import { useEffect, useLayoutEffect, useRef, useState, type FormEvent } from 'react';
 import { readDraft, removeDraft, writeDraft } from '../note-drafts';
-import { ChevronLeft, ChevronRight, FileText, List, MessagesSquare, RefreshCw, Send } from 'lucide-react';
+import { BookOpenText, ChevronLeft, ChevronRight, FileText, MessagesSquare, RefreshCw, Send } from 'lucide-react';
 import { api } from '../api';
 import type { BookPageInfo, BookPages, NoteNode } from '../../shared/types';
 import { Modal, NodeIcon, Spinner } from './Primitives';
@@ -31,7 +31,7 @@ export function BookContents({ bookId, title, current, refresh, onNavigate }: {
   }, [open, bookId, refresh, retry]);
   const navigate = (id: string) => { setOpen(false); onNavigate(id); };
   return <>
-    <button className="text-button" onClick={() => setOpen(true)} aria-label="书内目录"><List size={16} /><span>书内目录</span></button>
+    <button className="icon-button" onClick={() => setOpen(true)} aria-label="书内目录" title="书内目录"><BookOpenText size={18} /></button>
     {open && <Modal title="书内目录" onClose={() => setOpen(false)}>
       <p className="book-contents-title">《{title}》</p>
       {error ? <div className="form-stack"><p className="inline-error" role="alert">{error}</p><button className="button compact" onClick={() => setRetry((value) => value + 1)}>重试加载目录</button></div>

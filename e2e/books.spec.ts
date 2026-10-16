@@ -70,6 +70,10 @@ test('book details edit the title and cover, and pages expose the book contents'
     await page.screenshot({ path: info.outputPath(`book-cover-${theme}.png`) });
   }
   await page.locator('.book-page-row', { hasText: '第 1 页' }).click();
+  // The contents button shares the note actions' row instead of taking its own.
+  const actions = page.locator('.note-actions');
+  await expect(actions.getByRole('button', { name: '书内目录', exact: true })).toBeVisible();
+  await page.locator('.note-toolbar').screenshot({ path: info.outputPath('book-page-toolbar.png') });
   await page.getByRole('button', { name: '书内目录', exact: true }).click();
   const contents = page.getByRole('dialog', { name: '书内目录' });
   await expect(contents.getByRole('button', { name: /第 1 页/ })).toHaveAttribute('aria-current', 'page');

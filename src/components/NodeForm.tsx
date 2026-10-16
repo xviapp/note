@@ -16,7 +16,7 @@ import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
 import { NodePicker } from './Tree';
 
-const commonTypes: NoteVariant[] = ['markdown', 'folder', 'journal', 'link'];
+const commonTypes: NoteVariant[] = ['markdown', 'folder', 'paper', 'book'];
 const choices = [
   ...commonTypes.map((variant) => NOTE_TYPES[variant]),
   ...CREATABLE_TYPES.filter(({ variant }) => !commonTypes.includes(variant)),

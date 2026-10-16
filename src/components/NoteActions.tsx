@@ -42,6 +42,7 @@ export function NoteActions({
   onAnnotations,
   onEdit,
   menu,
+  extra,
   onAction,
 }: {
   note: NoteDetail;
@@ -76,6 +77,8 @@ export function NoteActions({
   onEdit: () => void;
   // A note type's own items (e.g. a book's details).
   menu?: ReactNode;
+  // A note type's own toolbar buttons (e.g. a book page's arrows and contents).
+  extra?: ReactNode;
   onAction: (action: NodeAction, node: NoteNode) => void;
 }) {
   const hasChildren = note.kind !== 'folder' && !!note.child_count;
@@ -179,6 +182,7 @@ export function NoteActions({
           )}
         </button>
       )}
+      {extra}
       {!editing && (note.kind === 'markdown' || note.arxiv_id) && toc.available && (
         <button
           ref={toc.toggleRef}
