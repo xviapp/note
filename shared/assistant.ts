@@ -11,11 +11,15 @@ export const AI_QUOTE_LIMIT = 20_000;
 export const AI_IMAGE_LIMIT = 1_048_576;
 export const AI_DEFAULT_MAX_TOKENS = 8192;
 export const AI_REPLY_LIMITS = [2048, 4096, 8192, 16384, 32768] as const;
+export const AI_THINKING_LEVELS = ['none', 'low', 'high', 'max'] as const;
+export type ThinkingLevel = (typeof AI_THINKING_LEVELS)[number];
+export const AI_DEFAULT_THINKING_LEVEL: ThinkingLevel = 'none';
 
 export interface AssistantSettings {
   configured: boolean;
   model: string;
   maxTokens: number;
+  thinkingLevel: ThinkingLevel;
 }
 export interface ChatMessage {
   id: string;

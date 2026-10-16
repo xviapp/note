@@ -3,7 +3,9 @@ import { QingliIcon } from './QingliIcon';
 import {
   AI_DEFAULT_MAX_TOKENS,
   AI_REPLY_LIMITS,
+  AI_DEFAULT_THINKING_LEVEL,
   type AssistantSettings,
+  type ThinkingLevel,
 } from '../../shared/assistant';
 import { api } from '../api';
 import type { Confirm } from './Primitives';
@@ -13,6 +15,7 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
   const [key, setKey] = useState(''),
     [busy, setBusy] = useState(false);
   const [maxTokens, setMaxTokens] = useState<number>(AI_DEFAULT_MAX_TOKENS);
+  const [thinkingLevel, setThinkingLevel] = useState<ThinkingLevel>(AI_DEFAULT_THINKING_LEVEL);
   const [error, setError] = useState(''),
     [notice, setNotice] = useState('');
   useEffect(() => {
@@ -22,6 +25,7 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
         if (live) {
           setSettings(value);
           setMaxTokens(value.maxTokens);
+          setThinkingLevel(value.thinkingLevel ?? AI_DEFAULT_THINKING_LEVEL);
         }
       })
       .catch((e) => {
@@ -49,11 +53,12 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
           '/api/ai/settings',
           action === 'save' ? 'PUT' : 'DELETE',
           action === 'save'
-            ? { ...(key.trim() ? { apiKey: key.trim() } : {}), maxTokens }
+            ? { ...(key.trim() ? { apiKey: key.trim() } : {}), maxTokens, thinkingLevel }
             : undefined,
         );
         setSettings(saved);
         setMaxTokens(saved.maxTokens);
+        setThinkingLevel(saved.thinkingLevel ?? AI_DEFAULT_THINKING_LEVEL);
         setKey('');
         setNotice(action === 'save' ? 'AI 配置已保存。' : 'AI 配置已清除。');
       }
@@ -118,6 +123,26 @@ export function AiSettings({ confirm }: { confirm: Confirm }) {
             ))}
           </select>
         </label>
+        <label>
+          思考深度
+          <select
+            value={thinkingLevel}
+            disabled={busy || !settings}
+            aria-describedby="ai-thinking-hint"
+            onChange={(e) => {
+              setThinkingLevel(e.target.value as ThinkingLevel);
+              setNotice('');
+            }}
+          >
+            <option value="none">关闭（默认）</option>
+            <option value="low">低</option>
+            <option value="high">高</option>
+            <option value="max">最高</option>
+          </select>
+        </label>
+        <p className="field-hint" id="ai-thinking-hint">
+          用于青藜会话。深度越高，通常等待越久、消耗越多；思考与回答共用单次回复上限。
+        </p>
         <p className="field-hint">
           密钥加密保存在服务端。仅发送你提交的问题、附件、引用、截图和本文件的近期会话；调用按
           DeepSeek 账户计费。

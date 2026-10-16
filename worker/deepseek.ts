@@ -2,7 +2,10 @@ import {
   AI_MODEL,
   AI_DEFAULT_MAX_TOKENS,
   AI_REPLY_LIMITS,
+  AI_DEFAULT_THINKING_LEVEL,
+  AI_THINKING_LEVELS,
   type AssistantSettings,
+  type ThinkingLevel,
 } from '../shared/assistant';
 import { sseData } from '../shared/sse';
 import { AppError, integer, textValue } from './http';
@@ -36,13 +39,17 @@ function validateKey(value: unknown): string {
   return key;
 }
 export async function aiSettings(env: Env): Promise<AssistantSettings> {
-  const row = await env.DB.prepare('SELECT max_tokens FROM ai_settings WHERE id=1').first<{
+  const row = await env.DB.prepare(
+    'SELECT max_tokens,thinking_level FROM ai_settings WHERE id=1',
+  ).first<{
     max_tokens: number;
+    thinking_level: ThinkingLevel;
   }>();
   return {
     configured: !!row,
     model: AI_MODEL,
     maxTokens: row?.max_tokens ?? AI_DEFAULT_MAX_TOKENS,
+    thinkingLevel: row?.thinking_level ?? AI_DEFAULT_THINKING_LEVEL,
   };
 }
 export async function saveAiSettings(
@@ -54,8 +61,14 @@ export async function saveAiSettings(
     data.maxTokens === undefined ? current.maxTokens : integer(data.maxTokens, '回复长度');
   if (!AI_REPLY_LIMITS.some((limit) => limit === maxTokens))
     throw new AppError(400, '请选择支持的回复长度。');
+  const thinkingLevel =
+    data.thinkingLevel === undefined ? current.thinkingLevel : data.thinkingLevel;
+  if (!AI_THINKING_LEVELS.some((level) => level === thinkingLevel))
+    throw new AppError(400, '请选择支持的思考深度。');
   if (data.apiKey === undefined && current.configured) {
-    await env.DB.prepare('UPDATE ai_settings SET max_tokens=? WHERE id=1').bind(maxTokens).run();
+    await env.DB.prepare('UPDATE ai_settings SET max_tokens=?,thinking_level=? WHERE id=1')
+      .bind(maxTokens, thinkingLevel)
+      .run();
     return aiSettings(env);
   }
   const key = validateKey(data.apiKey);
@@ -66,9 +79,9 @@ export async function saveAiSettings(
     new TextEncoder().encode(key),
   );
   await env.DB.prepare(
-    'INSERT INTO ai_settings(id,encrypted_key,max_tokens) VALUES(1,?,?) ON CONFLICT(id) DO UPDATE SET encrypted_key=excluded.encrypted_key,max_tokens=excluded.max_tokens',
+    'INSERT INTO ai_settings(id,encrypted_key,max_tokens,thinking_level) VALUES(1,?,?,?) ON CONFLICT(id) DO UPDATE SET encrypted_key=excluded.encrypted_key,max_tokens=excluded.max_tokens,thinking_level=excluded.thinking_level',
   )
-    .bind(`${toBase64(iv)}.${toBase64(new Uint8Array(encrypted))}`, maxTokens)
+    .bind(`${toBase64(iv)}.${toBase64(new Uint8Array(encrypted))}`, maxTokens, thinkingLevel)
     .run();
   return aiSettings(env);
 }
@@ -165,13 +178,15 @@ export async function* deepseekReply(
   maxTokens: number,
   // Ask for a JSON object reply (the prompt must describe its shape).
   json = false,
+  thinkingLevel: ThinkingLevel = AI_DEFAULT_THINKING_LEVEL,
 ): AsyncGenerator<string> {
   const response = await providerFetch('/chat/completions', key, signal, {
     model: AI_MODEL,
     messages,
     stream: true,
     max_tokens: maxTokens,
-    thinking: { type: 'disabled' },
+    thinking: { type: thinkingLevel === 'none' ? 'disabled' : 'enabled' },
+    ...(thinkingLevel === 'none' ? {} : { reasoning_effort: thinkingLevel }),
     ...(json ? { response_format: { type: 'json_object' } } : {}),
   });
   if (!response.body) throw new AppError(502, 'DeepSeek 没有返回回复。');
@@ -197,6 +212,12 @@ export async function* deepseekReply(
       yield value;
     }
   }
+  if (finish === 'length' && !length && thinkingLevel !== 'none')
+    throw new AppError(
+      502,
+      '思考已用完本次生成额度，尚未生成回答。请在设置中提高单次回复上限或降低思考深度后重试。',
+      'AI_LENGTH_LIMIT',
+    );
   if (finish === 'length')
     throw new AppError(502, '已达到本次回复长度上限，可点击「继续生成」。', 'AI_LENGTH_LIMIT');
   if (!ended || finish !== 'stop' || !length)

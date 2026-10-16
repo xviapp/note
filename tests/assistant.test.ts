@@ -586,6 +586,7 @@ describe('per-file DeepSeek assistant', () => {
       configured: true,
       model: 'deepseek-flash',
       maxTokens: 8192,
+      thinkingLevel: 'none',
     });
     const row = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first<{
       encrypted_key: string;
@@ -611,7 +612,11 @@ describe('per-file DeepSeek assistant', () => {
     const node = await create();
     const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
     await chat(node);
-    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body)).max_tokens).toBe(8192);
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).toMatchObject({
+      max_tokens: 8192,
+      thinking: { type: 'disabled' },
+    });
+    expect(JSON.parse(String(fetch.mock.calls[0][1]?.body))).not.toHaveProperty('reasoning_effort');
     const encrypted = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first();
     expect(await ok('/api/ai/settings', 'PUT', { maxTokens: 16384 })).toMatchObject({
       maxTokens: 16384,
@@ -628,6 +633,68 @@ describe('per-file DeepSeek assistant', () => {
     expect(await ok('/api/ai/settings')).toMatchObject({ maxTokens: 16384 });
     await ok('/api/ai/settings', 'DELETE');
     expect(await ok('/api/ai/settings')).toMatchObject({ configured: false, maxTokens: 8192 });
+  });
+
+  it('persists thinking depth and applies it to file and global chats without storing reasoning', async () => {
+    expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel: 'none' });
+    await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'high' });
+    const encrypted = await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first();
+    const node = await create();
+    const reasoning = '仅供模型内部思考，不应保存或发送到会话。';
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => new Response(
+      `data: ${JSON.stringify({ choices: [{ delta: { reasoning_content: reasoning } }] })}\n\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: { content: '正式回答。' } }] })}\n\n` +
+      `data: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+      { headers: { 'content-type': 'text/event-stream' } },
+    ));
+    for (const thinkingLevel of ['low', 'high', 'max', 'none']) {
+      expect(await ok('/api/ai/settings', 'PUT', { thinkingLevel })).toMatchObject({ thinkingLevel });
+      expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel, maxTokens: 8192 });
+      for (const id of [node.id, GLOBAL_ASSISTANT_ID]) {
+        const result = await events(await request(`/api/nodes/${id}/assistant`, 'POST', { content: '解释一下。' }));
+        expect(result.at(-1)).toMatchObject({ type: 'done', message: { content: '正式回答。' } });
+        expect(JSON.stringify(result)).not.toContain(reasoning);
+        const sent = JSON.parse(String(fetch.mock.lastCall?.[1]?.body));
+        expect(sent.thinking).toEqual({ type: thinkingLevel === 'none' ? 'disabled' : 'enabled' });
+        if (thinkingLevel === 'none') expect(sent).not.toHaveProperty('reasoning_effort');
+        else expect(sent.reasoning_effort).toBe(thinkingLevel);
+        expect(JSON.stringify(sent.messages)).not.toContain(reasoning);
+        expect(JSON.stringify(await ok(`/api/nodes/${id}/assistant`))).not.toContain(reasoning);
+      }
+    }
+    expect(await bindings.DB.prepare('SELECT encrypted_key FROM ai_settings').first()).toEqual(encrypted);
+    await ok('/api/ai/settings', 'PUT', { thinkingLevel: 'max' });
+    await ok('/api/ai/settings', 'PUT', { maxTokens: 16384 });
+    await configure();
+    expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel: 'max', maxTokens: 16384 });
+    await ok('/api/ai/settings', 'DELETE');
+    expect(await ok('/api/ai/settings')).toMatchObject({ configured: false, thinkingLevel: 'none' });
+  });
+
+  it('rejects unsupported thinking depths without changing the saved configuration', async () => {
+    await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'low' });
+    for (const thinkingLevel of ['', 'medium', 'ultra', 'HIGH', null, 1, {}, ['high']]) {
+      const response = await request('/api/ai/settings', 'PUT', {
+        apiKey: 'sk-replacement-that-must-not-be-saved', maxTokens: 32768, thinkingLevel,
+      });
+      expect(response.status).toBe(400);
+      expect(await response.json()).toMatchObject({ error: '请选择支持的思考深度。' });
+    }
+    expect(await ok('/api/ai/settings')).toMatchObject({ thinkingLevel: 'low', maxTokens: 8192 });
+    expect(await readApiKey(bindings)).toBe(key);
+  });
+
+  it('explains a thinking-only length limit and does not retry the paid request', async () => {
+    await ok('/api/ai/settings', 'PUT', { apiKey: key, thinkingLevel: 'max' });
+    const node = await create();
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider('', 'length'));
+    const result = await chat(node);
+    expect(result.at(-1)).toMatchObject({
+      type: 'error', error: expect.stringContaining('降低思考深度'),
+      message: { status: 'failed', content: '' },
+    });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect((await history(node)).busy).toBe(false);
   });
 
   it('continues a length-limited reply with its original context and exports the partial reply once', async () => {

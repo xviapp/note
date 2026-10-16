@@ -346,7 +346,7 @@ export async function sendChat(
   const prompt = textValue(data.content, '问题', AI_PROMPT_LIMIT).trim();
   const quote = data.quote == null ? '' : textValue(data.quote, '引用文字', AI_QUOTE_LIMIT, true);
   const apiKey = await readApiKey(env);
-  const { maxTokens } = await aiSettings(env);
+  const { maxTokens, thinkingLevel } = await aiSettings(env);
   const timeout = Math.max(300_000, Math.ceil(maxTokens / 8192) * 300_000);
   const continuation =
     data.continueFrom === undefined
@@ -476,6 +476,8 @@ export async function sendChat(
           prepared.messages,
           signal,
           maxTokens,
+          false,
+          thinkingLevel,
         )) {
           content += delta;
           emit({ type: 'delta', content: delta });
