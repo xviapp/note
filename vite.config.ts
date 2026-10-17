@@ -4,6 +4,24 @@ import { offlineShell } from './scripts/offline-shell';
 
 export default defineConfig(({ mode }) => ({
   plugins: [react(), offlineShell()],
+  css: {
+    postcss: {
+      plugins:
+        mode === 'android'
+          ? [{
+              postcssPlugin: 'yejian-android-woff2',
+              Declaration: {
+                src(declaration) {
+                  // WebView 125 supports WOFF2. Remove font fallbacks before
+                  // Vite discovers their URLs and emits duplicate font assets.
+                  const woff2 = declaration.value.match(/url\([^)]*\)\s*format\((["'])woff2\1\)/);
+                  if (woff2) declaration.value = woff2[0];
+                },
+              },
+            }]
+          : [],
+    },
+  },
   resolve: {
     // Android WebView updates separately from the OS. Ship PDF.js's supported
     // compatibility build, including its matching worker, inside the APK.

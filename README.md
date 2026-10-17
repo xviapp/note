@@ -16,7 +16,7 @@
 
 ## 最新更新
 
-0.4.31：手机隐藏列表排序栏，Android 默认连接 `note.iyi.li`。详见[发布说明](docs/releases/0.4.31.txt)。
+0.4.31：手机隐藏列表排序栏，Android 默认连接 `note.iyi.li`，安装包缩小约 43%，保留原有字体和离线阅读能力。详见[发布说明](docs/releases/0.4.31.txt)。
 
 ## 功能
 

@@ -80,6 +80,7 @@ npm run android:publish -- --apk artifacts/yejian-<版本>-android-release.apk -
 - WebView 代理在页面准备后设置，不能提前到 `onCreate`，见[网络代理](network-proxy.md)。
 - 原生占位卡片由 `WindowTheme` 绘制，修改网页浮窗样式时同步检查，避免切换时跳动。
 - PDF.js 使用 `legacy` 主库和 worker；包内网页资源、APK、构建缓存和签名不进 Git。
+- 中文与公式字体保留完整字形，以 WOFF2 格式随包提供；Android 构建移除 CSS 中的 WOFF、TTF 备用引用，避免重复打包。
 
 ## 验证
 
