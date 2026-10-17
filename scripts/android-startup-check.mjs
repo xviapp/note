@@ -47,7 +47,7 @@ try {
       body: JSON.stringify({ initialized: true, authenticated: false, name: '页间' }),
     }),
   );
-  await page.goto(`https://note.xvi.app/?startup-check=${Date.now()}`);
+  await page.goto(`https://note.iyi.li/?startup-check=${Date.now()}`);
   await expect(page.locator('.auth-form')).toBeVisible();
   await page
     .getByRole('combobox', { name: '主题', exact: true, includeHidden: true })

@@ -1,47 +1,46 @@
 # 应用品牌与图标
 
-应用名称为「页间」，固定 slogan 为「落笔于页，留心于间」。
+名称「页间」，标语「落笔于页，留心于间」。
 
-页间图标由书页、木杖与叶片组成：奶油白 `#F8F2E8` 底色、灰青绿 `#526B60` 图案，采用扁平剪纸风格。统一轮廓源为 `assets/brand/mark.json`，保留书页、木杖与叶片的比例与曲线；生成脚本使用纯色色块，不加浮雕、高光或投影，并将轮廓以画布中心放大至 112%，网页 PNG 与 Android 彩色前景使用同一透明图稿；来源见[资源记录](../assets/brand/README.md)。白天、夜间、星空和跟随系统主题都使用同一个白底图标，站内图标只缩放并加圆角。
+## 页间图标
 
-## 使用位置
+书页、木杖和叶片组成灰青绿剪纸图案（`#526B60`），底色奶油白（`#F8F2E8`）。轮廓源为 `assets/brand/mark.json`，来源见[资源记录](../assets/brand/README.md)。所有主题共用轮廓，不加浮雕、高光或投影。
 
-- `src/components/Brand.tsx`、`BootScreen.tsx`：登录、首次设置、加载页和侧栏。
-- `index.html`、`share.html`：favicon、Apple 桌面图标和安装清单。
-- `public/brand/`：透明扁平前景、64 px favicon、128 px 站内图标、180 px Apple 图标、192 / 512 px 安装图标，以及 Web App Manifest（文件名沿用 `day-` 前缀）。
-- `public/favicon.ico`：未读取页面图标配置的客户端兜底，包含 16 / 32 / 48 / 64 px。
-- `public/android-webview.html`：旧系统网页组件提示页。
-- `android/app/src/main/res/`：普通和圆形桌面图标共用透明扁平前景，启动画面使用同一彩色前景，单色主题图标保留独立矢量轮廓。
+网页 PNG 和 Android 彩色前景使用同一透明图稿，轮廓从中心放大至 112%。Android 前景和网页加载图案内缩 16%；单色图标由三条矢量路径生成。108 dp 画布中的图案须留在中央 66 dp 圆形安全区内。
 
-Android 彩色前景使用 `drawable-nodpi/brand_clay.png`，内缩 16%；网页加载页使用同一份透明前景 `public/brand/clay-foreground.png`，也内缩 16%。单色前景由 `mark.json` 的三条矢量路径生成。两者采用 108 dp 画布，图案保留在中央 66 dp 圆形安全区内，避免不同桌面形状裁掉书页；参见 [Android 自适应图标规范](https://developer.android.google.cn/develop/ui/compose/system/icon_design_adaptive?hl=en)。系统深色模式下桌面图标不变。启动画面背景跟随 App 内选择的主题：白天米白、夜间深灰、星空深蓝；选「跟随系统」时按系统深浅色（`note_surface`）。深色背景上图标放在米白圆底上；浅色背景不加圆底，灰青绿图案直接置于米白背景。Android 13+ 通过 `SplashScreen.setSplashScreenTheme` 让系统记住所选主题，从下一次冷启动起生效；更早的版本只能跟随系统深浅色。深色模式冷启动不出现整屏亮帧。Android 13+ 的系统主题图标由桌面按壁纸配色着色。
-
-桌面图标缓存的刷新时间由系统决定；已安装的网页快捷方式是否刷新图标由浏览器及系统决定。
-
-启动图标略高于中心：Android 使用独立的 `splash_icon.xml`，保持图案大小，将图案在系统 288 dp 画布内上移约 23 dp；指纹等待背景复用同一图稿。网页加载页将图标、名称和加载提示整体上移 24 px。桌面图标仍保持居中。
+启动背景随主题：白天米白、夜间深灰、星空深蓝；深色背景加米白圆底。Android 13+ 记住所选启动主题，更早版本跟随系统深浅色。启动图案在系统画布上移约 23 dp，网页加载区上移 24 px，桌面图标居中。
 
 ## 青藜图标
 
-`assets/qingli/original.png` 保存用户确认的短发带读书人物图稿，`assets/qingli/mark.svg` 是从图稿直接提取的深色轮廓，`assets/qingli/mark.png` 为透明栅格图形，处理方式见[资源记录](../assets/qingli/README.md)。发布用的 `public/qingli/mark-128.png` 仅缩小尺寸并移除元数据，不重绘图案。
+`assets/qingli/original.png` 为确认图稿，`mark.svg` 保存提取的深色轮廓，`mark.png` 为透明栅格图。发布资源 `public/qingli/mark-128.png` 只缩小并移除元数据，不重绘，见[资源记录](../assets/qingli/README.md)。
 
-`QingliIcon` 使用透明图形作为 CSS alpha mask，并沿用主题强调色 `--blue`：白天为青绿色，夜间为浅绿色，星空为浅紫色；跟随系统时自动切换。统一用于悬浮按钮、窗口标题、设置标题、空会话，以及选文和翻译里的“问青藜”。图标属于装饰，读屏继续使用按钮和标题上的文字。网页离线缓存与 Android 包内资源均包含图标。
+`QingliIcon` 用图形作 alpha mask，颜色取 `--blue`：白天青绿、夜间浅绿、星空浅紫。按钮和标题提供读屏名称，图标本身为装饰。
+
+## 使用位置
+
+| 资源 | 位置 |
+| --- | --- |
+| 网页图标与安装清单 | `public/brand/`、`public/favicon.ico` |
+| 青藜图标 | `public/qingli/` |
+| 登录、加载、侧栏 | `Brand.tsx`、`BootScreen.tsx` |
+| Android 图标与启动画面 | `android/app/src/main/res/` |
+| 旧 WebView 提示 | `public/android-webview.html` |
+
+网页文件名保留 `day-` 前缀。ICO 包含 16、32、48、64 px；其他尺寸由脚本生成。桌面和浏览器何时刷新已安装图标由系统决定。
 
 ## 更新资源
 
-更新 `assets/brand/mark.json` 或 `assets/qingli/mark.svg` 后，在安装了 ImageMagick 和 Chromium 的环境运行（使用项目已有的 Playwright；可通过 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定浏览器）：
+修改矢量源后运行，需要 ImageMagick、Chromium 和项目的 Playwright：
 
 ```bash
 npm run icons
 ```
 
-`scripts/brand-assets.mjs` 生成 `assets/brand/clay.svg`、透明扁平图稿、网页 PNG、ICO、安装清单、Android 彩色与单色前景、配色资源和青藜的透明图标。生成结果随源文件一起提交；普通 Web / Android 构建直接使用这些文件，无需图像工具。改图标后分别部署网站、重新构建并安装 Android 包；部署网站不会更新手机上已安装的图标。
-
-图标与安装清单包含在离线界面缓存中，PNG / ICO 与字体等静态资源一起打包，减少首次准备离线资源的请求数。
+可用 `PLAYWRIGHT_CHROMIUM_EXECUTABLE` 指定浏览器。生成结果与源文件一起提交，日常构建使用已生成的文件。网站和 APK 分别更新，部署网站不会替换已安装图标。
 
 ## 验证
 
-改图标后检查：
-
-- 电脑和手机视口的白天、夜间、星空及跟随系统主题下，登录页、侧栏、加载页和旧 WebView 提示页的标识；`e2e/family-style.spec.ts` 覆盖主题回归。
-- 网页产物和 APK 内的图标与 `public/brand/` 源文件逐字节一致，`npm run test:build` 检查离线资源打包。
-- Android 前景最远点位于 33 dp 安全半径内，圆形、圆角方形和单色图标无裁切；`node scripts/android.mjs lintDebug` 通过。
-- 深色模式冷启动无亮帧，可用 [Android 文档](android.md#验证)中的启动回归脚本在模拟器上检查。
+- 检查三种主题及跟随系统下的登录、侧栏、加载和旧 WebView 提示页。
+- 运行 `npm run test:build`，确认打包资源与源文件一致。
+- 检查 Android 圆形、圆角方形、单色图标无裁切，运行 `node scripts/android.mjs lintDebug`。
+- 深色冷启动无亮帧，见 [Android 验证](android.md#验证)。

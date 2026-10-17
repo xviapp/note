@@ -88,7 +88,7 @@ try {
       authReady = new Promise((resolve) => {
         releaseAuth = resolve;
       });
-      await page.goto(`https://note.xvi.app/?layout-check=${Date.now()}`);
+      await page.goto(`https://note.iyi.li/?layout-check=${Date.now()}`);
       await expect(page.locator('.boot-screen')).toBeVisible();
       await page.waitForTimeout(1500);
       // App resume reapplies the theme. It must not remove/reapply system insets.
@@ -182,7 +182,7 @@ try {
       await writeFile(path.join(output, `${name}.png`), screenshot);
       return native;
     };
-    await page.goto(`https://note.xvi.app/?interaction-check=${Date.now()}`);
+    await page.goto(`https://note.iyi.li/?interaction-check=${Date.now()}`);
     await expect(page.locator('.app-shell')).toBeVisible();
     await page.waitForTimeout(500);
     const before = await saveNative('before');
