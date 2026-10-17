@@ -1,0 +1,44 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xvi-note",
+  "main": "worker/index.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "directory": "./dist",
+    "binding": "ASSETS",
+    "not_found_handling": "single-page-application",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xvi-note",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "xvi-note-files" }],
+  "triggers": { "crons": ["*/30 * * * *"] },
+  "observability": { "enabled": true },
+  "vars": { "APP_NAME": "页间" },
+  "env": {
+    "production": {
+      "name": "xvi-note",
+      "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+      "workers_dev": true,
+      "preview_urls": false,
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "xvi-note",
+          "database_id": "YOUR_D1_DATABASE_ID",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "xvi-note-files" }],
+      "vars": { "APP_NAME": "页间" },
+      "secrets": { "required": ["APP_SECRET", "SETUP_TOKEN"] },
+    },
+  },
+}

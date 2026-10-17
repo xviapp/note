@@ -24,10 +24,10 @@
     "icons": "node scripts/brand-assets.mjs",
     "test:e2e": "playwright test",
     "db:local": "wrangler d1 migrations apply DB --local",
-    "db:remote": "wrangler d1 migrations apply DB --remote --env production",
+    "db:remote": "npm run cf -- d1 migrations apply DB --remote",
     "setup:local": "node scripts/setup.mjs",
     "reset-password": "node scripts/reset-password.mjs",
-    "deploy": "npm run build && npm run db:remote && wrangler deploy --env production",
+    "deploy": "npm run build && npm run db:remote && npm run cf -- deploy",
     "build:android": "node scripts/assets.mjs && tsc --noEmit && vite build --mode android && cap sync android",
     "build:android:release": "npm run build:android && node scripts/android.mjs assembleRelease",
     "android:apk": "npm run build:android && node scripts/android.mjs assembleDebug",
@@ -35,7 +35,8 @@
     "install:android:release": "node scripts/android.mjs installRelease",
     "android:open": "cap open android",
     "android:release": "npm run build:android && node scripts/android.mjs assembleRelease",
-    "android:publish": "node scripts/android-publish.mjs"
+    "android:publish": "node scripts/android-publish.mjs",
+    "cf": "node scripts/cloudflare.mjs"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",
@@ -90,5 +91,6 @@
       "wrangler": "4.145.0",
       "miniflare": "5.20260930.0-alpha"
     }
-  }
+  },
+  "license": "MIT"
 }

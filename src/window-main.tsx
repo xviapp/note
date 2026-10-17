@@ -3,6 +3,7 @@ import { Capacitor } from '@capacitor/core';
 import { device, installMobile, type LaunchAction } from './mobile';
 import { prepareProxy } from './proxy';
 import { ProxyStatus } from './components/ProxySettings';
+import { AppErrorBoundary, AppErrorScreen } from './components/AppErrorBoundary';
 import { AssistantSheet, JournalWindow } from './components/FloatingWindows';
 import './theme';
 import './family-tokens.css';
@@ -16,17 +17,19 @@ import './share.css';
 
 // Android's floating windows from launcher shortcuts (今日记, 问青藜): one
 // tool over whatever app is open, without the notebook or its offline cache.
+const root = createRoot(document.getElementById('root')!);
 async function start() {
   installMobile();
   void prepareProxy();
   let kind: LaunchAction | null = null;
-  if (Capacitor.isNativePlatform()) kind = (await device.takeLaunch().catch(() => ({ action: null }))).action;
+  if (Capacitor.isNativePlatform())
+    kind = (await device.takeLaunch().catch(() => ({ action: null }))).action;
   else kind = location.hash === '#assistant' ? 'assistant' : 'journal';
-  createRoot(document.getElementById('root')!).render(
-    <>
+  root.render(
+    <AppErrorBoundary>
       {kind === 'assistant' ? <AssistantSheet /> : <JournalWindow />}
       <ProxyStatus />
-    </>,
+    </AppErrorBoundary>,
   );
 }
-void start();
+void start().catch((error: unknown) => root.render(<AppErrorScreen error={error} />));

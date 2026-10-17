@@ -12,6 +12,46 @@
 body {
   margin: 0;
 }
+.app-error-screen {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: 24px;
+}
+.app-error-card {
+  width: min(100%, 480px);
+  min-width: 0;
+  display: grid;
+  gap: 16px;
+  padding: 24px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--family-radius-card);
+}
+.app-error-card > svg {
+  color: var(--muted);
+}
+.app-error-card h1 {
+  font-size: 22px;
+}
+.app-error-card p {
+  color: var(--muted);
+}
+.app-error-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.app-error-card summary {
+  cursor: pointer;
+}
+.app-error-card pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  user-select: text;
+  font: inherit;
+  font-size: 13px;
+}
 button,
 input,
 select,

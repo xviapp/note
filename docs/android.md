@@ -72,15 +72,15 @@ Android 构建为 PDF.js 主库和 worker 选择 `legacy` 包以兼容 WebView 1
 
 设置显示原生读取的版本、构建号，并用安装证书检查更新兼容性；仅 Android 客户端显示检查更新与下载入口。较新的兼容版本由用户选择保存位置，原生层边下载边写入并核对 SHA-256，再通过系统文件管理器安装。
 
-发布顺序：完成检查和 APK 构建，部署 Worker，最后发布安装包。`android:publish` 用 SDK 工具验证包名、版本和签名并生成版本清单，指定 `--remote` 才上传：先上传不可变 APK，再更新最新版本清单。安装包按构建号与摘要寻址，保存在 R2 的 `releases/android/`，通过登录接口访问，不计入笔记库容量。发布说明放在 `docs/releases/<版本>.txt`。
+发布顺序：完成检查和 APK 构建，部署 Worker，最后发布安装包。`android:publish` 用 SDK 工具验证包名、版本和签名并生成版本清单，指定 `--remote --bucket <FILES 对应的 R2 桶名>` 才上传，使用 `wrangler.selfhost.jsonc` 的生产环境：先上传不可变 APK，再更新最新版本清单。安装包按构建号与摘要寻址，保存在 R2 的 `releases/android/`，通过登录接口访问，不计入笔记库容量。发布说明放在 `docs/releases/<版本>.txt`。
 
 ```bash
 pnpm android:apk
 pnpm run deploy
-pnpm android:publish --apk artifacts/yejian-<版本>-android-debug.apk --notes docs/releases/<版本>.txt --remote
+pnpm android:publish --apk artifacts/yejian-<版本>-android-debug.apk --notes docs/releases/<版本>.txt --remote --bucket 你的R2桶名
 ```
 
-每次发布递增 `android/app/build.gradle` 的 `versionCode`。调试包沿用开发机调试签名以便覆盖升级；正式签名用 `pnpm android:release`，需设置 `NOTE_ANDROID_KEYSTORE`（绝对路径）、`NOTE_ANDROID_STORE_PASSWORD`、`NOTE_ANDROID_KEY_ALIAS` 和 `NOTE_ANDROID_KEY_PASSWORD`，缺少即停止。换用其他证书后不能直接覆盖升级，应先在网页版进行整库备份；应用也会阻止证书不同的版本作为普通更新安装。密钥和密码不进入仓库。
+每次发布递增 `android/app/build.gradle` 的 `versionCode`。调试包沿用开发机调试签名以便覆盖升级；正式签名用 `pnpm android:release`，需设置 `NOTE_ANDROID_KEYSTORE`（绝对路径）、`NOTE_ANDROID_STORE_PASSWORD`、`NOTE_ANDROID_KEY_ALIAS` 和 `NOTE_ANDROID_KEY_PASSWORD`，缺少即停止。换用其他证书后不能直接覆盖升级，应先在网页版进行整库备份；应用也会阻止证书不同的版本作为普通更新安装。密钥和密码不进入仓库。请另行备份正式签名文件、别名和密码；丢失原签名后无法给已安装的同签名应用发布覆盖升级。
 
 ## 验证
 

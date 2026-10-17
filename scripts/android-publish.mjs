@@ -11,10 +11,13 @@ const { values } = parseArgs({
     apk: { type: 'string' },
     notes: { type: 'string' },
     remote: { type: 'boolean' },
+    bucket: { type: 'string' },
   },
 });
 if (!values.apk || !values.notes)
-  throw new Error('需要 --apk <安装包> 和 --notes <更新说明文件>；加 --remote 发布到已配置的 R2。');
+  throw new Error('需要 --apk <安装包> 和 --notes <更新说明文件>；加 --remote --bucket <R2 桶名> 发布。');
+if (values.remote && !values.bucket)
+  throw new Error('远端发布需要 --bucket <自部署配置中 FILES 对应的 R2 桶名>。');
 const sdk = [
   process.env.ANDROID_SDK_ROOT,
   process.env.ANDROID_HOME,
@@ -67,23 +70,20 @@ const release = {
 const manifest = `${apk}.json`;
 await writeFile(manifest, JSON.stringify(release, null, 2) + '\n');
 if (values.remote) {
-  const command = process.platform === 'win32' ? 'npx.cmd' : 'npx';
   const put = (key, file, type) =>
     execFileSync(
-      command,
+      process.execPath,
       [
-        'wrangler',
+        'scripts/cloudflare.mjs',
         'r2',
         'object',
         'put',
-        `xvi-note-files/${key}`,
+        `${values.bucket}/${key}`,
         '--file',
         file,
         '--content-type',
         type,
         '--remote',
-        '--env',
-        'production',
       ],
       { stdio: 'inherit' },
     );
@@ -95,4 +95,4 @@ if (values.remote) {
   );
   put('releases/android/latest.json', manifest, 'application/json');
   console.log(`已发布页间 ${version}，构建 ${release.build}`);
-} else console.log(`校验通过，更新清单：${manifest}\n加 --remote 后发布。`);
+} else console.log(`校验通过，更新清单：${manifest}\n加 --remote --bucket <R2 桶名> 后发布。`);

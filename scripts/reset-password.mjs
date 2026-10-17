@@ -33,9 +33,8 @@ const wrangler = (parameters, input) => {
   const result = spawnSync(
     process.execPath,
     [
-      'node_modules/wrangler/bin/wrangler.js',
+      remote ? 'scripts/cloudflare.mjs' : 'node_modules/wrangler/bin/wrangler.js',
       ...parameters,
-      ...(remote ? ['--env', 'production'] : []),
     ],
     { input, stdio: input ? ['pipe', 'inherit', 'inherit'] : 'inherit' },
   );

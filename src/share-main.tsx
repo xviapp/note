@@ -5,6 +5,7 @@ import ShareWindow from './components/ShareWindow';
 import { device } from './mobile';
 import { prepareProxy } from './proxy';
 import { ProxyStatus } from './components/ProxySettings';
+import { AppErrorBoundary } from './components/AppErrorBoundary';
 import './theme';
 import './family-tokens.css';
 import './styles.css';
@@ -25,10 +26,10 @@ if (Capacitor.isNativePlatform())
 function start() {
   void prepareProxy();
   createRoot(document.getElementById('root')!).render(
-    <>
+    <AppErrorBoundary>
       <ShareWindow />
       <ProxyStatus />
-    </>,
+    </AppErrorBoundary>,
   );
 }
 void start();
