@@ -35,37 +35,54 @@ beforeEach(() => {
 });
 afterEach(cleanup);
 
-const fill = (label: string, value: string) =>
-  fireEvent.change(screen.getByLabelText(label), { target: { value } });
+const type = (digits: string) => {
+  for (const digit of digits) fireEvent.click(screen.getByRole('button', { name: digit }));
+};
+const prompt = (text: string) => expect(screen.getByText(text)).toBeTruthy();
 
 describe('AppLockSettings', () => {
-  it('sets a PIN after it is typed twice', async () => {
+  it('sets a PIN after it is typed twice on the pad', async () => {
     render(<AppLockSettings />);
     fireEvent.click(await screen.findByRole('button', { name: '设置 PIN' }));
-    fill('PIN', '1234');
-    fill('再次输入 PIN', '1243');
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('两次输入的 PIN 不一致。');
+    prompt('输入 PIN');
+    type('1234');
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+    prompt('再次输入 PIN');
+    type('1243');
+    expect((await screen.findByRole('alert')).textContent).toBe('两次输入的 PIN 不一致，请重新输入。');
     expect(mock.appLockSetPin).not.toHaveBeenCalled();
+    prompt('输入 PIN');
 
-    fill('再次输入 PIN', '1234');
     mock.appLockSetPin.mockImplementation(async () => {
       mock.state = on;
     });
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    type('1234');
+    fireEvent.click(screen.getByRole('button', { name: '下一步' }));
+    type('1234');
     await screen.findByRole('button', { name: '修改 PIN' });
     expect(mock.appLockSetPin).toHaveBeenCalledWith({ pin: '1234' });
     expect(screen.getByText('打开页间时输入 4 位 PIN')).toBeTruthy();
   });
 
-  it('keeps digits only and refuses a short PIN', async () => {
+  it('needs four digits before 下一步 and deletes the last one', async () => {
     render(<AppLockSettings />);
     fireEvent.click(await screen.findByRole('button', { name: '设置 PIN' }));
-    fill('PIN', '12a');
-    expect((screen.getByLabelText('PIN') as HTMLInputElement).value).toBe('12');
-    fill('再次输入 PIN', '12');
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
-    expect((await screen.findByRole('alert')).textContent).toBe('PIN 需为 4 到 6 位数字。');
+    const next = screen.getByRole('button', { name: '下一步' }) as HTMLButtonElement;
+    type('125');
+    expect(next.disabled).toBe(true);
+    fireEvent.click(screen.getByRole('button', { name: '删除' }));
+    expect(screen.getByRole('status').getAttribute('aria-label')).toBe('已输入 2 位');
+    type('34');
+    expect(next.disabled).toBe(false);
+  });
+
+  it('takes a six-digit PIN without 下一步 and accepts the keyboard', async () => {
+    render(<AppLockSettings />);
+    fireEvent.click(await screen.findByRole('button', { name: '设置 PIN' }));
+    for (const key of '123456') fireEvent.keyDown(window, { key });
+    prompt('再次输入 PIN');
+    for (const key of '123456') fireEvent.keyDown(window, { key });
+    await waitFor(() => expect(mock.appLockSetPin).toHaveBeenCalledWith({ pin: '123456' }));
   });
 
   it('shows why the current PIN was refused and stays open', async () => {
@@ -73,21 +90,23 @@ describe('AppLockSettings', () => {
     mock.appLockDisable.mockRejectedValue(new Error('当前 PIN 不正确。'));
     render(<AppLockSettings />);
     fireEvent.click(await screen.findByRole('button', { name: '关闭' }));
-    fill('当前 PIN', '0000');
-    fireEvent.click(screen.getByRole('button', { name: '关闭应用锁' }));
+    prompt('输入当前 PIN');
+    type('0000');
     expect((await screen.findByRole('alert')).textContent).toBe('当前 PIN 不正确。');
     expect(mock.appLockDisable).toHaveBeenCalledWith({ current: '0000' });
     expect(screen.getByRole('dialog')).toBeTruthy();
+    expect(screen.getByRole('status').getAttribute('aria-label')).toBe('已输入 0 位');
   });
 
   it('changes the PIN with the current one', async () => {
     mock.state = on;
     render(<AppLockSettings />);
     fireEvent.click(await screen.findByRole('button', { name: '修改 PIN' }));
-    fill('当前 PIN', '1234');
-    fill('新 PIN', '567890');
-    fill('再次输入新 PIN', '567890');
-    fireEvent.click(screen.getByRole('button', { name: '保存' }));
+    type('1234');
+    prompt('输入新 PIN');
+    type('567890');
+    prompt('再次输入新 PIN');
+    type('567890');
     await waitFor(() => expect(mock.appLockSetPin).toHaveBeenCalledWith({ pin: '567890', current: '1234' }));
   });
 

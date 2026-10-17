@@ -3618,6 +3618,85 @@ button.node-list-toggle:focus-visible {
   flex-shrink: 0;
   gap: 8px;
 }
+/* The app lock's PIN dialogs: dots over a number pad, like the lock screen. */
+.pin-modal {
+  width: 360px;
+}
+.pin-entry {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+.pin-prompt {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+}
+.pin-dots {
+  display: flex;
+  gap: 14px;
+  margin: 20px 0 8px;
+}
+.pin-dots span {
+  width: 12px;
+  height: 12px;
+  border: 1px solid var(--line-strong);
+  border-radius: 50%;
+}
+.pin-dots span.filled {
+  border-color: var(--ink);
+  background: var(--ink);
+}
+.pin-dots.shake {
+  animation: pin-shake 0.3s;
+}
+@keyframes pin-shake {
+  25% { transform: translateX(10px); }
+  75% { transform: translateX(-10px); }
+}
+.pin-entry .inline-error,
+.pin-entry .field-hint {
+  min-height: 1.8em;
+  margin: 0;
+}
+.pin-pad {
+  display: grid;
+  grid-template-columns: repeat(3, 64px);
+  gap: 12px 20px;
+  margin: 12px 0 4px;
+}
+.pin-key {
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border: 1px solid var(--line);
+  border-radius: 50%;
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 24px;
+  cursor: pointer;
+  touch-action: manipulation;
+}
+.pin-key:hover:not(:disabled) {
+  background: var(--hover);
+}
+.pin-key:active:not(:disabled) {
+  background: var(--selected);
+}
+.pin-key:focus-visible {
+  outline: 2px solid var(--focus);
+  outline-offset: 2px;
+}
+.pin-key-icon {
+  border-color: transparent;
+  background: transparent;
+}
+.pin-key:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
 .setting-row > select {
   width: auto;
   flex-shrink: 0;

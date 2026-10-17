@@ -1,4 +1,5 @@
-import { useEffect, useState, type FormEvent } from 'react';
+import { Check, Delete } from 'lucide-react';
+import { useEffect, useRef, useState } from 'react';
 import type { AppLockState, device as Device } from '../mobile';
 import { Modal } from './Primitives';
 
@@ -125,6 +126,7 @@ export function AppLockSettings() {
       {dialog && (
         <PinDialog
           kind={dialog}
+          pinLength={state.pinLength}
           onClose={() => setDialog(null)}
           onDone={async () => {
             setDialog(null);
@@ -136,76 +138,128 @@ export function AppLockSettings() {
   );
 }
 
-function PinDialog({ kind, onClose, onDone }: {
+type Step = 'current' | 'pin' | 'repeat';
+const STEPS: Record<Dialog, Step[]> = { set: ['pin', 'repeat'], change: ['current', 'pin', 'repeat'], off: ['current'] };
+const KEYS = ['1', '2', '3', '4', '5', '6', '7', '8', '9', 'next', '0', 'delete'];
+const MIN = 4, MAX = 6;
+
+// Each PIN is typed on a number pad like the lock screen's, one step at a time:
+// the current PIN (its length is known, so it is taken when complete), the new
+// one (4 to 6 digits, taken at 6 or on 下一步) and the new one again.
+function PinDialog({ kind, pinLength, onClose, onDone }: {
   kind: Dialog;
+  pinLength: number;
   onClose: () => void;
   onDone: () => Promise<void>;
 }) {
-  const [current, setCurrent] = useState('');
-  const [pin, setPin] = useState('');
-  const [repeat, setRepeat] = useState('');
+  const steps = STEPS[kind];
+  const [step, setStep] = useState(0);
+  const [values, setValues] = useState<Record<Step, string>>({ current: '', pin: '', repeat: '' });
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
-  const submit = async (event: FormEvent) => {
-    event.preventDefault();
-    setError('');
-    if (kind !== 'off') {
-      if (!/^\d{4,6}$/.test(pin)) return setError('PIN 需为 4 到 6 位数字。');
-      if (pin !== repeat) return setError('两次输入的 PIN 不一致。');
-    }
+  const [shake, setShake] = useState(0);
+  const name = steps[step];
+  const typed = values[name];
+  const length = name === 'current' ? pinLength : name === 'repeat' ? values.pin.length : 0;
+  const prompt = {
+    current: '输入当前 PIN',
+    pin: kind === 'change' ? '输入新 PIN' : '输入 PIN',
+    repeat: kind === 'change' ? '再次输入新 PIN' : '再次输入 PIN',
+  }[name];
+  const fail = (text: string, back: Step) => {
+    setError(text);
+    setShake((n) => n + 1);
+    const from = steps.indexOf(back);
+    setValues((old) => {
+      const next = { ...old };
+      for (const s of steps.slice(from)) next[s] = '';
+      return next;
+    });
+    setStep(from);
+  };
+  const save = async (done: Record<Step, string>) => {
     setBusy(true);
     try {
       await native((plugin) =>
         kind === 'off'
-          ? plugin.appLockDisable({ current })
-          : plugin.appLockSetPin(kind === 'change' ? { pin, current } : { pin }),
+          ? plugin.appLockDisable({ current: done.current })
+          : plugin.appLockSetPin(kind === 'change' ? { pin: done.pin, current: done.current } : { pin: done.pin }),
       );
       await onDone();
     } catch (e) {
-      setError(message(e));
       setBusy(false);
+      fail(message(e), steps[0]);
     }
   };
-  const field = (label: string, value: string, set: (value: string) => void, autoFocus = false) => (
-    <label>
-      {label}
-      <input
-        type="password"
-        inputMode="numeric"
-        autoComplete="off"
-        maxLength={6}
-        required
-        autoFocus={autoFocus}
-        value={value}
-        onChange={(event) => set(event.target.value.replace(/\D/g, ''))}
-      />
-    </label>
-  );
+  const finish = (done: Record<Step, string>) => {
+    if (name === 'repeat' && done.repeat !== done.pin) return fail('两次输入的 PIN 不一致，请重新输入。', 'pin');
+    if (step + 1 < steps.length) return setStep(step + 1);
+    void save(done);
+  };
+  const press = (key: string) => {
+    if (busy) return;
+    if (key === 'delete') return setValues({ ...values, [name]: typed.slice(0, -1) });
+    if (key === 'next') return typed.length >= MIN && finish(values);
+    if (typed.length >= (length || MAX)) return;
+    setError('');
+    const done = { ...values, [name]: typed + key };
+    setValues(done);
+    if (done[name].length === (length || MAX)) finish(done);
+  };
+  const pressed = useRef(press);
+  pressed.current = press;
+  useEffect(() => {
+    const onKey = (event: KeyboardEvent) => {
+      const key = /^\d$/.test(event.key) ? event.key
+        : event.key === 'Backspace' ? 'delete' : event.key === 'Enter' ? 'next' : '';
+      if (!key) return;
+      event.preventDefault();
+      pressed.current(key);
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
   return (
-    <Modal title={titles[kind]} onClose={() => !busy && onClose()}>
-      <form className="form-stack" onSubmit={(event) => void submit(event)}>
-        {kind !== 'set' && field('当前 PIN', current, setCurrent, true)}
-        {kind !== 'off' && (
-          <>
-            {field(kind === 'change' ? '新 PIN' : 'PIN', pin, setPin, kind === 'set')}
-            {field(kind === 'change' ? '再次输入新 PIN' : '再次输入 PIN', repeat, setRepeat)}
-            <p className="field-hint">4 到 6 位数字，只用于这台设备</p>
-          </>
-        )}
-        {error && (
-          <p className="inline-error" role="alert">
-            {error}
-          </p>
-        )}
-        <div className="dialog-actions">
-          <button type="button" className="button" onClick={onClose} disabled={busy}>
-            取消
-          </button>
-          <button className="button primary" disabled={busy}>
-            {kind === 'off' ? '关闭应用锁' : '保存'}
-          </button>
+    <Modal title={titles[kind]} className="pin-modal" onClose={() => !busy && onClose()}>
+      <div className="pin-entry">
+        <p className="pin-prompt">{prompt}</p>
+        <div
+          key={shake}
+          className={`pin-dots${shake ? ' shake' : ''}`}
+          role="status"
+          aria-label={`已输入 ${typed.length} 位`}
+        >
+          {Array.from({ length: length || Math.max(MIN, Math.min(MAX, typed.length + 1)) }, (_, i) => (
+            <span key={i} className={i < typed.length ? 'filled' : ''} />
+          ))}
         </div>
-      </form>
+        <p className={error ? 'inline-error' : 'field-hint'} role={error ? 'alert' : undefined}>
+          {error || (name === 'pin' ? '4 到 6 位数字，只用于这台设备' : ' ')}
+        </p>
+        <div className="pin-pad">
+          {KEYS.map((key) =>
+            key === 'next' ? (
+              name === 'pin' ? (
+                <button key={key} className="pin-key pin-key-icon" aria-label="下一步"
+                  disabled={busy || typed.length < MIN} onClick={() => press(key)}>
+                  <Check size={24} />
+                </button>
+              ) : (
+                <span key={key} />
+              )
+            ) : key === 'delete' ? (
+              <button key={key} className="pin-key pin-key-icon" aria-label="删除"
+                disabled={busy || !typed} onClick={() => press(key)}>
+                <Delete size={24} />
+              </button>
+            ) : (
+              <button key={key} className="pin-key" disabled={busy} onClick={() => press(key)}>
+                {key}
+              </button>
+            ),
+          )}
+        </div>
+      </div>
     </Modal>
   );
 }
