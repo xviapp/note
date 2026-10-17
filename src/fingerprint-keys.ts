@@ -1,4 +1,5 @@
 import { Capacitor } from '@capacitor/core';
+import type { device as Device } from './mobile';
 import { defaultPolicy, StaleKeyError, unlockedRaw, unlockRaw, type KeepPolicy } from './keyring';
 
 // Android only: content keys kept by the device behind a fingerprint, so an
@@ -11,7 +12,10 @@ export interface FingerprintState {
   keys: Map<string, string>;
 }
 
-const native = async () => (await import('./mobile')).device;
+// A Capacitor plugin answers any property, `then` included, so it must never
+// be what an async function returns: call it where it is imported.
+const native = async <T,>(action: (plugin: typeof Device) => Promise<T>) =>
+  action((await import('./mobile')).device);
 const listeners = new Set<() => void>();
 let state: FingerprintState | null = null;
 let loading: Promise<FingerprintState | null> | undefined;
@@ -36,7 +40,7 @@ export function loadFingerprint(refresh = false): Promise<FingerprintState | nul
   if (loading && !refresh) return loading;
   return (loading = (async () => {
     try {
-      const { available, keys } = await (await native()).fingerprintKeys();
+      const { available, keys } = await native((plugin) => plugin.fingerprintKeys());
       const next = { available, keys: new Map(keys.map((key) => [key.id, key.wrapped])) };
       set(next);
       return next;
@@ -50,11 +54,9 @@ export function loadFingerprint(refresh = false): Promise<FingerprintState | nul
 export async function saveFingerprint(id: string): Promise<boolean> {
   const unlocked = await unlockedRaw(id);
   if (!unlocked) throw new Error('请先用密码解锁。');
-  const { cancelled } = await (await native()).fingerprintKeySave({
-    id,
-    wrapped: unlocked.wrapped,
-    key: toBase64(unlocked.raw),
-  });
+  const { cancelled } = await native((plugin) =>
+    plugin.fingerprintKeySave({ id, wrapped: unlocked.wrapped, key: toBase64(unlocked.raw) }),
+  );
   await loadFingerprint(true);
   return !cancelled;
 }
@@ -65,7 +67,7 @@ export async function unlockWithFingerprint(id: string, policy: KeepPolicy = def
   if (!wrapped) throw new Error('未在本机启用指纹解锁，请输入密码。');
   let result: { cancelled: boolean; key?: string };
   try {
-    result = await (await native()).fingerprintKeyOpen({ id });
+    result = await native((plugin) => plugin.fingerprintKeyOpen({ id }));
   } catch (error) {
     // The device may have dropped its keys (new fingerprints).
     await loadFingerprint(true);
@@ -83,6 +85,6 @@ export async function unlockWithFingerprint(id: string, policy: KeepPolicy = def
 }
 
 export async function removeFingerprint(id?: string) {
-  await (await native()).fingerprintKeyRemove(id ? { id } : {});
+  await native((plugin) => plugin.fingerprintKeyRemove(id ? { id } : {}));
   await loadFingerprint(true);
 }

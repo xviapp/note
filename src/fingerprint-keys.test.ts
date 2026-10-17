@@ -7,8 +7,10 @@ const mock = vi.hoisted(() => ({
 }));
 vi.mock('@capacitor/core', () => ({ Capacitor: { isNativePlatform: () => true } }));
 // The device keeps keys in memory; open() stands in for the fingerprint prompt.
-vi.mock('./mobile', () => ({
-  device: {
+// Like a Capacitor plugin, it answers any property (`then` included) with a
+// native call that never returns.
+vi.mock('./mobile', () => {
+  const methods: Record<string, unknown> = {
     fingerprintKeys: async () => ({
       available: true,
       keys: [...mock.saved].map(([id, { wrapped }]) => ({ id, wrapped })),
@@ -19,8 +21,9 @@ vi.mock('./mobile', () => ({
       if (id) mock.saved.delete(id);
       else mock.saved.clear();
     },
-  },
-}));
+  };
+  return { device: new Proxy(methods, { get: (target, key) => target[String(key)] ?? (() => new Promise(() => {})) }) };
+});
 import { createKey, isUnlocked, lock, lockAll, rememberCatalog } from './keyring';
 import { fingerprintState, loadFingerprint, saveFingerprint, unlockWithFingerprint } from './fingerprint-keys';
 
