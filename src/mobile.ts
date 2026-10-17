@@ -41,6 +41,12 @@ export const device = registerPlugin<{
   appLockSetTimeout(options: { timeout: number }): Promise<void>;
   // 忘记 PIN, once this page has signed out: drops the session cookie and the lock.
   appLockReset(): Promise<void>;
+  // Content keys of encrypted notes kept for fingerprint unlocking (base64 raw
+  // keys), each with the wrapped key it was saved from.
+  fingerprintKeys(): Promise<{ available: boolean; keys: { id: string; wrapped: string }[] }>;
+  fingerprintKeySave(options: { id: string; wrapped: string; key: string }): Promise<{ cancelled: boolean }>;
+  fingerprintKeyOpen(options: { id: string }): Promise<{ cancelled: boolean; key?: string }>;
+  fingerprintKeyRemove(options: { id?: string }): Promise<void>;
   saveFile(options: {
     url?: string;
     sha256?: string;
@@ -130,6 +136,10 @@ export function installMobile() {
   });
   // 忘记 PIN on the app lock: sign out here (even offline), then let Android
   // drop the session cookie and the lock before the sign-in screen shows.
+  // Locking every key (全部锁定, signing out) also drops those kept for the fingerprint.
+  window.addEventListener('note:keys-locked', () => {
+    void import('./fingerprint-keys').then(({ removeFingerprint }) => removeFingerprint()).catch(() => {});
+  });
   window.addEventListener('note:app-lock-forgot', () => {
     void (async () => {
       const { signOutHere } = await import('./api');

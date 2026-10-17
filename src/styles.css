@@ -3618,6 +3618,18 @@ button.node-list-toggle:focus-visible {
   flex-shrink: 0;
   gap: 8px;
 }
+/* A checkbox beside its text, in a form of stacked labels. */
+.check-row {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  min-height: 44px;
+}
+.check-row input {
+  width: 18px;
+  height: 18px;
+  margin: 0;
+}
 /* The app lock's PIN dialogs: dots over a number pad, like the lock screen. */
 .pin-modal {
   width: 360px;

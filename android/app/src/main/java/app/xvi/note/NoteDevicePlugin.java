@@ -153,6 +153,53 @@ public class NoteDevicePlugin extends Plugin {
         call.resolve();
     }
 
+    // Content keys of encrypted notes, unlocked here by fingerprint (FingerprintKeys).
+    @PluginMethod
+    public void fingerprintKeys(PluginCall call) {
+        boolean available = AppLock.biometricAvailable(getContext());
+        com.getcapacitor.JSArray keys = new com.getcapacitor.JSArray();
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R)
+            for (String[] key : new FingerprintKeys(getContext()).list())
+                keys.put(new JSObject().put("id", key[0]).put("wrapped", key[1]));
+        call.resolve(new JSObject().put("available", available).put("keys", keys));
+    }
+
+    private void fingerprintDone(PluginCall call, String result, String error, boolean cancelled) {
+        if (result != null) call.resolve(new JSObject().put("key", result).put("cancelled", false));
+        else if (cancelled) call.resolve(new JSObject().put("cancelled", true));
+        else call.reject(error);
+    }
+
+    @PluginMethod
+    public void fingerprintKeySave(PluginCall call) {
+        String id = call.getString("id"), wrapped = call.getString("wrapped"), key = call.getString("key");
+        if (id == null || wrapped == null || key == null) { call.reject("缺少密钥。"); return; }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !AppLock.biometricAvailable(getContext())) {
+            call.reject("未录入指纹，请先在系统设置中添加。");
+            return;
+        }
+        getActivity().runOnUiThread(() -> new FingerprintKeys(getContext()).save(getActivity(), id, wrapped, key,
+            (result, error, cancelled) -> fingerprintDone(call, result, error, cancelled)));
+    }
+
+    @PluginMethod
+    public void fingerprintKeyOpen(PluginCall call) {
+        String id = call.getString("id");
+        if (id == null) { call.reject("缺少密钥。"); return; }
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.R || !AppLock.biometricAvailable(getContext())) {
+            call.reject("指纹暂不可用，请输入密码。");
+            return;
+        }
+        getActivity().runOnUiThread(() -> new FingerprintKeys(getContext()).open(getActivity(), id,
+            (result, error, cancelled) -> fingerprintDone(call, result, error, cancelled)));
+    }
+
+    @PluginMethod
+    public void fingerprintKeyRemove(PluginCall call) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) new FingerprintKeys(getContext()).remove(call.getString("id"));
+        call.resolve();
+    }
+
     // 忘记 PIN: the page has signed out; remove the session cookie and the lock.
     @PluginMethod
     public void appLockReset(PluginCall call) {

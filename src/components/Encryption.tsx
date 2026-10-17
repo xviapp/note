@@ -1,5 +1,5 @@
-import { useState, type FormEvent } from 'react';
-import { KeyRound, LockKeyhole } from 'lucide-react';
+import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { Fingerprint, KeyRound, LockKeyhole } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { MIN_ENCRYPTION_PASSWORD } from '../../shared/encryption';
 import type { Crumb, NoteDetail } from '../../shared/types';
@@ -19,6 +19,15 @@ import {
   type KeepPolicy,
 } from '../keyring';
 import { syncEncryption, type SyncResult } from '../encryption-sync';
+import {
+  fingerprintState,
+  loadFingerprint,
+  removeFingerprint,
+  saveFingerprint,
+  subscribeFingerprint,
+  unlockWithFingerprint,
+} from '../fingerprint-keys';
+import { notice } from '../mobile';
 import { Modal } from './Primitives';
 import { LockBadge, useKeys } from './LockBadge';
 
@@ -61,6 +70,14 @@ export function keyOwner(path: Crumb[], keyId: string) {
   return [...path].reverse().find((part) => part.encryption === keyId)?.title ?? '';
 }
 
+// Android: whether this device has a fingerprint, and the keys it keeps for it.
+function useFingerprint() {
+  useEffect(() => {
+    void loadFingerprint();
+  }, []);
+  return useSyncExternalStore(subscribeFingerprint, fingerprintState);
+}
+
 export function UnlockForm({
   keyId,
   owner,
@@ -70,10 +87,14 @@ export function UnlockForm({
   owner?: string;
   onUnlocked?: () => void;
 }) {
+  const fingerprint = useFingerprint();
   const [password, setPassword] = useState(''),
     [policy, setPolicy] = useState(defaultPolicy),
+    [keep, setKeep] = useState(false),
     [busy, setBusy] = useState(false),
     [error, setError] = useState('');
+  const saved = !!fingerprint?.available && fingerprint.keys.has(keyId);
+  const offer = !!fingerprint?.available && !saved;
   const submit = async (event: FormEvent) => {
     event.preventDefault();
     setBusy(true);
@@ -81,7 +102,23 @@ export function UnlockForm({
     try {
       await unlock(keyId, password, policy);
       setPassword('');
+      // Already unlocked: a fingerprint that fails or is cancelled only means typing it next time.
+      if (keep)
+        void saveFingerprint(keyId)
+          .then((done) => done && notice('已启用指纹解锁', 'toast'))
+          .catch((e: Error) => notice(e.message));
       onUnlocked?.();
+    } catch (e) {
+      setError((e as Error).message);
+    } finally {
+      setBusy(false);
+    }
+  };
+  const byFingerprint = async () => {
+    setBusy(true);
+    setError('');
+    try {
+      if (await unlockWithFingerprint(keyId, policy)) onUnlocked?.();
     } catch (e) {
       setError((e as Error).message);
     } finally {
@@ -90,12 +127,18 @@ export function UnlockForm({
   };
   return (
     <form className="form-stack unlock-form" onSubmit={submit}>
+      {saved && (
+        <button type="button" className="button fingerprint-unlock" disabled={busy} onClick={() => void byFingerprint()}>
+          <Fingerprint size={18} />
+          用指纹解锁
+        </button>
+      )}
       <label>
         {owner ? `「${owner}」的密码` : '密码'}
         <input
           type="password"
           autoComplete="current-password"
-          autoFocus
+          autoFocus={!saved}
           required
           value={password}
           disabled={busy}
@@ -103,6 +146,17 @@ export function UnlockForm({
         />
       </label>
       <KeepSelect value={policy} onChange={setPolicy} disabled={busy} />
+      {offer && (
+        <label className="check-row">
+          <input
+            type="checkbox"
+            checked={keep}
+            disabled={busy}
+            onChange={(event) => setKeep(event.target.checked)}
+          />
+          以后在本机用指纹解锁
+        </label>
+      )}
       {error && (
         <p className="inline-error" role="alert">
           {error}
@@ -390,6 +444,7 @@ export function EncryptionSettings() {
   useKeys();
   const [policy, setPolicy] = useState(defaultPolicy);
   const entries = unlockedEntries();
+  const fingerprints = useFingerprint()?.keys.size ?? 0;
   return (
     <section className="settings-section">
       <h2>
@@ -427,9 +482,20 @@ export function EncryptionSettings() {
       ) : (
         <p className="field-hint">没有已解锁的密码。</p>
       )}
-      <button className="button" disabled={!entries.length} onClick={() => lockAll()}>
+      <button className="button" disabled={!entries.length && !fingerprints} onClick={() => lockAll()}>
         全部锁定
       </button>
+      {fingerprints > 0 && (
+        <>
+          <h3>指纹解锁 {fingerprints}</h3>
+          <p className="field-hint">
+            这些密码可在本机用指纹解锁。修改密码、新录入指纹、全部锁定或退出登录后需重新输入密码。
+          </p>
+          <button className="button" onClick={() => void removeFingerprint().catch(() => {})}>
+            关闭指纹解锁
+          </button>
+        </>
+      )}
     </section>
   );
 }

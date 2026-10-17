@@ -14,7 +14,8 @@ import {
 } from '../shared/encryption';
 
 // Content keys unlocked on this device. A key is unwrapped with its password
-// here and never sent anywhere except with an AI request (see api.ts). How
+// here and never sent anywhere except with an AI request (see api.ts) or to
+// Android's Keystore for fingerprint unlocking (fingerprint-keys.ts). How
 // long it stays unlocked is the policy chosen when unlocking:
 // - session: memory only, gone on reload or when the app closes;
 // - idle: locks after so many minutes without use;
@@ -305,6 +306,24 @@ export async function rewrap(id: string, current: string | null, password: strin
     },
   };
 }
+// The wrapped key an unlocked key came from, and the content key itself.
+export async function unlockedRaw(id: string) {
+  const key = await unlockedKey(id);
+  const entry = unlocked.get(id);
+  return key && entry ? { wrapped: entry.wrapped, raw: await exportContentKey(key) } : null;
+}
+// A content key this device kept (see fingerprint-keys.ts), unlocked if it
+// still matches its password's record.
+export class StaleKeyError extends Error {}
+export async function unlockRaw(id: string, raw: Uint8Array, wrapped: string, policy = defaultPolicy()) {
+  let record = await keyRecord(id);
+  if (record.wrapped !== wrapped) record = await keyRecord(id, true).catch(() => record);
+  if (record.wrapped !== wrapped) throw new StaleKeyError('密码已修改，请输入新密码。');
+  const key = await importContentKey(raw, true);
+  if (!(await verifyKeyCheck(key, record.check_value)))
+    throw new StaleKeyError('密钥校验失败，请输入密码。');
+  remember(id, record.wrapped, key, policy);
+}
 export function lock(id: string) {
   unlocked.delete(id);
   void forget(id);
@@ -313,6 +332,8 @@ export function lock(id: string) {
 // Signing out or losing the session locks every key on this device.
 export function lockAll() {
   unlocked.clear();
+  // Also drops keys kept for fingerprint unlocking (see mobile.ts).
+  window.dispatchEvent(new Event('note:keys-locked'));
   void forget();
   try {
     localStorage.removeItem(CATALOG_KEY);
