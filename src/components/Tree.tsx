@@ -82,7 +82,14 @@ export function NodeMenu({
         <button onClick={() => onAction('move', node)}>移动到…</button>
         <button onClick={() => onAction('encryption', node)}>本地加密</button>
         {node.key_id && isUnlocked(node.key_id) && (
-          <button onClick={() => lock(node.key_id!)}>立即锁定</button>
+          <button
+            onClick={(event) => {
+              event.currentTarget.closest('details')!.open = false;
+              lock(node.key_id!);
+            }}
+          >
+            立即锁定
+          </button>
         )}
         <button className="danger-text" onClick={() => onAction('delete', node)}>
           移到回收站
