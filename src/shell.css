@@ -609,6 +609,9 @@ button:active:not(:disabled) {
 .android-shell .main-area {
   border: 0;
 }
+.android-shell .list-controls {
+  display: none;
+}
 .android-shell .phone-bottom-nav {
   display: flex;
   justify-content: space-around;

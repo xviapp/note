@@ -8,7 +8,7 @@ async function create(page: Page, data: object) {
   return response.json();
 }
 
-for (const android of [false, true]) test(`lists summarize content, sort and retain compact mode${android ? ' on Android' : ''}`, async ({ page }, info) => {
+for (const android of [false, true]) test(`lists summarize content and limit display controls to desktop web${android ? ' on Android' : ''}`, async ({ page }, info) => {
   if (android) await page.addInitScript(() => { (window as any).androidBridge = {}; });
   await login(page);
   await create(page, { kind: 'markdown', title: 'B 阅读札记', content: '# 记录\n\n一句能帮助识别内容的摘要。' });
@@ -21,14 +21,19 @@ for (const android of [false, true]) test(`lists summarize content, sort and ret
   await expect(rows.filter({ hasText: 'B 阅读札记' })).toContainText('一句能帮助识别内容的摘要');
   await expect(rows.filter({ hasText: 'A 资料' })).toContainText('1 个下级条目');
   await expect(rows.filter({ hasText: 'C 书籍' })).toContainText('读到第 12 页 / 共 100 页');
-  await root.getByLabel('列表排序').selectOption('title');
-  await expect(rows.first()).toContainText('A 资料');
-  await root.getByRole('button', { name: '紧凑列表', exact: true }).click();
-  await expect(rows.filter({ hasText: 'B 阅读札记' }).locator('small')).toBeHidden();
-  await page.reload();
-  await expect(root.getByLabel('列表排序')).toHaveValue('title');
-  await expect(root.getByRole('button', { name: '紧凑列表', exact: true })).toHaveAttribute('aria-pressed', 'true');
-  await root.getByRole('button', { name: '紧凑列表', exact: true }).click();
+  const displayControls = !android && info.project.name === 'desktop';
+  if (displayControls) {
+    await root.getByLabel('列表排序').selectOption('title');
+    await expect(rows.first()).toContainText('A 资料');
+    await root.getByRole('button', { name: '紧凑列表', exact: true }).click();
+    await expect(rows.filter({ hasText: 'B 阅读札记' }).locator('small')).toBeHidden();
+    await page.reload();
+    await expect(root.getByLabel('列表排序')).toHaveValue('title');
+    await expect(root.getByRole('button', { name: '紧凑列表', exact: true })).toHaveAttribute('aria-pressed', 'true');
+    await root.getByRole('button', { name: '紧凑列表', exact: true }).click();
+  } else {
+    await expect(root.locator('.list-controls')).toBeHidden();
+  }
   // The browser-only Android stub has no native NoteDevice plugin.
   if (android) {
     const notice = page.locator('.notice').filter({ hasText: 'NoteDevice' });
@@ -41,9 +46,15 @@ for (const android of [false, true]) test(`lists summarize content, sort and ret
   }
   if (info.project.name === 'mobile') {
     await page.setViewportSize({ width: 320, height: 740 });
-    await expect(root.getByLabel('列表排序')).toBeVisible();
+    await expect(root.locator('.list-controls')).toBeHidden();
     await page.screenshot({ path: info.outputPath('list-320.png') });
     expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+  }
+  for (const path of [`/n/${folder.id}`, '/favorites', '/recent']) {
+    await page.goto(path);
+    const controls = page.locator('.main-area .node-list > .list-controls');
+    if (displayControls) await expect(controls).toBeVisible();
+    else await expect(controls).toBeHidden();
   }
 });
 
