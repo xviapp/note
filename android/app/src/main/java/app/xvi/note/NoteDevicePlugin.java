@@ -190,8 +190,11 @@ public class NoteDevicePlugin extends Plugin {
             call.reject("指纹暂不可用，请输入密码。");
             return;
         }
-        getActivity().runOnUiThread(() -> new FingerprintKeys(getContext()).open(getActivity(), id,
-            (result, error, cancelled) -> fingerprintDone(call, result, error, cancelled)));
+        // Not over the app lock: the prompt waits until the notebook is unlocked.
+        getActivity().runOnUiThread(() -> host().whenUnlocked(
+            () -> new FingerprintKeys(getContext()).open(getActivity(), id,
+                (result, error, cancelled) -> fingerprintDone(call, result, error, cancelled)),
+            () -> call.resolve(new JSObject().put("cancelled", true))));
     }
 
     @PluginMethod

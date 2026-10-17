@@ -1,4 +1,4 @@
-import { useEffect, useState, useSyncExternalStore, type FormEvent } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore, type FormEvent } from 'react';
 import { Fingerprint, KeyRound, LockKeyhole } from 'lucide-react';
 import { api, formatDate } from '../api';
 import { MIN_ENCRYPTION_PASSWORD } from '../../shared/encryption';
@@ -70,6 +70,8 @@ export function keyOwner(path: Crumb[], keyId: string) {
   return [...path].reverse().find((part) => part.encryption === keyId)?.title ?? '';
 }
 
+// One fingerprint prompt at a time, however many unlock forms are shown.
+let prompting = false;
 // Android: whether this device has a fingerprint, and the keys it keeps for it.
 function useFingerprint() {
   useEffect(() => {
@@ -114,17 +116,30 @@ export function UnlockForm({
       setBusy(false);
     }
   };
-  const byFingerprint = async () => {
+  const byFingerprint = async (quiet = false) => {
+    if (prompting) return;
+    prompting = true;
     setBusy(true);
     setError('');
     try {
       if (await unlockWithFingerprint(keyId, policy)) onUnlocked?.();
     } catch (e) {
-      setError((e as Error).message);
+      // An automatic prompt that fails leaves the button and the password.
+      if (!quiet) setError((e as Error).message);
     } finally {
+      prompting = false;
       setBusy(false);
     }
   };
+  // With a fingerprint kept for this key, ask for it at once, a single time.
+  const asked = useRef(false),
+    ask = useRef(byFingerprint);
+  ask.current = byFingerprint;
+  useEffect(() => {
+    if (!saved || asked.current) return;
+    asked.current = true;
+    void ask.current(true);
+  }, [saved]);
   return (
     <form className="form-stack unlock-form" onSubmit={submit}>
       {saved && (

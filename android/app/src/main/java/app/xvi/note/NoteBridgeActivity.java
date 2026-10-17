@@ -108,6 +108,11 @@ abstract class NoteBridgeActivity extends BridgeActivity {
     // The app lock guards the notebook (MainActivity) only.
     void appLockChanged() {}
 
+    /** Runs {@code action} now, or once the app lock is passed; a newer one replaces a waiting one. */
+    void whenUnlocked(Runnable action, Runnable replaced) {
+        action.run();
+    }
+
     void resetAppLock(Runnable done) {
         done.run();
     }

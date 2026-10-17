@@ -35,6 +35,8 @@ public class MainActivity extends NoteBridgeActivity {
     private AppLock lock;
     private AppLockView lockView;
     private OnBackPressedCallback lockedBack;
+    // A fingerprint prompt the page asked for while locked, with how to drop it.
+    private Runnable afterUnlock, dropAfterUnlock;
     private long stoppedAt = -1;
     // A picker or camera this activity started; returning from it is not a return to the app.
     private boolean returningFromResult;
@@ -153,6 +155,18 @@ public class MainActivity extends NoteBridgeActivity {
         ((ViewGroup) lockView.getParent()).removeView(lockView);
         lockView = null;
         lockedBack.setEnabled(false);
+        Runnable waiting = afterUnlock;
+        afterUnlock = dropAfterUnlock = null;
+        // After the lock's own fingerprint prompt has gone.
+        if (waiting != null) new Handler(Looper.getMainLooper()).postDelayed(waiting, 300);
+    }
+
+    @Override
+    void whenUnlocked(Runnable action, Runnable replaced) {
+        if (lockView == null) { action.run(); return; }
+        if (dropAfterUnlock != null) dropAfterUnlock.run();
+        afterUnlock = action;
+        dropAfterUnlock = replaced;
     }
 
     // Recent apps shows no picture of the notebook while the app lock is on.
