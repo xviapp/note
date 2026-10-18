@@ -47,15 +47,19 @@ function readOutbox(): PendingClip[] {
     return [];
   }
 }
-function writeOutbox(next: PendingClip[]) {
+// False when the outbox could not be kept on this device (storage full or
+// unavailable); it then lives only in memory.
+function writeOutbox(next: PendingClip[]): boolean {
   outbox = next;
+  let stored = true;
   try {
     if (next.length) localStorage.setItem(OUTBOX, JSON.stringify(next));
     else localStorage.removeItem(OUTBOX);
   } catch {
-    /* Storage can be full or unavailable; the clips stay in memory. */
+    stored = false;
   }
   listeners.forEach((listener) => listener());
+  return stored;
 }
 window.addEventListener('storage', (event) => {
   if (event.key !== OUTBOX && event.key !== null) return;
@@ -133,9 +137,18 @@ export async function addClip(
     file,
     archived: restore?.archived ?? false,
   };
-  writeOutbox([...outbox, item]);
-  void flushClips();
-  return item;
+  if (writeOutbox([...outbox, item])) {
+    void flushClips();
+    return item;
+  }
+  // Not kept on this device: it is added only once the server has it.
+  if (!isOffline()) await flushClips();
+  const left = outbox.find((entry) => entry.id === item.id);
+  if (!left) return item;
+  writeOutbox(outbox.filter((entry) => entry.id !== item.id));
+  throw new Error(
+    `无法在本机暂存随手记${left.error ? `，发送也未完成（${left.error}）` : isOffline() ? '，当前也无法联网' : '，发送也未完成'}。内容已保留，请清理本机存储空间或稍后重试。`,
+  );
 }
 async function uploadImage(image: Blob & { name?: string }): Promise<NonNullable<Clip['file']>> {
   if (isOffline()) throw new Error('图片需要联网后才能存入随手记。');

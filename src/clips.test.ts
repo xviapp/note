@@ -92,6 +92,30 @@ describe('clip outbox', () => {
     expect(localStorage.getItem('note-draft:clips')).toBeNull();
   });
 
+  it('reports a clip it cannot keep on this device unless the server has it', async () => {
+    const clips = await load();
+    const setItem = vi.spyOn(localStorage, 'setItem').mockImplementation(() => {
+      throw new DOMException('full', 'QuotaExceededError');
+    });
+    try {
+      // Online, it counts once it was sent.
+      api.mockImplementation(async (_path: string, method = 'GET') =>
+        method === 'GET' ? { keyId: null, pinned: [], items: [], next: null } : { id: 'sent' },
+      );
+      await expect(clips.addClip('已送达')).resolves.toMatchObject({ text: '已送达' });
+      expect(clips.pendingClips()).toEqual([]);
+      // Not sent either: the caller keeps the text, nothing waits in memory.
+      api.mockImplementation(async (_path: string, method = 'GET') => {
+        if (method === 'GET') return { keyId: null, pinned: [], items: [], next: null };
+        throw new ApiError('连接已中断', 0);
+      });
+      await expect(clips.addClip('未送达')).rejects.toThrow('无法在本机暂存随手记');
+      expect(clips.pendingClips()).toEqual([]);
+    } finally {
+      setItem.mockRestore();
+    }
+  });
+
   it('sends clips added while the outbox is empty or already sending', async () => {
     let release = () => {};
     api.mockImplementation(async (_path: string, method = 'GET', data?: { text: string }) => {
