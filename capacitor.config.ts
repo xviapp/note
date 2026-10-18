@@ -10,7 +10,7 @@ const config: CapacitorConfig = {
   // The APK serves its bundled UI at our HTTPS origin. MainActivity lets
   // /api requests reach the real server, preserving cookies, uploads and SSE.
   server: {
-    hostname: 'note.iyi.li',
+    hostname: 'iyi.li',
     androidScheme: 'https',
     errorPath: 'android-webview.html',
   },

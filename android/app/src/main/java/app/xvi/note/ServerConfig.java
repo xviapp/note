@@ -2,6 +2,7 @@ package app.xvi.note;
 
 import android.content.Context;
 import android.content.SharedPreferences;
+import android.content.pm.PackageInfo;
 import com.getcapacitor.CapConfig;
 import java.io.ByteArrayOutputStream;
 import java.io.File;
@@ -17,6 +18,8 @@ import org.json.JSONObject;
 final class ServerConfig {
     private static final String PREFS = "note-server";
     private static final String HOST = "host";
+    // The default before iyi.li.
+    static final String PREVIOUS_DEFAULT = "note.iyi.li";
     private static final String HOST_PATTERN =
         "[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?(\\.[a-z0-9]([a-z0-9-]{0,61}[a-z0-9])?)+";
 
@@ -80,6 +83,18 @@ final class ServerConfig {
 
     static void save(Context context, String host) {
         prefs(context).edit().putString(HOST, host).commit();
+    }
+
+    /** An update that finds no saved server stays on the previous default, so
+     * its session, drafts and offline copies (kept per origin) stay with it. */
+    static void keepPreviousDefault(Context context) {
+        if (configured(context)) return;
+        try {
+            PackageInfo info = context.getPackageManager().getPackageInfo(context.getPackageName(), 0);
+            if (info.firstInstallTime != info.lastUpdateTime) save(context, PREVIOUS_DEFAULT);
+        } catch (Exception error) {
+            // Unknown: a new install keeps the bundled default.
+        }
     }
 
     /** Capacitor's bundled configuration with the chosen server as its hostname. */

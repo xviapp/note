@@ -51,6 +51,7 @@ public class MainActivity extends NoteBridgeActivity {
             booting || (lockView != null && lockView.awaitingFingerprint()));
         new Handler(Looper.getMainLooper()).postDelayed(this::finishBoot, BOOT_TIMEOUT_MS);
         registerNotePlugins();
+        ServerConfig.keepPreviousDefault(this);
         config = ServerConfig.load(this);
         super.onCreate(savedInstanceState);
         if (bridge == null) return;

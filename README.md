@@ -60,7 +60,7 @@ npm run deploy
 
 ## Android
 
-[下载 APK](https://github.com/xviapp/note/releases/latest/download/app.xvi.note.apk)。需要 Android 8.0+、Android System WebView 125+，默认连接 `note.iyi.li`，也可填写自己的服务器地址。
+[下载 APK](https://github.com/xviapp/note/releases/latest/download/app.xvi.note.apk)。需要 Android 8.0+、Android System WebView 125+，默认连接 `iyi.li`，也可填写自己的服务器地址。
 
 构建需要 JDK 21、Android SDK Platform 37 和 Build Tools 37：
 
