@@ -79,9 +79,10 @@ test('随手记 keeps, copies, pins and deletes clips from any page', async ({ p
   await page.keyboard.press('Escape');
   await expect(dialog).toHaveCount(0);
 
-  // A selection goes in with one tap.
+  // A selection can be saved from the overflow menu.
   await page.locator('.read-content p').filter({ hasText: '落笔于页' }).selectText();
-  await page.locator('.selection-toolbar').getByRole('button', { name: '记一下' }).click();
+  await page.locator('.selection-toolbar').getByRole('button', { name: '更多', exact: true }).click();
+  await page.locator('.selection-toolbar').getByRole('menuitem', { name: '记一下' }).click();
   await expect(page.locator('.selection-toolbar')).toContainText('已存入随手记');
   await page.screenshot({ path: testInfo.outputPath('selection-toolbar.png') });
   if (testInfo.project.name === 'desktop') {

@@ -117,7 +117,10 @@ test('selection toolbar copies, offers translation, and dismisses without editin
     await expect(toolbar(page)).toBeVisible();
   } else await selectText(page, text);
   await assertInViewport(page);
-  await toolbar(page).getByRole('button', { name: '复制', exact: true }).click();
+  await expect(toolbar(page).getByRole('button')).toHaveText(['问青藜', '翻译', '高亮', '更多']);
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await assertInViewport(page);
+  await toolbar(page).getByRole('menuitem', { name: '复制', exact: true }).click();
   await expect(toolbar(page).getByRole('status')).toHaveText('已复制');
   expect(await page.evaluate(() => navigator.clipboard.readText())).toBe(paragraph);
   expect(await page.evaluate(() => getSelection()?.toString())).toBe(paragraph);
@@ -129,9 +132,16 @@ test('selection toolbar copies, offers translation, and dismisses without editin
   await expect(toolbar(page)).toHaveCount(0);
   await selectText(page, text);
   await page.keyboard.press('Tab');
-  await expect(toolbar(page).getByRole('button', { name: '复制', exact: true })).toBeFocused();
-  await page.keyboard.press('ArrowRight');
   await expect(toolbar(page).getByRole('button', { name: '问青藜', exact: true })).toBeFocused();
+  await page.keyboard.press('End');
+  await expect(toolbar(page).getByRole('button', { name: '更多', exact: true })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(toolbar(page).getByRole('menuitem', { name: '添加批注' })).toBeFocused();
+  await page.keyboard.press('ArrowDown');
+  await expect(toolbar(page).getByRole('menuitem', { name: '记一下' })).toBeFocused();
+  await page.keyboard.press('Escape');
+  await expect(toolbar(page).getByRole('menu')).toHaveCount(0);
+  await expect(toolbar(page).getByRole('button', { name: '更多', exact: true })).toBeFocused();
   await page.keyboard.press('Escape');
   await expect(toolbar(page)).toHaveCount(0);
   await selectText(page, text);
@@ -273,4 +283,51 @@ test('oversized quotes are not silently truncated or substituted for a draft', a
   await expect(page.locator('.context-quote')).toHaveCount(0);
   await expect(toolbar(page).getByRole('status')).toContainText('请缩小选择范围');
   expect(posts).toEqual([]);
+});
+
+
+test('compact selection actions fit every theme and recover from copy and share failures', async ({ page, baseURL }, info) => {
+  const { node } = await prepare(page, baseURL!);
+  await page.evaluate(() => {
+    Object.defineProperty(navigator.clipboard, 'writeText', {
+      configurable: true, value: () => Promise.reject(new Error('clipboard unavailable')),
+    });
+    Object.defineProperty(navigator, 'share', {
+      configurable: true, value: () => Promise.reject(new Error('share unavailable')),
+    });
+  });
+  if (info.project.name === 'mobile') await page.setViewportSize({ width: 320, height: 700 });
+  const text = page.locator('.read-content p').first();
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => {
+      window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value }));
+    }, theme);
+    await selectText(page, text);
+    await assertInViewport(page);
+    const boxes = await toolbar(page).locator('.selection-actions button').evaluateAll((buttons) =>
+      buttons.map((button) => { const r = button.getBoundingClientRect(); return { top: r.top, height: r.height }; }),
+    );
+    expect(new Set(boxes.map((box) => box.top)).size).toBe(1);
+    if (info.project.name === 'mobile') expect(Math.min(...boxes.map((box) => box.height))).toBeGreaterThanOrEqual(44);
+    await page.screenshot({ path: info.outputPath(`compact-${theme}.png`) });
+    await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+    await assertInViewport(page);
+    expect(await page.evaluate(() => getSelection()?.toString())).toBe(paragraph);
+    await page.screenshot({ path: info.outputPath(`overflow-${theme}.png`) });
+    await page.keyboard.press('Escape');
+    await expect(toolbar(page)).toBeVisible();
+  }
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await toolbar(page).getByRole('menuitem', { name: '复制', exact: true }).click();
+  await expect(toolbar(page).getByRole('status')).toHaveText('复制失败，请重试。');
+  expect(await page.evaluate(() => getSelection()?.toString())).toBe(paragraph);
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await toolbar(page).getByRole('menuitem', { name: '分享', exact: true }).click();
+  await expect(toolbar(page).getByRole('status')).toHaveText('分享失败，请重试。');
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await toolbar(page).getByRole('menuitem', { name: '全选', exact: true }).click();
+  await expect.poll(() => page.evaluate(() => getSelection()?.toString())).toContain('第 24 段阅读记录。');
+  await expect(toolbar(page)).toBeVisible();
+  await assertInViewport(page);
+  expect((await (await page.request.get(`/api/nodes/${node.id}`)).json()).content).toContain(paragraph);
 });

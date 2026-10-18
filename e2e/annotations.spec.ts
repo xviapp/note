@@ -54,7 +54,8 @@ test('highlights and notes are saved, reopened, listed in order and exported', a
 
   // A note on the second paragraph first, then a plain highlight on the first.
   await selectText(page, paragraphs.nth(1));
-  await toolbar(page).getByRole('button', { name: '批注' }).click();
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await toolbar(page).getByRole('menuitem', { name: '添加批注' }).click();
   const editor = page.getByRole('dialog', { name: '添加批注' });
   await expect(editor.locator('blockquote')).toHaveText('第二段值得批注。');
   await editor.getByLabel('批注内容').fill('这是我的想法');
@@ -155,7 +156,8 @@ test('PDF selections are highlighted on their page and open their note', async (
     page,
     page.locator('.pdf-text-layer span').filter({ hasText: 'Marked PDF page 2' }),
   );
-  await toolbar(page).getByRole('button', { name: '批注' }).click();
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await toolbar(page).getByRole('menuitem', { name: '添加批注' }).click();
   const editor = page.getByRole('dialog', { name: '添加批注' });
   await editor.getByLabel('批注内容').fill('第二页的要点');
   await editor.getByRole('button', { name: '保存' }).click();
@@ -214,7 +216,8 @@ test('colours: picked in the note, remembered for highlights, filtered in the li
   await page.goto(`/n/${note.id}`);
   const paragraphs = page.locator('.read-content p');
   await selectText(page, paragraphs.nth(0));
-  await toolbar(page).getByRole('button', { name: '批注' }).click();
+  await toolbar(page).getByRole('button', { name: '更多', exact: true }).click();
+  await toolbar(page).getByRole('menuitem', { name: '添加批注' }).click();
   const editor = page.getByRole('dialog', { name: '添加批注' });
   await editor.getByRole('radio', { name: '蓝色' }).click();
   await editor.getByLabel('批注内容').fill('蓝色想法');
@@ -344,10 +347,8 @@ test('the comparison view shows and adds notes on the source side', async ({ pag
   await expect.poll(() => highlights(page, 'annotation-yellow')).toBe(2);
   const second = source.locator('p').filter({ hasText: /^Equation 1 and Reference 1/ });
   await selectText(page, second);
-  await view
-    .getByRole('toolbar', { name: '选中文字操作' })
-    .getByRole('button', { name: '批注' })
-    .click();
+  await view.getByRole('toolbar', { name: '选中文字操作' }).getByRole('button', { name: '更多', exact: true }).click();
+  await view.getByRole('menuitem', { name: '添加批注' }).click();
   const editor = page.getByRole('dialog', { name: '添加批注' });
   await editor.getByLabel('批注内容').fill('对照时写的');
   await editor.getByRole('button', { name: '保存' }).click();

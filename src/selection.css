@@ -1,19 +1,30 @@
 .selection-toolbar {
   position: fixed;
   z-index: 80;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 6px;
   max-width: calc(100vw - 20px);
-  padding: 4px;
-  border: 1px solid var(--line);
-  border-radius: var(--radius-menu);
-  background: var(--surface);
   color: var(--ink);
-  box-shadow: var(--shadow-popover);
   font-size: 13px;
   line-height: 1.4;
   user-select: none;
   -webkit-user-select: none;
 }
-.selection-toolbar::after {
+.selection-bar,
+.selection-more {
+  padding: 4px;
+  border: 1px solid var(--line);
+  border-radius: var(--radius-menu);
+  background: var(--surface);
+  box-shadow: var(--shadow-popover);
+}
+.selection-bar {
+  position: relative;
+  max-width: 100%;
+}
+.selection-bar::after {
   content: '';
   position: absolute;
   left: calc(var(--selection-arrow) - 5px);
@@ -22,23 +33,24 @@
   background: var(--surface);
   transform: rotate(45deg);
 }
-.selection-toolbar[data-side='above']::after {
+.selection-toolbar[data-side='above'] .selection-bar::after {
   bottom: -5px;
   border-right: 1px solid var(--line);
   border-bottom: 1px solid var(--line);
 }
-.selection-toolbar[data-side='below']::after {
+.selection-toolbar[data-side='below'] .selection-bar::after {
   top: -5px;
   border-top: 1px solid var(--line);
   border-left: 1px solid var(--line);
 }
 .selection-actions {
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   justify-content: center;
   gap: 2px;
 }
-.selection-actions button {
+.selection-actions button,
+.selection-more button {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -48,14 +60,28 @@
   border-radius: var(--radius-control);
   white-space: nowrap;
 }
-.selection-actions button:hover {
+.selection-actions button:hover,
+.selection-more button:hover {
   background: var(--hover);
   color: var(--blue);
 }
-.selection-actions button:focus-visible {
+.selection-actions button:focus-visible,
+.selection-more button:focus-visible {
   outline-offset: -2px;
 }
+.selection-more {
+  display: grid;
+  width: 160px;
+}
+.selection-toolbar[data-side='above'] .selection-more {
+  order: -1;
+}
+.selection-more button {
+  justify-content: flex-start;
+  gap: 10px;
+}
 .selection-status {
+  max-width: 260px;
   margin: 2px 6px 0;
   padding: 7px 4px 5px;
   border-top: 1px solid var(--line);
@@ -63,14 +89,19 @@
   font-size: 12px;
 }
 @media (pointer: coarse) {
-  .selection-actions button {
+  .selection-actions button,
+  .selection-more button {
     min-height: 44px;
   }
 }
 @media (max-width: 480px) {
   .selection-actions button {
     gap: 4px;
-    padding: 8px 7px;
+    min-width: 44px;
+    padding: 8px 10px;
+  }
+  .selection-actions button svg {
+    display: none;
   }
 }
 
@@ -236,12 +267,6 @@
 }
 .annotation-empty {
   color: var(--muted);
-}
-@media (max-width: 420px) {
-  .selection-actions button {
-    gap: 4px;
-    padding: 8px 7px;
-  }
 }
 /* The same marks on PDF pages. Pages stay white in every theme, so the
    colours are fixed; clicks pass through to the selectable text layer. */

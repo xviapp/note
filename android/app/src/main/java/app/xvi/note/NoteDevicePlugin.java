@@ -32,6 +32,36 @@ public class NoteDevicePlugin extends Plugin {
     private volatile boolean saving;
     private static final long MAX_DOWNLOAD = 50L * 1024 * 1024;
 
+    @PluginMethod
+    public void setSelectionToolbar(PluginCall call) {
+        String owner = call.getString("owner");
+        if (owner == null) { call.reject("缺少选文区域标识。"); return; }
+        boolean enabled = call.getBoolean("enabled", false);
+        getActivity().runOnUiThread(() -> {
+            if (getBridge().getWebView() instanceof NoteWebView view) {
+                view.setSelectionToolbar(owner, enabled);
+                call.resolve();
+            } else call.reject("当前版本不支持自定义选文菜单。");
+        });
+    }
+
+    @PluginMethod
+    public void shareText(PluginCall call) {
+        String text = call.getString("text");
+        if (text == null || text.isBlank()) { call.reject("请先选择要分享的文字。"); return; }
+        getActivity().runOnUiThread(() -> {
+            try {
+                Intent send = new Intent(Intent.ACTION_SEND).setType("text/plain").putExtra(Intent.EXTRA_TEXT, text);
+                getActivity().startActivity(Intent.createChooser(send, "分享选文"));
+                call.resolve();
+            } catch (android.content.ActivityNotFoundException error) {
+                call.reject("没有可接收分享的应用。", error);
+            } catch (Exception error) {
+                call.reject("无法分享选文，请缩小选择范围后重试。", error);
+            }
+        });
+    }
+
     private static String hex(byte[] bytes) {
         StringBuilder result = new StringBuilder();
         for (byte value : bytes) result.append(String.format(java.util.Locale.ROOT, "%02x", value & 255));

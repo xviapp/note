@@ -20,6 +20,8 @@ export const device = registerPlugin<{
   setBackground(options: { color: string; preference: string }): Promise<void>;
   notify(options: { message: string }): Promise<void>;
   haptic(): Promise<void>;
+  setSelectionToolbar(options: { owner: string; enabled: boolean }): Promise<void>;
+  shareText(options: { text: string }): Promise<void>;
   // The open note's window needs: screen kept on, no screenshots, volume-key paging.
   setWindowState(options: { keepAwake: boolean; secure: boolean; volumeKeys: boolean }): Promise<void>;
   // What this page was opened for: a floating window's tool, or a page the

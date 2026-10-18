@@ -1,6 +1,7 @@
 package app.xvi.note;
 
 import android.content.Intent;
+import android.graphics.Bitmap;
 import android.net.Uri;
 import android.view.KeyEvent;
 import android.view.WindowManager;
@@ -37,6 +38,12 @@ abstract class NoteBridgeActivity extends BridgeActivity {
         OriginPolicy policy = new OriginPolicy(bridge.getLocalUrl());
         CookieManager.getInstance().setAcceptThirdPartyCookies(bridge.getWebView(), false);
         bridge.setWebViewClient(new BridgeWebViewClient(bridge) {
+            @Override
+            public void onPageStarted(WebView view, String url, Bitmap favicon) {
+                if (view instanceof NoteWebView noteView) noteView.resetSelectionToolbar();
+                super.onPageStarted(view, url, favicon);
+            }
+
             @Override
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (policy.sameOrigin(request.getUrl().toString()) && request.getUrl().getPath().startsWith("/__share/"))

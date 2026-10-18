@@ -1,6 +1,17 @@
-import { useEffect, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useId, useLayoutEffect, useRef, useState, type CSSProperties } from 'react';
 import { createPortal } from 'react-dom';
-import { Copy, Highlighter, Languages, MessageSquareQuote, StickyNote } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import {
+  Copy,
+  Highlighter,
+  Languages,
+  MessageSquareQuote,
+  MoreHorizontal,
+  Share2,
+  StickyNote,
+  TextSelect,
+} from 'lucide-react';
+import { device } from '../mobile';
 import { QingliIcon } from './QingliIcon';
 import { addClip } from '../clips';
 import { paperText } from '../paper';
@@ -16,6 +27,7 @@ interface SelectedText {
   last: DOMRect;
   host: HTMLElement;
   focusTarget: HTMLElement | null;
+  content: HTMLElement;
 }
 
 const controls = 'input, textarea, select, button, [contenteditable="true"], .cm-editor';
@@ -84,6 +96,10 @@ function readSelection(owner: string): SelectedText | null {
     last: rects[rects.length - 1],
     host: dialog || document.body,
     focusTarget: scroll || scope.closest<HTMLElement>('[tabindex]'),
+    content:
+      start!.closest<HTMLElement>(
+        '.read-content, .plain-text, .paper-body, .pdf-text-layer, .markdown-body',
+      ) || scope,
   };
 }
 
@@ -110,23 +126,36 @@ export function SelectionToolbar({
 }) {
   const [selected, setSelected] = useState<SelectedText | null>(null);
   const [status, setStatus] = useState('');
+  const [more, setMore] = useState(false);
+  const menuId = useId();
   const [position, setPosition] = useState({ left: 0, top: 0, arrow: 0, side: 'above' });
   const toolbar = useRef<HTMLDivElement>(null);
+  const moreButton = useRef<HTMLButtonElement>(null);
+  const moreOpen = useRef(more);
+  const focusMenu = useRef(false);
   const active = useRef(selected);
   const callbacks = useRef({ onSelection, onQuote, onTranslate, onAnnotate });
   const dismiss = useRef(() => {});
   active.current = selected;
+  moreOpen.current = more;
   callbacks.current = { onSelection, onQuote, onTranslate, onAnnotate };
 
   useEffect(() => {
     let timer = 0,
       selecting = false;
+    let nativeSelection = false;
+    const syncNative = (enabled: boolean) => {
+      if (nativeSelection === enabled || Capacitor.getPlatform() !== 'android') return;
+      nativeSelection = enabled;
+      void device.setSelectionToolbar({ owner: menuId, enabled }).catch(() => {});
+    };
     let dismissed: Range | null = null;
     const close = () => {
       window.clearTimeout(timer);
       const value = window.getSelection();
       dismissed = value?.rangeCount ? value.getRangeAt(0).cloneRange() : null;
       setSelected(null);
+      setMore(false);
     };
     dismiss.current = close;
     const refresh = () => {
@@ -140,10 +169,13 @@ export function SelectionToolbar({
         active.current?.text !== next.text
       ) {
         setStatus('');
+        setMore(false);
         setSelected(next);
       }
     };
     const schedule = () => {
+      // Keep the native menu hidden during handle drags and toolbar dismissal too.
+      syncNative(!!readSelection(owner));
       if (window.getSelection()?.isCollapsed) dismissed = null;
       window.clearTimeout(timer);
       timer = window.setTimeout(refresh, 120);
@@ -170,6 +202,11 @@ export function SelectionToolbar({
       if (event.key === 'Escape') {
         event.preventDefault();
         event.stopPropagation();
+        if (moreOpen.current) {
+          setMore(false);
+          if (inside(document.activeElement)) moreButton.current?.focus({ preventScroll: true });
+          return;
+        }
         if (inside(document.activeElement))
           active.current.focusTarget?.focus({ preventScroll: true });
         close();
@@ -189,6 +226,7 @@ export function SelectionToolbar({
     window.visualViewport?.addEventListener('resize', close);
     window.visualViewport?.addEventListener('scroll', close);
     return () => {
+      syncNative(false);
       window.clearTimeout(timer);
       document.removeEventListener('selectionchange', schedule);
       document.removeEventListener('pointerdown', down, true);
@@ -201,7 +239,7 @@ export function SelectionToolbar({
       window.visualViewport?.removeEventListener('resize', close);
       window.visualViewport?.removeEventListener('scroll', close);
     };
-  }, [owner]);
+  }, [owner, menuId]);
 
   useLayoutEffect(() => {
     if (!selected || !toolbar.current) return;
@@ -212,7 +250,7 @@ export function SelectionToolbar({
     const rightEdge = leftEdge + (viewport?.width ?? innerWidth) - 20;
     const bottomEdge = topEdge + (viewport?.height ?? innerHeight) - 20;
     const above = selected.first.top - height - 12;
-    const below = selected.last.bottom + 16;
+    const below = selected.last.bottom + (matchMedia('(pointer: coarse)').matches ? 28 : 16);
     const useBelow = matchMedia('(pointer: coarse)').matches
       ? below + height <= bottomEdge || above < topEdge
       : above < topEdge && below + height <= bottomEdge;
@@ -225,7 +263,13 @@ export function SelectionToolbar({
       arrow: Math.max(16, Math.min(width - 16, middle - left)),
       side: useBelow ? 'below' : 'above',
     });
-  }, [selected, status]);
+    if (more && focusMenu.current) {
+      toolbar.current
+        .querySelector<HTMLButtonElement>('[role="menuitem"]')
+        ?.focus({ preventScroll: true });
+      focusMenu.current = false;
+    }
+  }, [selected, status, more]);
 
   if (!selected) return null;
   return createPortal(
@@ -245,119 +289,215 @@ export function SelectionToolbar({
       }
       onPointerDown={(event) => event.preventDefault()}
       onKeyDown={(event) => {
-        if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return;
-        const buttons = Array.from(toolbar.current!.querySelectorAll('button'));
+        const inMenu = (event.target as HTMLElement).closest('[role="menu"]');
+        if (event.target === moreButton.current && ['ArrowDown', 'ArrowUp'].includes(event.key)) {
+          event.preventDefault();
+          focusMenu.current = true;
+          setMore(true);
+          return;
+        }
+        if (inMenu && event.key === 'ArrowLeft') {
+          event.preventDefault();
+          setMore(false);
+          moreButton.current?.focus({ preventScroll: true });
+          return;
+        }
+        const forward = inMenu ? 'ArrowDown' : 'ArrowRight';
+        const backward = inMenu ? 'ArrowUp' : 'ArrowLeft';
+        if (![backward, forward, 'Home', 'End'].includes(event.key)) return;
+        const buttons = Array.from(
+          toolbar.current!.querySelectorAll<HTMLButtonElement>(
+            inMenu ? '[role="menuitem"]' : '.selection-actions button',
+          ),
+        );
         const index = buttons.indexOf(document.activeElement as HTMLButtonElement);
         const next =
           event.key === 'Home'
             ? 0
             : event.key === 'End'
               ? buttons.length - 1
-              : (index + (event.key === 'ArrowRight' ? 1 : -1) + buttons.length) % buttons.length;
+              : (index + (event.key === forward ? 1 : -1) + buttons.length) % buttons.length;
         event.preventDefault();
         buttons[next]?.focus({ preventScroll: true });
       }}
     >
-      <div className="selection-actions">
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await navigator.clipboard.writeText(selected.text);
-              if (active.current === selected) setStatus('已复制');
-            } catch {
-              if (active.current === selected) setStatus('复制失败，请使用系统复制。');
-            }
-          }}
-        >
-          <Copy size={16} />
-          复制
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            const error = callbacks.current.onQuote(selected.text);
-            if (error) {
-              setStatus(error);
-              return;
-            }
-            dismiss.current();
-            window.getSelection()?.removeAllRanges();
-          }}
-        >
-          <QingliIcon size={19} />
-          问青藜
-        </button>
-        <button
-          type="button"
-          onClick={() => {
-            if (selected.text.length > TRANSLATION_LIMIT) {
-              setStatus(
-                `每次最多翻译 ${TRANSLATION_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`,
-              );
-              return;
-            }
-            callbacks.current.onTranslate({
-              source: selected.text,
-              location: captureSourceLocation(selected.range),
-              host: selected.host,
-              anchor: {
-                left: selected.first.left,
-                top: selected.first.top,
-                bottom: selected.last.bottom,
-              },
-            });
-            dismiss.current();
-            window.getSelection()?.removeAllRanges();
-          }}
-        >
-          <Languages size={16} />
-          翻译
-        </button>
-        <button
-          type="button"
-          onClick={async () => {
-            try {
-              await addClip(selected.text, clipSource ?? null);
-              if (active.current === selected) setStatus('已存入随手记');
-            } catch (error) {
-              if (active.current === selected) setStatus((error as Error).message);
-            }
-          }}
-        >
-          <StickyNote size={16} />
-          记一下
-        </button>
-        {onAnnotate &&
-          ([false, true] as const).map((withNote) => (
-            <button
-              key={String(withNote)}
-              type="button"
-              onClick={async () => {
-                const error = await callbacks.current.onAnnotate?.(
-                  { quote: selected.text, location: captureSourceLocation(selected.range) },
-                  withNote,
+      <div className="selection-bar">
+        <div className="selection-actions">
+          <button
+            type="button"
+            onClick={() => {
+              const error = callbacks.current.onQuote(selected.text);
+              if (error) {
+                setStatus(error);
+                return;
+              }
+              dismiss.current();
+              window.getSelection()?.removeAllRanges();
+            }}
+          >
+            <QingliIcon size={19} />
+            问青藜
+          </button>
+          <button
+            type="button"
+            onClick={() => {
+              if (selected.text.length > TRANSLATION_LIMIT) {
+                setStatus(
+                  `每次最多翻译 ${TRANSLATION_LIMIT.toLocaleString()} 个字符，请缩小选择范围。`,
                 );
-                if (active.current !== selected) return;
-                if (error) {
-                  setStatus(error);
-                  return;
+                return;
+              }
+              callbacks.current.onTranslate({
+                source: selected.text,
+                location: captureSourceLocation(selected.range),
+                host: selected.host,
+                anchor: {
+                  left: selected.first.left,
+                  top: selected.first.top,
+                  bottom: selected.last.bottom,
+                },
+              });
+              dismiss.current();
+              window.getSelection()?.removeAllRanges();
+            }}
+          >
+            <Languages size={16} />
+            翻译
+          </button>
+          {onAnnotate && (
+            <button type="button" onClick={() => void annotate(false)}>
+              <Highlighter size={16} />
+              高亮
+            </button>
+          )}
+          <button
+            ref={moreButton}
+            type="button"
+            aria-haspopup="menu"
+            aria-expanded={more}
+            aria-controls={more ? menuId : undefined}
+            onClick={(event) => {
+              focusMenu.current = event.detail === 0;
+              setMore(!more);
+            }}
+          >
+            <MoreHorizontal size={16} />
+            更多
+          </button>
+        </div>
+        {status && (
+          <p className="selection-status" role="status">
+            {status}
+          </p>
+        )}
+      </div>
+      {more && (
+        <div className="selection-more" role="menu" aria-label="更多选文操作" id={menuId}>
+          {onAnnotate && (
+            <button type="button" role="menuitem" onClick={() => void annotate(true)}>
+              <MessageSquareQuote size={16} />
+              添加批注
+            </button>
+          )}
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              try {
+                await addClip(selected.text, clipSource ?? null);
+                if (active.current === selected) {
+                  setMore(false);
+                  setStatus('已存入随手记');
                 }
-                dismiss.current();
-                window.getSelection()?.removeAllRanges();
+              } catch (error) {
+                if (active.current === selected) {
+                  setMore(false);
+                  setStatus((error as Error).message);
+                }
+              }
+            }}
+          >
+            <StickyNote size={16} />
+            记一下
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={async () => {
+              try {
+                await navigator.clipboard.writeText(selected.text);
+                if (active.current === selected) {
+                  setMore(false);
+                  setStatus('已复制');
+                }
+              } catch {
+                if (active.current === selected) {
+                  setMore(false);
+                  setStatus('复制失败，请重试。');
+                }
+              }
+            }}
+          >
+            <Copy size={16} />
+            复制
+          </button>
+          <button
+            type="button"
+            role="menuitem"
+            onClick={() => {
+              setMore(false);
+              const selection = window.getSelection();
+              const range = document.createRange();
+              range.selectNodeContents(selected.content);
+              selection?.removeAllRanges();
+              selection?.addRange(range);
+            }}
+          >
+            <TextSelect size={16} />
+            全选
+          </button>
+          {(Capacitor.getPlatform() === 'android' || typeof navigator.share === 'function') && (
+            <button
+              type="button"
+              role="menuitem"
+              onClick={async () => {
+                try {
+                  if (Capacitor.getPlatform() === 'android')
+                    await device.shareText({ text: selected.text });
+                  else await navigator.share({ text: selected.text });
+                  if (active.current === selected) dismiss.current();
+                } catch (error) {
+                  if (active.current === selected) {
+                    setMore(false);
+                    if (!(error instanceof Error && error.name === 'AbortError'))
+                      setStatus('分享失败，请重试。');
+                  }
+                }
               }}
             >
-              {withNote ? <MessageSquareQuote size={16} /> : <Highlighter size={16} />}
-              {withNote ? '批注' : '高亮'}
+              <Share2 size={16} />
+              分享
             </button>
-          ))}
-      </div>
-      {status && (
-        <p className="selection-status" role="status">
-          {status}
-        </p>
+          )}
+        </div>
       )}
     </div>,
     selected.host,
   );
+
+  async function annotate(withNote: boolean) {
+    if (!selected) return;
+    const error = await callbacks.current.onAnnotate?.(
+      { quote: selected.text, location: captureSourceLocation(selected.range) },
+      withNote,
+    );
+    if (active.current !== selected) return;
+    if (error) {
+      setMore(false);
+      setStatus(error);
+      return;
+    }
+    dismiss.current();
+    window.getSelection()?.removeAllRanges();
+  }
 }
