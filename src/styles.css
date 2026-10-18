@@ -4245,6 +4245,19 @@ button.node-list-toggle:focus-visible {
 .backup-preview {
   margin-top: 16px;
 }
+/* 导入文件夹: the summary and the lists of skipped and failed items. */
+.import-summary p {
+  margin: 0 0 8px;
+}
+.import-list {
+  max-height: 180px;
+  overflow: auto;
+  margin: 8px 0 0;
+  padding-left: 20px;
+  color: var(--muted);
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
 
 /* Comparison reading: the paper and its translation side by side, full screen. */
 .compare-view {

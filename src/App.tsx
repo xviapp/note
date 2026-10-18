@@ -36,6 +36,8 @@ import { flushSaves } from './save-outbox';
 import { fillSearchIndex } from './search-index';
 import { settleChange, showChange } from './optimistic';
 import { NodeForm } from './components/NodeForm';
+import { ImportDialog } from './components/ImportDialog';
+import { canImportFolders, droppedFiles, type ImportFile } from './vault-import';
 import { NodeList } from './components/NodeList';
 import { Settings } from './components/Settings';
 import { TrashView } from './components/TrashView';
@@ -204,7 +206,8 @@ function Notebook({
       iconOnly?: boolean;
     } | null>(null),
     [moving, setMoving] = useState<NoteNode | null>(null),
-    [encrypting, setEncrypting] = useState<NoteDetail | null>(null);
+    [encrypting, setEncrypting] = useState<NoteDetail | null>(null),
+    [importing, setImporting] = useState<{ parent: string | null; dropped?: ImportFile[] } | null>(null);
   const leaveGuard = useRef<() => Promise<boolean>>(async () => true),
     question = useQuestion();
   const navigation = useNotebookNavigation(leaveGuard);
@@ -584,12 +587,43 @@ function Notebook({
     toast: toast.show,
   });
   const { moved, drop } = moves;
+  // Where something new goes from the page shown: into it, or beside it.
+  const container = () =>
+    loaded && noteType(loaded).container && !(loaded.kind === 'markdown' && (loaded.project_category || navigation.route.project)) ? loaded.id : loaded?.parent_id || null;
+  const titleOf = (id: string | null) =>
+    id === null ? '全部笔记' : id === loaded?.id ? loaded.title : (loaded?.breadcrumbs.find((crumb) => crumb.id === id)?.title ?? '当前文件夹');
   const newNode = async () => {
     if (!(await leaveGuard.current())) return;
-    setForm({
-      parent: loaded && noteType(loaded).container && !(loaded.kind === 'markdown' && (loaded.project_category || navigation.route.project)) ? loaded.id : loaded?.parent_id || null,
-    });
+    setForm({ parent: container() });
   };
+  // A folder or files dropped on the window (desktop) are offered for import.
+  const dropTarget = useRef(container);
+  dropTarget.current = container;
+  useEffect(() => {
+    if (!canImportFolders()) return;
+    const files = (event: DragEvent) =>
+      !!event.dataTransfer?.types.includes('Files') && !document.querySelector('dialog[open]');
+    const over = (event: DragEvent) => {
+      if (!files(event)) return;
+      event.preventDefault();
+      event.dataTransfer!.dropEffect = 'copy';
+    };
+    const drop = (event: DragEvent) => {
+      // The editor takes files dropped on it as attachments.
+      if (event.defaultPrevented || !files(event)) return;
+      event.preventDefault();
+      const parent = dropTarget.current();
+      void droppedFiles(event.dataTransfer!.items)
+        .then((dropped) => dropped.length && setImporting({ parent, dropped }))
+        .catch(report);
+    };
+    window.addEventListener('dragover', over);
+    window.addEventListener('drop', drop);
+    return () => {
+      window.removeEventListener('dragover', over);
+      window.removeEventListener('drop', drop);
+    };
+  }, [report]);
   shortcuts.current.newNode = () => void newNode();
   const logout = async (all = false) => {
     if (!(await leaveGuard.current())) return;
@@ -867,8 +901,25 @@ function Notebook({
           <ImageViewer {...globalImage} onClose={() => setGlobalImage(null)} />
         </Suspense>
       )}
+      {importing && (
+        <ImportDialog
+          parent={importing.parent}
+          parentTitle={titleOf(importing.parent)}
+          dropped={importing.dropped}
+          onClose={() => setImporting(null)}
+          onImported={() => changed()}
+        />
+      )}
       {form && (
         <NodeForm
+          onImport={
+            form.node || form.file
+              ? undefined
+              : () => {
+                  setImporting({ parent: form.parent });
+                  setForm(null);
+                }
+          }
           node={form.node}
           parent={form.parent}
           existingFile={form.file}

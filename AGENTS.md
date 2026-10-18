@@ -53,7 +53,7 @@ All application source and assets are maintained in this repository. Edit local 
 - User-facing text, error messages, README and `docs/` are Simplified Chinese; code comments and commits are English.
 - Match surrounding code. Base styles live in `src/styles.css`; `src/shell.css` only adds family-specific rules.
 - Docs describe current behavior. Do not add dated validation logs or version histories; release notes go in `docs/releases/<version>.txt`.
-- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
+- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, folder import in `docs/import.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
 
 ## Testing
 

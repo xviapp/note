@@ -15,6 +15,7 @@ import { Modal, NodeIcon } from './Primitives';
 import { FolderIconPicker, type FolderIconValue } from './FolderIconPicker';
 import { isFolderEmoji } from '../../shared/folder-icons';
 import { NodePicker } from './Tree';
+import { canImportFolders } from '../vault-import';
 
 const commonTypes: NoteVariant[] = ['markdown', 'folder', 'paper', 'book'];
 const choices = [
@@ -30,6 +31,7 @@ export function NodeForm({
   onClose,
   onSaved,
   onBackground,
+  onImport,
 }: {
   node?: NoteNode;
   parent: string | null;
@@ -40,6 +42,8 @@ export function NodeForm({
   // Given, the form closes once its files are uploaded and the request goes on
   // in the background: `shown` is what the lists show until it is confirmed.
   onBackground?: (request: Promise<NoteNode>, shown: { fields?: Partial<NoteNode>; added?: NoteNode }) => void;
+  // Offers 导入文件夹 instead of creating one note (desktop only).
+  onImport?: () => void;
 }) {
   const [kind, setKind] = useState<NoteVariant>(
     (node && variantOf(node)) ||
@@ -222,6 +226,11 @@ export function NodeForm({
               disabled={working} onClick={() => setMoreTypes((value) => !value)}>
               {moreTypes ? '收起其他类型' : '更多类型'}
             </button>
+            {onImport && canImportFolders() && (
+              <button type="button" className="text-button kind-more" disabled={working} onClick={onImport}>
+                导入文件夹…
+              </button>
+            )}
           </fieldset>
         )}
         {!iconOnly && (
