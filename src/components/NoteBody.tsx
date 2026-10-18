@@ -6,6 +6,7 @@ import { MarkdownView } from './LazyMarkdown';
 import type { Heading } from './MarkdownView';
 import { PaperView } from './PaperView';
 import type { RecordStyle } from '../markdown-records';
+import type { SectionControls } from './MarkdownSection';
 
 // The readable body of a note, by kind. While editing, `content` is the draft.
 export function NoteBody({
@@ -17,6 +18,7 @@ export function NoteBody({
   onHeadings,
   records,
   hideHeading,
+  sections,
 }: {
   note: NoteDetail;
   editing: boolean;
@@ -26,6 +28,7 @@ export function NoteBody({
   onHeadings: (headings: Heading[]) => void;
   records?: RecordStyle;
   hideHeading?: string;
+  sections?: SectionControls;
 }) {
   return (
     <div className="read-content" data-version-id={note.current_version_id}>
@@ -40,6 +43,7 @@ export function NoteBody({
             onHeadings={onHeadings}
             records={records}
             hideHeading={editing ? undefined : hideHeading}
+            sections={editing ? undefined : sections}
           />
         ) : (
           <p className="empty-body">暂无内容。点击「编辑正文」开始编辑。</p>

@@ -53,6 +53,9 @@ import { useNoteReading } from '../use-note-reading';
 import { useNoteAnnotationPosition } from '../use-note-annotation-position';
 import { useReadingWindow } from '../reading-window';
 import { settleChange, showChange } from '../optimistic';
+import { useQuickMarkdown } from '../use-quick-markdown';
+import { QuickAppend } from './QuickAppend';
+import { hasDraft, sectionDraftId } from '../note-drafts';
 
 const Editor = lazy(() => import('./Editor'));
 const SplitView = lazy(() => import('./SplitView'));
@@ -96,6 +99,8 @@ export default function NotePane(props: Props) {
   const [note, setNote] = useState<NoteDetail | null>(null),
     noteRef = useRef<NoteDetail | null>(null);
   const [appending, setAppending] = useState(false);
+  const [sectionEditing, setSectionEditing] = useState(false);
+  const sectionLeave = useRef<() => Promise<boolean>>(async () => true);
   const [image, setImage] = useState<{ src: string; alt: string } | null>(null),
     [pdf, setPdf] = useState<FileInfo | null>(null);
   const [childrenOpen, setChildrenOpen] = useState(false),
@@ -142,7 +147,7 @@ export default function NotePane(props: Props) {
     setNote,
     question,
     setLeaveGuard: (guard) => props.setLeaveGuard(async () => {
-      if (!appending) return guard();
+      if (!appending) return await sectionLeave.current() && await guard();
       props.onNotice?.('正在保存，请稍候再离开。');
       return false;
     }),
@@ -153,19 +158,33 @@ export default function NotePane(props: Props) {
   });
   const {
     scroll, reading, toc, touched, restored, tocPosition, revealAppend, restorePosition, recordScroll,
-  } = useNoteReading({ id, note, editing });
+  } = useNoteReading({ id, note, editing: editing || sectionEditing });
   const { loadError, retry, setRetry, stale, applyDetail } = useNoteLoading({
     id,
     refresh: props.refresh,
-    editing,
+    editing: editing || sectionEditing,
     note,
     noteRef,
     setNote,
     reset,
     onLoaded: props.onLoaded,
   });
+  const quickMarkdown = useQuickMarkdown({
+    id, note, editing, disabled: offline || stale, appending,
+    projectContext: props.projectContext,
+    confirm: question.confirm,
+    onActive: setSectionEditing,
+    onBusy: setAppending,
+    onSaved: (detail) => { applyDetail(detail); props.onChanged(); },
+    refresh: () => setRetry((count) => count + 1),
+    onNotice: props.onNotice,
+  });
+  sectionLeave.current = quickMarkdown.leave;
+  const openEditor = async () => {
+    if (await sectionLeave.current()) await startEdit();
+  };
   // Android: the screen stays on, encrypted notes block screenshots, volume keys page.
-  useReadingWindow(!!note, !!note?.key_id, !!note && !editing);
+  useReadingWindow(!!note, !!note?.key_id, !!note && !editing && !sectionEditing);
   // While editing, 随手记 can insert a clip at the cursor.
   const inserting = useRef({ insert, addFiles });
   inserting.current = { insert, addFiles };
@@ -187,14 +206,14 @@ export default function NotePane(props: Props) {
     if (!loadedId || stale || draftChecked.current || !TEXT_KINDS.includes(noteRef.current!.kind))
       return;
     draftChecked.current = true;
-    void offerDraft();
+    void offerDraft(hasDraft(id) ? id : sectionDraftId(id));
     // offerDraft reads the latest note through noteRef; run once it has loaded.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [loadedId, stale]);
   // The E shortcut, sent by the notebook when no field has focus.
   const editShortcut = useRef(() => {});
   editShortcut.current = () => {
-    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline && !stale && !appending) void startEdit();
+    if (note && TEXT_KINDS.includes(note.kind) && !editing && !offline && !stale && !appending) void openEditor();
   };
   useEffect(() => {
     const edit = () => editShortcut.current();
@@ -325,7 +344,7 @@ export default function NotePane(props: Props) {
     store: annotations,
     owner: 'note',
     root: () => readingRoot.current?.querySelector<HTMLElement>('.read-content') ?? null,
-    active: !editing,
+    active: !editing && !sectionEditing,
     offline,
     paintKey: `${note?.id}:${note?.current_version_id}:${markdownReady}`,
     markerHost: () => scroll.current?.querySelector<HTMLElement>('.note-article') ?? null,
@@ -488,8 +507,8 @@ export default function NotePane(props: Props) {
           annotationCount={annotatable ? annotationList.length : 0}
           annotationsOpen={annotationPanel}
           onAnnotations={() => setAnnotationsOpen((open) => !(open && !toc.compact))}
-          onEdit={() => void startEdit()}
-          menu={typeView.menu}
+          onEdit={() => void openEditor()}
+          menu={quickMarkdown.available ? <>{typeView.menu}{quickMarkdown.menu}</> : typeView.menu}
           extra={typeView.toolbar}
           onAction={props.onAction}
         />
@@ -626,8 +645,9 @@ export default function NotePane(props: Props) {
                     onHeadings={toc.onHeadings}
                     records={typeView.records}
                     hideHeading={typeView.hideHeading}
+                    sections={quickMarkdown.controls}
                   />
-                  {!editing && layer.marks}
+                  {!editing && !sectionEditing && layer.marks}
                   {typeView.below}
                   {TEXT_KINDS.includes(note.kind) && !typeView.hideAttachments && (
                     <Attachments
@@ -655,6 +675,14 @@ export default function NotePane(props: Props) {
                 </article>
               </div>
               {typeView.footer}
+              {quickMarkdown.active && <QuickAppend id={id} keyId={note.key_id} kind="note"
+                disabled={offline || stale || quickMarkdown.waitingForSave} blocked={sectionEditing || appending}
+                label="追加笔记" placeholder="补充想法或笔记内容…" onBusy={setAppending}
+                onSaved={() => {
+                  revealAppend.current = true;
+                  setRetry((count) => count + 1);
+                  props.onChanged();
+                }} />}
             </div>
           )}
           {!editing &&
@@ -729,7 +757,7 @@ export default function NotePane(props: Props) {
           />
         )}
       </div>
-      {!editing && note.kind !== 'folder' && (
+      {!editing && !sectionEditing && note.kind !== 'folder' && (
         <SelectionToolbar
           owner={id}
           clipSource={{ id: note.id, title: note.title }}
@@ -840,7 +868,7 @@ export default function NotePane(props: Props) {
           onNavigate={props.onNavigate}
           onPreviewFile={previewFile}
           onRestore={async (version) => {
-            if (!(await leave())) return;
+            if (!(await sectionLeave.current()) || !(await leave())) return;
             if (
               !(await question.confirm(
                 '恢复这个版本？',

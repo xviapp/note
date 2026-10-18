@@ -314,8 +314,8 @@ export function useNoteEditor({
     }
   };
   // Offers a draft left by a closed tab or a reclaimed app when the note opens.
-  const offerDraft = async () => {
-    const draft = await readDraft(id),
+  const offerDraft = async (draftId = id) => {
+    const draft = await readDraft(draftId),
       current = noteRef.current;
     if (!draft || !current || editing) return;
     // The draft is being saved in the background, not left behind.
@@ -324,7 +324,7 @@ export function useNoteEditor({
       draft.content === current.content &&
       sortedIds(draft.attachments) === sortedIds(current.attachments)
     ) {
-      removeDraft(id);
+      removeDraft(draftId);
       return;
     }
     const changed = draft.revision !== current.revision;
@@ -337,10 +337,15 @@ export function useNoteEditor({
         { value: 'restore', label: '恢复草稿' },
       ],
     );
-    if (answer === 'discard') removeDraft(id);
+    if (answer === 'discard') removeDraft(draftId);
     if (answer !== 'restore') return;
     try {
       await unlockNote(id);
+      if (draftId !== id) {
+        if (!await writeDraft(id, draft, current.key_id))
+          throw new Error('无法在本机恢复草稿，原草稿已保留，请稍后重试。');
+        removeDraft(draftId);
+      }
       onStart();
       baseRevision.current = current.revision;
       setContent(draft.content);

@@ -1689,6 +1689,72 @@ button.node-list-toggle:focus-visible {
 .markdown-body h4 {
   font-size: 15px;
 }
+/* Section controls add no text to the reading surface; their menu is portaled. */
+.markdown-section {
+  position: relative;
+  display: flow-root;
+  min-width: 0;
+}
+.markdown-section > :is(h1, h2, h3, h4, h5, h6) {
+  padding-right: 38px;
+}
+.markdown-section > .section-trigger {
+  position: absolute;
+  top: 0;
+  right: 0;
+  margin-top: 1.7em;
+  color: var(--muted);
+  z-index: 1;
+}
+.markdown-section:has(> h1) > .section-trigger { font-size: 26px; }
+.markdown-section:has(> h2) > .section-trigger { font-size: 21px; }
+.markdown-section:has(> h3) > .section-trigger { font-size: 17px; }
+.markdown-section:has(> h4, > h5, > h6) > .section-trigger { font-size: 15px; }
+.markdown-section:not(:has(> :is(h1, h2, h3, h4, h5, h6))) {
+  padding-right: 38px;
+}
+.markdown-section:not(:has(> :is(h1, h2, h3, h4, h5, h6))) > .section-trigger { margin-top: 0; }
+.markdown-section.is-editing { padding-right: 0; }
+.section-menu.menu-popup {
+  position: fixed;
+  inset: auto;
+  width: 152px;
+  min-width: 152px;
+  z-index: 150;
+}
+.section-editor {
+  margin: 20px 0;
+  padding: 16px;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-control);
+  background: var(--surface);
+  color: var(--ink);
+  font: 14px/1.6 var(--font-ui);
+}
+.section-editor .section-editor-heading {
+  margin: 0 0 12px;
+  font-weight: 600;
+}
+.section-editor-hint {
+  display: block;
+  margin-bottom: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+.section-editor textarea {
+  display: block;
+  min-height: 180px;
+  resize: vertical;
+  font-family: monospace;
+  line-height: 1.7;
+}
+.section-editor .inline-error { margin: 10px 0 0; }
+.section-editor-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 8px;
+  margin-top: 12px;
+}
 /* Appended records (see src/markdown-records.ts): an issue reads as a
    discussion thread, a todo as a progress timeline, a journal entry as a day log. */
 .markdown-body .record {

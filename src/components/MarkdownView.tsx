@@ -12,6 +12,8 @@ import '../math.css';
 import { CachedImage } from './CachedImage';
 import { markdownFrontMatter } from '../../shared/projects';
 import { rehypeRecords, rehypeRepeatedTitle, type RecordStyle } from '../markdown-records';
+import { rehypeSections } from '../markdown-sections';
+import { MarkdownSection, type SectionControls } from './MarkdownSection';
 
 // Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
 // https://github.com/rehypejs/rehype-sanitize#example-math
@@ -27,6 +29,16 @@ export interface Heading {
   title: string;
   level: number;
 }
+function prepareMarkdown(content: string) {
+  const front = markdownFrontMatter(content);
+  // Keep original offsets for heading IDs, links and reading positions.
+  if (!front || !/^(title|status):/m.test(front[1])) return { rendered: content, bodyStart: 0 };
+  const afterFront = content.slice(front[0].length);
+  return {
+    rendered: front[0].replace(/[^\r\n]/g, ' ') + afterFront,
+    bodyStart: front[0].length + (afterFront.match(/^(?:[ \t]*\r?\n)*/)?.[0].length ?? 0),
+  };
+}
 export const MarkdownView = memo(function MarkdownView({
   content,
   onNavigate,
@@ -35,6 +47,7 @@ export const MarkdownView = memo(function MarkdownView({
   safeImages = false,
   records,
   hideHeading,
+  sections,
 }: {
   content: string;
   onNavigate: (id: string) => void;
@@ -45,15 +58,11 @@ export const MarkdownView = memo(function MarkdownView({
   records?: RecordStyle;
   // A leading H1 with this text repeats the page heading and is hidden.
   hideHeading?: string;
+  sections?: SectionControls;
 }) {
   const ref = useRef<HTMLDivElement>(null);
-  const rendered = useMemo(() => {
-    const front = markdownFrontMatter(content);
-    // Keep original offsets for heading IDs, links and reading positions.
-    return front && /^(title|status):/m.test(front[1])
-      ? front[0].replace(/[^\r\n]/g, ' ') + content.slice(front[0].length)
-      : content;
-  }, [content]);
+  const sectionMode = !!sections;
+  const { rendered, bodyStart } = useMemo(() => prepareMarkdown(content), [content]);
   // Appended records are listed by the page itself, so they stay out of the outline.
   useEffect(() => {
     onHeadings?.(
@@ -63,11 +72,11 @@ export const MarkdownView = memo(function MarkdownView({
         level: Number(h.tagName[1]),
       })),
     );
-  }, [content, hideHeading, onHeadings]);
+  }, [content, hideHeading, onHeadings, sectionMode, sections?.activeStart]);
   // Renderers keep a stable identity, so a re-render does not remount images or
   // links; the latest callbacks are read when they run.
-  const callbacks = useRef({ onNavigate, onImage });
-  callbacks.current = { onNavigate, onImage };
+  const callbacks = useRef({ onNavigate, onImage, sections });
+  callbacks.current = { onNavigate, onImage, sections };
   const components = useMemo<Components>(() => {
     const heading =
       (level: number) =>
@@ -103,6 +112,18 @@ export const MarkdownView = memo(function MarkdownView({
     const onNavigate = (id: string) => callbacks.current.onNavigate(id),
       onImage = (src: string, alt: string) => callbacks.current.onImage(src, alt);
     return {
+      section: ({ node, children, ...props }) => {
+        const start = node?.properties.dataSectionStart;
+        const controls = callbacks.current.sections;
+        if (typeof start !== 'number' || !controls) return <section {...props}>{children}</section>;
+        return <MarkdownSection section={{
+          start,
+          end: Number(node!.properties.dataSectionEnd),
+          title: String(node!.properties.dataSectionTitle),
+          level: Number(node!.properties.dataSectionLevel),
+          children: Number(node!.properties.dataSectionChildren),
+        }} controls={controls}>{children}</MarkdownSection>;
+      },
       h1: heading(1),
       h2: heading(2),
       h3: heading(3),
@@ -162,6 +183,7 @@ export const MarkdownView = memo(function MarkdownView({
           [rehypeSanitize, markdownSchema],
           [rehypeRecords, records],
           [rehypeRepeatedTitle, hideHeading],
+          [rehypeSections, { enabled: !!sections, length: content.length, bodyStart }],
           rehypeMathCompatibility,
           [rehypeKatex, mathOptions],
         ]}

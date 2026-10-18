@@ -7,6 +7,8 @@ import { dropPhotos } from './pending-photos';
 // reclaiming the app does not lose them. Cleared with the private cache on
 // sign-out or session loss (see clearPrivateCache).
 export const DRAFT_PREFIX = 'note-draft:';
+// Section drafts must never replace a body queued by the full editor.
+export const sectionDraftId = (id: string) => `section:${id}`;
 export interface NoteDraft {
   content: string;
   attachments: FileInfo[];
