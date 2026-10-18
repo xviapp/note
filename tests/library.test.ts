@@ -12,6 +12,7 @@ import type {
   SearchResult,
 } from '../shared/types';
 import { cleanup } from '../worker/recovery';
+import { indexPending, indexStatement } from '../worker/note-text';
 import { discardFile, storeText, uploadFile } from '../worker/storage';
 import { editToken, requireSession } from '../worker/auth';
 
@@ -230,6 +231,54 @@ describe('private library behavior', () => {
     expect(
       await bindings.DB.prepare('SELECT COUNT(*) count FROM note_text WHERE node_id=?').bind(first.id).first('count'),
     ).toBe(0);
+  });
+
+  it('does not index a body that became encrypted after it was read', async () => {
+    const note = await create('markdown', '读过的笔记', { content: '读出时的明文' });
+    await bindings.DB.prepare('DELETE FROM note_text').run();
+    const row = await bindings.DB.prepare(
+      'SELECT b.id,b.object_key FROM nodes n JOIN versions v ON v.id=n.current_version_id JOIN blobs b ON b.id=v.body_blob_id WHERE n.id=?',
+    )
+      .bind(note.id)
+      .first<{ id: string; object_key: string }>();
+    // Read, then re-sealed in place under the same version before the write.
+    const late = indexStatement(bindings, note.id, note.current_version_id!, 'markdown', '读出时的明文', row!.object_key);
+    await bindings.DB.prepare("UPDATE blobs SET object_key=?,key_id='k' WHERE id=?")
+      .bind(`${row!.object_key}/sealed`, row!.id)
+      .run();
+    await late.run();
+    expect(await bindings.DB.prepare('SELECT COUNT(*) n FROM note_text').first('n')).toBe(0);
+    // A replaced object is not the one that was read either, even if plain.
+    await bindings.DB.prepare('UPDATE blobs SET key_id=NULL WHERE id=?').bind(row!.id).run();
+    await late.run();
+    expect(await bindings.DB.prepare('SELECT COUNT(*) n FROM note_text').first('n')).toBe(0);
+  });
+
+  it('retries a body that could not be read instead of indexing it empty', async () => {
+    const note = await create('markdown', '暂时读不到', { content: '稍后才能读到的正文' });
+    await bindings.DB.prepare('DELETE FROM note_text').run();
+    const { object_key } = (await bindings.DB.prepare(
+      'SELECT b.object_key FROM nodes n JOIN versions v ON v.id=n.current_version_id JOIN blobs b ON b.id=v.body_blob_id WHERE n.id=?',
+    )
+      .bind(note.id)
+      .first<{ object_key: string }>())!;
+    const object = await bindings.FILES.get(object_key);
+    const bytes = await object!.arrayBuffer();
+    await bindings.FILES.delete(object_key);
+    expect(await indexPending(bindings, 10)).toEqual({ indexed: 0, more: false });
+    const failed = await bindings.DB.prepare('SELECT body,retry_at,attempts FROM note_text WHERE node_id=?')
+      .bind(note.id)
+      .first<{ body: string; retry_at: number; attempts: number }>();
+    expect(failed).toMatchObject({ body: '', attempts: 1 });
+    expect(failed!.retry_at).toBeGreaterThan(Date.now());
+    // Not due yet: other notes go on, this one waits.
+    expect(await indexPending(bindings, 10)).toEqual({ indexed: 0, more: false });
+    await bindings.FILES.put(object_key, bytes);
+    await bindings.DB.prepare('UPDATE note_text SET retry_at=0').run();
+    expect(await indexPending(bindings, 10)).toEqual({ indexed: 1, more: false });
+    expect(
+      (await ok<{ results: SearchResult[] }>('/api/search?q=稍后才能读到')).results.map((item) => item.id),
+    ).toEqual([note.id]);
   });
 
   it('creates untitled notes and folders while keeping uploaded filenames and rename validation', async () => {

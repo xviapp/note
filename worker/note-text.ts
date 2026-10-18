@@ -11,20 +11,40 @@ import type { Env } from './types';
 // is missing (notes from before the index, restored backups, decrypted notes).
 // Encrypted notes are never indexed, and search checks the key again on read.
 
+// Whether the version is the note's current one and still plain: no key for
+// the note, none on the body, and (when given) the same object that was read.
+// Encrypting re-seals bodies in place under the same version, so a body read
+// before that must not be written after it.
+const currentPlain = () => `EXISTS(SELECT 1 FROM nodes n JOIN versions v ON v.id=n.current_version_id
+  JOIN blobs b ON b.id=v.body_blob_id
+  WHERE n.id=? AND n.current_version_id=? AND b.key_id IS NULL AND (? IS NULL OR b.object_key=?)
+    AND ${KEY_SQL('n')} IS NULL)`;
 // Writes a note's body for its current version; a version that is no longer
-// current (a newer save won) is not written.
+// current (a newer save won) or no longer plain is not written.
 export function indexStatement(
   env: Env,
   nodeId: string,
   versionId: string,
   kind: NodeKind,
   content: string,
+  objectKey: string | null = null,
 ) {
   return env.DB.prepare(
-    `INSERT INTO note_text(node_id,version_id,body)
-     SELECT ?,?,? WHERE EXISTS(SELECT 1 FROM nodes WHERE id=? AND current_version_id=?)
-     ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,body=excluded.body`,
-  ).bind(nodeId, versionId, searchText(kind, content), nodeId, versionId);
+    `INSERT INTO note_text(node_id,version_id,body,retry_at,attempts)
+     SELECT ?,?,?,NULL,0 WHERE ${currentPlain()}
+     ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,body=excluded.body,retry_at=NULL,attempts=0`,
+  ).bind(nodeId, versionId, searchText(kind, content), nodeId, versionId, objectKey, objectKey);
+}
+// A body that could not be read: kept out of search until a later try reads
+// it. After RETRIES failed reads it is indexed empty and left alone.
+const RETRIES = 8;
+function failedStatement(env: Env, nodeId: string, versionId: string, attempts: number, now: number) {
+  const retryAt = attempts < RETRIES ? now + Math.min(30 * 60_000 * 2 ** (attempts - 1), 86400_000) : null;
+  return env.DB.prepare(
+    `INSERT INTO note_text(node_id,version_id,body,retry_at,attempts)
+     SELECT ?,?,'',?,? WHERE ${currentPlain()}
+     ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,body='',retry_at=excluded.retry_at,attempts=excluded.attempts`,
+  ).bind(nodeId, versionId, retryAt, attempts, nodeId, versionId, null, null);
 }
 export function forgetStatement(env: Env, nodeId: string) {
   return env.DB.prepare('DELETE FROM note_text WHERE node_id=?').bind(nodeId);
@@ -51,26 +71,35 @@ export async function indexPending(env: Env, limit: number): Promise<{ indexed: 
        JOIN versions v ON v.id=n.current_version_id JOIN blobs b ON b.id=v.body_blob_id
        WHERE b.key_id IS NOT NULL)`,
   ).run();
+  const now = Date.now();
+  // Bodies never read first; failed reads once they are due.
   const pending = await env.DB.prepare(
-    `SELECT n.id,n.kind,n.current_version_id version_id,v.body_blob_id FROM nodes n
+    `SELECT n.id,n.kind,n.current_version_id version_id,v.body_blob_id,b.object_key,
+       CASE WHEN t.version_id=n.current_version_id THEN t.attempts ELSE 0 END attempts FROM nodes n
      JOIN versions v ON v.id=n.current_version_id JOIN blobs b ON b.id=v.body_blob_id
      LEFT JOIN note_text t ON t.node_id=n.id
      WHERE n.kind IN ('markdown','text') AND n.arxiv_id IS NULL AND b.key_id IS NULL
-       AND (t.version_id IS NULL OR t.version_id<>n.current_version_id) AND ${KEY_SQL('n')} IS NULL
-     LIMIT ?`,
+       AND (t.version_id IS NULL OR t.version_id<>n.current_version_id OR t.retry_at<=?)
+       AND ${KEY_SQL('n')} IS NULL
+     ORDER BY t.retry_at IS NOT NULL,t.retry_at LIMIT ?`,
   )
-    .bind(limit)
-    .all<{ id: string; kind: NodeKind; version_id: string; body_blob_id: string }>();
+    .bind(now, limit)
+    .all<{ id: string; kind: NodeKind; version_id: string; body_blob_id: string; object_key: string; attempts: number }>();
   if (!pending.results.length) return { indexed: 0, more: false };
+  let indexed = 0;
   const statements = await Promise.all(
     pending.results.map(async (row) => {
-      // An unreadable body is indexed empty, so it is not retried forever.
-      const content = await readText(env, row.body_blob_id).catch(() => '');
-      return indexStatement(env, row.id, row.version_id, row.kind, content);
+      try {
+        const content = await readText(env, row.body_blob_id);
+        indexed++;
+        return indexStatement(env, row.id, row.version_id, row.kind, content, row.object_key);
+      } catch {
+        return failedStatement(env, row.id, row.version_id, row.attempts + 1, now);
+      }
     }),
   );
   await env.DB.batch(statements);
-  return { indexed: statements.length, more: statements.length === limit };
+  return { indexed, more: statements.length === limit };
 }
 
 // The SQL that requires every word in the body, and its parameters. Words of
