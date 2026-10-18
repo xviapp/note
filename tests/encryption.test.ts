@@ -441,6 +441,85 @@ describe('encrypted notes', () => {
     expect(site!.allocated_bytes).toBe(blobs!.size);
     expect((await bindings.FILES.list()).objects).toHaveLength(1);
   });
+  it('gives each note its own copy of a file another place uses', async () => {
+    const image = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');
+    const file = await ok<FileInfo>(`/api/files?name=a.svg&size=${image.length}`, 'POST', image);
+    const owner = await ok<NoteNode>('/api/nodes', 'POST', {
+      kind: 'markdown',
+      content: `![](/api/files/${file.id})`,
+      attachments: [file.id],
+    });
+    const { folder, id, key } = await encryptedFolder();
+    const plainFolder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '公开' });
+    // Linking the owner's file from another note asks the device for a copy.
+    const refused = await request('/api/nodes', 'POST', {
+      kind: 'markdown',
+      parentId: plainFolder.id,
+      content: `![](/api/files/${file.id})`,
+    });
+    expect(refused.status).toBe(409);
+    expect(await refused.json()).toMatchObject({
+      code: 'FILES_SHARED',
+      files: [{ id: file.id, name: 'a.svg' }],
+    });
+    const copy = await ok<FileInfo>(`/api/files?name=a.svg&size=${image.length}`, 'POST', image);
+    await ok('/api/nodes', 'POST', {
+      kind: 'markdown',
+      parentId: plainFolder.id,
+      content: `![](/api/files/${copy.id})`,
+      copies: { [file.id]: copy.id },
+    });
+    // A file shared before this rule: re-encrypting it for one note is refused...
+    const note = await ok<NoteNode>('/api/nodes', 'POST', {
+      kind: 'markdown',
+      parentId: folder.id,
+      bodyBlobId: (await uploadSealed(key, id, '旧图')).id,
+    });
+    const version = await bindings.DB.prepare('SELECT current_version_id v FROM nodes WHERE id=?')
+      .bind(note.id)
+      .first<{ v: string }>();
+    await bindings.DB.prepare('INSERT INTO version_assets(version_id,blob_id) VALUES(?,?)')
+      .bind(version!.v, file.id)
+      .run();
+    const plan = await ok<EncryptionPlan>(`/api/nodes/${folder.id}/encryption/plan`);
+    expect(plan.objects.map((object) => object.id)).toEqual([file.id]);
+    const sealed = await sealBytes(key, id, image);
+    const shared = await request(
+      `/api/nodes/${folder.id}/encryption/objects/${file.id}`,
+      'PUT',
+      sealed,
+    );
+    expect(shared.status).toBe(409);
+    expect((await shared.json<{ code: string }>()).code).toBe('FILES_SHARED');
+    const kept = await bindings.DB.prepare('SELECT key_id FROM blobs WHERE id=?')
+      .bind(file.id)
+      .first<{ key_id: string | null }>();
+    expect(kept!.key_id).toBeNull();
+    // ...and saving the note with a sealed copy separates it, older versions included.
+    const own = await ok<FileInfo>(
+      `/api/files?name=a.svg&size=${sealed.length}&key=${id}&mime=image%2Fsvg%2Bxml`,
+      'POST',
+      sealed,
+    );
+    const { token } = await ok<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: note.id });
+    const body = await uploadSealed(key, id, `![](/api/files/${own.id})`);
+    const saved = await request(
+      `/api/nodes/${note.id}/content`,
+      'PUT',
+      { bodyBlobId: body.id, revision: 1, attachments: [own.id], copies: { [file.id]: own.id } },
+      { 'x-note-edit': token },
+    );
+    expect(saved.ok, await saved.clone().text()).toBe(true);
+    expect((await ok<EncryptionPlan>(`/api/nodes/${folder.id}/encryption/plan`)).objects).toEqual([]);
+    const left = await bindings.DB.prepare(
+      'SELECT COUNT(*) n FROM version_assets a JOIN versions v ON v.id=a.version_id WHERE v.node_id=? AND a.blob_id=?',
+    )
+      .bind(note.id, file.id)
+      .first<{ n: number }>();
+    expect(left!.n).toBe(0);
+    const ownerDetail = await ok<NoteDetail>(`/api/nodes/${owner.id}`);
+    expect(ownerDetail.attachments.map((item) => item.id)).toEqual([file.id]);
+  });
   it('includes book covers in encryption plans and accepts covers sealed for the book', async () => {
     const book = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '加密书籍', book: {} });
     const other = await newKey();

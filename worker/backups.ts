@@ -14,6 +14,7 @@ import { AppError, idValue } from './http';
 import { LIBRARY_UNREFERENCED, discardFile } from './storage';
 import type { Env } from './types';
 import { sanitizeSvg } from '../shared/svg';
+import { SEALED_HEADER, sealedKeyId } from '../shared/encryption';
 
 const DAY = 86400_000;
 // D1 allows 2 MB per value and 50 queries per invocation on the free plan.
@@ -75,7 +76,7 @@ export async function createBackup(env: Env) {
       now + DAY,
     ),
     env.DB.prepare(
-      `INSERT INTO backup_files(job_id,source_id,blob_id) SELECT ?,id,id FROM blobs WHERE state='ready' AND NOT (${LIBRARY_UNREFERENCED})`,
+      `INSERT INTO backup_files(job_id,source_id,blob_id,object_key) SELECT ?,id,id,object_key FROM blobs WHERE state='ready' AND NOT (${LIBRARY_UNREFERENCED})`,
     ).bind(id),
     ...tables.map(([table, columns]) =>
       env.DB.prepare(`SELECT ${columns.join(',')} FROM ${table}`),
@@ -100,6 +101,27 @@ export async function createBackup(env: Env) {
     throw new AppError(400, (error as Error).message);
   }
   return { id, archive };
+}
+// A file of an export as the snapshot named it: re-encryption meanwhile puts
+// new content under the same blob, and the archive must match its manifest.
+export async function backupFile(env: Env, jobId: string, sourceId: string) {
+  await job(env, jobId, 'export');
+  const row = await env.DB.prepare(
+    `SELECT COALESCE(f.object_key,b.object_key) object_key,b.mime FROM backup_files f JOIN blobs b ON b.id=f.blob_id
+     WHERE f.job_id=? AND f.source_id=?`,
+  )
+    .bind(jobId, idValue(sourceId))
+    .first<{ object_key: string; mime: string }>();
+  if (!row) throw new AppError(404, '备份中没有此文件。');
+  const object = await env.FILES.get(row.object_key);
+  if (!object) throw new AppError(409, '文件已不可读取，请重新备份。');
+  return new Response(object.body, {
+    headers: {
+      'content-type': 'application/octet-stream',
+      'content-length': String(object.size),
+      'cache-control': 'no-store',
+    },
+  });
 }
 export async function deleteBackup(env: Env, id: string) {
   await env.DB.batch([
@@ -169,6 +191,36 @@ export async function startRestore(env: Env, input: unknown, key: string) {
   await restoreBatch(env, statements);
   return { id: key, rootId: null };
 }
+// Passes a file through once its first bytes show it is sealed with the key
+// the manifest names (or not sealed, for a plain file). A file replaced under
+// another key after the manifest was written could not be opened after restore.
+function sealedAs(keyId: string | null) {
+  const head: Uint8Array[] = [];
+  let seen = 0,
+    checked = false;
+  const check = (controller: TransformStreamDefaultController<Uint8Array>) => {
+    checked = true;
+    const bytes = new Uint8Array(seen);
+    let offset = 0;
+    for (const chunk of head) {
+      bytes.set(chunk, offset);
+      offset += chunk.length;
+    }
+    if (sealedKeyId(bytes) !== keyId) throw new AppError(400, '文件的加密方式与备份清单不符，请重新备份。');
+    controller.enqueue(bytes);
+  };
+  return new TransformStream<Uint8Array, Uint8Array>({
+    transform(chunk, controller) {
+      if (checked) return controller.enqueue(chunk);
+      head.push(chunk);
+      seen += chunk.length;
+      if (seen >= SEALED_HEADER + 16) check(controller);
+    },
+    flush(controller) {
+      if (!checked) check(controller);
+    },
+  });
+}
 export async function uploadRestoreFile(
   env: Env,
   request: Request,
@@ -188,7 +240,7 @@ export async function uploadRestoreFile(
   if (existing?.state === 'ready') return { ok: true };
   if (existing) throw new AppError(409, '此文件仍在上传，请稍后重试。');
   if (!request.body && file.size !== 0) throw new AppError(400, '文件内容缺失。');
-  const incoming = request.body || new Blob([]).stream();
+  const incoming = (request.body || new Blob([]).stream()).pipeThrough(sealedAs(file.key_id ?? null));
   let content: Uint8Array | ReadableStream<Uint8Array> = incoming;
   let size = file.size;
   // A sealed file is restored byte for byte; see docs/encryption.md.
@@ -265,9 +317,9 @@ export async function uploadRestoreFile(
       .first();
     if (!finished) throw new AppError(409, '恢复任务已结束，请重新开始。');
     return { ok: true };
-  } catch {
+  } catch (error) {
     transfer.abort();
-    await Promise.allSettled(transfers);
+    const results = await Promise.allSettled(transfers);
     await env.DB.prepare('UPDATE backup_files SET blob_id=NULL WHERE job_id=? AND source_id=?')
       .bind(jobId, sourceId)
       .run();
@@ -275,7 +327,11 @@ export async function uploadRestoreFile(
     // Pending uploads are also removed after a failed transfer.
     await env.FILES.delete(objectKey).catch(() => {});
     await env.DB.prepare("DELETE FROM blobs WHERE id=? AND state='pending'").bind(id).run();
-    throw new AppError(400, '文件上传中断，请重试恢复。');
+    // A file that is not what the manifest says is refused as such.
+    const refused = [error, ...results.map((result) => result.status === 'rejected' && result.reason)].find(
+      (reason) => reason instanceof AppError && reason.status === 400,
+    );
+    throw refused ?? new AppError(400, '文件上传中断，请重试恢复。');
   }
 }
 function inserts(env: Env, table: string, columns: readonly string[], rows: BackupRow[]) {

@@ -124,6 +124,7 @@ export async function journalEntry(
         parentId: month,
         ...(bodyBlobId === undefined ? { content: content ?? '' } : { bodyBlobId, metadata }),
         attachments: attachments ?? [],
+        copies: data.copies,
       },
       key,
       undefined,
@@ -132,6 +133,7 @@ export async function journalEntry(
           'INSERT INTO journal_entries(node_id,journal_id,date,created_at) VALUES(?,?,?,?)',
         ).bind(node, id, date, now),
       ],
+      true,
     );
     return { node, created: true };
   } catch (error) {

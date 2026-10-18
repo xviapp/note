@@ -1,5 +1,5 @@
 import { Capacitor, registerPlugin } from '@capacitor/core';
-import { api, fileUrl, parse } from './api';
+import { api, parse } from './api';
 import { BACKUP_METADATA_LIMIT, validateBackup, type LibraryBackup } from '../shared/backup';
 import type { FileEntry, ZipReader } from '@zip.js/zip.js';
 
@@ -111,7 +111,11 @@ export async function exportLibrary(progress: (message: string) => void, signal:
     for (const [index, file] of archive.files.entries()) {
       signal.throwIfAborted();
       progress(`正在备份 ${index + 1}/${archive.files.length}：${file.name}`);
-      const response = await fetch(fileUrl(file.id), { credentials: 'same-origin', signal });
+      // As the snapshot named it, even if re-encrypted since (worker/backups.ts).
+      const response = await fetch(`/api/backups/${id}/files/${encodeURIComponent(file.id)}`, {
+        credentials: 'same-origin',
+        signal,
+      });
       if (!response.ok || !response.body) throw new Error(`无法读取「${file.name}」，备份未完成。`);
       let bytes = 0;
       const content = response.body.pipeThrough(

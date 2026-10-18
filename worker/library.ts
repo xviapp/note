@@ -23,6 +23,7 @@ import {
 } from './projects';
 import { sealedSize } from '../shared/encryption';
 import { hasKey, locked } from './encryption';
+import { NOT_DOCUMENT, referencingNodes } from './blob-references';
 import { insertJournal, journalEntryOf, journalNeighbours } from './journals';
 
 // What a node is: its kind, or the kind of page a side table makes of it.
@@ -244,6 +245,56 @@ function attachmentIds(content: string, ids: unknown): string[] {
   if (values.size > 100) throw new AppError(400, '每篇笔记最多关联 100 个附件。');
   return [...values].sort();
 }
+// A note's files are its own: a file another note (or a clip) refers to, or
+// a newly linked one sealed for another place, would make the two places
+// re-encrypt it in turn. Links to PDF and image entries stay links. Devices are told which ones to copy first
+// (FILES_SHARED, see src/api.ts) and name their copies in `copies`
+// ({ original: copy }), which also take the original's place in the note's
+// older versions. Restoring a version and Worker-written notes skip this.
+async function ownFiles(
+  env: Env,
+  node: string | null,
+  assets: string[],
+  scope: string | null,
+  input: unknown,
+): Promise<D1PreparedStatement[]> {
+  const copies =
+    input && typeof input === 'object' && !Array.isArray(input)
+      ? Object.entries(input as Record<string, unknown>).map(([from, to]) => [idValue(from), idValue(to)])
+      : [];
+  if (input !== undefined && (!copies.length || copies.length > 100))
+    throw new AppError(400, '附件副本不正确。');
+  if (copies.some(([, to]) => !assets.includes(to))) throw new AppError(400, '附件副本不正确。');
+  if (!assets.length) return [];
+  const set = '(SELECT value FROM json_each((SELECT files FROM me)))';
+  const shared = await env.DB.prepare(
+    `WITH me(node,scope,files) AS (SELECT ?,?,?)
+     SELECT b.id,b.name,b.mime FROM blobs b WHERE b.id IN ${set} AND b.state='ready' AND ${NOT_DOCUMENT('b.id')} AND (
+       ${referencingNodes(set)
+         .map((refs) => `b.id IN (SELECT blob FROM (${refs}) WHERE node IS NOT (SELECT node FROM me))`)
+         .join('\n OR ')}
+       OR EXISTS(SELECT 1 FROM clips c WHERE c.blob_id=b.id)
+       OR (b.key_id IS NOT (SELECT scope FROM me) AND NOT EXISTS(
+         SELECT 1 FROM nodes n JOIN version_assets a ON a.version_id=n.current_version_id
+         WHERE n.id=(SELECT node FROM me) AND a.blob_id=b.id)))
+     ORDER BY b.id`,
+  )
+    .bind(node, scope, JSON.stringify(assets))
+    .all<{ id: string; name: string; mime: string }>();
+  if (shared.results.length)
+    throw new AppError(409, '附件也被其他笔记使用，需要先复制一份。', 'FILES_SHARED', {
+      files: shared.results,
+    });
+  if (!node) return [];
+  return copies.flatMap(([from, to]) => [
+    env.DB.prepare(
+      'UPDATE OR IGNORE version_assets SET blob_id=? WHERE blob_id=? AND version_id IN (SELECT id FROM versions WHERE node_id=?)',
+    ).bind(to, from, node),
+    env.DB.prepare(
+      'DELETE FROM version_assets WHERE blob_id=? AND version_id IN (SELECT id FROM versions WHERE node_id=?)',
+    ).bind(from, node),
+  ]);
+}
 async function folderIcon(
   env: Env,
   kind: NodeKind,
@@ -276,6 +327,8 @@ export async function createNode(
   paper?: { arxivId: string; html: string; assets: string[] },
   // Rows created with the node in the same batch (book pages, discussions).
   extra?: (id: string, now: number) => D1PreparedStatement[],
+  // Written by a device, whose files must be the note's own (ownFiles).
+  device = false,
 ): Promise<NoteNode> {
   const operation = paper ? 'import-arxiv' : 'create';
   const previous = await priorOperation(env, key, operation);
@@ -362,6 +415,7 @@ export async function createNode(
     : isText
       ? attachmentIds(content, data.attachments ?? [])
       : [];
+  if (device && isText && !paper) await ownFiles(env, null, assets, scope, data.copies);
   const blob = paper
       ? await storePaper(env, paper.html)
       : isText
@@ -463,6 +517,8 @@ export async function saveNote(
   key: string,
   // Restoring a version reuses its body; a sealed one has no text here.
   reuse?: { bodyId: string; sealed: boolean },
+  // Written by a device, whose files must be the note's own (ownFiles).
+  device = false,
 ): Promise<NoteNode> {
   const previous = await priorOperation(env, key, `save:${id}`);
   if (previous) return previous;
@@ -476,6 +532,7 @@ export async function saveNote(
   const known = !sealedBody && !reuse?.sealed;
   const content = known ? textValue(data.content, '正文', 1_048_576, true) : '',
     assets = attachmentIds(content, data.attachments ?? []);
+  const copies = device && !reuse ? await ownFiles(env, id, assets, scope, data.copies) : [];
   const current = await env.DB.prepare(
     'SELECT body_blob_id,key_id FROM versions v JOIN blobs b ON b.id=v.body_blob_id WHERE v.id=?',
   )
@@ -506,6 +563,7 @@ export async function saveNote(
       env.DB.prepare(
         'INSERT INTO version_assets(version_id,blob_id) SELECT ?,value FROM json_each(?)',
       ).bind(version, JSON.stringify(assets)),
+      ...copies,
       env.DB.prepare(
         'UPDATE nodes SET current_version_id=?,revision=revision+1,updated_at=? WHERE id=?',
       ).bind(version, now, id),

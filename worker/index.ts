@@ -1,6 +1,7 @@
 import { assistantNode } from './assistant';
 import type { Env } from './types';
 import {
+  backupFile,
   createBackup,
   deleteBackup,
   startRestore,
@@ -120,6 +121,8 @@ export default {
       );
       if (backup) {
         if (!backup[2] && method === 'DELETE') return json(await deleteBackup(env, backup[1]));
+        if (backup[2] === 'files' && backup[3] && method === 'GET')
+          return await backupFile(env, backup[1], backup[3]);
         if (backup[2] === 'files' && backup[3] && method === 'POST')
           return json(await uploadRestoreFile(env, request, backup[1], backup[3]));
         if (backup[2] === 'commit' && !backup[3] && method === 'POST')
@@ -179,7 +182,7 @@ export default {
       if (path === '/api/search' && method === 'GET') return json(await searchNodes(env, url));
       if (path === '/api/search/index' && method === 'POST') return json(await indexPending(env, 10));
       if (path === '/api/nodes' && method === 'POST') {
-        return json(await createNode(env, await body(request), operationKey(request)), 201);
+        return json(await createNode(env, await body(request), operationKey(request), undefined, undefined, true), 201);
       }
       if (path === '/api/import/arxiv/preview' && method === 'GET') {
         return json(await arxivPreview(url.searchParams.get('url'), request.signal));
@@ -375,7 +378,7 @@ export default {
           return json(await trashNode(env, id, (await body(request)).count));
         if (action === 'content' && method === 'PUT') {
           await requireEdit(request, env, session, id);
-          return json(await saveNote(env, id, await body(request), operationKey(request)));
+          return json(await saveNote(env, id, await body(request), operationKey(request), undefined, true));
         }
         if (version && method === 'POST' && version[2]) {
           await requireEdit(request, env, session, id);
@@ -395,7 +398,7 @@ export default {
       const known = asError(error);
       if (known.status === 500)
         console.error('API error', error instanceof Error ? error.message : String(error));
-      return json({ error: known.message, code: known.code }, known.status);
+      return json({ ...known.details, error: known.message, code: known.code }, known.status);
     }
   },
   async scheduled(

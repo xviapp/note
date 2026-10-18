@@ -128,6 +128,20 @@ export async function cleanup(
   // A few notes per run; the app fills the rest through POST /api/search/index.
   await indexPending(env, 5).catch(() => {});
   if (!files) return { removed: 0 };
+  // Old content kept for an export that has since ended or expired.
+  const retired = await env.DB.prepare(
+    'SELECT object_key FROM retired_objects r WHERE NOT EXISTS(SELECT 1 FROM backup_files f WHERE f.object_key=r.object_key) LIMIT 50',
+  ).all<{ object_key: string }>();
+  if (retired.results.length)
+    try {
+      const keys = retired.results.map((row) => row.object_key);
+      await env.FILES.delete(keys);
+      await env.DB.prepare(
+        `DELETE FROM retired_objects WHERE object_key IN (${keys.map(() => '?').join(',')})`,
+      ).bind(...keys).run();
+    } catch {
+      // Kept for a later sweep.
+    }
   // Select once, then delete in bounded batches without rescanning referenced blobs.
   // Keep D1 calls below the Free plan per-invocation limit, including maintenance above.
   const candidates = await env.DB.prepare(

@@ -2,7 +2,7 @@
 import { env, applyD1Migrations } from 'cloudflare:test';
 import { beforeAll, describe, expect, it } from 'vitest';
 import type { Env } from '../worker/types';
-import { blobReferences } from '../worker/blob-references';
+import { blobReferences, referencingNodes } from '../worker/blob-references';
 import { UNREFERENCED } from '../worker/storage';
 import { backupColumns } from '../shared/backup';
 
@@ -61,6 +61,19 @@ describe('blob reference contract', () => {
       const name = `${table}.${column}`;
       expect(all, `${name} missing from UNREFERENCED`).toContain(name);
       if (!OPERATIONAL.has(name)) expect(library, `${name} missing from blobReferences`).toContain(name);
+    }
+  });
+
+  it('knows which note holds every library blob reference', () => {
+    const notes = new Set(
+      [...referencingNodes('(?)').join('\n').matchAll(/FROM (\w+) (\w+) WHERE \2\.(\w+) IN/g)].map(
+        ([, table, , column]) => `${table}.${column}`,
+      ),
+    );
+    for (const { table, column } of references) {
+      const name = `${table}.${column}`;
+      if (OPERATIONAL.has(name) || table === 'clips') continue;
+      expect(notes, `${name} missing from referencingNodes`).toContain(name);
     }
   });
 

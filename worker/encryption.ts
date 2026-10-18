@@ -20,6 +20,7 @@ import { sanitizeSvg, SVG_MIME } from '../shared/svg';
 import { AppError, idValue, integer, readLimited, textValue } from './http';
 import { getNode, KEY_SQL, nodePath } from './library';
 import { MAX_FILE_BYTES } from './storage';
+import { NOT_DOCUMENT, referencingNodes } from './blob-references';
 import type { NoteNode } from '../shared/types';
 import type { BlobRow, Env } from './types';
 
@@ -188,7 +189,7 @@ const subtree = () => `WITH RECURSIVE sub(id,key_id,depth) AS (
 // many SELECTs one compound query may join, so each kind is its own query.
 const REFS = [
   `'body',v.body_blob_id,v.id=n.current_version_id AND n.kind='markdown',v.id FROM sub s JOIN nodes n ON n.id=s.id JOIN versions v ON v.node_id=s.id JOIN blobs b ON b.id=v.body_blob_id`,
-  `'file',a.blob_id,0,NULL FROM sub s JOIN versions v ON v.node_id=s.id JOIN version_assets a ON a.version_id=v.id JOIN blobs b ON b.id=a.blob_id`,
+  `'file',a.blob_id,0,NULL FROM sub s JOIN versions v ON v.node_id=s.id JOIN version_assets a ON a.version_id=v.id JOIN blobs b ON b.id=a.blob_id AND ${NOT_DOCUMENT('a.blob_id')}`,
   `'file',n.file_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.file_blob_id`,
   `'file',n.icon_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.icon_blob_id`,
   `'file',k.cover_blob_id,0,NULL FROM sub s JOIN books k ON k.node_id=s.id JOIN blobs b ON b.id=k.cover_blob_id`,
@@ -302,6 +303,15 @@ export async function replaceObject(
     .first<BlobRow>();
   if (!file) throw new AppError(404, '文件不存在或已被清理。', 'FILE_UNAVAILABLE');
   const { target, kind, node_id } = await objectTarget(env, root, file.id);
+  // An object other places want under another key is not changed for one of
+  // them; the device copies it for this note instead (src/encryption-sync.ts).
+  const keys = await env.DB.batch<{ k: string | null }>(
+    referencingNodes('(?)').map((refs) =>
+      env.DB.prepare(`SELECT ${KEY_SQL('n')} k FROM (${refs}) r JOIN nodes n ON n.id=r.node`).bind(file.id),
+    ),
+  );
+  if (keys.some((result) => result.results.some((row) => (row.k ?? null) !== target)))
+    throw new AppError(409, `「${file.name}」也被加密设置不同的笔记使用，需要先为这篇笔记复制一份。`, 'FILES_SHARED');
   // Encrypted highlights leave the search index; decrypted ones return on the next save.
   return swapObject(
     env,
@@ -340,17 +350,24 @@ export async function swapObject(
     .first();
   if (!space) throw new AppError(413, '空间不足，请清理后再加密。', 'QUOTA_EXCEEDED');
   const objectKey = `objects/${file.id}/${crypto.randomUUID()}`;
+  let retained = false;
   try {
     await env.FILES.put(objectKey, bytes, {
       httpMetadata: { contentType: target ? 'application/octet-stream' : file.mime },
     });
-    const [changed] = await env.DB.batch([
+    const [changed, , ...rest] = await env.DB.batch([
       env.DB.prepare(
         "UPDATE blobs SET object_key=?,key_id=?,size=? WHERE id=? AND object_key=? AND state='ready' RETURNING id",
       ).bind(objectKey, target, bytes.byteLength, file.id, file.object_key),
+      // An export still downloading the old content keeps it until it ends.
+      env.DB.prepare(
+        'INSERT OR IGNORE INTO retired_objects(object_key,retired_at) SELECT ?,? WHERE EXISTS(SELECT 1 FROM backup_files WHERE object_key=?)',
+      ).bind(file.object_key, Date.now(), file.object_key),
+      env.DB.prepare('SELECT 1 FROM retired_objects WHERE object_key=?').bind(file.object_key),
       ...also,
     ]);
     if (!changed.results.length) throw new AppError(409, '文件已在别处更新，请重新开始。');
+    retained = rest[0].results.length > 0;
   } catch (error) {
     await env.FILES.delete(objectKey).catch(() => {});
     await env.DB.prepare('UPDATE site SET allocated_bytes=allocated_bytes-? WHERE id=1')
@@ -358,7 +375,7 @@ export async function swapObject(
       .run();
     throw error;
   }
-  await env.FILES.delete(file.object_key).catch(() => {});
+  if (!retained) await env.FILES.delete(file.object_key).catch(() => {});
   return { id: file.id, key_id: target, size: bytes.byteLength };
 }
 // Re-sealed D1 values from the plan, plus summaries of re-sealed notes.

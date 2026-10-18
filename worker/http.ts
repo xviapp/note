@@ -3,6 +3,8 @@ export class AppError extends Error {
     public status: number,
     message: string,
     public code = 'REQUEST_FAILED',
+    // Sent with the error for the device to act on.
+    public details?: Record<string, unknown>,
   ) {
     super(message);
   }

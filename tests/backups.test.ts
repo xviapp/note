@@ -10,6 +10,15 @@ import { createNode } from '../worker/library';
 import { LIBRARY_UNREFERENCED, readText, storeChatBody, storeText, uploadFile } from '../worker/storage';
 import { cleanup, purgeTrash, trashNode } from '../worker/recovery';
 import { startRestore, finishRestore } from '../worker/backups';
+import {
+  exportContentKey,
+  keyCheck,
+  newContentKey,
+  newSalt,
+  passwordKey,
+  sealBytes,
+  wrapContentKey,
+} from '../shared/encryption';
 
 const bindings = env as unknown as Env & {
   TEST_MIGRATIONS: Parameters<typeof applyD1Migrations>[1];
@@ -41,6 +50,7 @@ beforeEach(async () => {
   await bindings.DB.batch(
     [
       'DELETE FROM backup_jobs',
+      'DELETE FROM retired_objects',
       'DELETE FROM backup_restore_nodes',
       'DELETE FROM assistant_threads',
       'DELETE FROM nodes',
@@ -309,6 +319,52 @@ it('pins snapshot bytes through deletion and cleanup, then releases them', async
   await ok(`/api/backups/${snapshot.id}`, 'DELETE');
   await cleanup(bindings);
   expect((await request(`/api/files/${snapshot.archive.files[0].id}`)).status).toBe(404);
+});
+it('exports files as the snapshot named them while they are re-encrypted', async () => {
+  const folder = await create({ kind: 'folder', title: '私人' });
+  await create({ kind: 'markdown', parentId: folder.id, content: '快照时的明文' });
+  const snapshot = await ok<{ id: string; archive: LibraryBackup }>('/api/backups', 'POST', {});
+  const [body] = snapshot.archive.files;
+  expect(body.key_id).toBeNull();
+  // A password is set and the body is re-encrypted before the export downloads it.
+  const key = await newContentKey(),
+    salt = newSalt(),
+    keyId = crypto.randomUUID();
+  await ok('/api/encryption/keys', 'POST', {
+    id: keyId,
+    salt,
+    iterations: 100_000,
+    wrapped: await wrapContentKey(await passwordKey('secret-1', salt, 100_000), await exportContentKey(key)),
+    check_value: await keyCheck(key),
+  });
+  await ok(`/api/nodes/${folder.id}/encryption`, 'PUT', { encryption: keyId });
+  const sealed = await sealBytes(key, keyId, new TextEncoder().encode('快照时的明文'));
+  const swapped = await SELF.fetch(`https://notes.test/api/nodes/${folder.id}/encryption/objects/${body.id}`, {
+    method: 'PUT',
+    headers: { cookie, origin: 'https://notes.test', 'x-idempotency-key': crypto.randomUUID() },
+    body: sealed,
+  });
+  expect(swapped.ok, await swapped.clone().text()).toBe(true);
+  const exported = await request(`/api/backups/${snapshot.id}/files/${body.id}`);
+  expect(new TextDecoder().decode(await exported.arrayBuffer())).toBe('快照时的明文');
+  // The re-encrypted object does not pass as the manifest's plain file.
+  const stage = await ok<{ id: string }>('/api/backups/restore', 'POST', snapshot.archive);
+  const refused = await SELF.fetch(`https://notes.test/api/backups/${stage.id}/files/${body.id}`, {
+    method: 'POST',
+    headers: { cookie, origin: 'https://notes.test' },
+    body: sealed,
+  });
+  expect(refused.status).toBe(400);
+  expect((await refused.json<{ error: string }>()).error).toContain('加密方式与备份清单不符');
+  await ok(`/api/backups/${stage.id}`, 'DELETE');
+  // The old content goes once the export ends.
+  const objects = async () => (await bindings.FILES.list()).objects.length;
+  await cleanup(bindings);
+  const kept = await objects();
+  await ok(`/api/backups/${snapshot.id}`, 'DELETE');
+  await cleanup(bindings);
+  expect(await objects()).toBe(kept - 1);
+  expect(await bindings.DB.prepare('SELECT COUNT(*) n FROM retired_objects').first('n')).toBe(0);
 });
 it('rejects cyclic or incomplete manifests, requires authentication and rolls back an invalid restore', async () => {
   const note = await create({ kind: 'text', title: '保留', content: 'safe' });

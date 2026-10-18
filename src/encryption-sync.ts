@@ -13,7 +13,8 @@ import {
 import { annotationSearchText, type Annotation } from '../shared/annotations';
 import { rewriteBackupText } from '../shared/backup';
 import { markdownMetadata } from '../shared/projects';
-import { api, parse } from './api';
+import { api, ApiError, lockNote, parse, unlockNote } from './api';
+import { TEXT_KINDS, type NoteDetail } from '../shared/types';
 import { forgetScope, keyOrThrow, LockedError, sealData, sealString } from './encryption';
 import { removeCachedNote } from './offline-cache';
 import { proxyReady } from './proxy';
@@ -63,7 +64,12 @@ async function resealText(target: string | null, value: string) {
 async function syncObject(root: string, object: PlanObject) {
   const plain = await plainOf(await readObject(object.id));
   if (object.target) await keyOrThrow(object.target);
-  await writeObject(root, object.id, await reseal(object.target, plain));
+  try {
+    await writeObject(root, object.id, await reseal(object.target, plain));
+  } catch (error) {
+    if (error instanceof ApiError && error.code === 'FILES_SHARED' && (await separate(object))) return;
+    throw error;
+  }
   const text = () => new TextDecoder().decode(plain);
   const fields: Record<string, unknown>[] = [];
   if (object.kind === 'annotation' && !object.target) {
@@ -88,6 +94,25 @@ async function syncObject(root: string, object: PlanObject) {
     });
   }
   if (fields.length) await api(`/api/nodes/${root}/encryption/fields`, 'POST', { fields });
+}
+// A file that a note with another key uses too: saving this note again gives
+// it a copy of its own, sealed for its place (ownCopies in api.ts).
+async function separate(object: PlanObject): Promise<boolean> {
+  const note = await api<NoteDetail>(`/api/nodes/${object.node_id}`);
+  if (note.locked) throw new LockedError(note.locked);
+  if (!TEXT_KINDS.includes(note.kind) || !note.attachments.some((file) => file.id === object.id))
+    return false;
+  await unlockNote(note.id);
+  try {
+    await api(`/api/nodes/${note.id}/content`, 'PUT', {
+      content: note.content,
+      attachments: note.attachments.map((file) => file.id),
+      revision: note.revision,
+    });
+  } finally {
+    lockNote(note.id);
+  }
+  return true;
 }
 async function syncField(field: PlanField) {
   if (field.table === 'translations')

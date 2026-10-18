@@ -42,3 +42,29 @@ it('allows long AI work to finish within its provider budget', async () => {
   await api('/api/books/role-prompt', 'POST', { title: '书籍' });
   expect(timeout).toHaveBeenCalledWith(expect.any(Function), 25 * 60_000);
 });
+
+it('copies files another note uses and saves with the copies', async () => {
+  const bodies: Record<string, unknown>[] = [];
+  const fetcher = vi.fn(async (path: string, options: RequestInit = {}) => {
+    if (path === '/api/nodes/n1/keys') return Response.json({ key_id: null, chain: [] });
+    if (path === '/api/files/f1') return new Response('图片');
+    if (path.startsWith('/api/files?')) return Response.json({ id: 'f2', name: 'a.png', mime: 'image/png', size: 6 });
+    const body = JSON.parse(String(options.body));
+    bodies.push(body);
+    return bodies.length === 1
+      ? Response.json(
+        { error: '附件也被其他笔记使用。', code: 'FILES_SHARED', files: [{ id: 'f1', name: 'a.png', mime: 'image/png' }] },
+        { status: 409 },
+      )
+      : Response.json({ id: 'n1', revision: 2 });
+  });
+  vi.stubGlobal('fetch', fetcher);
+  await api('/api/nodes/n1/content', 'PUT', { content: '![](/api/files/f1) /api/files/f10', attachments: ['f1'], revision: 1 }, 'save');
+  expect(bodies[1]).toEqual({
+    content: '![](/api/files/f2) /api/files/f10',
+    attachments: ['f2'],
+    revision: 1,
+    copies: { f1: 'f2' },
+  });
+  expect(fetcher.mock.calls.filter(([path]) => path === '/api/nodes/n1/content').map((call) => (call[1] as RequestInit & { headers: Record<string, string> }).headers['x-idempotency-key'])).toEqual(['save', 'save']);
+});

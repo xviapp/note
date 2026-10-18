@@ -1,6 +1,6 @@
 import { TEXT_KINDS, type AuthStatus, type FileInfo, type NoteDetail } from '../shared/types';
 import type { Annotation, AnnotationList } from '../shared/annotations';
-import { KEY_HEADER } from '../shared/encryption';
+import { KEY_HEADER, openBytes, sealedKeyId } from '../shared/encryption';
 import { markdownMetadata } from '../shared/projects';
 import {
   forgetScope,
@@ -33,6 +33,7 @@ export class ApiError extends Error {
     message: string,
     public status: number,
     public code?: string,
+    public details?: Record<string, unknown>,
   ) {
     super(message);
   }
@@ -67,7 +68,9 @@ export async function api<T = Record<string, unknown>>(
   if (method === 'GET') return request<T>(path, method, data, key);
   // Writes into an encrypted place are sealed here first. A device that had
   // an old idea of the place's key learns the new one and seals again.
-  for (let attempt = 0; ; attempt++) {
+  let resealed = false,
+    copied = false;
+  for (;;) {
     const sealed = await sealWrite<T>(path, method, data);
     if (sealed.done) return sealed.value;
     try {
@@ -75,11 +78,51 @@ export async function api<T = Record<string, unknown>>(
       moved(path, method, data);
       return value;
     } catch (error) {
-      if (attempt || !(error instanceof ApiError) || error.code !== 'ENCRYPTION_CHANGED')
-        throw error;
+      if (!(error instanceof ApiError)) throw error;
+      // Files of another note are copied for this one (see ownFiles in worker/library.ts).
+      if (error.code === 'FILES_SHARED' && !copied && sealed.scope !== undefined) {
+        copied = true;
+        data = await ownCopies(sealed.scope, data as Record<string, unknown>, error.details?.files);
+        continue;
+      }
+      if (resealed || error.code !== 'ENCRYPTION_CHANGED') throw error;
+      resealed = true;
       forgetScope(sealed.scope ?? undefined);
     }
   }
+}
+// A copy of each named file for the note at `scope` (sealed like its own),
+// with the body's links and attachments moved to the copies.
+async function ownCopies(
+  scope: string | null,
+  data: Record<string, unknown>,
+  files: unknown,
+): Promise<Record<string, unknown>> {
+  if (!Array.isArray(files) || !files.length) throw new ApiError('附件需要复制，但服务器没有说明是哪些。', 409);
+  const copies: Record<string, string> = {};
+  for (const file of files as { id: string; name: string; mime: string }[]) {
+    await proxyReady();
+    const response = await fetch(fileUrl(file.id), { credentials: 'same-origin' });
+    if (!response.ok) await parse(response);
+    let bytes: Uint8Array<ArrayBuffer> = new Uint8Array(await response.arrayBuffer());
+    const keyId = sealedKeyId(bytes);
+    if (keyId) bytes = await openBytes(await keyOrThrow(keyId), bytes);
+    copies[file.id] = (await upload(new File([bytes], file.name, { type: file.mime }), scope)).id;
+  }
+  const swap = (id: unknown) => (typeof id === 'string' && copies[id]) || id;
+  return {
+    ...data,
+    ...(typeof data.content === 'string'
+      ? {
+          content: data.content.replace(
+            /\/api\/files\/([a-zA-Z0-9_-]{1,80})/g,
+            (link, id: string) => (copies[id] ? `/api/files/${copies[id]}` : link),
+          ),
+        }
+      : {}),
+    ...(Array.isArray(data.attachments) ? { attachments: data.attachments.map(swap) } : {}),
+    copies: { ...(data.copies as Record<string, string> | undefined), ...copies },
+  };
 }
 // A note's detail without keeping it as read (no files, see src/prefetch.ts).
 // A note fetched before it is opened (src/prefetch.ts), cached as the server
@@ -363,6 +406,7 @@ export async function parse<T>(response: Response): Promise<T> {
   })) as {
     error?: string;
     code?: string;
+    [detail: string]: unknown;
   };
   if (!value || typeof value !== 'object' || Array.isArray(value))
     throw new ApiError('服务器响应不完整，请稍后重试。', 502, 'INVALID_RESPONSE');
@@ -375,7 +419,8 @@ export async function parse<T>(response: Response): Promise<T> {
     if (response.status === 403 && value.code === 'EDIT_LOCKED') {
       lockEdits();
     }
-    throw new ApiError(value.error || '操作未完成。', response.status, value.code);
+    const { error, code, ...details } = value;
+    throw new ApiError(error || '操作未完成。', response.status, code, details);
   }
   return value as T;
 }
