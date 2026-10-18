@@ -19,20 +19,26 @@ test('ordinary Markdown can append, edit and delete sections in every theme', as
   await page.goto(url);
   await expect(page.locator('.read-content')).toContainText('原来的内容。');
   const readText = await page.locator('.read-content').textContent();
-  await noteAction(page, '开启快捷编辑');
+  await expect(page.locator('.quick-append')).toBeVisible();
+  await expect(page.locator('.quick-append')).not.toHaveClass(/is-active/);
   await expect(page.getByRole('button', { name: '管理章节 第一节', exact: true })).toBeVisible();
   expect(await page.locator('.read-content').textContent()).toBe(readText);
   await page.reload();
   await expect(page.locator('.quick-append')).toBeVisible();
 
-  // Turning the feature on for one note does not enable it on another note.
+  // Notes default to quick editing; an explicit opt-out is remembered per note.
   const other = await (await page.request.post('/api/nodes', {
     headers, data: { kind: 'markdown', title: '其他笔记.md', content: '## 其他\n\n内容' },
   })).json();
   await page.goto(`/n/${other.id}`);
   await expect(page.locator('.read-content')).toContainText('其他');
+  await expect(page.locator('.quick-append')).toBeVisible();
+  await noteAction(page, '关闭快捷编辑');
+  await page.reload();
+  await expect(page.locator('.read-content')).toContainText('其他');
   await expect(page.locator('.quick-append')).toHaveCount(0);
   await page.goto(url);
+  await expect(page.locator('.quick-append')).toBeVisible();
 
   const field = page.getByRole('textbox', { name: '章节 Markdown（含标题和子章节）' });
   for (const theme of ['light', 'dark', 'starry']) {

@@ -35,7 +35,7 @@ export function useQuickMarkdown({ id, note, editing, disabled, appending, proje
   const waitingForSave = !!useSyncExternalStore(subscribeSaves, () => pendingSave(id));
   const blocked = disabled || waitingForSave;
   const [enabled, setEnabled] = useState(() => {
-    try { return localStorage.getItem(preference) === 'true'; } catch { return false; }
+    try { return localStorage.getItem(preference) !== 'false'; } catch { return true; }
   });
   const [session, setSession] = useState<Session | null>(null);
   const [text, setText] = useState('');

@@ -29,7 +29,6 @@ beforeEach(() => {
   write.mockReset();
   pendingSave.mockReset();
   localStorage.clear();
-  localStorage.setItem('note:quick-edit:note', 'true');
   confirm.mockResolvedValue(false);
 });
 afterEach(cleanup);
@@ -38,6 +37,47 @@ function edit() {
   fireEvent.click(screen.getByRole('button', { name: '开始编辑' }));
   fireEvent.change(field(), { target: { value: '## 一\n\n修改' } });
 }
+
+it.each([
+  [null, true],
+  ['true', true],
+  ['false', false],
+] as const)('uses preference %s with quick editing enabled=%s', (preference, enabled) => {
+  if (preference !== null) localStorage.setItem('note:quick-edit:note', preference);
+  render(<Harness />);
+  expect(screen.getByRole('button', { name: enabled ? '关闭快捷编辑' : '开启快捷编辑' }).getAttribute('aria-pressed'))
+    .toBe(String(enabled));
+  fireEvent.click(screen.getByRole('button', { name: '开始编辑' }));
+  expect(screen.queryByRole('textbox') !== null).toBe(enabled);
+});
+
+it('remembers an explicit opt-out and a later opt-in across reopening', async () => {
+  const first = render(<Harness />);
+  fireEvent.click(screen.getByRole('button', { name: '关闭快捷编辑' }));
+  await screen.findByRole('button', { name: '开启快捷编辑' });
+  expect(localStorage.getItem('note:quick-edit:note')).toBe('false');
+  first.unmount();
+  const second = render(<Harness />);
+  fireEvent.click(screen.getByRole('button', { name: '开始编辑' }));
+  expect(screen.queryByRole('textbox')).toBeNull();
+  fireEvent.click(screen.getByRole('button', { name: '开启快捷编辑' }));
+  await screen.findByRole('button', { name: '关闭快捷编辑' });
+  expect(localStorage.getItem('note:quick-edit:note')).toBe('true');
+  second.unmount();
+  render(<Harness />);
+  fireEvent.click(screen.getByRole('button', { name: '开始编辑' }));
+  expect(field()).toBeTruthy();
+});
+
+it('keeps the default enabled when device preferences cannot be read', () => {
+  const getItem = vi.spyOn(Storage.prototype, 'getItem').mockImplementation(() => { throw new Error('Storage unavailable'); });
+  try {
+    render(<Harness />);
+    expect(screen.getByRole('button', { name: '关闭快捷编辑' })).toBeTruthy();
+  } finally {
+    getItem.mockRestore();
+  }
+});
 
 it('backs up a full recoverable draft and asks before discarding section edits', async () => {
   render(<Harness />);
