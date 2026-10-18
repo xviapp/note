@@ -239,9 +239,43 @@ export async function addPage(
   const title =
     textValue(data.title ?? '', '标题', 200, true).trim() ||
     (page ? `第 ${page} 页` : '未命名页面');
-  const text = fileId
-    ? await recognize(env, fileId)
-    : textValue(data.content, '正文', 1_048_576).trim();
+  if (!fileId)
+    return createPage(env, bookId, info, key, title, page, null, textValue(data.content, '正文', 1_048_576).trim());
+  // One recognition per operation: a request with the same key while it runs
+  // (or after it ended without a page) does not pay again.
+  const claim = `${key}:recognize`;
+  const claimed = await env.DB.prepare(
+    "INSERT OR IGNORE INTO idempotency(key,operation,created_at) VALUES(?,'recognize-page',?) RETURNING key",
+  )
+    .bind(claim, Date.now())
+    .first();
+  if (!claimed) {
+    const done = await priorOperation(env, key, 'create');
+    if (done) return done;
+    throw new AppError(
+      409,
+      '这一页已在识别，或上次识别没有确认结果。请稍后到书中查看，需要时重新添加。',
+      'OPERATION_PENDING',
+    );
+  }
+  try {
+    return await createPage(env, bookId, info, key, title, page, fileId, await recognize(env, fileId));
+  } catch (error) {
+    // It ended with an answer: the same operation may be tried again.
+    await env.DB.prepare('DELETE FROM idempotency WHERE key=?').bind(claim).run();
+    throw error;
+  }
+}
+async function createPage(
+  env: Env,
+  bookId: string,
+  info: Awaited<ReturnType<typeof book>>,
+  key: string,
+  title: string,
+  page: number | null,
+  fileId: string | null,
+  text: string,
+): Promise<NoteNode> {
   const node = await createNode(
     env,
     {

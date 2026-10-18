@@ -195,6 +195,30 @@ describe('books', () => {
     expect(fetch).toHaveBeenCalledTimes(1);
   });
 
+  it('recognizes a page once when the same request arrives twice at once', async () => {
+    const book = await newBook(),
+      file = await photo();
+    let answer!: () => void;
+    const fetch = vi.spyOn(globalThis, 'fetch').mockImplementation(
+      () => new Promise<Response>((resolve) => (answer = () => resolve(provider('同一页。')))),
+    );
+    const first = request(`/api/nodes/${book.id}/pages`, 'POST', { fileId: file.id }, 'same-page');
+    await vi.waitFor(() => expect(fetch).toHaveBeenCalledTimes(1));
+    const second = await request(`/api/nodes/${book.id}/pages`, 'POST', { fileId: file.id }, 'same-page');
+    expect(second.status).toBe(409);
+    expect((await second.json<{ code: string }>()).code).toBe('OPERATION_PENDING');
+    answer();
+    const page = await (await first).json<NoteNode>();
+    // Once the page exists, the same request returns it.
+    expect((await ok<NoteNode>(`/api/nodes/${book.id}/pages`, 'POST', { fileId: file.id }, 'same-page')).id).toBe(page.id);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    // A recognition that ended in an error may be tried again under the same key.
+    fetch.mockImplementation(async () => provider(''));
+    expect((await request(`/api/nodes/${book.id}/pages`, 'POST', { fileId: file.id }, 'retry-page')).ok).toBe(false);
+    fetch.mockImplementation(async () => provider('第二次识别。'));
+    await ok(`/api/nodes/${book.id}/pages`, 'POST', { fileId: file.id }, 'retry-page');
+  });
+
   it('refuses pages outside a book and keeps nothing when nothing is recognized', async () => {
     const folder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '杂项' });
     const file = await photo();
