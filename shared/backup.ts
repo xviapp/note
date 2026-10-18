@@ -21,6 +21,8 @@ export const backupColumns = {
     'file_blob_id',
     'icon_emoji',
     'icon_blob_id',
+    'icon_glyph',
+    'icon_file_id',
     'current_version_id',
     'revision',
     'trash_id',
@@ -221,10 +223,13 @@ export function validateBackup(input: unknown): LibraryBackup {
       if (table === 'books' && row.cover_blob_id === undefined) row.cover_blob_id = null;
       if (table === 'clips' && row.archived === undefined) row.archived = 0;
       if (table === 'clips' && row.blob_id === undefined) row.blob_id = null;
-      // Older v1 archives predate custom folder icons.
+      // Older v1 archives predate custom icons, or keep folder icons in the
+      // columns icons moved out of (migrations/0029_node_icons.sql).
       if (table === 'nodes') {
-        if (row.icon_emoji === undefined) row.icon_emoji = null;
-        if (row.icon_blob_id === undefined) row.icon_blob_id = null;
+        if (row.icon_glyph === undefined) row.icon_glyph = row.icon_emoji ?? null;
+        if (row.icon_file_id === undefined) row.icon_file_id = row.icon_blob_id ?? null;
+        row.icon_emoji = null;
+        row.icon_blob_id = null;
         for (const field of [
           'metadata_title',
           'metadata_status',
@@ -291,16 +296,13 @@ export function validateBackup(input: unknown): LibraryBackup {
       invalid('PDF 类型不正确。');
     if (node.kind === 'image' && !files.get(String(node.file_blob_id))?.mime.startsWith('image/'))
       invalid('图片类型不正确。');
-    hasFile(node.icon_blob_id, true);
-    if (
-      (node.kind !== 'folder' && (node.icon_emoji !== null || node.icon_blob_id !== null)) ||
-      (node.icon_emoji !== null && (!isFolderEmoji(node.icon_emoji) || node.icon_blob_id !== null))
-    )
-      invalid('文件夹图标不正确。');
-    if (node.icon_blob_id !== null) {
-      const icon = files.get(String(node.icon_blob_id))!;
+    hasFile(node.icon_file_id, true);
+    if (node.icon_glyph !== null && (!isFolderEmoji(node.icon_glyph) || node.icon_file_id !== null))
+      invalid('图标不正确。');
+    if (node.icon_file_id !== null) {
+      const icon = files.get(String(node.icon_file_id))!;
       if (!FOLDER_ICON_MIMES.includes(icon.mime) || icon.size > FOLDER_ICON_MAX_BYTES)
-        invalid('文件夹图标图片不正确。');
+        invalid('图标图片不正确。');
     }
     if (
       node.current_version_id !== null &&

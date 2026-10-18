@@ -398,11 +398,11 @@ export async function storageInfo(env: Env): Promise<StorageInfo> {
     `SELECT
     COALESCE(SUM(CASE WHEN state='pending' THEN size ELSE 0 END),0) reserved,
     COALESCE(SUM(CASE WHEN state!='pending' AND (
-      EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND (n.file_blob_id=b.id OR n.icon_blob_id=b.id)) OR
+      EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND (n.file_blob_id=b.id OR n.icon_blob_id=b.id OR n.icon_file_id=b.id)) OR
       EXISTS(SELECT 1 FROM nodes n JOIN versions v ON v.id=n.current_version_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR
       EXISTS(SELECT 1 FROM nodes n JOIN version_assets a ON a.version_id=n.current_version_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR ${aiLive}
     ) THEN size ELSE 0 END),0) current,
-    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a JOIN versions v ON v.id=a.version_id JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND (n.file_blob_id=b.id OR n.icon_blob_id=b.id)) OR ${aiLive}) THEN size ELSE 0 END),0) live,
+    COALESCE(SUM(CASE WHEN state!='pending' AND (EXISTS(SELECT 1 FROM versions v JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND v.body_blob_id=b.id) OR EXISTS(SELECT 1 FROM version_assets a JOIN versions v ON v.id=a.version_id JOIN nodes n ON n.id=v.node_id WHERE n.trash_id IS NULL AND a.blob_id=b.id) OR EXISTS(SELECT 1 FROM nodes n WHERE n.trash_id IS NULL AND (n.file_blob_id=b.id OR n.icon_blob_id=b.id OR n.icon_file_id=b.id)) OR ${aiLive}) THEN size ELSE 0 END),0) live,
     COALESCE(SUM(CASE WHEN state!='pending' AND (${referenced}) THEN size ELSE 0 END),0) referenced
     FROM blobs b`,
   );

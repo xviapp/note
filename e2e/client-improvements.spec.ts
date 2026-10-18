@@ -303,7 +303,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   const openIcons = async () => {
     await menu.getByRole('button', { name: `管理 ${title}`, exact: true }).click();
     await menu.getByRole('button', { name: '更换图标', exact: true }).click();
-    return page.getByRole('dialog', { name: '更换文件夹图标', exact: true });
+    return page.getByRole('dialog', { name: '更换图标', exact: true });
   };
   let icons = await openIcons();
   await icons.getByLabel('自定义 Emoji', { exact: true }).fill('不是 Emoji');
@@ -312,7 +312,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await icons.getByRole('button', { name: '保存信息' }).click();
   await expect(page.locator('.document-kind .custom-folder-icon')).toHaveText('👩🏽‍🔬');
   icons = await openIcons();
-  await icons.getByLabel('上传文件夹图标', { exact: true }).setInputFiles({
+  await icons.getByLabel('上传图标', { exact: true }).setInputFiles({
     name: 'icon.svg',
     mimeType: 'image/svg+xml',
     buffer: Buffer.from(
@@ -324,9 +324,9 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await icons.getByRole('button', { name: '保存信息' }).click();
   await expect(page.locator('.document-kind .custom-folder-icon img')).toBeVisible();
   const node = await (await page.request.get(`/api/nodes/${nodeId}`)).json();
-  expect(node.icon_blob_id).toBeTruthy();
-  expect(node.icon_emoji).toBeNull();
-  const iconResponse = await page.request.get(`/api/files/${node.icon_blob_id}`);
+  expect(node.icon_file_id).toBeTruthy();
+  expect(node.icon_glyph).toBeNull();
+  const iconResponse = await page.request.get(`/api/files/${node.icon_file_id}`);
   expect(iconResponse.headers()['content-type']).toContain('image/webp');
   expect((await iconResponse.body()).length).toBeLessThan(128 * 1024);
   await page.reload();
@@ -345,7 +345,7 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
         db.close();
         return (
           !!cached?.complete &&
-          cached.files.some((file: any) => file.id === cached.detail.icon_blob_id)
+          cached.files.some((file: any) => file.id === cached.detail.icon_file_id)
         );
       }, nodeId),
     )
@@ -366,8 +366,8 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   icons = await openIcons();
   await icons.getByRole('button', { name: '恢复默认', exact: true }).click();
   await icons.getByRole('button', { name: '取消', exact: true }).click();
-  expect((await (await page.request.get(`/api/nodes/${nodeId}`)).json()).icon_blob_id).toBe(
-    node.icon_blob_id,
+  expect((await (await page.request.get(`/api/nodes/${nodeId}`)).json()).icon_file_id).toBe(
+    node.icon_file_id,
   );
   await noteAction(page, '收藏笔记');
   const nav = page.getByRole('button', { name: '打开笔记目录', exact: true });
@@ -386,6 +386,22 @@ test('folder icons can be created, replaced, cancelled and reset across lists an
   await icons.getByRole('button', { name: '保存信息' }).click();
   await expect(page.locator('.document-kind .custom-folder-icon')).toHaveCount(0);
   await expect(page.locator('.document-kind .kind-folder')).toBeVisible();
+
+  // Any kind of entry can change its icon, a note too.
+  const noteTitle = `有图标的笔记 ${info.project.name}`;
+  const created = await page.request.post('/api/nodes', {
+    headers,
+    data: { kind: 'markdown', title: noteTitle, content: '正文' },
+  });
+  const note = await created.json();
+  await page.goto(`/n/${note.id}`);
+  await menu.getByRole('button', { name: `管理 ${noteTitle}`, exact: true }).click();
+  await menu.getByRole('button', { name: '更换图标', exact: true }).click();
+  const noteIcons = page.getByRole('dialog', { name: '更换图标', exact: true });
+  await noteIcons.getByRole('button', { name: '使用 📝', exact: true }).click();
+  await noteIcons.getByRole('button', { name: '保存信息' }).click();
+  await expect(page.locator('.document-kind .custom-folder-icon')).toHaveText('📝');
+  expect((await (await page.request.get(`/api/nodes/${note.id}`)).json()).icon_glyph).toBe('📝');
 });
 test('untitled notes open for writing and Qingli uses the floating entry', async ({ page }) => {
   await login(page);

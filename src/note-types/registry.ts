@@ -32,7 +32,8 @@ export interface NoteType {
   newChild: boolean;
   // Offered in the new-note dialog, in this order, stored as this kind.
   create?: { order: number; kind: NodeKind };
-  // Can take an Emoji or picture icon (folders and what is built on them).
+  // Picks an Emoji or picture icon when created (folders and what is built on
+  // them); any entry can change its icon afterwards.
   customIcon: boolean;
 }
 

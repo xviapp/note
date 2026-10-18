@@ -21,8 +21,8 @@ export function NodeIcon({
       | 'kind'
       | 'variant'
       | 'arxiv_id'
-      | 'icon_emoji'
-      | 'icon_blob_id'
+      | 'icon_glyph'
+      | 'icon_file_id'
       | 'reference_kind'
       | 'project_category'
     >
@@ -30,26 +30,24 @@ export function NodeIcon({
 }) {
   const variant =
     kind ?? (node?.kind ? variantOf(node as Parameters<typeof variantOf>[0]) : 'markdown');
-  if (node && variant === 'reference')
-    return (
-      <span className="node-reference-icon" aria-hidden="true">
-        <NodeIcon kind={node.project_category || node.reference_kind || 'reference'} size={size} />
-        <CornerUpRight size={Math.max(10, size * 0.65)} className="reference-arrow" />
-      </span>
-    );
-  if (
-    (variant === 'folder' || variant === 'book' || variant === 'project') &&
-    (node?.icon_emoji || node?.icon_blob_id)
-  )
+  // A custom icon (any kind of entry) comes first.
+  if (node?.icon_glyph || node?.icon_file_id)
     return (
       <span
         className="node-icon custom-folder-icon"
         style={{ '--node-icon-size': `${size}px` } as CSSProperties}
         aria-hidden="true"
       >
-        {node.icon_emoji || (
-          <CachedImage icon src={fileUrl(node.icon_blob_id!)} alt="" draggable={false} />
+        {node.icon_glyph || (
+          <CachedImage icon src={fileUrl(node.icon_file_id!)} alt="" draggable={false} />
         )}
+      </span>
+    );
+  if (node && variant === 'reference')
+    return (
+      <span className="node-reference-icon" aria-hidden="true">
+        <NodeIcon kind={node.project_category || node.reference_kind || 'reference'} size={size} />
+        <CornerUpRight size={Math.max(10, size * 0.65)} className="reference-arrow" />
       </span>
     );
   const shown: IconType =

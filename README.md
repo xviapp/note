@@ -20,7 +20,7 @@
 
 ## 功能
 
-- 笔记：Markdown、纯文本、PDF、图片、网页链接；树形目录、收藏、[搜索](docs/search.md)、高亮和批注。电脑上可按住 Ctrl/Cmd 或 Shift 点击多选，批量移动或移到回收站；可[导入 Markdown 笔记文件夹](docs/import.md)。普通 Markdown 默认开启[快捷编辑](docs/markdown-editing.md)，直接追加内容、修改或删除章节，可按篇关闭。
+- 笔记：Markdown、纯文本、PDF、图片、网页链接；树形目录、收藏、[搜索](docs/search.md)、高亮和批注。任何条目都可在「更换图标」中设置 Emoji 或图片图标。电脑上可按住 Ctrl/Cmd 或 Shift 点击多选，批量移动或移到回收站；可[导入 Markdown 笔记文件夹](docs/import.md)。普通 Markdown 默认开启[快捷编辑](docs/markdown-editing.md)，直接追加内容、修改或删除章节，可按篇关闭。
 - 阅读：章节目录、进度记忆、分屏、三种主题、字体与排版设置。[离线阅读](docs/offline-reading.md)支持正文、PDF、图片和附件。
 - 编辑：点击「编辑正文」后编辑；本机暂存草稿，保存冲突时可覆盖或另存为新笔记。
 - [arXiv 论文](docs/arxiv.md)：导入正文和插图，逐段翻译、对照阅读。

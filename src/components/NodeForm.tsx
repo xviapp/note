@@ -62,14 +62,16 @@ export function NodeForm({
   const continued = useRef<string | null>(null),
     [progress, setProgress] = useState<ArxivImportProgress | null>(null);
   const [icon, setIcon] = useState<FolderIconValue>({
-    emoji: node?.icon_emoji ?? null,
-    fileId: node?.icon_blob_id ?? null,
+    emoji: node?.icon_glyph ?? null,
+    fileId: node?.icon_file_id ?? null,
   });
   const [author, setAuthor] = useState(''),
     [pageCount, setPageCount] = useState(''),
     [role, setRole] = useState('');
   // A book is a folder created with its reading details.
   const folderLike = NOTE_TYPES[kind].customIcon;
+  // Folders and what is built on them pick an icon when created; any entry can change it later.
+  const withIcon = folderLike || !!node;
   const [preparingIcon, setPreparingIcon] = useState(false);
   const uploadedIcon = useRef<{ source: File; info: FileInfo } | null>(null);
   const working = busy || preparingIcon;
@@ -89,7 +91,7 @@ export function NodeForm({
     try {
       let iconData;
       if (kind === 'reference' && !reference) throw new Error('请先选择要引用的文件或文件夹。');
-      if (folderLike) {
+      if (withIcon) {
         if (icon.emoji && !isFolderEmoji(icon.emoji)) throw new Error('请输入一个 Emoji。');
         if (icon.file && uploadedIcon.current?.source !== icon.file) {
           if (uploadedIcon.current)
@@ -116,7 +118,7 @@ export function NodeForm({
               title,
               ...(kind === 'link' && !node.arxiv_id ? { url } : {}),
               revision: node.revision,
-              ...(folderLike ? { icon: iconData } : {}),
+              ...(withIcon ? { icon: iconData } : {}),
             })
           : api<NoteNode>('/api/nodes', 'POST', {
               kind: NOTE_TYPES[kind].create?.kind ?? kind,
@@ -128,11 +130,11 @@ export function NodeForm({
               ...(kind === 'project' ? { project: true } : {}),
               ...(kind === 'journal' ? { journal: true } : {}),
               ...(kind === 'reference' ? { referenceId: reference!.id } : {}),
-              ...(folderLike ? { icon: iconData } : {}),
+              ...(withIcon ? { icon: iconData } : {}),
               ...(kind === 'book' ? { book: { author, pageCount: Number(pageCount) || 0, rolePrompt: role } } : {}),
             }, key.current)
         ).then((result) => {
-          if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_blob_id)
+          if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_file_id)
             void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
           return result;
         });
@@ -156,7 +158,7 @@ export function NodeForm({
             title,
             ...(kind === 'link' && !node.arxiv_id ? { url } : {}),
             revision: node.revision,
-            ...(folderLike ? { icon: iconData } : {}),
+            ...(withIcon ? { icon: iconData } : {}),
           })
         : kind === 'paper'
           ? await importPaper({ title, parentId: parent, url }, key.current, continued, setProgress)
@@ -173,14 +175,14 @@ export function NodeForm({
                 ...(kind === 'project' ? { project: true } : {}),
                 ...(kind === 'journal' ? { journal: true } : {}),
                 ...(kind === 'reference' ? { referenceId: reference!.id } : {}),
-                ...(folderLike ? { icon: iconData } : {}),
+                ...(withIcon ? { icon: iconData } : {}),
                 ...(kind === 'book'
                   ? { book: { author, pageCount: Number(pageCount) || 0, rolePrompt: role } }
                   : {}),
               },
               key.current,
             );
-      if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_blob_id)
+      if (uploadedIcon.current && uploadedIcon.current.info.id !== result.icon_file_id)
         void api(`/api/files/${uploadedIcon.current.info.id}`, 'DELETE').catch(() => {});
       onSaved(result);
     } catch (e) {
@@ -193,7 +195,7 @@ export function NodeForm({
     <Modal
       title={
         iconOnly
-          ? '更换文件夹图标'
+          ? '更换图标'
           : node
             ? '修改笔记信息'
             : existingFile
@@ -319,8 +321,9 @@ export function NodeForm({
             />
           </>
         )}
-        {folderLike && (
+        {withIcon && (
           <FolderIconPicker
+            kind={kind}
             value={icon}
             onChange={setIcon}
             disabled={working}
@@ -377,7 +380,7 @@ export function NodeForm({
           </button>
           <button
             className="button primary"
-            disabled={working || (folderLike && !!icon.emoji && !isFolderEmoji(icon.emoji))}
+            disabled={working || (withIcon && !!icon.emoji && !isFolderEmoji(icon.emoji))}
           >
             {busy
               ? kind === 'paper'

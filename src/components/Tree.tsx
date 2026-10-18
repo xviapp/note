@@ -79,9 +79,7 @@ export function NodeMenu({
         <button onClick={() => onAction('rename', node)}>
           重命名{node.kind === 'link' && !node.arxiv_id ? ' / 修改链接' : ''}
         </button>
-        {noteType(node).customIcon && (
-          <button onClick={() => onAction('icon', node)}>更换图标</button>
-        )}
+        <button onClick={() => onAction('icon', node)}>更换图标</button>
         <button onClick={() => onAction('move', node)}>移动到…</button>
         <button onClick={() => onAction('encryption', node)}>本地加密</button>
         {node.key_id && isUnlocked(node.key_id) && (

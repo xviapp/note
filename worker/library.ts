@@ -300,15 +300,14 @@ async function ownFiles(
     ).bind(from, node),
   ]);
 }
-async function folderIcon(
+// Any entry's icon: an Emoji or a small picture (see migrations/0029_node_icons.sql).
+async function nodeIcon(
   env: Env,
-  kind: NodeKind,
   input: unknown,
   current?: NoteNode,
 ): Promise<{ emoji: string | null; fileId: string | null }> {
   if (input === undefined)
-    return { emoji: current?.icon_emoji ?? null, fileId: current?.icon_blob_id ?? null };
-  if (kind !== 'folder') throw new AppError(400, '只有文件夹可以自定义图标。');
+    return { emoji: current?.icon_glyph ?? null, fileId: current?.icon_file_id ?? null };
   if (input === null) return { emoji: null, fileId: null };
   if (!input || typeof input !== 'object' || Array.isArray(input))
     throw new AppError(400, '图标格式不正确。');
@@ -320,7 +319,7 @@ async function folderIcon(
   if (fileId !== null) {
     const file = await getBlob(env, idValue(fileId));
     if (!FOLDER_ICON_MIMES.includes(file.mime) || file.size > FOLDER_ICON_MAX_BYTES)
-      throw new AppError(400, '文件夹图标需要使用不超过 128 KiB 的图片。');
+      throw new AppError(400, '图标需要使用不超过 128 KiB 的图片。');
     return { emoji: null, fileId: file.id };
   }
   return { emoji: emoji as string | null, fileId: null };
@@ -378,7 +377,7 @@ export async function createNode(
         : data.book !== undefined
           ? '未命名书籍'
           : UNTITLED_NAMES[kind]);
-  const icon = await folderIcon(env, kind, data.icon);
+  const icon = await nodeIcon(env, data.icon);
   // A book is a folder created together with its details.
   if (data.book !== undefined && (kind !== 'folder' || paper))
     throw new AppError(400, '只能新建文件夹形式的书籍。');
@@ -443,7 +442,7 @@ export async function createNode(
       'INSERT INTO idempotency(key,operation,node_id,result_revision,created_at) VALUES(?,?,?,?,?)',
     ).bind(key, operation, id, 1, now),
     env.DB.prepare(
-      `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at,arxiv_id,icon_emoji,icon_blob_id)
+      `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at,arxiv_id,icon_glyph,icon_file_id)
       VALUES(?,?,?,?,COALESCE(?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?)),?,?,?,?,?,?,?,?)`,
     ).bind(
       id,
@@ -622,7 +621,7 @@ export async function updateNode(
   const url = data.url === undefined ? node.url : node.kind === 'link' ? validUrl(data.url) : null;
   if (node.arxiv_id && url !== node.url)
     throw new AppError(400, '已保存论文的原文地址不能修改，请重新导入其他论文。');
-  const icon = await folderIcon(env, node.kind, data.icon, node);
+  const icon = await nodeIcon(env, data.icon, node);
   const position = data.position === undefined ? Date.now() : data.position;
   if (typeof position !== 'number' || !Number.isFinite(position))
     throw new AppError(400, '节点顺序不正确。');
@@ -631,7 +630,7 @@ export async function updateNode(
   if (moving && parent && (await getNode(env, parent)).variant === 'reference')
     throw new AppError(400, '不能移入引用，请打开原目录后再移动。');
   const result = await env.DB.prepare(
-    `UPDATE nodes SET title=?,url=?,icon_emoji=?,icon_blob_id=?,${moving ? 'parent_id=?,position=?,' : ''} revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id`,
+    `UPDATE nodes SET title=?,url=?,icon_glyph=?,icon_file_id=?,${moving ? 'parent_id=?,position=?,' : ''} revision=revision+1,updated_at=? WHERE id=? AND revision=? AND trash_id IS NULL RETURNING id`,
   )
     .bind(
       title,
@@ -645,8 +644,8 @@ export async function updateNode(
     )
     .first();
   if (!result) throw new AppError(409, '节点已在其他页面更新，请刷新后重试。', 'VERSION_CONFLICT');
-  if (node.icon_blob_id && node.icon_blob_id !== icon.fileId)
-    await discardFile(env, node.icon_blob_id).catch(() => {});
+  if (node.icon_file_id && node.icon_file_id !== icon.fileId)
+    await discardFile(env, node.icon_file_id).catch(() => {});
   const updated = await getNode(env, id);
   // Moved into an encrypted folder: its plain text leaves the search index.
   if (moving && updated.key_id) await forgetSubtree(env, id);

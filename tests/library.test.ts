@@ -385,12 +385,12 @@ describe('private library behavior', () => {
   });
   it('supports compound emoji and image folder icons without unlocking and preserves referenced bytes', async () => {
     const folder = await create('folder', '研究', { icon: { emoji: '👩🏽‍🔬' } });
-    expect(folder.icon_emoji).toBe('👩🏽‍🔬');
+    expect(folder.icon_glyph).toBe('👩🏽‍🔬');
     const renamed = await ok<NoteNode>(`/api/nodes/${folder.id}`, 'PATCH', {
       title: '研究资料',
       revision: folder.revision,
     });
-    expect(renamed.icon_emoji).toBe('👩🏽‍🔬');
+    expect(renamed.icon_glyph).toBe('👩🏽‍🔬');
     const image = await file();
     const pictured = await ok<NoteNode>(
       `/api/nodes/${folder.id}`,
@@ -398,8 +398,8 @@ describe('private library behavior', () => {
       { revision: renamed.revision, icon: { fileId: image.id } },
       { locked: true },
     );
-    expect(pictured).toMatchObject({ icon_emoji: null, icon_blob_id: image.id });
-    expect((await ok<{ nodes: NoteNode[] }>('/api/nodes')).nodes[0].icon_blob_id).toBe(image.id);
+    expect(pictured).toMatchObject({ icon_glyph: null, icon_file_id: image.id });
+    expect((await ok<{ nodes: NoteNode[] }>('/api/nodes')).nodes[0].icon_file_id).toBe(image.id);
     expect(await discardFile(bindings, image.id)).toBe(false);
     await bindings.DB.prepare('UPDATE blobs SET draft_until=0 WHERE id=?').bind(image.id).run();
     await cleanup(bindings);
@@ -423,7 +423,7 @@ describe('private library behavior', () => {
     expect((await request(`/api/files/${image.id}`)).status).toBe(200);
     await ok(`/api/trash/${batch.id}/restore`, 'POST', {});
     const restored = await ok<NoteNode>(`/api/nodes/${folder.id}`);
-    expect(restored.icon_blob_id).toBe(image.id);
+    expect(restored.icon_file_id).toBe(image.id);
     expect(
       (
         await request(`/api/nodes/${folder.id}`, 'PATCH', {
@@ -436,7 +436,7 @@ describe('private library behavior', () => {
       revision: restored.revision,
       icon: null,
     });
-    expect(reset).toMatchObject({ icon_emoji: null, icon_blob_id: null });
+    expect(reset).toMatchObject({ icon_glyph: null, icon_file_id: null });
     expect((await request(`/api/files/${image.id}`)).status).toBe(404);
     expect((await ok<StorageInfo>('/api/storage')).allocatedBytes).toBe(0);
   });
@@ -453,28 +453,27 @@ describe('private library behavior', () => {
       expect(
         (await request('/api/nodes', 'POST', { kind: 'folder', title: 'invalid', icon })).ok,
       ).toBe(false);
-    expect(
-      (
-        await request('/api/nodes', 'POST', {
-          kind: 'markdown',
-          title: 'invalid',
-          icon: { emoji: '📚' },
-        })
-      ).status,
-    ).toBe(400);
+    // Any kind of entry takes an icon, not only folders.
+    const note = await create('markdown', '有图标的笔记', { icon: { emoji: '📚' } });
+    expect(note.icon_glyph).toBe('📚');
+    const pictured = await ok<NoteNode>(`/api/nodes/${note.id}`, 'PATCH', {
+      revision: note.revision,
+      icon: { fileId: image.id },
+    });
+    expect(pictured).toMatchObject({ icon_glyph: null, icon_file_id: image.id });
     const folder = await create('folder', '图标测试', { icon: { emoji: '🇨🇳' } });
     const keycap = await ok<NoteNode>(`/api/nodes/${folder.id}`, 'PATCH', {
       revision: folder.revision,
       icon: { emoji: '1️⃣' },
     });
-    expect(keycap.icon_emoji).toBe('1️⃣');
+    expect(keycap.icon_glyph).toBe('1️⃣');
     await bindings.DB.prepare("UPDATE blobs SET state='deleting' WHERE id=?").bind(image.id).run();
     await expect(
-      bindings.DB.prepare('UPDATE nodes SET icon_emoji=NULL,icon_blob_id=? WHERE id=?')
+      bindings.DB.prepare('UPDATE nodes SET icon_glyph=NULL,icon_file_id=? WHERE id=?')
         .bind(image.id, folder.id)
         .run(),
     ).rejects.toThrow('FILE_UNAVAILABLE');
-    expect((await ok<NoteNode>(`/api/nodes/${folder.id}`)).icon_emoji).toBe('1️⃣');
+    expect((await ok<NoteNode>(`/api/nodes/${folder.id}`)).icon_glyph).toBe('1️⃣');
     const oversized = new Uint8Array(128 * 1024 + 1);
     oversized.set(png);
     const uploaded = await uploadFile(

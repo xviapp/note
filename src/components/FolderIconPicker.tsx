@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { ImagePlus, RotateCcw } from 'lucide-react';
 import { FOLDER_ICON_MAX_BYTES, isFolderEmoji } from '../../shared/folder-icons';
-import { NodeIcon } from './Primitives';
+import { NodeIcon, type IconType } from './Primitives';
 
 export interface FolderIconValue {
   emoji: string | null;
@@ -39,7 +39,7 @@ async function thumbnail(file: File): Promise<File> {
       canvas.toBlob(resolve, 'image/webp', 0.86),
     );
     if (!blob || blob.size > FOLDER_ICON_MAX_BYTES) throw new Error('图片处理失败，请换一张试试。');
-    return new File([blob], `folder-icon.${blob.type === 'image/webp' ? 'webp' : 'png'}`, {
+    return new File([blob], `icon.${blob.type === 'image/webp' ? 'webp' : 'png'}`, {
       type: blob.type,
     });
   } finally {
@@ -48,11 +48,14 @@ async function thumbnail(file: File): Promise<File> {
 }
 
 export function FolderIconPicker({
+  kind = 'folder',
   value,
   onChange,
   disabled,
   onBusy,
 }: {
+  // Shown when no custom icon is chosen.
+  kind?: IconType;
   value: FolderIconValue;
   onChange: (value: FolderIconValue) => void;
   disabled: boolean;
@@ -71,17 +74,13 @@ export function FolderIconPicker({
   }, [value.file]);
   return (
     <fieldset className="folder-icon-picker" disabled={disabled}>
-      <legend>文件夹图标</legend>
+      <legend>图标</legend>
       <div className="folder-icon-current">
         <span className="folder-icon-preview" aria-label="图标预览">
           {value.file && preview ? (
             <img src={preview} alt="" />
           ) : (
-            <NodeIcon
-              kind="folder"
-              size={36}
-              node={{ icon_emoji: value.emoji, icon_blob_id: value.fileId }}
-            />
+            <NodeIcon kind={kind} size={36} node={{ icon_glyph: value.emoji, icon_file_id: value.fileId }} />
           )}
         </span>
         <label className="folder-emoji-input">
@@ -121,7 +120,7 @@ export function FolderIconPicker({
           <input
             type="file"
             accept="image/*"
-            aria-label="上传文件夹图标"
+            aria-label="上传图标"
             onChange={async (event) => {
               const file = event.target.files?.[0];
               event.target.value = '';

@@ -5,7 +5,7 @@ import { beforeAll, beforeEach, expect, it } from 'vitest';
 import type { Env } from '../worker/types';
 import type { NoteDetail, NoteNode } from '../shared/types';
 import type { AnnotationList } from '../shared/annotations';
-import type { LibraryBackup } from '../shared/backup';
+import { validateBackup, type LibraryBackup } from '../shared/backup';
 import { createNode } from '../worker/library';
 import { LIBRARY_UNREFERENCED, readText, storeChatBody, storeText, uploadFile } from '../worker/storage';
 import { cleanup, purgeTrash, trashNode } from '../worker/recovery';
@@ -238,11 +238,11 @@ it('round-trips the whole library, versions, paper assets, chats and translation
   const restoredFolder = (
     await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${rootId}`)
   ).nodes.find((n) => n.title === '论文')!;
-  expect(restoredFolder.icon_emoji).toBe('📚');
+  expect(restoredFolder.icon_glyph).toBe('📚');
   const children = (await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${restoredFolder.id}`))
     .nodes;
   const restoredPdf = children.find((n) => n.kind === 'pdf')!;
-  const restoredIcon = children.find((n) => n.title === '图片目录')!.icon_blob_id;
+  const restoredIcon = children.find((n) => n.title === '图片目录')!.icon_file_id;
   expect(restoredIcon).toBeTruthy();
   expect(restoredIcon).not.toBe(icon.id);
   expect(new Uint8Array(await (await request(`/api/files/${restoredIcon}`)).arrayBuffer())).toEqual(
@@ -319,6 +319,20 @@ it('pins snapshot bytes through deletion and cleanup, then releases them', async
   await ok(`/api/backups/${snapshot.id}`, 'DELETE');
   await cleanup(bindings);
   expect((await request(`/api/files/${snapshot.archive.files[0].id}`)).status).toBe(404);
+});
+it('reads icons from archives made before any entry could have one', async () => {
+  await create({ kind: 'folder', title: '旧图标', icon: { emoji: '📚' } });
+  await create({ kind: 'markdown', title: '新图标', content: '', icon: { emoji: '📝' } });
+  const { archive } = await ok<{ archive: LibraryBackup }>('/api/backups', 'POST', {});
+  const row = (title: string, tables: LibraryBackup['tables']) => tables.nodes.find((node) => node.title === title)!;
+  expect(row('新图标', archive.tables)).toMatchObject({ icon_glyph: '📝', icon_emoji: null });
+  // An older archive keeps a folder's icon in icon_emoji and has no icon_glyph.
+  const old = structuredClone(archive);
+  const folder = row('旧图标', old.tables);
+  folder.icon_emoji = folder.icon_glyph;
+  delete folder.icon_glyph;
+  delete folder.icon_file_id;
+  expect(row('旧图标', validateBackup(old).tables)).toMatchObject({ icon_glyph: '📚', icon_emoji: null, icon_file_id: null });
 });
 it('exports files as the snapshot named them while they are re-encrypted', async () => {
   const folder = await create({ kind: 'folder', title: '私人' });

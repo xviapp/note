@@ -262,8 +262,8 @@ function stored(detail: NoteDetail): NoteDetail {
 function noteFiles(note: NoteDetail): FileInfo[] {
   const files = new Map(note.attachments.map((file) => [file.id, file]));
   if (note.file) files.set(note.file.id, note.file);
-  if (note.icon_blob_id)
-    files.set(note.icon_blob_id, { id: note.icon_blob_id, name: '', mime: '', size: 0 });
+  if (note.icon_file_id)
+    files.set(note.icon_file_id, { id: note.icon_file_id, name: '', mime: '', size: 0 });
   if (note.book?.cover_blob_id)
     files.set(note.book.cover_blob_id, { id: note.book.cover_blob_id, name: '', mime: '', size: 0 });
   // Uploaded images can also be referenced by another note's Markdown.

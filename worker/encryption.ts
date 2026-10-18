@@ -191,7 +191,7 @@ const REFS = [
   `'body',v.body_blob_id,v.id=n.current_version_id AND n.kind='markdown',v.id FROM sub s JOIN nodes n ON n.id=s.id JOIN versions v ON v.node_id=s.id JOIN blobs b ON b.id=v.body_blob_id`,
   `'file',a.blob_id,0,NULL FROM sub s JOIN versions v ON v.node_id=s.id JOIN version_assets a ON a.version_id=v.id JOIN blobs b ON b.id=a.blob_id AND ${NOT_DOCUMENT('a.blob_id')}`,
   `'file',n.file_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.file_blob_id`,
-  `'file',n.icon_blob_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.icon_blob_id`,
+  `'file',n.icon_file_id,0,NULL FROM sub s JOIN nodes n ON n.id=s.id JOIN blobs b ON b.id=n.icon_file_id`,
   `'file',k.cover_blob_id,0,NULL FROM sub s JOIN books k ON k.node_id=s.id JOIN blobs b ON b.id=k.cover_blob_id`,
   `'chat',m.body_blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN blobs b ON b.id=m.body_blob_id`,
   `'file',m.image_blob_id,0,NULL FROM sub s JOIN assistant_messages m ON m.node_id=s.id JOIN blobs b ON b.id=m.image_blob_id`,

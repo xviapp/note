@@ -411,6 +411,8 @@ export async function finishRestore(env: Env, jobId: string) {
     file_blob_id: null,
     icon_emoji: null,
     icon_blob_id: null,
+    icon_glyph: null,
+    icon_file_id: null,
     current_version_id: null,
     revision: 1,
     trash_id: null,

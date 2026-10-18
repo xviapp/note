@@ -51,8 +51,9 @@ export interface NoteNode {
   url: string | null;
   arxiv_id?: string | null;
   file_blob_id: string | null;
-  icon_emoji?: string | null;
-  icon_blob_id?: string | null;
+  // A custom icon: an Emoji, or a small picture (migrations/0029_node_icons.sql).
+  icon_glyph?: string | null;
+  icon_file_id?: string | null;
   current_version_id: string | null;
   revision: number;
   trash_id: string | null;
