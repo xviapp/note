@@ -5,14 +5,19 @@ import { Modal } from './Primitives';
 import { NodePicker } from './Tree';
 
 export function MoveDialog({
-  node,
+  nodes,
   onClose,
   onSaved,
+  onMoveMany,
 }: {
-  node: NoteNode;
+  nodes: NoteNode[];
   onClose: () => void;
+  // One note was moved.
   onSaved: (parent: string | null, title: string, ancestors: string[]) => void;
+  // Several selected notes: the caller moves them (see useMoveNotes' dropMany).
+  onMoveMany: (parent: string | null, title: string, ancestors: string[]) => Promise<unknown>;
 }) {
+  const [node] = nodes;
   const [parent, setParent] = useState<string | null>(node.parent_id),
     [title, setTitle] = useState('原位置'),
     [ancestors, setAncestors] = useState<string[]>([]);
@@ -20,7 +25,7 @@ export function MoveDialog({
     [error, setError] = useState('');
   return (
     <Modal
-      title={`移动「${node.title}」`}
+      title={nodes.length > 1 ? `移动 ${nodes.length} 项` : `移动「${node.title}」`}
       onClose={() => {
         if (!busy) onClose();
       }}
@@ -28,7 +33,7 @@ export function MoveDialog({
       <NodePicker
         value={parent}
         parentsOnly
-        exclude={node.id}
+        exclude={nodes.map((item) => item.id)}
         onSelect={(id, name, path) => {
           setParent(id);
           setTitle(name);
@@ -47,10 +52,15 @@ export function MoveDialog({
         </button>
         <button
           className="button primary"
-          disabled={busy || parent === node.parent_id}
+          disabled={busy || nodes.every((item) => item.parent_id === parent)}
           onClick={async () => {
             setBusy(true);
             try {
+              if (nodes.length > 1) {
+                await onMoveMany(parent, title, ancestors);
+                onClose();
+                return;
+              }
               await api(`/api/nodes/${node.id}`, 'PATCH', {
                 parentId: parent,
                 revision: node.revision,

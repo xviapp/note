@@ -19,11 +19,11 @@ export function useMoveNotes({
   toast: (message: string, undo?: () => Promise<void>) => void;
 }) {
   const [moved, setMoved] = useState<MovedNode | null>(null);
-  const relocate = async (id: string, parent: string | null) => {
+  const relocate = async (id: string, parent: string | null, refresh = true) => {
     const node = await api<NoteNode>(`/api/nodes/${id}`);
     if (node.parent_id === parent) return null;
     await api(`/api/nodes/${id}`, 'PATCH', { parentId: parent, revision: node.revision });
-    onMoved();
+    if (refresh) onMoved();
     return node;
   };
   const announce = (
@@ -71,5 +71,43 @@ export function useMoveNotes({
       return false;
     }
   };
-  return { moved, drop, announce };
+  // Several selected notes, one after another; one toast undoes them all.
+  // Those that cannot move (e.g. into themselves) are reported; the rest stay moved.
+  const dropMany = async (nodes: NoteNode[], parent: string | null, title: string, path?: string[]) => {
+    if (!(await canLeave())) return false;
+    const done: { id: string; from: string | null }[] = [],
+      failed: string[] = [];
+    for (const node of nodes) {
+      if (node.id === parent || (knownNode(node.id)?.parent_id ?? node.parent_id) === parent) continue;
+      const withdraw = showChange(node.id, { fields: { parent_id: parent } });
+      try {
+        const before = await relocate(node.id, parent, false);
+        if (!before) withdraw();
+        else {
+          settleChange(withdraw);
+          done.push({ id: node.id, from: before.parent_id });
+        }
+      } catch (e) {
+        withdraw();
+        failed.push(`「${node.title}」：${(e as Error).message}`);
+      }
+    }
+    if (done.length) {
+      onMoved();
+      setMoved({ id: done[0].id, parent, key: Date.now(), path });
+      toast(`已将 ${done.length} 项移到${parent ? `「${title || '目标文件夹'}」` : '根目录'}`, async () => {
+        try {
+          for (const { id, from } of done) await relocate(id, from, false);
+          onMoved();
+          toast('已撤销移动');
+        } catch (e) {
+          onMoved();
+          onError(e);
+        }
+      });
+    }
+    if (failed.length) onError(new Error(`${failed.length} 项未能移动：${failed.join('；')}`));
+    return done.length > 0;
+  };
+  return { moved, drop, dropMany, announce };
 }

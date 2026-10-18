@@ -36,6 +36,8 @@ import { flushSaves } from './save-outbox';
 import { fillSearchIndex } from './search-index';
 import { settleChange, showChange } from './optimistic';
 import { NodeForm } from './components/NodeForm';
+import { SelectionBar } from './components/SelectionBar';
+import { clearSelection } from './selection';
 import { ImportDialog } from './components/ImportDialog';
 import { canImportFolders, droppedFiles, type ImportFile } from './vault-import';
 import { NodeList } from './components/NodeList';
@@ -205,7 +207,7 @@ function Notebook({
       file?: FileInfo;
       iconOnly?: boolean;
     } | null>(null),
-    [moving, setMoving] = useState<NoteNode | null>(null),
+    [moving, setMoving] = useState<NoteNode[] | null>(null),
     [encrypting, setEncrypting] = useState<NoteDetail | null>(null),
     [importing, setImporting] = useState<{ parent: string | null; dropped?: ImportFile[] } | null>(null);
   const leaveGuard = useRef<() => Promise<boolean>>(async () => true),
@@ -522,7 +524,7 @@ function Notebook({
       const fresh = await api<NoteDetail>(`/api/nodes/${node.id}`);
       if (kind === 'rename') setForm({ node: fresh, parent: fresh.parent_id });
       else if (kind === 'icon') setForm({ node: fresh, parent: fresh.parent_id, iconOnly: true });
-      else if (kind === 'move') setMoving(fresh);
+      else if (kind === 'move') setMoving([fresh]);
       else if (kind === 'encryption') setEncrypting(fresh);
     } catch (e) {
       report(e);
@@ -577,6 +579,64 @@ function Notebook({
       report(e);
     }
   };
+  // Several selected notes: asked about once, each its own trash batch, one 撤销 for all.
+  const removeMany = async (nodes: NoteNode[]) => {
+    if (!(await leaveGuard.current())) return;
+    try {
+      const previews = await Promise.all(
+        nodes.map((node) =>
+          node.child_count === 0
+            ? { count: 1, title: node.title }
+            : api<{ count: number; title: string }>(`/api/nodes/${node.id}/delete-preview`),
+        ),
+      );
+      const total = previews.reduce((sum, preview) => sum + preview.count, 0);
+      if (
+        !(await question.confirm(
+          '移到回收站？',
+          `所选 ${nodes.length} 项${total > nodes.length ? `及其下级，共 ${total} 项` : ''}内容将保留 7 天，到期后清理。`,
+          '移到回收站',
+          true,
+        ))
+      )
+        return;
+      const wasOpen = nodes.some(
+        (node) => selected === node.id || !!loaded?.breadcrumbs.some((part) => part.id === node.id),
+      );
+      if (wasOpen) setRoute(null);
+      const batches: string[] = [],
+        failed: string[] = [];
+      for (const [index, node] of nodes.entries()) {
+        const withdraw = showChange(node.id, { hidden: true });
+        try {
+          const batch = await api<{ id: string }>(`/api/nodes/${node.id}`, 'DELETE', {
+            count: previews[index].count,
+          });
+          batches.push(batch.id);
+          settleChange(withdraw);
+        } catch (e) {
+          withdraw();
+          failed.push(`「${node.title}」：${(e as Error).message}`);
+        }
+      }
+      clearSelection();
+      changed();
+      if (batches.length)
+        toast.show(`已将 ${batches.length} 项移到回收站`, async () => {
+          try {
+            for (const batch of batches) await api(`/api/trash/${batch}/restore`, 'POST', {});
+            toast.show('已恢复');
+          } catch (e) {
+            report(e);
+          } finally {
+            changed();
+          }
+        });
+      if (failed.length) report(new Error(`${failed.length} 项未能删除：${failed.join('；')}`));
+    } catch (e) {
+      report(e);
+    }
+  };
   const moves = useMoveNotes({
     canLeave: () => leaveGuard.current(),
     onMoved: () => {
@@ -596,6 +656,8 @@ function Notebook({
     if (!(await leaveGuard.current())) return;
     setForm({ parent: container() });
   };
+  // A selection belongs to the page it was made on.
+  useEffect(() => clearSelection(), [navigation.path]);
   // A folder or files dropped on the window (desktop) are offered for import.
   const dropTarget = useRef(container);
   dropTarget.current = container;
@@ -671,6 +733,9 @@ function Notebook({
               onOpen: openNode,
               onAction: action,
               onDrop: drop,
+              onDropMany: async (nodes, parent, title) => {
+                if (await moves.dropMany(nodes, parent, title)) clearSelection();
+              },
               moved,
             }}
           />
@@ -961,7 +1026,9 @@ function Notebook({
               ['E', '编辑当前笔记'],
               ['Q', '打开随手记'],
               ['Ctrl S', '编辑时保存并继续编辑'],
-              ['Esc', '关闭弹窗、菜单或全屏视图'],
+              ['Ctrl 点击', '在目录或列表中多选，再批量移动或删除'],
+              ['Shift 点击', '连续选择到上次点击的条目'],
+              ['Esc', '关闭弹窗、菜单或全屏视图，或取消多选'],
               ['?', '显示这份列表'],
             ].map(([keys, action]) => (
               <div key={keys}>
@@ -1013,16 +1080,25 @@ function Notebook({
       )}
       {moving && (
         <MoveDialog
-          node={moving}
+          nodes={moving}
           onClose={() => setMoving(null)}
           onSaved={(parent, title, ancestors) => {
-            moves.announce(moving.id, moving.parent_id, parent, title, ancestors);
+            moves.announce(moving[0].id, moving[0].parent_id, parent, title, ancestors);
             setMoving(null);
             changed();
             setDetailRevision((r) => r + 1);
           }}
+          onMoveMany={async (parent, title, ancestors) => {
+            if (await moves.dropMany(moving, parent, title, ancestors)) clearSelection();
+          }}
         />
       )}{' '}
+      <SelectionBar
+        onMove={async (nodes) => {
+          if (await leaveGuard.current()) setMoving(nodes);
+        }}
+        onDelete={(nodes) => void removeMany(nodes)}
+      />
       {question.dialog}
     </div>
   );

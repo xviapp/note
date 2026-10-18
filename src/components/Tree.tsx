@@ -23,6 +23,7 @@ import { LockBadge, useKeys } from './LockBadge';
 import { isUnlocked, lock } from '../keyring';
 import { nodeDescription, useListPreferences, type ListSort } from '../list-preferences';
 import { ListControls } from './ListControls';
+import { canMultiSelect, selectClick, selection, topSelected, useSelection } from '../selection';
 
 export type NodeAction = 'rename' | 'move' | 'delete' | 'new' | 'icon' | 'encryption';
 export interface TreeProps {
@@ -38,6 +39,8 @@ export interface TreeProps {
   onAction: (action: NodeAction, node: NoteNode) => void;
   // Resolves once the move is saved (true) or rejected (false).
   onDrop: (id: string, parent: string | null, parentTitle: string) => Promise<boolean>;
+  // Selected notes dragged together (see src/selection.ts).
+  onDropMany?: (nodes: NoteNode[], parent: string | null, parentTitle: string) => Promise<unknown>;
   // A completed move to reveal: the tree opens its folder and highlights it.
   moved?: MovedNode | null;
 }
@@ -124,6 +127,7 @@ function Branch({
     return () => onLoading(request, false);
   }, [loading, onLoading]);
   const view = useContext(DragContext);
+  const chosen = useSelection();
   // Each change is applied to the saved set rather than written from this
   // Branch's copy, so Branches do not overwrite each other's expansions.
   const setOpen = (id: string, open: boolean) => {
@@ -207,6 +211,7 @@ function Branch({
               key={node.id}
               role="treeitem"
               data-tree-item={node.id}
+              data-select-item={node.id}
               className={
                 view?.drag?.source.id === node.id || view?.saving === node.id
                   ? 'is-drag-source'
@@ -221,6 +226,7 @@ function Branch({
                 className={[
                   'tree-row',
                   props.selected === node.id && 'selected',
+                  chosen.scope === 'tree' && chosen.items.has(node.id) && 'is-multi-selected',
                   view?.drag?.target === node.id && 'is-drop-over',
                   view?.landed?.parent === node.id && 'is-drop-done',
                   view?.landed?.id === node.id && view.landed.parent === parent && 'is-landed',
@@ -231,6 +237,9 @@ function Branch({
                 data-tree-node={node.id}
                 data-tree-title={node.title}
                 data-tree-container={container ? 'true' : undefined}
+                data-select-id={node.id}
+                // Shift + click selects rows, not the text between them.
+                onMouseDown={(event) => event.shiftKey && canMultiSelect() && event.preventDefault()}
                 onPointerDown={(event) => view?.start.startMouse(event, node)}
                 onTouchStart={(event) => view?.start.startTouch(event, node)}
               >
@@ -246,7 +255,7 @@ function Branch({
                 <button
                   className="tree-label"
                   aria-label={node.title}
-                  onClick={() => props.onOpen(node)}
+                  onClick={(event) => selectClick(event, node, 'tree') || props.onOpen(node)}
                   title={node.title}
                 >
                   <NodeIcon node={node} />
@@ -298,7 +307,15 @@ export function Tree(props: TreeProps) {
   const [saving, setSaving] = useState<string>();
   const [landed, setLanded] = useState<DragView['landed']>(null);
   const [reveal, setReveal] = useState<Set<string>>(() => new Set());
-  const onDrop = props.onDrop;
+  const { onDrop, onDropMany } = props;
+  const chosen = useSelection();
+  // Dragging one of several selected rows carries them all.
+  const group = (source: NoteNode) => {
+    const current = selection();
+    return current.scope === 'tree' && current.items.size > 1 && current.items.has(source.id) && onDropMany
+      ? topSelected(current.items)
+      : null;
+  };
   const start = useTreeDrag(root, ghost, {
     onDrop: (source, target) => {
       const parent = target === ROOT_TARGET ? null : target;
@@ -306,6 +323,15 @@ export function Tree(props: TreeProps) {
         ? root.current?.querySelector<HTMLElement>(`[data-tree-node="${CSS.escape(parent)}"]`)
             ?.dataset.treeTitle || ''
         : '';
+      const nodes = group(source);
+      if (nodes) {
+        // Not into one of them, nor below one of them.
+        const row = parent && root.current?.querySelector(`[data-tree-node="${CSS.escape(parent)}"]`);
+        if (row && nodes.some((node) => row.closest(`[data-tree-item="${CSS.escape(node.id)}"]`))) return;
+        setSaving(source.id);
+        void onDropMany!(nodes, parent, title).finally(() => setSaving(undefined));
+        return;
+      }
       setSaving(source.id);
       void onDrop(source.id, parent, title).finally(() => setSaving(undefined));
     },
@@ -366,7 +392,7 @@ export function Tree(props: TreeProps) {
     }
   };
   return (
-    <div ref={root} className={`tree${drag ? ' is-dragging' : ''}${props.browsing ? ` browsing-tree${preferences.compact ? ' is-compact' : ''}` : ''}`}>
+    <div ref={root} data-select-scope="tree" className={`tree${drag ? ' is-dragging' : ''}${props.browsing ? ` browsing-tree${preferences.compact ? ' is-compact' : ''}` : ''}`}>
       {props.browsing && <ListControls />}
       <div
         className={[
@@ -424,6 +450,9 @@ export function Tree(props: TreeProps) {
             <span className={`tree-drag-card${drag.target !== undefined ? ' can-drop' : ''}`}>
               <NodeIcon node={drag.source} />
               <span>{drag.source.title}</span>
+              {chosen.scope === 'tree' && chosen.items.size > 1 && chosen.items.has(drag.source.id) && (
+                <small>等 {topSelected(chosen.items).length} 项</small>
+              )}
             </span>
           </div>,
           document.body,
@@ -446,7 +475,7 @@ export function NodePicker({
   // `ancestors` are the selected folder's parents, from the top level down.
   onSelect: (id: string | null, title: string, ancestors: string[]) => void;
   parentsOnly?: boolean;
-  exclude?: string;
+  exclude?: string | string[];
   label?: string;
   initialPath?: { id: string; title: string }[];
 }) {
@@ -500,7 +529,7 @@ export function NodePicker({
       {error && <p className="inline-error">{error}</p>}
       {!listing && !error && <Spinner />}
       {listing?.nodes
-        .filter((node) => node.id !== exclude && (!parentsOnly || noteType(node).container))
+        .filter((node) => ![exclude].flat().includes(node.id) && (!parentsOnly || noteType(node).container))
         .map((node) => (
           <div className={`picker-row ${value === node.id ? 'selected' : ''}`} key={node.id}>
             <button

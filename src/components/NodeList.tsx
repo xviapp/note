@@ -8,6 +8,7 @@ import { useNodeListing } from '../use-node-listing';
 import { nodeDescription, useListPreferences } from '../list-preferences';
 import { ListControls } from './ListControls';
 import { LockBadge } from './LockBadge';
+import { canMultiSelect, selectClick, useSelection } from '../selection';
 
 type NodeListProps = {
   refresh: number;
@@ -25,7 +26,9 @@ export function NodeList({
   const query = (view ? `view=${view}` : `parent=${parent || ''}`)
     + (props.onAction && preferences.sort !== 'default' ? `&sort=${preferences.sort}` : '');
   const { listing, error, loading, more } = useNodeListing(query, props.refresh);
-  const wrap = (children: ReactNode) => <div className={`node-list${props.onAction && preferences.compact ? ' is-compact' : ''}`} aria-busy={loading}>
+  // A list that can manage its notes can also select several (src/selection.ts).
+  const wrap = (children: ReactNode) => <div className={`node-list${props.onAction && preferences.compact ? ' is-compact' : ''}`} aria-busy={loading}
+    data-select-scope={props.onAction ? 'list' : undefined}>
     {props.onAction && <ListControls />}{children}
   </div>;
   if (!listing)
@@ -74,6 +77,7 @@ function NodeRows({
   ...props
 }: NodeListProps & { items: NoteNode[]; error: string; depth?: number }) {
   const [open, setOpen] = useState(() => new Set<string>());
+  const chosen = useSelection();
   const nestable = items.some((node) => (node.child_count ?? 0) > 0);
   return (
     <>
@@ -86,8 +90,14 @@ function NodeRows({
         const count = node.child_count ?? 0,
           expanded = count > 0 && open.has(node.id);
         return (
-          <div className="node-list-item" key={node.id} aria-busy={node.id.startsWith('pending-') || undefined}>
-            <div className={`node-list-row${nestable ? ' is-nestable' : ''}`}>
+          <div className="node-list-item" key={node.id} aria-busy={node.id.startsWith('pending-') || undefined}
+            data-select-item={props.onAction ? node.id : undefined}>
+            <div
+              className={`node-list-row${nestable ? ' is-nestable' : ''}${chosen.scope === 'list' && chosen.items.has(node.id) ? ' is-multi-selected' : ''}`}
+              data-select-id={props.onAction ? node.id : undefined}
+              // Shift + click selects rows, not the text between them.
+              onMouseDown={(event) => props.onAction && event.shiftKey && canMultiSelect() && event.preventDefault()}
+            >
               {count > 0 ? (
                 <button
                   className="node-list-toggle"
@@ -107,7 +117,10 @@ function NodeRows({
               ) : (
                 nestable && <span className="node-list-toggle" aria-hidden="true" />
               )}
-              <button className="node-list-main" onClick={() => props.onOpen(node)}>
+              <button
+                className="node-list-main"
+                onClick={(event) => (props.onAction && selectClick(event, node, 'list')) || props.onOpen(node)}
+              >
                 <NodeIcon node={node} size={20} />
                 <span>
                   <strong>
