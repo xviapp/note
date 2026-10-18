@@ -233,6 +233,22 @@ describe('private library behavior', () => {
     ).toBe(0);
   });
 
+  it('creates a node under the ID the device chose, once', async () => {
+    const id = crypto.randomUUID();
+    const folder = await ok<NoteNode>('/api/nodes', 'POST', { id, kind: 'folder', title: '导入' }, { key: 'import-root' });
+    expect(folder.id).toBe(id);
+    // The same operation returns it; another one cannot take the ID.
+    expect((await ok<NoteNode>('/api/nodes', 'POST', { id, kind: 'folder', title: '导入' }, { key: 'import-root' })).id).toBe(id);
+    const taken = await request('/api/nodes', 'POST', { id, kind: 'markdown', content: '' });
+    expect(taken.status).toBe(409);
+    expect((await taken.json<{ code: string }>()).code).toBe('NODE_EXISTS');
+    expect((await request('/api/nodes', 'POST', { id: 'not-a-uuid', kind: 'folder' })).status).toBe(400);
+    // Siblings it creates keep the order it gives them.
+    for (const [position, title] of [[2, '甲'], [1, '乙']] as const)
+      await ok('/api/nodes', 'POST', { kind: 'folder', title, parentId: id, position });
+    expect((await ok<{ nodes: NoteNode[] }>(`/api/nodes?parent=${id}`)).nodes.map((node) => node.title)).toEqual(['乙', '甲']);
+  });
+
   it('does not index a body that became encrypted after it was read', async () => {
     const note = await create('markdown', '读过的笔记', { content: '读出时的明文' });
     await bindings.DB.prepare('DELETE FROM note_text').run();

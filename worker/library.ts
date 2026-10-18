@@ -236,6 +236,11 @@ function validUrl(input: unknown): string {
     throw new AppError(400, '网页链接仅支持不含账号密码的 http 和 https 地址。');
   return url.href;
 }
+function uuidValue(value: unknown): string {
+  if (typeof value !== 'string' || !/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/.test(value))
+    throw new AppError(400, '条目标识不正确。');
+  return value;
+}
 function attachmentIds(content: string, ids: unknown): string[] {
   if (!Array.isArray(ids) || ids.length > 100)
     throw new AppError(400, '每篇笔记最多关联 100 个附件。');
@@ -416,12 +421,21 @@ export async function createNode(
       ? attachmentIds(content, data.attachments ?? [])
       : [];
   if (device && isText && !paper) await ownFiles(env, null, assets, scope, data.copies);
+  // A device may name the new node, so links between notes it imports can be
+  // written before they exist (src/vault-import.ts).
+  const chosen = device && data.id !== undefined ? uuidValue(data.id) : null;
+  // Its place among siblings it creates too; otherwise after the last one.
+  const position = device && data.position !== undefined ? data.position : null;
+  if (position !== null && (typeof position !== 'number' || !Number.isFinite(position)))
+    throw new AppError(400, '节点顺序不正确。');
+  if (chosen && (await env.DB.prepare('SELECT 1 FROM nodes WHERE id=?').bind(chosen).first()))
+    throw new AppError(409, '这个条目已存在。', 'NODE_EXISTS');
   const blob = paper
       ? await storePaper(env, paper.html)
       : isText
         ? (sealedBody ?? (await storeText(env, content, scope)))
         : null,
-    id = crypto.randomUUID(),
+    id = chosen ?? crypto.randomUUID(),
     now = Date.now(),
     version = crypto.randomUUID();
   const statements = [
@@ -430,12 +444,13 @@ export async function createNode(
     ).bind(key, operation, id, 1, now),
     env.DB.prepare(
       `INSERT INTO nodes(id,parent_id,kind,title,position,url,file_blob_id,revision,created_at,updated_at,arxiv_id,icon_emoji,icon_blob_id)
-      VALUES(?,?,?,?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?),?,?,?,?,?,?,?,?)`,
+      VALUES(?,?,?,?,COALESCE(?,(SELECT COALESCE(MAX(position),0)+1 FROM nodes WHERE parent_id IS ?)),?,?,?,?,?,?,?,?)`,
     ).bind(
       id,
       parent,
       kind,
       title,
+      position,
       parent,
       url,
       fileId,
