@@ -285,7 +285,6 @@ test('oversized quotes are not silently truncated or substituted for a draft', a
   expect(posts).toEqual([]);
 });
 
-
 test('compact selection actions fit every theme and recover from copy and share failures', async ({ page, baseURL }, info) => {
   const { node } = await prepare(page, baseURL!);
   await page.evaluate(() => {

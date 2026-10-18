@@ -150,12 +150,17 @@ export function SelectionToolbar({
       void device.setSelectionToolbar({ owner: menuId, enabled }).catch(() => {});
     };
     let dismissed: Range | null = null;
-    const close = () => {
+    const hide = () => {
       window.clearTimeout(timer);
       const value = window.getSelection();
       dismissed = value?.rangeCount ? value.getRangeAt(0).cloneRange() : null;
       setSelected(null);
       setMore(false);
+    };
+    // A selection left without our toolbar gets the system menu back.
+    const close = () => {
+      hide();
+      syncNative(false);
     };
     dismiss.current = close;
     const refresh = () => {
@@ -174,8 +179,9 @@ export function SelectionToolbar({
       }
     };
     const schedule = () => {
-      // Keep the native menu hidden during handle drags and toolbar dismissal too.
-      syncNative(!!readSelection(owner));
+      // Keep the native menu hidden during handle drags, but not for a dismissed selection.
+      const value = readSelection(owner);
+      syncNative(!!value && !sameRange(dismissed, value.range));
       if (window.getSelection()?.isCollapsed) dismissed = null;
       window.clearTimeout(timer);
       timer = window.setTimeout(refresh, 120);
@@ -187,7 +193,8 @@ export function SelectionToolbar({
       // Remember the selection before focus moves (e.g. opening the assistant).
       const value = readSelection(owner);
       if (value) callbacks.current.onSelection(value.text);
-      close();
+      // A new selection may start here; keep the native menu hidden meanwhile.
+      hide();
       selecting = true;
     };
     const up = () => {
@@ -467,11 +474,18 @@ export function SelectionToolbar({
                   else await navigator.share({ text: selected.text });
                   if (active.current === selected) dismiss.current();
                 } catch (error) {
-                  if (active.current === selected) {
-                    setMore(false);
-                    if (!(error instanceof Error && error.name === 'AbortError'))
-                      setStatus('分享失败，请重试。');
-                  }
+                  if (active.current !== selected) return;
+                  setMore(false);
+                  // APKs older than the site have no native share; copy instead.
+                  if ((error as { code?: string }).code === 'UNIMPLEMENTED') {
+                    try {
+                      await navigator.clipboard.writeText(selected.text);
+                      if (active.current === selected) setStatus('已复制。当前应用版本不支持分享，更新后可用。');
+                    } catch {
+                      if (active.current === selected) setStatus('分享失败，请重试。');
+                    }
+                  } else if (!(error instanceof Error && error.name === 'AbortError'))
+                    setStatus('分享失败，请重试。');
                 }
               }}
             >
