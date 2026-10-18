@@ -105,7 +105,8 @@ export function flushSaves(retryRefused = false): Promise<void> {
   return flushing;
 }
 // False stops the round: the connection is lost and later saves wait too.
-async function send(item: PendingSave): Promise<boolean> {
+async function send(queued: PendingSave): Promise<boolean> {
+  let item = queued;
   const started = draftEpoch();
   const draft = await readDraft(item.id);
   // The body saved with this entry, or a later edit of it; never an older draft.
@@ -113,6 +114,15 @@ async function send(item: PendingSave): Promise<boolean> {
     const message = '本机找不到这次保存的正文，未发送。';
     write(saves.map((entry) => (entry.key === item.key ? { ...entry, error: message } : entry)));
     return true;
+  }
+  // A later edit (another window kept editing) is another body: it gets its
+  // own operation and starts from its own revision, so a resend cannot be
+  // answered with the earlier body's result. If that one was saved, this
+  // comes back as a conflict with the draft kept.
+  if (item.draftAt !== undefined && draft.savedAt !== item.draftAt) {
+    const next = { ...item, key: crypto.randomUUID(), revision: draft.revision, draftAt: draft.savedAt };
+    write(saves.map((entry) => (entry.key === item.key ? next : entry)));
+    item = next;
   }
   try {
     await unlockNote(item.id);

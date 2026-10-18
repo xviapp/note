@@ -56,6 +56,25 @@ it('waits after a lost connection and resends with the same operation', async ()
   expect(pendingSave('n1')).toBeUndefined();
 });
 
+it('sends a later edit from another window as its own operation', async () => {
+  api.mockRejectedValue(new ApiError('连接已中断', 0));
+  await queueSave(note, '正文 A', []);
+  await flushSaves();
+  const first = api.mock.calls[0]![3];
+  // Another window keeps editing the note; its draft replaces A's.
+  await new Promise((resolve) => setTimeout(resolve, 2));
+  localStorage.setItem('note-draft:n1', JSON.stringify({ content: '正文 B', attachments: [], revision: 4, savedAt: Date.now() }));
+  api.mockReset();
+  api.mockRejectedValue(new ApiError('这篇笔记已在其他页面更新，当前编辑内容已保留。', 409, 'VERSION_CONFLICT'));
+  await flushSaves();
+  const [, , body, key] = api.mock.calls.find((call) => call[1] === 'PUT')!;
+  expect(body).toEqual({ content: '正文 B', attachments: [], revision: 4 });
+  expect(key).not.toBe(first);
+  // Refused, B waits with its draft instead of being cleared as saved.
+  expect(pendingSave('n1')!.error).toContain('已在其他页面更新');
+  expect((await readDraft('n1'))!.content).toBe('正文 B');
+});
+
 it('hands a refused save to the open note, or keeps it with its draft and reason', async () => {
   api.mockRejectedValue(new ApiError('这篇笔记已在其他页面更新，当前编辑内容已保留。', 409, 'VERSION_CONFLICT'));
   await queueSave(note, '设备二的草稿', []);
