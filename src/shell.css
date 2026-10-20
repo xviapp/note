@@ -535,7 +535,8 @@ button:active:not(:disabled) {
   .note-article {
     padding: 12px 20px 80px;
   }
-  .document-heading h1 {
+  .document-heading h1,
+  .document-title-row .document-title-input:not([type='checkbox']):not([type='radio']):not([type='file']) {
     font-size: 22px;
     line-height: 1.4;
   }

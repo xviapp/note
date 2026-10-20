@@ -321,6 +321,35 @@ export default function NotePane(props: Props) {
       props.onError(e);
     }
   };
+  // Shown at once, like a rename from the menu; withdrawn if the server refuses.
+  const rename = async (title: string) => {
+    const before = noteRef.current;
+    if (!before) return;
+    const retitle = (from: NoteDetail, value: string) => ({
+      ...from,
+      title: value,
+      breadcrumbs: from.breadcrumbs.map((part) => (part.id === from.id ? { ...part, title: value } : part)),
+    });
+    noteRef.current = retitle(before, title);
+    setNote(noteRef.current);
+    const withdraw = showChange(id, { fields: { title } });
+    try {
+      const saved = await api<NoteNode>(`/api/nodes/${id}`, 'PATCH', { title, revision: before.revision });
+      if (noteRef.current?.id === id) {
+        noteRef.current = { ...retitle(noteRef.current, saved.title), revision: saved.revision, updated_at: saved.updated_at };
+        setNote(noteRef.current);
+      }
+      props.onChanged();
+      settleChange(withdraw);
+    } catch (e) {
+      withdraw();
+      if (noteRef.current?.id === id) {
+        noteRef.current = retitle(noteRef.current, before.title);
+        setNote(noteRef.current);
+      }
+      props.onError(e);
+    }
+  };
   const navigation = (
     <NoteLocation
       note={note}
@@ -635,6 +664,12 @@ export default function NotePane(props: Props) {
                     kind={typeView.kind}
                     actions={typeView.headingActions}
                     onNew={() => props.onAction('new', note)}
+                    // A heading that shows another title (a journal day, a paper's metadata) keeps the menu's 重命名.
+                    onRename={
+                      offline || stale || appending || typeView.title || (note.project_category && note.metadata_title)
+                        ? undefined
+                        : (title) => void rename(title)
+                    }
                   />
                   <NoteBody
                     note={note}

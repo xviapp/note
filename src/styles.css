@@ -1641,6 +1641,44 @@ button.node-list-toggle:focus-visible {
   overflow-wrap: anywhere;
   margin: 0 0 10px;
 }
+/* The pen follows the title's text; what comes after it stays right-aligned. */
+.document-heading .document-title-row h1:has(+ .title-rename) {
+  flex: 0 1 auto;
+}
+.document-heading .title-rename {
+  width: 32px;
+  height: 32px;
+  margin: 0 auto 0 -12px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.document-title-row:hover .title-rename,
+.document-heading .title-rename:focus-visible {
+  opacity: 1;
+}
+@media (hover: none), (pointer: coarse) {
+  .document-heading .title-rename {
+    opacity: 0.55;
+  }
+}
+/* Takes the title's place and size while it is renamed. Matches the global
+   field selector so its border, padding and focus give way to an underline. */
+.document-title-row .document-title-input:not([type='checkbox']):not([type='radio']):not([type='file']) {
+  flex: 1;
+  min-width: 0;
+  font-family: var(--font-book);
+  font-size: 32px;
+  font-weight: 500;
+  letter-spacing: 0.015em;
+  line-height: 1.5;
+  color: var(--ink);
+  background: transparent;
+  border: 0;
+  border-bottom: 1px solid var(--focus);
+  border-radius: 0;
+  padding: 0;
+  outline: 0;
+}
 .document-meta {
   font-size: 11px;
   color: var(--muted);
@@ -3990,6 +4028,9 @@ button.node-list-toggle:focus-visible {
   .document-heading h1 {
     font-size: 27px;
     margin: 0 0 8px;
+  }
+  .document-title-row .document-title-input:not([type='checkbox']):not([type='radio']):not([type='file']) {
+    font-size: 27px;
   }
   .document-meta {
     font-size: 11px;

@@ -183,6 +183,25 @@ test('creation, rename, moving and storage settings work without unlocking file 
   await rename.getByLabel('标题', { exact: true }).fill(`${title}已改名`);
   await rename.getByRole('button', { name: '保存信息', exact: true }).click();
   await expect(page.getByRole('heading', { name: `${title}已改名`, exact: true })).toBeVisible();
+  // The pen beside the title renames in place; Escape leaves the title as it was.
+  const heading = page.locator('.document-heading');
+  await heading.getByRole('button', { name: '修改标题', exact: true }).click();
+  await heading.getByRole('textbox', { name: '笔记标题', exact: true }).fill('不会保存');
+  await heading.getByRole('textbox', { name: '笔记标题', exact: true }).press('Escape');
+  await expect(page.getByRole('heading', { name: `${title}已改名`, exact: true })).toBeVisible();
+  await heading.getByRole('button', { name: '修改标题', exact: true }).click();
+  await heading.getByRole('textbox', { name: '笔记标题', exact: true }).fill(`${title}再改名`);
+  await heading.getByRole('textbox', { name: '笔记标题', exact: true }).press('Enter');
+  await expect(page.getByRole('heading', { name: `${title}再改名`, exact: true })).toBeVisible();
+  await expect
+    .poll(async () => (await (await page.request.get(`/api/nodes/${id}`)).json()).title)
+    .toBe(`${title}再改名`);
+  // The note's new revision is kept, so the menu's rename does not conflict.
+  await actions.getByRole('button', { name: `管理 ${title}再改名`, exact: true }).click();
+  await actions.getByRole('button', { name: '重命名', exact: true }).click();
+  await rename.getByLabel('标题', { exact: true }).fill(`${title}已改名`);
+  await rename.getByRole('button', { name: '保存信息', exact: true }).click();
+  await expect(page.getByRole('heading', { name: `${title}已改名`, exact: true })).toBeVisible();
   await actions.getByRole('button', { name: `管理 ${title}已改名`, exact: true }).click();
   await actions.getByRole('button', { name: '移动到…', exact: true }).click();
   const move = page.getByRole('dialog', { name: `移动「${title}已改名」`, exact: true });

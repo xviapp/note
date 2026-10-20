@@ -96,22 +96,70 @@ export function NoteHeading({
   title,
   kind,
   actions,
+  onRename,
 }: {
   note: NoteDetail;
   editing: boolean;
   onNew: () => void;
+  // Given, a pen beside the title renames the note in place.
+  onRename?: (title: string) => void;
   // Shown instead of the note's own title and kind (e.g. a journal day).
   title?: string;
   kind?: { icon: ReactNode; label: string };
   actions?: ReactNode;
 }) {
+  const [renaming, setRenaming] = useState(false);
+  // A note left mid-rename starts its own page untouched.
+  useEffect(() => setRenaming(false), [note.id]);
+  const shown = title ?? (note.project_category && note.metadata_title ? note.metadata_title : note.title);
+  const finish = (value: string | null) => {
+    setRenaming(false);
+    const next = value?.trim();
+    if (next && next !== note.title) onRename?.(next);
+  };
   return (
     <header className="document-heading">
       <div className="document-title-row">
-      <h1>
-        {title ?? (note.project_category && note.metadata_title ? note.metadata_title : note.title)}
-        <LockBadge keyId={note.key_id} size={18} />
-      </h1>
+      {renaming && onRename && !editing ? (
+        <input
+          className="document-title-input"
+          aria-label="笔记标题"
+          defaultValue={note.title}
+          enterKeyHint="done"
+          autoFocus
+          onFocus={(event) => event.currentTarget.select()}
+          // Leaving the field without Enter keeps the old title.
+          onBlur={() => finish(null)}
+          onKeyDown={(event) => {
+            if (event.nativeEvent.isComposing) return;
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              finish(event.currentTarget.value);
+            } else if (event.key === 'Escape') {
+              event.preventDefault();
+              finish(null);
+            }
+          }}
+        />
+      ) : (
+        <>
+          <h1>
+            {shown}
+            <LockBadge keyId={note.key_id} size={18} />
+          </h1>
+          {/* Outside the heading so its accessible name stays the title. */}
+          {onRename && !editing && (
+            <button
+              className="icon-button title-rename"
+              aria-label="修改标题"
+              title="修改标题"
+              onClick={() => setRenaming(true)}
+            >
+              <Pencil size={16} />
+            </button>
+          )}
+        </>
+      )}
       {actions}
       </div>
       {/* Kind, date and New share one ruled row to keep the page top short. */}
