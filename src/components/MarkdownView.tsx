@@ -6,7 +6,7 @@ import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
 import rehypeKatex from 'rehype-katex';
 import rehypeSanitize, { defaultSchema } from 'rehype-sanitize';
-import { mathOptions, rehypeMathCompatibility } from '../math';
+import { mathOptions, normalizeMathDelimiters, rehypeMathCompatibility } from '../math';
 import 'katex/dist/katex.min.css';
 import '../math.css';
 import { CachedImage } from './CachedImage';
@@ -29,7 +29,8 @@ export interface Heading {
   title: string;
   level: number;
 }
-function prepareMarkdown(content: string) {
+function prepareMarkdown(source: string) {
+  const content = normalizeMathDelimiters(source);
   const front = markdownFrontMatter(content);
   // Keep original offsets for heading IDs, links and reading positions.
   if (!front || !/^(title|status):/m.test(front[1])) return { rendered: content, bodyStart: 0 };
