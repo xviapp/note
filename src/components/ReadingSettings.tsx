@@ -1,9 +1,10 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
 import { Capacitor } from '@capacitor/core';
 import { RotateCcw } from 'lucide-react';
 import { Modal } from './Primitives';
 import {
+  loadReadingFont,
   readingDefaults,
   readingPresets,
   setReadingPreferences,
@@ -18,6 +19,11 @@ import '../reading-settings.css';
 
 export function ReadingControls() {
   const value = useReadingPreferences();
+  // The font choices preview themselves.
+  useEffect(() => {
+    loadReadingFont('serif');
+    loadReadingFont('sans');
+  }, []);
   return (
     <div className="reading-controls">
       <fieldset className="reading-fonts">

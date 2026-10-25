@@ -38,10 +38,8 @@ import { settleChange, showChange } from './optimistic';
 import { NodeForm } from './components/NodeForm';
 import { SelectionBar } from './components/SelectionBar';
 import { clearSelection } from './selection';
-import { ImportDialog } from './components/ImportDialog';
 import { canImportFolders, droppedFiles, type ImportFile } from './vault-import';
 import { NodeList } from './components/NodeList';
-import { Settings } from './components/Settings';
 import { TrashView } from './components/TrashView';
 import NotePane from './components/NotePane';
 
@@ -51,7 +49,6 @@ import { isOffline, useOffline } from './connectivity';
 import { OfflineLibrary } from './components/OfflineCache';
 import { cacheEpoch, cacheSnapshot, initializeCache } from './offline-cache';
 import { ShareImport } from './components/ShareImport';
-import { QuickClips } from './components/QuickClips';
 import { flushClips } from './clips';
 import { watchWidgetClips } from './widget-clips';
 import { BootScreen } from './components/BootScreen';
@@ -71,6 +68,23 @@ import { noteType } from './note-types/registry';
 const TranslationScreen = lazy(() => import('./components/TranslationScreen'));
 
 const ImageViewer = lazy(() => import('./components/ImageViewer'));
+
+// Settings, import and 随手记 stay out of the startup bundle and are fetched
+// once the library is open, so opening them is still instant. Search stays in:
+// Ctrl+K must show it at once.
+const panels = {
+  settings: () => import('./components/Settings'),
+  importing: () => import('./components/ImportDialog'),
+  clips: () => import('./components/QuickClips'),
+};
+const Settings = lazy(() => panels.settings().then((module) => ({ default: module.Settings })));
+const ImportDialog = lazy(() =>
+  panels.importing().then((module) => ({ default: module.ImportDialog })),
+);
+const QuickClips = lazy(() => panels.clips().then((module) => ({ default: module.QuickClips })));
+const preloadPanels = () => {
+  for (const load of Object.values(panels)) void load().catch(() => {});
+};
 
 export default function App() {
   const [status, setStatus] = useState<AuthStatus | null>(null),
@@ -230,6 +244,7 @@ function Notebook({
     [],
   );
   useEffect(preloadMarkdown, []);
+  useEffect(preloadPanels, []);
   const changed = useCallback(() => setRevision((r) => r + 1), []);
   useEffect(() => {
     window.addEventListener('note:library-refresh', changed);
@@ -896,16 +911,18 @@ function Notebook({
             ) : view === 'trash' ? (
               <TrashView confirm={question.confirm} onChanged={changed} onError={report} />
             ) : (
-              <Settings
-                section={settingsSection}
-                onOpen={openSettings}
-                storage={storage}
-                confirm={question.confirm}
-                onChanged={changed}
-                onLogout={logout}
-                onError={report}
-                onNavigate={(id) => void navigate(id)}
-              />
+              <Suspense fallback={<Spinner />}>
+                <Settings
+                  section={settingsSection}
+                  onOpen={openSettings}
+                  storage={storage}
+                  confirm={question.confirm}
+                  onChanged={changed}
+                  onLogout={logout}
+                  onError={report}
+                  onNavigate={(id) => void navigate(id)}
+                />
+              </Suspense>
             )}
           </div>
         </ListingCacheContext.Provider>
@@ -967,13 +984,15 @@ function Notebook({
         </Suspense>
       )}
       {importing && (
-        <ImportDialog
-          parent={importing.parent}
-          parentTitle={titleOf(importing.parent)}
-          dropped={importing.dropped}
-          onClose={() => setImporting(null)}
-          onImported={() => changed()}
-        />
+        <Suspense fallback={null}>
+          <ImportDialog
+            parent={importing.parent}
+            parentTitle={titleOf(importing.parent)}
+            dropped={importing.dropped}
+            onClose={() => setImporting(null)}
+            onImported={() => changed()}
+          />
+        </Suspense>
       )}
       {form && (
         <NodeForm
@@ -1043,20 +1062,22 @@ function Notebook({
         </Modal>
       )}
       {clipsOpen && (
-        <QuickClips
-          source={
-            view === 'tree' && selected && loaded?.id === selected
-              ? { id: loaded.id, title: loaded.title }
-              : null
-          }
-          onClose={() => setClipsOpen(false)}
-          onNavigate={(id) => void navigate(id)}
-          onCreated={(node) => {
-            changed();
-            toast.show('已转为笔记');
-            void navigate(node.id);
-          }}
-        />
+        <Suspense fallback={null}>
+          <QuickClips
+            source={
+              view === 'tree' && selected && loaded?.id === selected
+                ? { id: loaded.id, title: loaded.title }
+                : null
+            }
+            onClose={() => setClipsOpen(false)}
+            onNavigate={(id) => void navigate(id)}
+            onCreated={(node) => {
+              changed();
+              toast.show('已转为笔记');
+              void navigate(node.id);
+            }}
+          />
+        </Suspense>
       )}
       {searchOpen && (
         <SearchDialog

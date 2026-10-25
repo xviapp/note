@@ -1,5 +1,18 @@
 import { useSyncExternalStore } from 'react';
 
+// Each font's @font-face rules (one per CJK subset) are over 100K of CSS, so they
+// load only when the font is chosen or shown in the settings preview.
+const fonts = {
+  serif: () => import('@fontsource/noto-serif-sc/400.css'),
+  sans: () => import('@fontsource/noto-sans-sc/400.css'),
+};
+const loaded = new Set<keyof typeof fonts>();
+export function loadReadingFont(font: ReadingPreferences['font']) {
+  if (font === 'system' || loaded.has(font)) return;
+  loaded.add(font);
+  void fonts[font]().catch(() => loaded.delete(font));
+}
+
 export interface ReadingPreferences {
   font: 'system' | 'serif' | 'sans';
   size: number;
@@ -45,6 +58,7 @@ let current = read();
 const listeners = new Set<() => void>();
 function apply() {
   const root = document.documentElement;
+  loadReadingFont(current.font);
   root.dataset.readingFont = current.font;
   for (const [name, value] of Object.entries({
     size: `${current.size}px`,
