@@ -1,9 +1,19 @@
-import type { FileInfo } from './types';
+import type { FileInfo, NoteNode } from './types';
 import type { ChatFile, ChatFileInput, ChatSource } from './chat-files';
 import type { ChatContextUsage } from './ai-context';
 
 // Reserved conversation scope; never a library node.
 export const GLOBAL_ASSISTANT_ID = 'qingli-global';
+
+// A note with a conversation, for 青藜对话: where it lives, how many questions
+// were asked and when the last message was written.
+export interface AssistantThread extends NoteNode {
+  path: string[];
+  questions: number;
+  chat_at: number;
+}
+// Far more than one person keeps. The list is read whole: the tree marks notes from it too.
+export const ASSISTANT_THREAD_LIMIT = 1000;
 
 export const AI_MODEL = 'deepseek-flash';
 export const AI_PROMPT_LIMIT = 8_000;

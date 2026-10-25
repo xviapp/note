@@ -9,7 +9,7 @@ import {
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import worker from '../worker/index';
 import type { Env } from '../worker/types';
-import type { ChatEvent, ChatHistory, ChatInput } from '../shared/assistant';
+import type { AssistantThread, ChatEvent, ChatHistory, ChatInput } from '../shared/assistant';
 import { parsePageRange, pageLabel, type ChatFileInput } from '../shared/chat-files';
 import type { FileInfo, NoteDetail, NoteNode, StorageInfo } from '../shared/types';
 import { sseData } from '../shared/sse';
@@ -1227,4 +1227,32 @@ it('isolates global history, accepts attachments and exports to the library root
   expect((await history(global)).messages).toHaveLength(0);
   expect((await history(file)).messages).toHaveLength(2);
   expect((await request(`/api/nodes/${saved.id}`)).status).toBe(200);
+});
+
+it('lists every note with a conversation, newest first, without the global one or trashed notes', async () => {
+  await configure();
+  vi.spyOn(globalThis, 'fetch').mockImplementation(async () => provider());
+  const folder = await ok<NoteNode>('/api/nodes', 'POST', { kind: 'folder', title: '读书' });
+  const nested = await create('第一章', { parentId: folder.id });
+  const plain = await create('随笔');
+  const trashed = await create('草稿');
+  const silent = await create('没聊过');
+  await chat(nested);
+  await chat(trashed);
+  await chat(plain);
+  await chat(nested, { content: '再问一次' });
+  await chat({ id: GLOBAL_ASSISTANT_ID } as NoteNode, { content: '全局问题' });
+  await ok(`/api/nodes/${trashed.id}`, 'DELETE', { count: 1 });
+
+  const { threads } = await ok<{ threads: AssistantThread[] }>('/api/assistant/threads');
+  expect(threads.map((thread) => thread.id).sort()).toEqual([nested.id, plain.id].sort());
+  expect(threads[0].chat_at).toBeGreaterThanOrEqual(threads[1].chat_at);
+  const byId = new Map(threads.map((thread) => [thread.id, thread]));
+  expect(byId.get(nested.id)).toMatchObject({ title: '第一章', path: ['读书'], questions: 2 });
+  expect(byId.get(plain.id)).toMatchObject({ path: [], questions: 1 });
+  expect(byId.has(silent.id)).toBe(false);
+
+  // A cleared conversation leaves the list.
+  await ok(`/api/nodes/${plain.id}/assistant`, 'DELETE');
+  expect((await ok<{ threads: AssistantThread[] }>('/api/assistant/threads')).threads.map((t) => t.id)).toEqual([nested.id]);
 });

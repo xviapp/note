@@ -20,6 +20,7 @@ import { useOffline } from '../connectivity';
 import { ghostTransform, ROOT_TARGET, useTreeDrag, type TreeDrag } from '../use-tree-drag';
 import { noteType } from '../note-types/registry';
 import { LockBadge, useKeys } from './LockBadge';
+import { ThreadBadge } from './ThreadBadge';
 import { isUnlocked, lock } from '../keyring';
 import { nodeDescription, useListPreferences, type ListSort } from '../list-preferences';
 import { ListControls } from './ListControls';
@@ -259,6 +260,7 @@ function Branch({
                   <NodeIcon node={node} />
                   <span>{node.title}{props.browsing && <small>{nodeDescription(node)}</small>}</span>
                   <LockBadge keyId={node.key_id} />
+                  <ThreadBadge id={node.id} />
                 </button>
                 <NodeMenu node={node} onAction={props.onAction} />
               </div>

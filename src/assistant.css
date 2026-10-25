@@ -852,3 +852,14 @@
 .assistant-panel.assistant-sheet .send-provider {
   display: none;
 }
+/* A note with a conversation, beside its title in the tree and lists. */
+.thread-badge {
+  flex: none;
+  margin-left: 4px;
+  vertical-align: -1px;
+  color: var(--muted);
+}
+.assistant-thread-meta {
+  color: var(--muted);
+  font-size: 12px;
+}

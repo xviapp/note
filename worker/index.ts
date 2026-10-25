@@ -29,7 +29,7 @@ import { discardFile, serveFile, storageInfo, storageUsage, uploadFile } from '.
 import { cleanup, deletePreview, listTrash, purgeTrash, restoreTrash, trashNode } from './recovery';
 import { favorite, openReading, readingState, saveReading } from './reading';
 import { aiSettings, configureProvider, saveAiSettings, testAiSettings } from './deepseek';
-import { chatHistory, clearChat, exportReply, sendChat } from './assistant';
+import { assistantThreads, chatHistory, clearChat, exportReply, sendChat } from './assistant';
 import { uploadChatFile } from './chat-files';
 import { CHAT_BODY_BYTE_LIMIT } from '../shared/chat-files';
 import { arxivPreview, continueArxiv, importArxiv } from './arxiv';
@@ -145,6 +145,7 @@ export default {
       if (encryptionKey && method === 'PUT')
         return json(await rewrapKey(env, encryptionKey[1], await body(request)));
       if (path === '/api/ai/settings' && method === 'GET') return json(await aiSettings(env));
+      if (path === '/api/assistant/threads' && method === 'GET') return json(await assistantThreads(env));
       if (path === '/api/ai/settings' || path === '/api/ai/test') {
         if (path === '/api/ai/settings' && method === 'PUT')
           return json(await saveAiSettings(env, await body(request)));

@@ -1,3 +1,4 @@
+import { Fragment } from 'react';
 import {
   ArrowLeft,
   Clock3,
@@ -5,6 +6,7 @@ import {
   HardDriveDownload,
   History,
   Menu,
+  MessagesSquare,
   Plus,
   Search,
   Settings2,
@@ -14,6 +16,7 @@ import {
   X,
 } from 'lucide-react';
 import { openClips } from '../clips';
+import { openAssistantThreads } from '../assistant-threads';
 import { settingsTitles, type SettingsSection, type View } from '../navigation';
 import { Brand } from './Brand';
 import { ThemeSwitcher } from './ThemePicker';
@@ -78,17 +81,25 @@ export function Sidebar({
       </button>
       <nav className="main-nav" aria-label="页面">
         {navItems.map((item) => (
-          <button
-            key={item.key}
-            className={view === item.key ? 'active' : ''}
-            aria-label={item.label}
-            aria-current={view === item.key ? 'page' : undefined}
-            title={item.label}
-            onClick={() => onView(item.key)}
-          >
-            <item.icon size={18} />
-            <span>{item.label}</span>
-          </button>
+          <Fragment key={item.key}>
+            <button
+              className={view === item.key ? 'active' : ''}
+              aria-label={item.label}
+              aria-current={view === item.key ? 'page' : undefined}
+              title={item.label}
+              onClick={() => onView(item.key)}
+            >
+              <item.icon size={18} />
+              <span>{item.label}</span>
+            </button>
+            {/* 青藜对话 is a list of its own rather than a page. */}
+            {item.key === 'recent' && (
+              <button aria-label="青藜对话" title="青藜对话" onClick={openAssistantThreads}>
+                <MessagesSquare size={18} />
+                <span>青藜对话</span>
+              </button>
+            )}
+          </Fragment>
         ))}
       </nav>
       <div className="sidebar-tree">

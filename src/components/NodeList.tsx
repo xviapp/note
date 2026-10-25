@@ -8,6 +8,7 @@ import { useNodeListing } from '../use-node-listing';
 import { nodeDescription, useListPreferences } from '../list-preferences';
 import { ListControls } from './ListControls';
 import { LockBadge } from './LockBadge';
+import { ThreadBadge } from './ThreadBadge';
 import { canMultiSelect, selectClick, useSelection } from '../selection';
 
 type NodeListProps = {
@@ -126,6 +127,7 @@ function NodeRows({
                   <strong>
                     {node.title}
                     <LockBadge keyId={node.key_id} />
+                    <ThreadBadge id={node.id} />
                   </strong>
                   <small>
                     {nodeDescription(node)}

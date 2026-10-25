@@ -587,7 +587,8 @@ progress::-moz-progress-bar {
 
 .main-nav {
   display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  /* Seven pages in two rows. */
+  grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 2px;
   padding-bottom: 10px;
   border-bottom: 1px solid var(--line);

@@ -40,6 +40,7 @@ import type { TranslationLaunch } from '../translation';
 import type { PdfSourceLocation, SourceLocation } from '../../shared/translation';
 import { clearSourceHighlight, locateTextSource, locateWord } from '../source-location';
 import { takeRequestedFind, takeRequestedPage } from '../find-request';
+import { takeAssistantRequest } from '../assistant-threads';
 import { exportAnnotations, useAnnotations } from '../annotations';
 import type { Annotation } from '../../shared/annotations';
 import { useAnnotationLayer } from '../use-annotation-layer';
@@ -294,6 +295,19 @@ export default function NotePane(props: Props) {
     // Runs once the note is there; the refs hold the latest reading state.
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [id, note?.id === id, editing]);
+  // Opened from 青藜对话: show this note's conversation.
+  useEffect(() => {
+    if (note?.id !== id) return;
+    const open = () => {
+      if (!takeAssistantRequest(id, false)) return;
+      setTranslation(null);
+      setPdf(null);
+      setAssistantOpen(true);
+    };
+    open();
+    window.addEventListener('note:assistant-request', open);
+    return () => window.removeEventListener('note:assistant-request', open);
+  }, [id, note?.id]);
   const showImage = useCallback((src: string, alt: string) => setImage({ src, alt }), []);
   const previewFile = (file: FileInfo) => {
     if (file.mime.startsWith('image/')) showImage(fileUrl(file.id), file.name);

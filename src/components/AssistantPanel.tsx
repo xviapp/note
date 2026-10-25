@@ -15,6 +15,7 @@ import {
   FilePlus2,
   FileText,
   MessageSquareQuote,
+  MessagesSquare,
   Paperclip,
   Quote,
   RefreshCw,
@@ -24,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { QingliIcon } from './QingliIcon';
+import { openAssistantThreads } from '../assistant-threads';
 import type { NoteDetail } from '../../shared/types';
 import { CHAT_FILE_LIMIT, pageLabel, type ChatSource } from '../../shared/chat-files';
 import { fileUrl } from '../api';
@@ -196,6 +198,14 @@ export function AssistantPanel(props: Props) {
                 文件对话
               </button>
             )}
+            <button
+              className="icon-button"
+              aria-label="全部青藜对话"
+              title="全部青藜对话"
+              onClick={openAssistantThreads}
+            >
+              <MessagesSquare size={16} />
+            </button>
             <button
               className="icon-button"
               aria-label="刷新会话"

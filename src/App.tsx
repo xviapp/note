@@ -58,6 +58,8 @@ import { SyncStatus } from './components/SyncStatus';
 import { ContinueReading } from './components/ContinueReading';
 import { useOutboxSummary } from './outbox';
 import { SearchDialog } from './components/SearchDialog';
+import { AssistantThreads } from './components/AssistantThreads';
+import { refreshThreads } from './assistant-threads';
 import { AuthScreen } from './components/AuthScreen';
 import { translationWindowId } from './screen-link';
 import { ListingCacheContext, type ListingCache } from './use-node-listing';
@@ -203,6 +205,7 @@ function Notebook({
   const [globalMode, setGlobalMode] = useState<AssistantMode>('floating');
   const [globalImage, setGlobalImage] = useState<{ src: string; alt: string } | null>(null);
   const [clipsOpen, setClipsOpen] = useState(false);
+  const [threadsOpen, setThreadsOpen] = useState(false);
   const globalActions = useRef<AssistantHandle | null>(null);
   const offline = useOffline();
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
@@ -365,12 +368,20 @@ function Notebook({
     void flushClips();
     const stopWidgetClips = android ? watchWidgetClips() : () => {};
     const open = () => setClipsOpen(true);
+    const openThreads = () => setThreadsOpen(true);
     window.addEventListener('note:clips', open);
+    window.addEventListener('note:assistant-threads', openThreads);
     return () => {
       stopWidgetClips();
       window.removeEventListener('note:clips', open);
+      window.removeEventListener('note:assistant-threads', openThreads);
     };
   }, [android]);
+  // Which notes have a conversation, for 青藜对话 and the marks in lists. A
+  // reply, a cleared conversation or a trashed note each changes the library.
+  useEffect(() => {
+    void refreshThreads().catch(() => {});
+  }, [revision]);
   const showToast = toast.show;
   useEffect(() => {
     const saved = (event: Event) => {
@@ -1078,6 +1089,16 @@ function Notebook({
             }}
           />
         </Suspense>
+      )}
+      {threadsOpen && (
+        <AssistantThreads
+          onClose={() => setThreadsOpen(false)}
+          onOpen={(id) => {
+            setGlobalOpen(false);
+            setMobileOpen(false);
+            void navigate(id);
+          }}
+        />
       )}
       {searchOpen && (
         <SearchDialog

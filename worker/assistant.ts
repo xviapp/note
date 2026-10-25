@@ -1,17 +1,19 @@
 import { annotationsText } from '../shared/annotations';
 import { listAnnotations } from './annotations';
 import {
+  ASSISTANT_THREAD_LIMIT,
   GLOBAL_ASSISTANT_ID,
   AI_IMAGE_LIMIT,
   AI_PROMPT_LIMIT,
   AI_QUOTE_LIMIT,
+  type AssistantThread,
   type ChatHistory,
   type ChatMessage,
 } from '../shared/assistant';
 import type { FileInfo, NoteNode } from '../shared/types';
 import type { BlobRow, Env } from './types';
 import { AppError, asError, idValue, sseResponse, textValue } from './http';
-import { createNode, getNode } from './library';
+import { createNode, getNode, NODE_COLUMNS } from './library';
 import { assistantContext } from './assistant-context';
 import {
   discardFile,
@@ -67,6 +69,32 @@ export async function assistantNode(
   if (node.kind === 'folder' && node.variant !== 'book')
     throw new AppError(400, '请打开一个文件与青藜对话。');
   return node;
+}
+// Every note with a conversation, the most recently written first. Only
+// metadata: titles are not encrypted, the messages themselves are not read.
+// A discussion's path runs through its book and page.
+export async function assistantThreads(env: Env): Promise<{ threads: AssistantThread[] }> {
+  const threads = `SELECT node_id,SUM(role='user') questions,MAX(created_at) chat_at
+    FROM assistant_messages GROUP BY node_id`;
+  const [rows, ancestors] = await env.DB.batch([
+    env.DB.prepare(`SELECT ${NODE_COLUMNS},x.questions,x.chat_at FROM (${threads}) x
+      JOIN nodes n ON n.id=x.node_id WHERE n.trash_id IS NULL ORDER BY x.chat_at DESC,n.id LIMIT ?`).bind(
+      ASSISTANT_THREAD_LIMIT,
+    ),
+    env.DB.prepare(`WITH RECURSIVE chain(hit,id,parent_id,title,depth) AS (
+      SELECT n.id,n.id,n.parent_id,NULL,0 FROM nodes n WHERE n.id IN (SELECT node_id FROM assistant_threads)
+      UNION ALL SELECT c.hit,p.id,p.parent_id,p.title,c.depth+1 FROM chain c JOIN nodes p ON p.id=c.parent_id WHERE c.depth<200
+    ) SELECT hit,title FROM chain WHERE depth>0 ORDER BY hit,depth DESC`),
+  ]);
+  const paths = new Map<string, string[]>();
+  for (const row of ancestors.results as { hit: string; title: string }[])
+    paths.set(row.hit, [...(paths.get(row.hit) ?? []), row.title]);
+  return {
+    threads: (rows.results as Omit<AssistantThread, 'path'>[]).map((node) => ({
+      ...node,
+      path: paths.get(node.id) ?? [],
+    })),
+  };
 }
 async function present(env: Env, row: MessageRow): Promise<ChatMessage> {
   let body: Pick<ChatMessage, 'content' | 'reasoning' | 'quote' | 'quoteSource' | 'files' | 'annotations' | 'continueFrom'> = {

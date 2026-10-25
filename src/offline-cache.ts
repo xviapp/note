@@ -398,6 +398,8 @@ export const cacheablePath = (path: string) =>
   // the 问青藜 window and panel open with the last conversation.
   path === '/api/nodes/qingli-global/assistant' ||
   path === '/api/ai/settings' ||
+  // Which notes have a conversation (titles and times only), for 青藜对话.
+  path === '/api/assistant/threads' ||
   /^\/api\/nodes(?:\?.*)?$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/annotations$/.test(path) ||
   /^\/api\/nodes\/[\w-]+\/pages$/.test(path) ||

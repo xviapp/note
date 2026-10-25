@@ -1,5 +1,6 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { api, ApiError } from '../api';
+import { takeAssistantRequest } from '../assistant-threads';
 import { variantOf, type NoteNode } from '../../shared/types';
 import { BookCard, BookForm } from '../components/BookPanel';
 import {
@@ -78,7 +79,24 @@ export function useBookPageView(ctx: TypeContext): TypeView | null {
   const { note } = ctx;
   const info = note?.book_page;
   const [discussion, setDiscussion] = useState<Discussion | null>(null);
-  useEffect(() => setDiscussion(null), [note?.id]);
+  const openAssistant = useRef(ctx.openAssistant);
+  openAssistant.current = ctx.openAssistant;
+  // A new page starts without a discussion, unless 青藜对话 asked for one of its own.
+  useEffect(() => {
+    setDiscussion(null);
+    if (!note) return;
+    const take = () => {
+      const wanted = takeAssistantRequest(note.id, true);
+      if (!wanted) return;
+      setDiscussion({ id: wanted });
+      openAssistant.current();
+    };
+    take();
+    window.addEventListener('note:assistant-request', take);
+    return () => window.removeEventListener('note:assistant-request', take);
+    // The page's id is what matters, not each refreshed copy of it.
+    // oxlint-disable-next-line react-hooks/exhaustive-deps
+  }, [note?.id]);
   if (!note || variantOf(note) !== 'book-page' || !info || !note.book) return null;
   const open = (next: Discussion) => {
     setDiscussion(next);
