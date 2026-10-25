@@ -228,14 +228,6 @@ test('global Qingli is available across pages, separate from file chats and save
   await page.getByRole('button', { name: '打开青藜', exact: true }).click();
   const file = page.getByRole('complementary', { name: '青藜', exact: true });
   await expect(file.getByText('独立的全局问题', { exact: true })).toHaveCount(0);
-  await file.getByRole('textbox', { name: '发给青藜的问题', exact: true }).fill('保留文件草稿');
-  await file.getByRole('button', { name: '全局对话', exact: true }).click();
-  await expect(file).toBeHidden();
-  await expect(global.getByText('独立的全局问题', { exact: true })).toBeVisible();
-  await expect(global.getByRole('button', { name: '附上当前文件', exact: true })).toBeVisible();
-  await page.screenshot({ path: `test-results/global-qingli-${info.project.name}.png` });
-  await global.getByRole('button', { name: '文件对话', exact: true }).click();
-  await expect(file.getByRole('textbox', { name: '发给青藜的问题', exact: true })).toHaveValue(
-    '保留文件草稿',
-  );
+  // A file's 青藜 stays with the file: there is no switch to the global conversation.
+  await expect(file.getByRole('button', { name: '全局对话', exact: true })).toHaveCount(0);
 });

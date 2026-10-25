@@ -71,7 +71,6 @@ interface Props {
   treeRefresh: number;
   showSidebar: boolean;
   globalAssistantOpen: boolean;
-  onGlobalAssistant: (selection: string) => void;
   sidebarOpen: boolean;
   onOpenSidebar: () => void;
   onBack: () => void;
@@ -781,9 +780,6 @@ export default function NotePane(props: Props) {
             showLauncher={typeView.assistant?.showLauncher}
             visible={assistantOpen && !editing}
             enabled={!editing && !props.globalAssistantOpen}
-            onGlobal={
-              typeView.assistant?.noGlobal ? undefined : () => props.onGlobalAssistant(selection)
-            }
             // Docked beside the article has no place in a full-screen view.
             mode={
               (typeView.fullscreen || splitOpen) && assistantMode === 'docked'

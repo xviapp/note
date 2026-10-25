@@ -46,8 +46,6 @@ export interface AssistantCustom {
   onDraftSend?: (content: string, quote: string) => void;
   onReplied?: () => void;
   showLauncher?: boolean;
-  // No switch to the global conversation.
-  noGlobal?: boolean;
 }
 
 // What a type adds to the note page. The page lays these out in fixed places;

@@ -201,7 +201,6 @@ function Notebook({
   const android = Capacitor.getPlatform() === 'android';
   const treeExpansion = useRef(new Set<string>());
   const [globalOpen, setGlobalOpen] = useState(false);
-  const [globalSelection, setGlobalSelection] = useState('');
   const [globalMode, setGlobalMode] = useState<AssistantMode>('floating');
   const [globalImage, setGlobalImage] = useState<{ src: string; alt: string } | null>(null);
   const [clipsOpen, setClipsOpen] = useState(false);
@@ -238,7 +237,6 @@ function Notebook({
   useEffect(() => {
     setMobileOpen(false);
     setLoaded(null);
-    setGlobalSelection('');
   }, [navigation.key]);
   const toast = useToast();
   const outbox = useOutboxSummary();
@@ -839,10 +837,6 @@ function Notebook({
                   treeRefresh={revision}
                   showSidebar={!android}
                   globalAssistantOpen={globalOpen}
-                  onGlobalAssistant={(selection) => {
-                    setGlobalSelection(selection);
-                    setGlobalOpen(true);
-                  }}
                   sidebarOpen={mobileOpen}
                   onOpenSidebar={openSidebar}
                   onBack={navigation.back}
@@ -974,7 +968,6 @@ function Notebook({
         showLauncher={(!selected || loaded?.kind === 'folder') && !loaded?.book}
         mode={globalMode}
         onModeChange={setGlobalMode}
-        selection={globalSelection}
         readingRoot={navigation.scroll}
         onOpen={() => setGlobalOpen(true)}
         onClose={() => setGlobalOpen(false)}

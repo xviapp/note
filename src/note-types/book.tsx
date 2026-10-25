@@ -213,7 +213,6 @@ export function useBookPageView(ctx: TypeContext): TypeView | null {
         ? undefined
         : (content, quote) => void ask(content, quote || undefined),
       onReplied: ctx.refresh,
-      noGlobal: true,
     },
   };
 }

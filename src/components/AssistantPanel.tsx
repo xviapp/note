@@ -14,7 +14,6 @@ import {
   Copy,
   FilePlus2,
   FileText,
-  Globe,
   MessageSquareQuote,
   MessagesSquare,
   Paperclip,
@@ -52,12 +51,12 @@ interface Props {
   showLauncher?: boolean;
   // A card in the middle of the screen (Android's 问青藜 window), never a sheet.
   centered?: boolean;
-  onGlobal?: () => void;
   visible: boolean;
   enabled: boolean;
   mode: AssistantMode;
   onModeChange: (mode: AssistantMode) => void;
-  selection: string;
+  // The reading selection to quote; the global conversation has none.
+  selection?: string;
   readingRoot: RefObject<HTMLDivElement | null>;
   onClose: () => void;
   onOpen: () => void;
@@ -189,21 +188,6 @@ export function AssistantPanel(props: Props) {
         actions={
           <>
             {props.headerActions}
-            {props.onGlobal && (
-              <button
-                className="icon-button"
-                aria-label="全局对话"
-                title="全局对话"
-                onClick={props.onGlobal}
-              >
-                <Globe size={16} />
-              </button>
-            )}
-            {props.global && node && (
-              <button className="text-button" onClick={props.onClose}>
-                文件对话
-              </button>
-            )}
             <button
               className="icon-button"
               aria-label="全部青藜对话"
@@ -551,14 +535,14 @@ export function AssistantPanel(props: Props) {
               }}
             />
             {/* A window of its own has no page to quote or capture. */}
-            {!props.centered && (
+            {!props.centered && props.selection !== undefined && (
               <button
                 type="button"
                 className="text-button"
                 disabled={!props.selection || sending}
                 title={props.selection ? undefined : '先在正文中选中文字'}
                 onClick={() => {
-                  const error = addQuote(props.selection);
+                  const error = addQuote(props.selection!);
                   if (error) setError(error);
                 }}
               >

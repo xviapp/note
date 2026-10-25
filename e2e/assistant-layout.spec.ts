@@ -97,7 +97,7 @@ test('assistant floats, docks and maximizes while keeping drafts, attachments an
   await expect(send).toBeEnabled();
   await send.focus();
   await page.keyboard.press('Tab');
-  await expect(panel.getByRole('button', { name: '全局对话', exact: true })).toBeFocused();
+  await expect(panel.getByRole('button', { name: '全部青藜对话', exact: true })).toBeFocused();
   await page.keyboard.press('Shift+Tab');
   await expect(send).toBeFocused();
   await panel.getByRole('button', { name: '附上当前文件', exact: true }).click();
