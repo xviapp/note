@@ -163,6 +163,12 @@
   color: var(--muted);
   font-size: 13px;
 }
+/* A full-height touch target, keeping the disclosure marker. */
+@media (pointer: coarse) {
+  .reading-adjustments summary {
+    padding-block: 14px;
+  }
+}
 .reading-adjustments .reading-slider {
   margin-top: 16px;
 }

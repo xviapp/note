@@ -3997,21 +3997,11 @@ button.node-list-toggle:focus-visible {
     max-width: 100%;
   }
 
-  .note-actions .icon-button {
-    width: 30px;
-    height: 32px;
-  }
   .note-actions .button {
-    font-size: 10px;
     padding: 5px 8px;
   }
   .note-actions .button svg {
     width: 13px;
-  }
-  .note-actions .edit-note-button {
-    width: 30px;
-    height: 32px;
-    padding: 0;
   }
   .edit-note-button span {
     display: none;
@@ -4019,21 +4009,11 @@ button.node-list-toggle:focus-visible {
   .note-actions .edit-note-button svg {
     width: 16px;
   }
-  .note-article {
-    padding: 29px 23px 65px;
-  }
-  .document-heading {
-    margin-bottom: 18px;
-  }
   .document-heading h1 {
-    font-size: 27px;
     margin: 0 0 8px;
   }
-  .document-title-row .document-title-input:not([type='checkbox']):not([type='radio']):not([type='file']) {
-    font-size: 27px;
-  }
   .document-meta {
-    font-size: 11px;
+    font-size: 12px;
   }
 
   .markdown-body {
@@ -4048,10 +4028,10 @@ button.node-list-toggle:focus-visible {
   }
   .markdown-body pre {
     padding: 13px;
-    font-size: 11px;
+    font-size: 12px;
   }
   .markdown-body table {
-    font-size: 12px;
+    font-size: 13px;
   }
   .children-section {
     margin-top: 38px;
@@ -4062,18 +4042,10 @@ button.node-list-toggle:focus-visible {
     margin: 11px 0 27px;
   }
 
-  .node-list-main time {
-    font-size: 9px;
-  }
-
-  .node-list-main small {
-    font-size: 10px;
-  }
-
   .notice,
   .capacity-warning {
     padding: 10px 16px;
-    font-size: 11px;
+    font-size: 13px;
   }
   .modal {
     padding: 20px;
@@ -4081,15 +4053,8 @@ button.node-list-toggle:focus-visible {
     max-height: calc(100dvh - 28px);
     border-radius: var(--radius-panel);
   }
-  .modal-heading {
-    margin-bottom: 17px;
-  }
   .modal-heading h2 {
     font-size: 16px;
-  }
-  .modal .button {
-    min-height: 39px;
-    font-size: 12px;
   }
   .dialog-actions {
     gap: 7px;
@@ -4097,14 +4062,8 @@ button.node-list-toggle:focus-visible {
   .modal-wide {
     width: calc(100vw - 24px);
   }
-  .icon-button {
-    min-height: 32px;
-  }
   .form-stack {
     gap: 17px;
-  }
-  input:not([type='checkbox']):not([type='radio']):not([type='file']) {
-    font-size: 16px;
   }
   .edit-toolbar {
     position: relative;
@@ -4140,9 +4099,7 @@ button.node-list-toggle:focus-visible {
     padding: 8px 12px;
   }
   .edit-toolbar .button {
-    font-size: 10px;
-    min-height: 31px;
-    padding: 5px 8px;
+    padding: 5px 10px;
   }
   .edit-toolbar .file-input-button span {
     display: inline;
@@ -4160,7 +4117,7 @@ button.node-list-toggle:focus-visible {
     flex: 1;
     font-size: 12px;
     padding: 6px 10px;
-    min-height: 46px;
+    min-height: var(--family-touch);
     color: var(--muted);
   }
   .edit-tabs button.active {
@@ -4182,12 +4139,12 @@ button.node-list-toggle:focus-visible {
     display: none;
   }
   .is-editing .note-article {
-    padding: 26px 23px 60px;
+    padding: 26px 20px 60px;
   }
   .save-error {
     padding: 10px 16px;
     gap: 10px;
-    font-size: 11px;
+    font-size: 13px;
   }
   .history-layout {
     grid-template-columns: 1fr;
@@ -4207,7 +4164,7 @@ button.node-list-toggle:focus-visible {
     gap: 2px;
   }
   .version-list strong {
-    font-size: 11px;
+    font-size: 12px;
   }
   .version-preview {
     padding: 19px;
@@ -4223,11 +4180,6 @@ button.node-list-toggle:focus-visible {
   .image-stage {
     height: 65dvh;
   }
-  .pdf-toolbar {
-    padding: 7px;
-    gap: 1px;
-  }
-
   .pdf-toolbar input {
     font-size: 13px !important;
   }
@@ -4246,15 +4198,13 @@ button.node-list-toggle:focus-visible {
     gap: 10px;
   }
   .trash-row .button {
-    font-size: 11px;
-    padding: 6px 10px;
-    min-height: 33px;
+    padding: 6px 12px;
   }
   .trash-row strong {
-    font-size: 12px;
+    font-size: 14px;
   }
   .trash-row small {
-    font-size: 10px;
+    font-size: 12px;
   }
   .settings-section {
     padding-top: 25px;
@@ -4268,7 +4218,7 @@ button.node-list-toggle:focus-visible {
   }
   .quota-form label {
     gap: 10px;
-    font-size: 11px;
+    font-size: 13px;
   }
   .input-unit {
     gap: 5px;
@@ -4276,14 +4226,9 @@ button.node-list-toggle:focus-visible {
   .input-unit input {
     width: 80px !important;
   }
-  .quota-form .button {
-    font-size: 11px;
-    padding: 6px 10px;
-  }
-
+  .quota-form .button,
   .setting-row .button {
-    font-size: 11px;
-    padding: 7px 10px;
+    padding: 7px 12px;
   }
 
   .empty-state {
