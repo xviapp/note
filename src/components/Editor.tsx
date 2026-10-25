@@ -4,6 +4,9 @@ import { EditorView, keymap } from '@codemirror/view';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useTheme } from '../theme';
 import { editorTheme } from '../editor-theme';
+import { FormatBar } from './FormatBar';
+
+const touch = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
 
 // Changes made from outside the editor while it is open.
 export interface EditorHandle {
@@ -34,6 +37,8 @@ export default function Editor({
 }) {
   const { theme } = useTheme();
   const view = useRef<EditorView | null>(null);
+  const [focused, setFocused] = useState<EditorView | null>(null);
+  const [formatBar] = useState(touch);
   const [initial] = useState(value);
   // The latest handlers, so the extensions stay the same across renders.
   const handlers = useRef({ onSave, onFiles });
@@ -99,22 +104,34 @@ export default function Editor({
         },
       }),
       ...(kind === 'markdown' ? [markdown()] : []),
+      ...(formatBar
+        ? [
+            EditorView.updateListener.of((update) => {
+              if (update.focusChanged) setFocused(update.view.hasFocus ? update.view : null);
+            }),
+            // The cursor stays above the format bar.
+            EditorView.scrollMargins.of(() => ({ bottom: 64 })),
+          ]
+        : []),
     ],
-    [kind],
+    [kind, formatBar],
   );
   return (
-    <CodeMirror
-      value={initial}
-      onChange={onChange}
-      onCreateEditor={(editor) => {
-        view.current = editor;
-      }}
-      extensions={extensions}
-      height="100%"
-      minHeight="350px"
-      theme={editorTheme(theme)}
-      autoFocus
-      basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true }}
-    />
+    <>
+      <CodeMirror
+        value={initial}
+        onChange={onChange}
+        onCreateEditor={(editor) => {
+          view.current = editor;
+        }}
+        extensions={extensions}
+        height="100%"
+        minHeight="350px"
+        theme={editorTheme(theme)}
+        autoFocus
+        basicSetup={{ lineNumbers: true, foldGutter: true, highlightActiveLine: true }}
+      />
+      {focused && <FormatBar view={focused} markdown={kind === 'markdown'} />}
+    </>
   );
 }

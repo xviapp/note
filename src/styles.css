@@ -2552,6 +2552,57 @@ button.node-list-toggle:focus-visible {
   gap: 8px;
 }
 .edit-insert-menu > summary[hidden] { display: none; }
+/* Markdown shortcuts above the phone keyboard while the editor has focus. */
+.format-bar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  z-index: 45;
+  display: flex;
+  padding: 4px max(8px, env(safe-area-inset-right)) max(4px, env(safe-area-inset-bottom))
+    max(8px, env(safe-area-inset-left));
+  border-top: 1px solid var(--line);
+  background: var(--surface);
+  transform: translateY(-100%);
+}
+.format-bar-scroll,
+.format-bar-history {
+  display: flex;
+  gap: 2px;
+}
+.format-bar-scroll {
+  flex: 1;
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+}
+.format-bar-history {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding-left: 4px;
+  border-left: 1px solid var(--line);
+}
+.format-bar button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  border-radius: var(--radius-control);
+  color: var(--muted);
+}
+.format-bar button:active {
+  background: var(--selected);
+  color: var(--blue);
+}
+@media (pointer: coarse) {
+  /* The last lines can scroll up past the format bar. */
+  .source-pane .cm-content {
+    padding-bottom: 64px;
+  }
+}
 .source-pane {
   width: 50%;
   min-width: 0;
