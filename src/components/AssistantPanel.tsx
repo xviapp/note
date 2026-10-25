@@ -14,6 +14,7 @@ import {
   Copy,
   FilePlus2,
   FileText,
+  Globe,
   MessageSquareQuote,
   MessagesSquare,
   Paperclip,
@@ -189,8 +190,13 @@ export function AssistantPanel(props: Props) {
           <>
             {props.headerActions}
             {props.onGlobal && (
-              <button className="text-button" onClick={props.onGlobal}>
-                全局对话
+              <button
+                className="icon-button"
+                aria-label="全局对话"
+                title="全局对话"
+                onClick={props.onGlobal}
+              >
+                <Globe size={16} />
               </button>
             )}
             {props.global && node && (
