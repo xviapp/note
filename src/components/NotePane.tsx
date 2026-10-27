@@ -28,6 +28,7 @@ import { LinkDialog, markdownLink } from './LinkDialog';
 import { useNoteEditor } from '../use-note-editor';
 import { NoteActions } from './NoteActions';
 import { NodeList } from './NodeList';
+import { ListControls } from './ListControls';
 import { FastScroll } from './FastScroll';
 import { NodeMenu, type NodeAction } from './Tree';
 import { LockedNote } from './Encryption';
@@ -860,10 +861,12 @@ export default function NotePane(props: Props) {
         <Modal
           title={`下级笔记（${note.child_count ?? 0}）`}
           className="children-modal"
+          actions={<ListControls />}
           onClose={() => setChildrenOpen(false)}
         >
           <NodeList
             parent={id}
+            showControls={false}
             refresh={props.treeRefresh}
             onOpen={(node) => {
               setChildrenOpen(false);

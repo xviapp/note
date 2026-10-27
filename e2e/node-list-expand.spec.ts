@@ -113,3 +113,41 @@ test('a note opens its children from the toolbar, while a folder lists them on t
     page.locator('.children-section .node-list-main').filter({ hasText: note.title }),
   ).toBeVisible();
 });
+
+test('child dialog keeps display controls in its header and fits every theme and phone width', async ({ page }, info) => {
+  await login(page);
+  const note = await create(page, { kind: 'markdown', title: '阅读与学习', content: '# 阅读笔记' });
+  const folder = await create(page, { kind: 'folder', title: '学习资料', parentId: note.id });
+  await create(page, { kind: 'markdown', title: '本周阅读清单', parentId: folder.id });
+  await create(page, { kind: 'markdown', title: '读书时留下的想法与问题', parentId: folder.id });
+  await page.goto(`/n/${note.id}`);
+  await noteAction(page, '下级笔记（1）');
+  const dialog = page.getByRole('dialog', { name: '下级笔记（1）', exact: true });
+  await expect(dialog.locator('.node-list-main')).toHaveCount(1);
+  await expect(dialog.locator('.node-list > .list-controls')).toHaveCount(0);
+  if (info.project.name === 'desktop') {
+    const header = dialog.locator('.modal-heading');
+    await expect(header.getByLabel('列表排序')).toBeVisible();
+    await header.getByLabel('列表排序').selectOption('title');
+    await expect(dialog.locator('.node-list-main')).toHaveCount(1);
+    await header.getByRole('button', { name: '紧凑列表', exact: true }).click();
+    await expect(dialog.locator('.node-list-main small')).toBeHidden();
+    await header.getByRole('button', { name: '紧凑列表', exact: true }).click();
+  } else {
+    await expect(dialog.locator('.list-controls')).toBeHidden();
+  }
+  for (const theme of ['light', 'dark', 'starry']) {
+    await page.evaluate((value) => window.dispatchEvent(new StorageEvent('storage', { key: 'note:theme', newValue: value })), theme);
+    await expect(page.locator('html')).toHaveAttribute('data-theme', theme);
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await dialog.screenshot({ path: `test-results/children-dialog-${theme}-${info.project.name}.png` });
+  }
+  await dialog.getByRole('button', { name: '展开 学习资料', exact: true }).click();
+  await expect(dialog.locator('.node-list-children .node-list-main')).toHaveCount(2);
+  await dialog.screenshot({ path: `test-results/children-dialog-expanded-${info.project.name}.png` });
+  if (info.project.name === 'mobile') {
+    await page.setViewportSize({ width: 320, height: 740 });
+    expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBe(true);
+    await expect(dialog.getByRole('button', { name: '关闭', exact: true })).toBeInViewport();
+  }
+});

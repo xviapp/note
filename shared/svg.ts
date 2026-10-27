@@ -30,6 +30,7 @@ const attributes = names(`id class x y x1 x2 y1 y2 cx cy r rx ry d points dx dy 
   intercept amplitude exponent z pointsAtX pointsAtY pointsAtZ`);
 const properties = names(`fill fill-opacity fill-rule stroke stroke-width stroke-opacity
   stroke-linecap stroke-linejoin stroke-miterlimit stroke-dasharray stroke-dashoffset opacity
+  marker-start marker-mid marker-end
   clip-path clip-rule mask filter color color-interpolation color-interpolation-filters
   stop-color stop-opacity flood-color flood-opacity lighting-color vector-effect paint-order
   font font-family font-size font-weight font-style font-stretch font-variant font-feature-settings

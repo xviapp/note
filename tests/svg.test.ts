@@ -4,6 +4,14 @@ import { diagramSvg, hostileSvg } from './fixtures/svg';
 
 const clean = (value: string) => sanitizeSvg(new TextEncoder().encode(value));
 describe('static SVG images', () => {
+  it('preserves local arrow markers in attributes and CSS while rejecting external markers', () => {
+    const svg = clean('<svg xmlns="http://www.w3.org/2000/svg"><defs><marker id="arrow" markerWidth="10" markerHeight="10"><path d="M0 0L10 5L0 10Z"/></marker></defs><style>.edge{marker-mid:url(#arrow);marker-start:url(https://tracker.invalid/a)}</style><path marker-end="url(#arrow)" marker-start="url(https://tracker.invalid/a)" style="marker-mid:url(#arrow)"/></svg>');
+    expect(svg).toContain('marker-end="url(#arrow)"');
+    expect(svg).toContain('marker-mid:url(#arrow)');
+    expect(svg).toContain('<marker id="arrow"');
+    expect(svg).not.toContain('tracker.invalid');
+    expect(clean(svg)).toBe(svg);
+  });
   it('preserves vector paths, text, styles, gradients, clipping and local glyph references', () => {
     const svg = clean(diagramSvg);
     for (const value of [

@@ -49,7 +49,7 @@ export default function ImageViewer({
           href={
             /^(data:|blob:)/.test(src) ? src : `${src}${src.includes('?') ? '&' : '?'}download=1`
           }
-          download={/^(data:|blob:)/.test(src) ? 'screenshot.jpg' : undefined}
+          download={src.startsWith('data:image/svg+xml') ? 'diagram.svg' : /^(data:|blob:)/.test(src) ? 'screenshot.jpg' : undefined}
           target="_blank"
           rel="noreferrer"
           aria-label="下载图片"

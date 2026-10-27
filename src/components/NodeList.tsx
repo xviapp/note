@@ -21,8 +21,9 @@ export function NodeList({
   view,
   parent,
   onNew,
+  showControls = true,
   ...props
-}: NodeListProps & { view?: 'favorites' | 'recent'; parent?: string | null; onNew?: () => void }) {
+}: NodeListProps & { view?: 'favorites' | 'recent'; parent?: string | null; onNew?: () => void; showControls?: boolean }) {
   const preferences = useListPreferences();
   const query = (view ? `view=${view}` : `parent=${parent || ''}`)
     + (props.onAction && preferences.sort !== 'default' ? `&sort=${preferences.sort}` : '');
@@ -30,7 +31,7 @@ export function NodeList({
   // A list that can manage its notes can also select several (src/selection.ts).
   const wrap = (children: ReactNode) => <div className={`node-list${props.onAction && preferences.compact ? ' is-compact' : ''}`} aria-busy={loading}
     data-select-scope={props.onAction ? 'list' : undefined}>
-    {props.onAction && <ListControls />}{children}
+    {props.onAction && showControls && <ListControls />}{children}
   </div>;
   if (!listing)
     return wrap(error ? (

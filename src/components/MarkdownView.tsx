@@ -14,6 +14,7 @@ import { markdownFrontMatter } from '../../shared/projects';
 import { rehypeRecords, rehypeRepeatedTitle, type RecordStyle } from '../markdown-records';
 import { rehypeSections } from '../markdown-sections';
 import { MarkdownSection, type SectionControls } from './MarkdownSection';
+import { MermaidDiagram } from './MermaidDiagram';
 
 // Sanitize Markdown before KaTeX generates its own markup, with trust disabled.
 // https://github.com/rehypejs/rehype-sanitize#example-math
@@ -113,6 +114,15 @@ export const MarkdownView = memo(function MarkdownView({
     const onNavigate = (id: string) => callbacks.current.onNavigate(id),
       onImage = (src: string, alt: string) => callbacks.current.onImage(src, alt);
     return {
+      pre: ({ node, children, ...props }) => {
+        const code = node?.children[0];
+        if (code?.type === 'element' && code.tagName === 'code' &&
+          Array.isArray(code.properties.className) && code.properties.className.includes('language-mermaid')) {
+          const source = code.children.map((child) => child.type === 'text' ? child.value : '').join('');
+          return <MermaidDiagram source={source} onImage={onImage} />;
+        }
+        return <pre {...props}>{children}</pre>;
+      },
       section: ({ node, children, ...props }) => {
         const start = node?.properties.dataSectionStart;
         const controls = callbacks.current.sections;

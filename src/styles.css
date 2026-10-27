@@ -2048,6 +2048,25 @@ button.node-list-toggle:focus-visible {
   cursor: zoom-in;
   margin: 1em 0;
 }
+.mermaid-diagram {
+  max-width: 100%;
+  min-width: 0;
+  overflow: auto;
+  margin: 1.5em 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: var(--surface);
+}
+.markdown-body .mermaid-diagram img {
+  max-width: none;
+  margin: 0;
+}
+.markdown-body .mermaid-status {
+  color: var(--muted);
+  font-size: 13px;
+  margin: 0 0 8px;
+}
 .markdown-body input[type='checkbox'] {
   accent-color: var(--blue);
 }
@@ -2824,6 +2843,76 @@ button.node-list-toggle:focus-visible {
   flex: none;
   align-items: center;
   gap: 2px;
+}
+.modal.children-modal {
+  width: 560px;
+  padding: 20px;
+  max-height: min(640px, calc(100dvh - 48px));
+  scrollbar-width: thin;
+}
+.children-modal .modal-heading {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  gap: 12px;
+  margin-bottom: 8px;
+  padding: 0 0 12px;
+  border-bottom: 1px solid var(--line);
+  background: var(--surface);
+}
+.children-modal .modal-heading h2 {
+  font-size: 16px;
+  white-space: nowrap;
+}
+.children-modal .modal-heading-actions {
+  gap: 8px;
+}
+.children-modal .list-controls {
+  gap: 6px;
+  margin: 0;
+}
+.children-modal .list-sort-label {
+  display: none;
+}
+.children-modal .list-controls select {
+  width: 116px;
+  min-height: 32px;
+  padding: 5px 8px;
+  border-color: transparent;
+  background: var(--surface-subtle);
+  font-size: 12px;
+}
+.children-modal .list-controls select:hover:not(:disabled) {
+  border-color: var(--line-strong);
+}
+.children-modal .list-controls .text-button {
+  min-height: 32px;
+  font-size: 12px;
+}
+.children-modal .node-list-row {
+  gap: 6px;
+  padding: 2px 0;
+}
+.children-modal .node-list-main {
+  gap: 10px;
+  min-height: 64px;
+  padding: 10px 4px;
+}
+.children-modal .node-list-main > .node-icon {
+  width: 36px;
+  height: 36px;
+  padding: 8px;
+}
+.children-modal .node-list-main > .custom-folder-icon {
+  flex-basis: 36px;
+  padding: 6px;
+}
+.children-modal .node-list-main time {
+  padding-left: 8px;
+  font-variant-numeric: tabular-nums;
+}
+.children-modal .node-list-children {
+  margin-bottom: 4px;
 }
 .modal.toc-modal {
   inset: 0 0 0 auto;

@@ -6,7 +6,7 @@ export function ListControls() {
   const value = useListPreferences();
   const offline = useOffline();
   return <div className="list-controls" aria-label="列表显示">
-    <label>排序
+    <label><span className="list-sort-label">排序</span>
       <select aria-label="列表排序" disabled={offline} title={offline ? '联网后可切换排序' : undefined} value={value.sort} onChange={(event) => setListPreferences({ sort: event.target.value as ListSort })}>
         <option value="default">默认顺序</option><option value="updated">最近更新</option><option value="title">标题顺序</option>
       </select>
