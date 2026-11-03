@@ -1,79 +1,14 @@
-import { mkdtemp, mkdir, readFile, rm, stat, symlink, writeFile } from 'node:fs/promises';
+import { mkdtemp, mkdir, readFile, rename, rm, stat, symlink, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 import { Client } from './client.ts';
+import { FakeServer } from './fake-server.ts';
 import { pull } from './pull.ts';
 
 const SERVER = 'https://note.test';
-interface FakeNode {
-  id: string;
-  parent: string | null;
-  kind: 'folder' | 'markdown' | 'text' | 'pdf' | 'image' | 'link';
-  title: string;
-  revision?: number;
-  content?: string;
-  key_id?: string | null;
-  variant?: string;
-  url?: string;
-  file?: { id: string; name: string; mime: string; size: number; key_id?: string | null };
-  attachments?: { id: string; name: string; mime: string; size: number; key_id?: string | null }[];
-  sealed?: string;
-}
-class Fake {
-  nodes: FakeNode[] = [];
-  files = new Map<string, Uint8Array>();
-  calls: string[] = [];
-  listFails = false;
-  failing = new Set<string>();
-  fetcher: typeof fetch = async (input) => {
-    const url = new URL(String(input)),
-      path = url.pathname;
-    this.calls.push(`${path}${url.search}`);
-    if (path === '/api/nodes') {
-      if (this.listFails) return Response.json({ error: '故障' }, { status: 500 });
-      const parent = url.searchParams.get('parent');
-      return Response.json({
-        nodes: this.nodes.filter((node) => node.parent === parent).map((node) => this.summary(node)),
-        nextOffset: null,
-      });
-    }
-    const node = path.match(/^\/api\/nodes\/(.+)$/)?.[1];
-    if (node) {
-      const found = this.nodes.find((item) => item.id === node);
-      if (!found || this.failing.has(node))
-        return Response.json({ error: '不存在' }, { status: found ? 500 : 404 });
-      return Response.json({
-        ...this.summary(found),
-        content: found.content ?? '',
-        sealed: found.sealed,
-        file: found.file,
-        attachments: found.attachments ?? [],
-        breadcrumbs: [],
-      });
-    }
-    const file = path.match(/^\/api\/files\/(.+)$/)?.[1];
-    const bytes = file && this.files.get(file);
-    if (!bytes) return Response.json({ error: '不存在' }, { status: 404 });
-    return new Response(bytes.slice());
-  };
-  summary(node: FakeNode) {
-    return {
-      ...node,
-      parent_id: node.parent,
-      revision: node.revision ?? 1,
-      key_id: node.key_id ?? null,
-      url: node.url ?? null,
-      variant: node.variant ?? node.kind,
-      child_count: this.nodes.filter((item) => item.parent === node.id).length,
-    };
-  }
-  get(id: string) {
-    return this.nodes.find((node) => node.id === id)!;
-  }
-}
 describe('pull', () => {
-  let dir: string, fake: Fake;
+  let dir: string, fake: FakeServer;
   const run = (options: { root?: string | null; pdf?: boolean } = {}) =>
     pull({
       client: new Client(SERVER, 'session', fake.fetcher, 0),
@@ -85,7 +20,7 @@ describe('pull', () => {
   const missing = (path: string) => expect(stat(join(dir, path))).rejects.toThrow();
   beforeEach(async () => {
     dir = await mkdtemp(join(tmpdir(), 'xvi-pull-'));
-    fake = new Fake();
+    fake = new FakeServer();
   });
   afterEach(() => rm(dir, { recursive: true, force: true }));
 
@@ -176,11 +111,23 @@ describe('pull', () => {
     expect(report).toMatchObject({ edited: ['a.md'], conflicts: ['b.md'], updated: [] });
     expect(await read('a.md')).toBe('本地');
     expect(await read('b.md')).toBe('本地');
-    // The base stays the version the edit was made from.
+    // The base stays the version the edit was made from, the server's beside it.
     expect(state.entries.n2.revision).toBe(1);
+    expect(await read('b.remote.md')).toBe('远端');
     await rm(join(dir, 'b.md'));
     await run();
     expect(await read('b.md')).toBe('远端');
+    await missing('b.remote.md');
+  });
+  it('moves the base on when only the details of an edited note changed', async () => {
+    fake.nodes = [{ id: 'n1', parent: null, kind: 'markdown', title: 'a', content: '一' }];
+    await run();
+    await writeFile(join(dir, 'a.md'), '本地');
+    fake.get('n1').revision = 2;
+    const { report, state } = await run();
+    expect(report).toMatchObject({ edited: ['a.md'], conflicts: [] });
+    expect(state.entries.n1.revision).toBe(2);
+    await missing('a.remote.md');
   });
   it('follows renames and removals, keeping local edits and foreign files', async () => {
     fake.nodes = [
@@ -209,6 +156,21 @@ describe('pull', () => {
     expect(report.kept.sort()).toEqual(['edited.md', 'moved-edit.md']);
     expect(state.entries.n3).toBeUndefined();
     expect(state.entries.n4.path).toBe('moved-edit.md');
+  });
+  it('leaves a local move waiting for push where it is', async () => {
+    fake.nodes = [
+      { id: 'n1', parent: null, kind: 'markdown', title: 'a', content: '一' },
+      { id: 'n2', parent: null, kind: 'markdown', title: 'b', content: '二' },
+    ];
+    await run();
+    await rename(join(dir, 'a.md'), join(dir, 'c.md'));
+    Object.assign(fake.get('n2'), { content: '新', revision: 2 });
+    const { report, state } = await run();
+    expect(report.movedLocally).toEqual(['a.md']);
+    expect(report.updated).toEqual(['b.md']);
+    await missing('a.md');
+    expect(await read('c.md')).toBe('一');
+    expect(state.entries.n1.path).toBe('a.md');
   });
   it('lets notes swap names', async () => {
     fake.nodes = [
@@ -324,7 +286,8 @@ describe('pull', () => {
     Object.assign(fake.get('n1'), { content: '新', revision: 2 });
     Object.assign(fake.get('n2'), { content: '新', revision: 2 });
     const { report } = await run();
-    expect(report.conflicts.sort()).toEqual(['b.md', '目录/a.md']);
+    expect(report.conflicts).toContain('b.md');
+    expect(report.failed.map((item) => item.path)).toContain('目录');
     await expect(stat(join(outside, 'a.md'))).rejects.toThrow();
     expect(await readFile(join(outside, 'target'), 'utf8')).toBe('外部');
     await rm(outside, { recursive: true });

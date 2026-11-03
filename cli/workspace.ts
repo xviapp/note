@@ -18,9 +18,18 @@ export interface Entry {
   revision: number;
   // SHA-256 of the file as last written; folders and omitted PDFs have none.
   hash?: string;
+  // SHA-256 of the file with its links in the server's form, the same at any depth.
+  normal?: string;
   // Names in .xvi/files this note links to.
   assets?: string[];
   omitted?: boolean;
+  parent?: string | null;
+  key_id?: string | null;
+  variant?: string;
+  // The stored file of a PDF or image, which notes can link to.
+  file?: string | null;
+  // The server's differing copy, saved beside the local edit it conflicts with.
+  remote?: { path: string; revision: number; hash: string; normal: string };
 }
 export interface State {
   version: 1;
@@ -28,7 +37,11 @@ export interface State {
   // The pulled node, or null for the whole library.
   root: string | null;
   pdf: boolean;
+  // Encrypted notes are kept here as plain text.
+  decrypt: boolean;
   entries: Record<string, Entry>;
+  // Identifiers of creations under way, so a retry cannot create them twice.
+  pending: Record<string, { id: string; key: string }>;
   // Generated guidance files with their hashes, so edits to them are kept.
   guides: Record<string, string>;
 }
@@ -40,6 +53,14 @@ function checkRelative(path: string): void {
   const parts = path.split('/');
   if (isAbsolute(path) || parts.some((part) => !part || part === '.' || part === '..'))
     throw new Error(`工作区记录中的路径不正确：${path}`);
+}
+// The workspace holding this directory, searching upwards.
+export async function findWorkspace(start: string): Promise<Workspace | null> {
+  for (let dir = start; ; dir = dirname(dir)) {
+    const workspace = new Workspace(dir);
+    if ((await workspace.loadState()) !== null) return workspace;
+    if (dirname(dir) === dir) return null;
+  }
 }
 export class Workspace {
   root: string;
@@ -84,6 +105,34 @@ export class Workspace {
       if (missing(error)) return null;
       throw error;
     }
+  }
+  async read(path: string): Promise<Uint8Array> {
+    if (!(await this.parentsAreDirectories(path)) || !(await lstat(this.absolute(path))).isFile())
+      throw new Error(`${path} 不是普通文件。`);
+    return readFile(this.absolute(path));
+  }
+  async isDirectory(path: string): Promise<boolean> {
+    try {
+      if (!(await this.parentsAreDirectories(path))) return false;
+      return (await lstat(this.absolute(path))).isDirectory();
+    } catch (error) {
+      if (missing(error)) return false;
+      throw error;
+    }
+  }
+  // Regular files outside dot directories; links are not followed.
+  async scan(): Promise<string[]> {
+    const found: string[] = [];
+    const visit = async (dir: string) => {
+      for (const item of await readdir(dir ? this.absolute(dir) : this.root, { withFileTypes: true })) {
+        if (item.name.startsWith('.')) continue;
+        const path = dir ? `${dir}/${item.name}` : item.name;
+        if (item.isDirectory()) await visit(path);
+        else if (item.isFile()) found.push(path);
+      }
+    };
+    await visit('');
+    return found.sort();
   }
   async exists(path: string): Promise<boolean> {
     return (await this.hash(path)) !== null;
@@ -150,9 +199,15 @@ export class Workspace {
       if (entry.path.split('/')[0] === META_DIR) throw new Error(`工作区记录中的路径不正确：${entry.path}`);
       for (const asset of entry.assets ?? [])
         if (!ASSET_NAME.test(asset)) throw new Error(`工作区记录中的附件不正确：${asset}`);
+      if (entry.remote) checkRelative(entry.remote.path);
     }
     for (const guide of Object.keys(state.guides ?? {})) checkRelative(guide);
-    return { ...state, guides: state.guides ?? {} };
+    return {
+      ...state,
+      decrypt: state.decrypt ?? false,
+      guides: state.guides ?? {},
+      pending: state.pending ?? {},
+    };
   }
   async saveState(state: State): Promise<void> {
     await this.write(STATE_FILE, Buffer.from(`${JSON.stringify(state, null, 2)}\n`));

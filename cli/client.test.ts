@@ -21,21 +21,37 @@ describe('login', () => {
   it('sends a derived proof with the site origin and keeps the session', async () => {
     let sent: { password: { derived: string; salt: string; iterations: number; length: number } };
     let origin: string | null = null;
+    const steps: string[] = [];
     const client = new Client(SERVER, null, async (input, init) => {
-      if (String(input).endsWith('/status'))
+      const path = new URL(String(input)).pathname;
+      const seen = new Headers(init?.headers);
+      if (path.endsWith('/status'))
         return json({
           initialized: true,
           password: { salt: SALT, iterations: 10, clientHash: true },
         });
-      origin = new Headers(init?.headers).get('origin');
+      if (path === '/api/tokens') {
+        steps.push(`token ${seen.get('cookie')} ${init?.body}`);
+        return json({ id: 't', token: 'xvi_abc' }, 201);
+      }
+      if (path === '/api/auth/logout') {
+        steps.push(`logout ${seen.get('cookie')}`);
+        return json({ ok: true });
+      }
+      origin = seen.get('origin');
       sent = JSON.parse(String(init?.body));
       const headers = new Headers();
       headers.append('set-cookie', 'note_session=abc; Path=/; HttpOnly');
       headers.append('set-cookie', 'note_device=def; Path=/api/auth/');
       return json({ ok: true }, 200, headers);
     });
-    await client.login('密码12345');
-    expect(client.session).toBe('abc');
+    await client.login('密码12345', '电脑', 'read');
+    expect(client.token).toBe('xvi_abc');
+    // The session only lives long enough to make the token.
+    expect(steps).toEqual([
+      'token note_session=abc {"name":"电脑","scope":"read"}',
+      'logout note_session=abc',
+    ]);
     expect(origin).toBe(SERVER);
     expect(sent!.password).toEqual({
       derived: await derivePasswordHash('密码12345', SALT, 10),
@@ -50,7 +66,7 @@ describe('login', () => {
         ? json({ initialized: true, password: { salt: SALT, iterations: 10, clientHash: true } })
         : json({ error: '密码不正确，请重新输入。', code: 'INVALID_PASSWORD' }, 401),
     );
-    await expect(client.login('错误密码1234')).rejects.toThrow('密码不正确');
+    await expect(client.login('错误密码1234', '电脑', 'write')).rejects.toThrow('密码不正确');
   });
 });
 describe('requests', () => {
@@ -77,10 +93,10 @@ describe('requests', () => {
     const client = new Client(SERVER, 's', async () => json({ error: 'x', code: 'UNAUTHENTICATED' }, 401));
     await expect(client.children(null)).rejects.toThrow('xvi login');
   });
-  it('sends the session cookie and follows pages', async () => {
+  it('sends the token and follows pages', async () => {
     const seen: string[] = [];
     const client = new Client(SERVER, 's', async (input, init) => {
-      seen.push(`${new URL(String(input)).search} ${new Headers(init?.headers).get('cookie')}`);
+      seen.push(`${new URL(String(input)).search} ${new Headers(init?.headers).get('authorization')}`);
       return json(
         String(input).includes('offset=0')
           ? { nodes: [{ id: 'a' }], nextOffset: 100 }
@@ -89,15 +105,42 @@ describe('requests', () => {
     });
     expect((await client.children('p')).map((node) => node.id)).toEqual(['a', 'b']);
     expect(seen).toEqual([
-      '?offset=0&parent=p note_session=s',
-      '?offset=100&parent=p note_session=s',
+      '?offset=0&parent=p Bearer s',
+      '?offset=100&parent=p Bearer s',
     ]);
   });
-  it('treats a sealed file as unavailable', async () => {
-    const client = new Client(SERVER, 's', async () =>
-      new Response('x', { headers: { 'x-note-key': 'k' } }),
+  it('still works with a session saved by an earlier version', async () => {
+    const seen: string[] = [];
+    const client = new Client(SERVER, null, async (input, init) => {
+      const headers = new Headers(init?.headers);
+      seen.push(`${new URL(String(input)).pathname} ${headers.get('cookie')} ${headers.get('authorization')}`);
+      return json({ nodes: [], nextOffset: null, ok: true });
+    });
+    client.session = 'old';
+    await client.children(null);
+    await client.logout();
+    expect(seen).toEqual([
+      '/api/nodes note_session=old null',
+      '/api/auth/logout note_session=old null',
+    ]);
+  });
+  it('explains a token without the permission', async () => {
+    const client = new Client(SERVER, 's', async () => json({ error: 'x', code: 'TOKEN_SCOPE' }, 403));
+    await expect(client.trash('a', 1)).rejects.toThrow('--read-only');
+  });
+  it('does not repeat a write', async () => {
+    let calls = 0;
+    const client = new Client(
+      SERVER,
+      's',
+      async () => {
+        calls++;
+        return json({ error: '忙' }, 503);
+      },
+      0,
     );
-    await expect(client.file('a')).resolves.toBeNull();
+    await expect(client.trash('a', 1)).rejects.toThrow('忙');
+    expect(calls).toBe(1);
   });
 });
 describe('resolveTarget', () => {
@@ -133,9 +176,9 @@ describe('credentials', () => {
   it('are stored privately', async () => {
     const home = await mkdtemp(join(tmpdir(), 'xvi-config-'));
     const env = { XDG_CONFIG_HOME: home };
-    await expect(loadCredentials(env)).resolves.toEqual({ sessions: {} });
-    await saveCredentials({ default: SERVER, sessions: { [SERVER]: 'abc' } }, env);
-    await expect(loadCredentials(env)).resolves.toMatchObject({ sessions: { [SERVER]: 'abc' } });
+    await expect(loadCredentials(env)).resolves.toEqual({ tokens: {} });
+    await saveCredentials({ default: SERVER, tokens: { [SERVER]: 'abc' } }, env);
+    await expect(loadCredentials(env)).resolves.toMatchObject({ tokens: { [SERVER]: 'abc' } });
     const { mode } = await stat(join(home, 'xvi-note', 'credentials.json'));
     expect(mode & 0o777).toBe(0o600);
     await rm(home, { recursive: true });

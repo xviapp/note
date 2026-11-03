@@ -1,4 +1,4 @@
-import { appendRecord } from './records';
+import { appendRecord } from './records.ts';
 
 export const PROJECT_CATEGORIES = ['todo', 'issue', 'note'] as const;
 export interface ProjectContext { id: string; category: ProjectCategory }
