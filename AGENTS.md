@@ -30,7 +30,9 @@
 
 **Android.** `vite build --mode android` writes `dist-android/` (PDF.js `legacy` build). The WebView serves bundled assets at the chosen server's HTTPS origin (`ServerConfig.java` rewrites Capacitor's hostname; default `iyi.li`; an update that never saved a server keeps `note.iyi.li`); only same-origin `/api/` goes to the network. `NoteProxyNetwork` routes the WebView and native requests through a user-configured external SOCKS5/HTTP proxy, checked on use, falling back to direct while it is down. Details in `docs/android.md` and `docs/network-proxy.md`.
 
-**Testing.** The `worker` Vitest project runs in workerd via `@cloudflare/vitest-pool-workers` with migrations from `TEST_MIGRATIONS`; tests call the worker directly or via `SELF.fetch`, reset tables in `beforeEach`, and run serially. The `client` project runs `src/**/*.test.ts(x)` with fake-indexeddb (`src/test-setup.ts`). E2E specs import `test` from `e2e/fixtures.ts` (see `e2e/AGENTS.md`).
+**CLI.** `cli/xvi.ts` is a Node command (run with type stripping, so imports carry `.ts`) that pulls a node's subtree into a local directory for coding agents. It uses the existing session API with no Worker changes. `.xvi/state.json` holds each file's node ID, base revision and hash, which keep local edits from being overwritten; encrypted subtrees stay out. Pull only for now. Details in `docs/cli.md`.
+
+**Testing.** The `worker` Vitest project runs in workerd via `@cloudflare/vitest-pool-workers` with migrations from `TEST_MIGRATIONS`; tests call the worker directly or via `SELF.fetch`, reset tables in `beforeEach`, and run serially. The `client` project runs `src/**/*.test.ts(x)` with fake-indexeddb (`src/test-setup.ts`). The `cli` project runs `cli/**/*.test.ts` in Node. E2E specs import `test` from `e2e/fixtures.ts` (see `e2e/AGENTS.md`).
 
 ## Commands
 
@@ -39,7 +41,7 @@ Use Node.js 22.12+ and install with `npm ci` (pnpm also works).
 - `npm run dev`: initialize local secrets and migrations, then start Vite and Wrangler. Keep `.wrangler/state` (local data); Playwright only resets `.wrangler/e2e/state`.
 - `npm run db:local` applies migrations to local D1 (`npm run dev` does it too).
 - `npm run check` (TypeScript), `npm run lint` (oxlint, fails on warnings; explain any `oxlint-disable`). TypeScript 7 has no JS API, so typescript-eslint cannot be used.
-- `npm test` (Vitest: `worker` project in workerd, `client` project in happy-dom). Single file: `npx vitest run tests/library.test.ts`, add `-t '<name>'` for one test.
+- `npm test` (Vitest: `worker` project in workerd, `client` project in happy-dom, `cli` project in Node). Single file: `npx vitest run tests/library.test.ts`, add `-t '<name>'` for one test.
 - `npm run test:e2e` serves the built `dist/`, so run `npm run build` first. Single spec: `npx playwright test e2e/notebook.spec.ts --project=desktop`.
 - `pnpm run deploy`: build, migrate production D1, deploy. Keep `run`; bare `pnpm deploy` is a different command. Deploying the site does not update installed APKs.
 - Android (JDK 21, Android SDK 37): `npm run android:apk`, `pnpm install:android`, `node scripts/android.mjs testDebugUnitTest`, `node scripts/android.mjs lintDebug`.
@@ -53,7 +55,7 @@ All application source and assets are maintained in this repository. Edit local 
 - User-facing text, error messages, README and `docs/` are Simplified Chinese; code comments and commits are English.
 - Match surrounding code. Base styles live in `src/styles.css`; `src/shell.css` only adds family-specific rules.
 - Docs describe current behavior. Do not add dated validation logs or version histories; release notes go in `docs/releases/<version>.txt`.
-- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, folder import in `docs/import.md`, proxy in `docs/network-proxy.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
+- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, folder import in `docs/import.md`, proxy in `docs/network-proxy.md`, CLI in `docs/cli.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
 
 ## Testing
 

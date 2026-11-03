@@ -39,6 +39,14 @@ export default defineConfig({
           setupFiles: ['src/test-setup.ts'],
         },
       },
+      {
+        // The command-line tool, on real temporary directories.
+        test: {
+          name: 'cli',
+          include: ['cli/**/*.test.ts'],
+          environment: 'node',
+        },
+      },
     ],
   },
 });

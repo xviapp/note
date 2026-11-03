@@ -3,6 +3,9 @@
   "version": "0.4.32",
   "private": true,
   "type": "module",
+  "bin": {
+    "xvi": "cli/xvi.ts"
+  },
   "engines": {
     "node": ">=22.12.0"
   },
@@ -13,7 +16,7 @@
     "prebuild": "node scripts/assets.mjs",
     "build": "tsc --noEmit && vite build",
     "check": "tsc --noEmit",
-    "lint": "oxlint --deny-warnings src worker shared tests e2e scripts",
+    "lint": "oxlint --deny-warnings src worker shared tests e2e scripts cli",
     "theme:check": "node --experimental-strip-types scripts/sync-theme.mjs",
     "theme:sync": "node --experimental-strip-types scripts/sync-theme.mjs --write",
     "test": "vitest run",
@@ -36,7 +39,8 @@
     "android:open": "cap open android",
     "android:release": "npm run build:android && node scripts/android.mjs assembleRelease",
     "android:publish": "node scripts/android-publish.mjs",
-    "cf": "node scripts/cloudflare.mjs"
+    "cf": "node scripts/cloudflare.mjs",
+    "xvi": "node --experimental-strip-types --disable-warning=ExperimentalWarning cli/xvi.ts"
   },
   "dependencies": {
     "@capacitor/android": "8.5.2",

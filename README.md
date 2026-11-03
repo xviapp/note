@@ -28,6 +28,7 @@
 - [书籍](docs/books.md)：拍照识别书页、逐页讨论、整理读书笔记。
 - [项目](docs/projects.md)：汇总待办、问题和笔记，引用已有文件。
 - [随手记](docs/quick-clips.md)：保存文字和图片，插入正文或转为笔记。
+- [命令行同步](docs/cli.md)：把笔记拉取到本地目录，供 Codex、Claude Code 等工具读取。
 - [青藜与翻译](docs/assistant.md)：引用选文、文件和截图提问，保存回复与翻译记录。
 - 资料保护：7 天回收站、当前版本及最近 5 个历史版本、整库备份、[本地加密](docs/encryption.md)。
 
