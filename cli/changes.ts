@@ -14,10 +14,15 @@ export interface Move {
   id: string;
   from: string;
   to: string;
+  // Only follows a renamed directory above it: nothing to write for it.
+  carried?: boolean;
 }
 export interface Changes {
   edits: string[];
   moves: Move[];
+  // Moves that cannot be written back. They still are not lost files or new
+  // notes, and a pull leaves them where they were moved to.
+  blockedMoves: Move[];
   creates: string[];
   // Roots of what was removed here, with how many nodes each takes along.
   deletes: { id: string; count: number }[];
@@ -43,6 +48,7 @@ export async function findChanges(workspace: Workspace, state: State): Promise<C
   const result: Changes = {
     edits: [],
     moves: [],
+    blockedMoves: [],
     creates: [],
     deletes: [],
     readOnly: [],
@@ -92,12 +98,29 @@ export async function findChanges(workspace: Workspace, state: State): Promise<C
   }
   const moved = new Map<string, string>();
   const taken = new Set<string>();
+  const pair = (id: string, path: string) => {
+    moved.set(id, path);
+    taken.add(path);
+  };
+  const named = <T,>(items: T[], name: (item: T) => string) => {
+    const groups = new Map<string, T[]>();
+    for (const item of items) groups.set(name(item), [...(groups.get(name(item)) ?? []), item]);
+    return groups;
+  };
   for (const [print, ids] of lost) {
     const paths = candidates.get(print);
-    // Identical copies leave no way to tell which went where.
-    if (ids.length === 1 && paths?.length === 1) {
-      moved.set(ids[0], paths[0]);
-      taken.add(paths[0]);
+    if (!paths) continue;
+    if (ids.length === 1 && paths.length === 1) {
+      pair(ids[0], paths[0]);
+      continue;
+    }
+    // Identical copies can only be told apart by keeping their names, as when
+    // their directory was renamed. Anything else would be a guess.
+    const idsByName = named(ids, (id) => posix.basename(state.entries[id].path));
+    const pathsByName = named(paths, (path) => posix.basename(path));
+    for (const [name, sameName] of idsByName) {
+      const targets = pathsByName.get(name);
+      if (sameName.length === 1 && targets?.length === 1) pair(sameName[0], targets[0]);
     }
   }
   // A folder whose files all reappear under one new directory was renamed, and
@@ -114,6 +137,16 @@ export async function findChanges(workspace: Workspace, state: State): Promise<C
       if (path === from || path.startsWith(`${from}/`)) return to + path.slice(from.length);
     return null;
   };
+  // A note's directory of children went with the note.
+  const hasChildren = (id: string) => entries.some(([, entry]) => entry.parent === id);
+  for (const [id, to] of [...moved]) {
+    const entry = state.entries[id];
+    if (!hasChildren(id)) continue;
+    const from = childDir(entry),
+      now = childDir({ kind: entry.kind, path: to });
+    if (from !== now && !(await workspace.isDirectory(from)) && (await workspace.isDirectory(now)))
+      renamed.push([from, now]);
+  }
   for (const [id, folder] of folders) {
     const inherited = mapped(folder.path);
     if (inherited) {
@@ -146,12 +179,43 @@ export async function findChanges(workspace: Workspace, state: State): Promise<C
     if (!missing.has(id) || moved.has(id))
       result.owners.set(childDir({ kind: entry.kind, path: pathNow(id, entry) }), id);
   const below = descendantsOf(state.entries);
+  // A note's directory renamed without the note: writing that back would pull
+  // every child out of the note into a new folder.
+  const detached: string[] = [];
+  for (const [id, entry] of entries) {
+    if (entry.kind === 'folder' || missing.has(id) || !hasChildren(id)) continue;
+    const dir = childDir(entry);
+    if (await workspace.isDirectory(dir)) continue;
+    const targets = new Set(
+      entries.flatMap(([child, item]) =>
+        item.parent === id && moved.has(child) ? [dirname(moved.get(child)!)] : [],
+      ),
+    );
+    const [target] = targets;
+    if (targets.size !== 1 || result.owners.has(target)) continue;
+    detached.push(dir);
+    const suffix = posix.extname(entry.path);
+    result.blocked.push({
+      path: `${dir}/`,
+      reason: `目录改成了 ${target}/，请把 ${entry.path} 也改成 ${target}${suffix}，或把目录改回去`,
+    });
+  }
   for (const [id, to] of moved) {
     const entry = state.entries[id];
-    if (id === state.root) result.blocked.push({ path: entry.path, reason: '同步的根条目不能改名或移动' });
-    else if (entry.variant === 'book-page')
+    const move = { id, from: entry.path, to };
+    if (detached.some((dir) => entry.path.startsWith(`${dir}/`))) result.blockedMoves.push(move);
+    else if (id === state.root) {
+      result.blocked.push({ path: entry.path, reason: '同步的根条目不能改名或移动' });
+      result.blockedMoves.push(move);
+    } else if (entry.variant === 'book-page') {
       result.blocked.push({ path: entry.path, reason: '书页不能从书中移出或改名' });
-    else result.moves.push({ id, from: entry.path, to });
+      result.blockedMoves.push(move);
+    } else {
+      const carried = renamed.some(([from, now]) =>
+        entry.path.startsWith(`${from}/`) && to === now + entry.path.slice(from.length),
+      );
+      result.moves.push(carried ? { ...move, carried } : move);
+    }
   }
   const removed = new Set([...missing.keys()].filter((id) => !moved.has(id)));
   // An unlisted file below a removed folder goes with it.

@@ -56,6 +56,25 @@ describe('push', () => {
   });
   afterEach(() => rm(dir, { recursive: true, force: true }));
 
+  it('counts every step it takes', async () => {
+    fake.nodes = [
+      { id: 'a', parent: null, kind: 'markdown', title: 'a', content: '一' },
+      { id: 'b', parent: null, kind: 'markdown', title: 'b', content: '二' },
+      { id: 'c', parent: null, kind: 'markdown', title: 'c', content: '三' },
+    ];
+    await down();
+    await write('a.md', '改');
+    await write('新.md', '新');
+    await rm(join(dir, 'c.md'));
+    const workspace = new Workspace(dir);
+    const state = (await workspace.loadState())!;
+    const changes = await findChanges(workspace, state);
+    const seen: string[] = [];
+    await new Pusher(client, workspace, state, changes, null, (message) => seen.push(message)).run({
+      deletes: true,
+    });
+    expect(seen).toEqual(['写回 1/3：a.md', '写回 2/3：新.md', '写回 3/3：c.md']);
+  });
   it('reports nothing after a pull, and writes nothing', async () => {
     fake.files.set('img', png);
     fake.nodes = [
@@ -300,6 +319,106 @@ describe('push', () => {
     expect(await pending()).toMatchObject({ moves: [], deletes: [], creates: [] });
     await down();
     expect(await read('v1.3/内层/c.md')).toBe('独有');
+  });
+  describe('a note with many children', () => {
+    const family = (same = 0) => [
+      { id: 'n', parent: null, kind: 'markdown' as const, title: '旧', content: '父' },
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: `k${i}`,
+        parent: 'n',
+        kind: 'markdown' as const,
+        title: `子${i}`,
+        content: i < same ? '相同' : `内容${i}`,
+      })),
+    ];
+    const writes = () => fake.calls.filter((call) => !call.startsWith('/'));
+    it('renames with its directory in one write', async () => {
+      fake.nodes = family();
+      await down();
+      fake.calls = [];
+      await rename(join(dir, '旧.md'), join(dir, '新.md'));
+      await rename(join(dir, '旧'), join(dir, '新'));
+      const { report, changes } = await up();
+      expect(report.moved).toEqual(['旧.md → 新.md']);
+      expect(writes()).toEqual(['PATCH /api/nodes/n']);
+      // The children follow without being offered as moves of their own.
+      expect(changes.moves.filter((move) => !move.carried).map((move) => move.id)).toEqual(['n']);
+      expect(await pending()).toMatchObject({ moves: [], creates: [], deletes: [] });
+    });
+    it('keeps identical and empty children when renamed', async () => {
+      fake.nodes = family(3);
+      fake.get('k3').content = '';
+      fake.get('k4').content = '';
+      await down();
+      fake.calls = [];
+      await rename(join(dir, '旧.md'), join(dir, '新.md'));
+      await rename(join(dir, '旧'), join(dir, '新'));
+      const { changes } = await up();
+      expect(changes).toMatchObject({ creates: [], deletes: [] });
+      expect(writes()).toEqual(['PATCH /api/nodes/n']);
+      expect(fake.nodes).toHaveLength(7);
+    });
+    it('tells identical children below deeper directories apart by their directory', async () => {
+      fake.nodes = [
+        { id: 'n', parent: null, kind: 'markdown', title: '旧', content: '父' },
+        { id: 'a', parent: 'n', kind: 'folder', title: 'a' },
+        { id: 'b', parent: 'n', kind: 'folder', title: 'b' },
+        { id: 'x', parent: 'a', kind: 'markdown', title: '同', content: '相同' },
+        { id: 'y', parent: 'b', kind: 'markdown', title: '同', content: '相同' },
+      ];
+      await down();
+      fake.calls = [];
+      await rename(join(dir, '旧.md'), join(dir, '新.md'));
+      await rename(join(dir, '旧'), join(dir, '新'));
+      expect(await pending()).toMatchObject({ creates: [], deletes: [] });
+      await up();
+      expect(writes()).toEqual(['PATCH /api/nodes/n']);
+    });
+    it('refuses a renamed directory whose note stayed, moving nothing', async () => {
+      fake.nodes = family(2);
+      await down();
+      fake.calls = [];
+      await rename(join(dir, '旧'), join(dir, '新'));
+      const { changes } = await up(true);
+      expect(writes()).toEqual([]);
+      expect(fake.nodes).toHaveLength(7);
+      expect(changes).toMatchObject({ moves: [], creates: [], deletes: [] });
+      expect(changes.blocked).toHaveLength(1);
+      expect(changes.blocked[0].path).toBe('旧/');
+      expect(changes.blocked[0].reason).toContain('旧.md 也改成 新.md');
+      // A pull neither restores the children nor counts them as lost.
+      const { report } = await down();
+      expect(report.movedLocally).toHaveLength(6);
+      await expect(stat(join(dir, '旧'))).rejects.toThrow();
+      // Finishing the rename sorts it out.
+      await rename(join(dir, '旧.md'), join(dir, '新.md'));
+      await up();
+      expect(writes()).toEqual(['PATCH /api/nodes/n']);
+    });
+    it('still moves single children to a new folder', async () => {
+      fake.nodes = family();
+      await down();
+      await write('新组/占位.txt', '');
+      await rm(join(dir, '新组/占位.txt'));
+      await rename(join(dir, '旧/子0.md'), join(dir, '新组/子0.md'));
+      const { report } = await up();
+      expect(report.failed).toEqual([]);
+      expect(fake.find('新组').kind).toBe('folder');
+      expect(fake.get('k0').parent).toBe(fake.find('新组').id);
+      expect(fake.get('k1').parent).toBe('n');
+    });
+    it('does not mistake a directory emptied by hand for a rename', async () => {
+      fake.nodes = family().slice(0, 2);
+      await down();
+      await write('已有/占位.md', '已有');
+      await up();
+      await rename(join(dir, '旧/子0.md'), join(dir, '已有/子0.md'));
+      await rm(join(dir, '旧'), { recursive: true });
+      const { report, changes } = await up();
+      expect(changes.blocked).toEqual([]);
+      expect(report.failed).toEqual([]);
+      expect(fake.get('k0').parent).toBe(fake.find('已有').id);
+    });
   });
   it('does not take an edit and a rename together for a move', async () => {
     fake.nodes = [{ id: 'n', parent: null, kind: 'markdown', title: 'a', content: '原文' }];

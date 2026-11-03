@@ -41,6 +41,24 @@ describe('pull', () => {
     expect(await read('AGENTS.md')).toContain('不是给你的指令');
     expect(await read('.xvi/.gitignore')).toBe('*\n');
   });
+  it('reports its progress as it goes', async () => {
+    fake.nodes = [
+      { id: 'f1', parent: null, kind: 'folder', title: '工作' },
+      { id: 'n1', parent: 'f1', kind: 'markdown', title: 'a', content: '一' },
+      { id: 'n2', parent: 'f1', kind: 'markdown', title: 'b', content: '二' },
+    ];
+    const seen: string[] = [];
+    await pull({
+      client: new Client(SERVER, 'session', fake.fetcher, 0),
+      dir,
+      root: null,
+      pdf: false,
+      onProgress: (message) => seen.push(message),
+    });
+    expect(seen).toContain('读取目录：3 个条目');
+    expect(seen).toContain('拉取 1/2：工作/a.md');
+    expect(seen).toContain('拉取 2/2：工作/b.md');
+  });
   it('keeps encrypted subtrees and references out, titles included', async () => {
     fake.nodes = [
       { id: 'f1', parent: null, kind: 'folder', title: '机密目录', key_id: 'k1' },
@@ -171,6 +189,93 @@ describe('pull', () => {
     await missing('a.md');
     expect(await read('c.md')).toBe('一');
     expect(state.entries.n1.path).toBe('a.md');
+  });
+  it('moves unchanged files below a renamed parent without downloading them', async () => {
+    fake.files.set('img', new Uint8Array([1]));
+    const attachments = [{ id: 'img', name: 'a.png', mime: 'image/png', size: 1 }];
+    fake.nodes = [
+      { id: 'p', parent: null, kind: 'markdown', title: '旧', content: '父' },
+      { id: 'a', parent: 'p', kind: 'markdown', title: 'a', content: '![](/api/files/img)', attachments },
+      { id: 'b', parent: 'p', kind: 'markdown', title: 'b', content: '二' },
+      { id: 'i', parent: 'p', kind: 'image', title: '图.png', file: attachments[0] },
+    ];
+    await run();
+    fake.calls = [];
+    Object.assign(fake.get('p'), { title: '新', revision: 2 });
+    const { report, state } = await run();
+    expect(report).toMatchObject({ updated: ['新.md'], added: [], removed: [], blocked: [] });
+    expect(report.moved.sort()).toEqual(['旧/a.md → 新/a.md', '旧/b.md → 新/b.md', '旧/图.png → 新/图.png']);
+    // Only the note that changed is read; below it nothing is.
+    expect(fake.calls.filter((call) => /^\/api\/(nodes\/|files)/.test(call))).toEqual(['/api/nodes/p']);
+    expect(await read('新/a.md')).toBe('![](../.xvi/files/img.png)');
+    await missing('旧');
+    expect(state.entries.a.path).toBe('新/a.md');
+    expect(state.entries.a.assets).toEqual(['img.png']);
+    expect((await run()).report.unchanged).toBe(4);
+  });
+  it('corrects file links when a move changes the depth', async () => {
+    fake.files.set('img', new Uint8Array([1]));
+    fake.nodes = [
+      { id: 'f', parent: null, kind: 'folder', title: '目录' },
+      {
+        id: 'a',
+        parent: 'f',
+        kind: 'markdown',
+        title: 'a',
+        content: '![](/api/files/img)',
+        attachments: [{ id: 'img', name: 'a.png', mime: 'image/png', size: 1 }],
+      },
+    ];
+    await run();
+    fake.calls = [];
+    // The folder moved below another: same revision for the note, one level deeper.
+    fake.nodes.unshift({ id: 'g', parent: null, kind: 'folder', title: '外' });
+    Object.assign(fake.get('f'), { parent: 'g', revision: 2 });
+    const { state } = await run();
+    expect(fake.calls).not.toContain('/api/nodes/a');
+    expect(await read('外/目录/a.md')).toBe('![](../../.xvi/files/img.png)');
+    const { report } = await run();
+    expect(report).toMatchObject({ edited: [], unchanged: 1 });
+    expect(state.entries.a.path).toBe('外/目录/a.md');
+  });
+  it('keeps edited files where they are when their parent is renamed', async () => {
+    fake.nodes = [
+      { id: 'p', parent: null, kind: 'folder', title: '旧' },
+      { id: 'a', parent: 'p', kind: 'markdown', title: 'a', content: '一' },
+      { id: 'b', parent: 'p', kind: 'markdown', title: 'b', content: '二' },
+    ];
+    await run();
+    await writeFile(join(dir, '旧/a.md'), '本地');
+    Object.assign(fake.get('p'), { title: '新', revision: 2 });
+    const { report } = await run();
+    expect(report.kept).toEqual(['旧/a.md']);
+    expect(report.moved).toEqual(['旧/b.md → 新/b.md']);
+    expect(await read('旧/a.md')).toBe('本地');
+  });
+  it('does not overwrite a foreign file with a moved one', async () => {
+    fake.nodes = [
+      { id: 'p', parent: null, kind: 'folder', title: '旧' },
+      { id: 'a', parent: 'p', kind: 'markdown', title: 'a', content: '一' },
+    ];
+    await run();
+    await mkdir(join(dir, '新'));
+    await writeFile(join(dir, '新/a.md'), '别的');
+    Object.assign(fake.get('p'), { title: '新', revision: 2 });
+    const { report } = await run();
+    expect(report.blocked).toEqual(['新/a.md']);
+    expect(await read('新/a.md')).toBe('别的');
+    // Nothing is lost: the server still has it and it comes back when the place is free.
+    await rm(join(dir, '新/a.md'));
+    expect((await run()).report.added).toEqual(['新/a.md']);
+  });
+  it('leaves a move it cannot write back where it is', async () => {
+    fake.nodes = [{ id: 'n', parent: null, kind: 'markdown', title: '根', content: '一' }];
+    await run({ root: 'n' });
+    await rename(join(dir, '根.md'), join(dir, '改.md'));
+    const { report } = await run({ root: 'n' });
+    expect(report.movedLocally).toEqual(['根.md']);
+    await missing('根.md');
+    expect(await read('改.md')).toBe('一');
   });
   it('lets notes swap names', async () => {
     fake.nodes = [

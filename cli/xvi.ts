@@ -4,6 +4,7 @@ import { relative, resolve } from 'node:path';
 import { parseArgs } from 'node:util';
 import { findChanges, type Changes } from './changes.ts';
 import { Client, loadCredentials, saveCredentials, serverOrigin, type Credentials } from './client.ts';
+import { Progress } from './progress.ts';
 import { canConfirm, confirm, readSecret } from './prompt.ts';
 import { pull, workspaceKeyring, type PullReport } from './pull.ts';
 import { Pusher, resolveConflict, type PushReport } from './push.ts';
@@ -33,7 +34,8 @@ const HELP = `页间命令行工具：把笔记同步到本地目录，改完再
   --decrypt         同时拉取加密条目，并以明文保存在目录中
   -h, --help        显示帮助
 `;
-const ask = (label: string) => readSecret(label);
+const progress = new Progress();
+const ask = (label: string) => progress.during(() => readSecret(label));
 function printList(title: string, items: string[]): void {
   if (!items.length) return;
   console.log(`${title}：`);
@@ -47,7 +49,7 @@ function printFailures(failed: { path: string; message: string }[]): void {
 }
 function printPullReport(report: PullReport): void {
   console.log(
-    `新增 ${report.added.length}，更新 ${report.updated.length}，移除 ${report.removed.length}，未变 ${report.unchanged}。`,
+    `新增 ${report.added.length}，更新 ${report.updated.length}，移动 ${report.moved.length}，移除 ${report.removed.length}，未变 ${report.unchanged}。`,
   );
   printList('本地有改动，已保留', report.edited);
   printList('本地和远端都有改动，远端版本存为 .remote 文件（合并后运行 xvi resolve）', report.conflicts);
@@ -66,7 +68,7 @@ function printPullReport(report: PullReport): void {
 function printChanges(changes: Changes, state: State, deleting: boolean): void {
   printList('修改', changes.edits);
   printList('新建', changes.creates);
-  printList('移动或改名', changes.moves.map(({ from, to }) => `${from} → ${to}`));
+  printList('移动或改名', changes.moves.filter((move) => !move.carried).map(({ from, to }) => `${from} → ${to}`));
   const deletes = changes.deletes.map(
     ({ id, count }) => `${state.entries[id].path}${count > 1 ? `（连同下级共 ${count} 个）` : ''}`,
   );
@@ -109,9 +111,11 @@ async function openWorkspace(dir: string | undefined): Promise<{ workspace: Work
 }
 async function showDiffs(client: Client, workspace: Workspace, state: State, changes: Changes) {
   const keyring = workspaceKeyring(client, state, ask);
-  for (const path of changes.edits) {
+  for (const [index, path] of changes.edits.entries()) {
     const id = Object.keys(state.entries).find((key) => state.entries[key].path === path)!;
+    progress.update(`比较差异 ${index + 1}/${changes.edits.length}：${path}`);
     const diff = await noteDiff(client, workspace, state, keyring, id);
+    progress.clear();
     if (diff === null) {
       console.log('未找到 git，无法显示差异。');
       return;
@@ -198,7 +202,8 @@ async function main(): Promise<void> {
         : (saved!.root ?? null);
     if (values.decrypt && !saved?.decrypt)
       console.log('解密后的内容会以明文保存在目录中，在其中运行的工具也会读取并发给模型服务商。');
-    const { report } = await pull({ client, dir, root, pdf: values.pdf, decrypt: values.decrypt, ask });
+    const { report } = await pull({ client, dir, root, pdf: values.pdf, decrypt: values.decrypt, ask, onProgress: progress.update });
+    progress.clear();
     printPullReport(report);
     return;
   }
@@ -207,10 +212,12 @@ async function main(): Promise<void> {
     const changes = await findChanges(workspace, state);
     printChanges(changes, state, false);
     const client = clientFor(credentials, named ?? state.server);
-    const remote = await remoteChanges(client, state).catch((error: unknown) => {
+    const remote = await remoteChanges(client, state, progress.update).catch((error: unknown) => {
+      progress.clear();
       console.log(`无法检查远端：${error instanceof Error ? error.message : String(error)}`);
       return [];
     });
+    progress.clear();
     printList('远端有变化（运行 xvi pull 同步）', remote);
     if (!hasWork(changes, true) && !remote.length && !changes.conflicts.length) console.log('没有变化。');
     if (values.diff) await showDiffs(client, workspace, state, changes);
@@ -237,9 +244,11 @@ async function main(): Promise<void> {
       }
     }
     const keyring = workspaceKeyring(client, state, ask);
-    const pusher = new Pusher(client, workspace, state, changes, keyring);
+    const pusher = new Pusher(client, workspace, state, changes, keyring, progress.update);
     try {
-      printPushReport(await pusher.run({ deletes: values.delete }));
+      const report = await pusher.run({ deletes: values.delete });
+      progress.clear();
+      printPushReport(report);
     } finally {
       await workspace.saveState(state);
       await workspace.clearTemporary();
@@ -257,6 +266,7 @@ async function main(): Promise<void> {
   throw new Error(`未知命令：${command}。请查看 xvi --help。`);
 }
 main().catch((error: unknown) => {
+  progress.clear();
   console.error(error instanceof Error ? error.message : String(error));
   process.exitCode = 1;
 });

@@ -17,6 +17,11 @@ export function localizeLinks(content: string, names: Map<string, string>, noteP
 // Workspace text as the server keeps it; where the note sits no longer matters.
 export const normalizeLinks = (content: string): string =>
   content.replace(LOCAL_LINK, (_link, id: string) => `/api/files/${id}`);
+// The same text for a note moved to another depth, from the names in .xvi/files it uses.
+export function relocateLinks(text: string, assets: string[] | undefined, path: string): string {
+  const names = new Map((assets ?? []).map((name) => [name.replace(/\.[^.]+$/, ''), name]));
+  return localizeLinks(normalizeLinks(text), names, path);
+}
 export const fileIdsIn = (content: string): string[] => [
   ...new Set([...content.matchAll(/\/api\/files\/([a-zA-Z0-9_-]{1,80})/g)].map((match) => match[1])),
 ];

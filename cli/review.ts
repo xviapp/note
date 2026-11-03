@@ -7,14 +7,19 @@ import type { NoteNode } from '../shared/types.ts';
 import type { Client } from './client.ts';
 import { Contents } from './content.ts';
 import type { Keyring } from './keys.ts';
+import type { OnProgress } from './progress.ts';
 import { listTree } from './pull.ts';
 import { META_DIR, type State, type Workspace } from './workspace.ts';
 
 // What changed on the server since the last sync. Locked nodes are compared by
 // their details only, so this asks for no password.
-export async function remoteChanges(client: Client, state: State): Promise<string[]> {
+export async function remoteChanges(
+  client: Client,
+  state: State,
+  onProgress?: OnProgress,
+): Promise<string[]> {
   const roots: NoteNode[] = state.root ? [await client.node(state.root)] : await client.children(null);
-  const items = await listTree(client, roots, (node) => state.decrypt || !node.key_id);
+  const items = await listTree(client, roots, (node) => state.decrypt || !node.key_id, undefined, onProgress);
   const seen = new Set<string>();
   const changed: string[] = [];
   for (const { node, path } of items) {

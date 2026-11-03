@@ -152,6 +152,18 @@ export class Workspace {
       throw error;
     }
   }
+  // Moves a file out of the way, to be placed again in this same pull.
+  async park(path: string): Promise<string> {
+    await this.ensureDir(TEMP_DIR);
+    const temporary = `${TEMP_DIR}/${randomUUID()}`;
+    await rename(this.absolute(path), this.absolute(temporary));
+    return temporary;
+  }
+  async place(temporary: string, path: string): Promise<void> {
+    const parent = dirname(path);
+    if (parent !== '.') await this.ensureDir(parent);
+    await rename(this.absolute(temporary), this.absolute(path));
+  }
   async remove(path: string): Promise<void> {
     if (await this.parentsAreDirectories(path)) await rm(this.absolute(path), { force: true });
   }

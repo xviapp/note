@@ -8,7 +8,8 @@ import { stemOf, type Changes, type Move } from './changes.ts';
 import { ApiError, type Client, type SaveNote } from './client.ts';
 import { Contents, normalHash, type Loaded } from './content.ts';
 import type { Keyring } from './keys.ts';
-import { fileIdsIn, localizeLinks, normalizeLinks, replaceFileIds } from './links.ts';
+import { fileIdsIn, normalizeLinks, relocateLinks, replaceFileIds } from './links.ts';
+import type { OnProgress } from './progress.ts';
 import { remotePath } from './pull.ts';
 import { FILES_DIR, hashBytes, type Entry, type State, type Workspace } from './workspace.ts';
 
@@ -71,7 +72,16 @@ export class Pusher {
     warnings: [],
     failed: [],
   };
-  constructor(client: Client, workspace: Workspace, state: State, changes: Changes, keyring: Keyring | null) {
+  onProgress: OnProgress;
+  constructor(
+    client: Client,
+    workspace: Workspace,
+    state: State,
+    changes: Changes,
+    keyring: Keyring | null,
+    onProgress: OnProgress = () => {},
+  ) {
+    this.onProgress = onProgress;
     this.client = client;
     this.workspace = workspace;
     this.state = state;
@@ -398,8 +408,7 @@ export class Pusher {
     if (entry.kind === 'markdown' || entry.kind === 'text') {
       // Its links to .xvi/files depend on how deep it now sits.
       const text = new TextDecoder().decode(await this.workspace.read(to));
-      const names = new Map((entry.assets ?? []).map((name) => [name.replace(/\.[^.]+$/, ''), name]));
-      const bytes = encoder.encode(localizeLinks(normalizeLinks(text), names, to));
+      const bytes = encoder.encode(relocateLinks(text, entry.assets, to));
       if (hashBytes(bytes) !== entry.hash) {
         await this.workspace.write(to, bytes);
         entry.hash = hashBytes(bytes);
@@ -431,16 +440,24 @@ export class Pusher {
     const { changes } = this;
     // Parents first: a child's place is worked out from its parent's new one.
     const moves = [...changes.moves].sort((a, b) => a.to.length - b.to.length);
-    for (const move of moves) await this.attempt(move.from, () => this.pushMove(move));
+    const creates = [...changes.creates].sort((a, b) => a.length - b.length);
+    const deletes = options.deletes ? changes.deletes : [];
+    const written = moves.filter((move) => !move.carried);
+    const total = written.length + changes.edits.length + creates.length + deletes.length;
+    let done = 0;
+    const step = (path: string, work: () => Promise<void>) => {
+      this.onProgress(`写回 ${++done}/${total}：${path}`);
+      return this.attempt(path, work);
+    };
+    for (const move of moves)
+      if (move.carried) await this.attempt(move.from, () => this.pushMove(move));
+      else await step(move.from, () => this.pushMove(move));
     for (const path of changes.edits) {
       const id = Object.keys(this.state.entries).find((key) => this.entry(key).path === path)!;
-      await this.attempt(path, () => this.pushEdit(id));
+      await step(path, () => this.pushEdit(id));
     }
-    for (const path of [...changes.creates].sort((a, b) => a.length - b.length))
-      await this.attempt(path, () => this.pushCreate(path));
-    if (options.deletes)
-      for (const item of changes.deletes)
-        await this.attempt(this.entry(item.id).path, () => this.pushDelete(item));
+    for (const path of creates) await step(path, () => this.pushCreate(path));
+    for (const item of deletes) await step(this.entry(item.id).path, () => this.pushDelete(item));
     await this.removeUnusedAssets();
     return this.report;
   }

@@ -5,6 +5,8 @@ import { ApiError, type Client } from './client.ts';
 import { findChanges } from './changes.ts';
 import { Contents, type Loaded } from './content.ts';
 import { Keyring, type AskPassword } from './keys.ts';
+import { relocateLinks } from './links.ts';
+import type { OnProgress } from './progress.ts';
 import { assignNames, fileSuffix, imageSuffixOfTitle } from './names.ts';
 import { FILES_DIR, META_DIR, hashBytes, Workspace, type Entry, type State } from './workspace.ts';
 
@@ -31,6 +33,8 @@ const GUIDES: Record<string, string> = { 'AGENTS.md': GUIDE, 'CLAUDE.md': '@AGEN
 export interface PullReport {
   added: string[];
   updated: string[];
+  // Only their place changed on the server, so nothing was downloaded.
+  moved: string[];
   removed: string[];
   unchanged: number;
   // Edited here while the server's copy is unchanged.
@@ -57,6 +61,7 @@ export interface Item {
 const emptyReport = (): PullReport => ({
   added: [],
   updated: [],
+  moved: [],
   removed: [],
   unchanged: 0,
   edited: [],
@@ -97,6 +102,7 @@ export async function listTree(
   root: NoteNode[],
   admit: (node: NoteNode) => Promise<boolean> | boolean,
   onReference: () => void = () => {},
+  onProgress: OnProgress = () => {},
 ): Promise<Item[]> {
   const items: Item[] = [];
   const visit = async (nodes: NoteNode[], dir: string) => {
@@ -110,6 +116,7 @@ export async function listTree(
     for (const node of included) {
       const name = names.get(node.id)!;
       items.push({ node, path: posix.join(dir, `${name}${await suffixOf(client, node)}`) });
+      onProgress(`读取目录：${items.length} 个条目`);
       if (node.child_count) await visit(await client.children(node.id), posix.join(dir, name));
     }
   };
@@ -127,13 +134,20 @@ class Puller {
   report = emptyReport();
   refreshAssets: boolean;
   private locked = new Set<string>();
+  // Unchanged files set aside while their place changes, with the entries they had.
+  private parked = new Map<string, { temporary: string; old: Entry }>();
+  // Changed files that also moved: updates, not new notes.
+  private relocated = new Set<string>();
+  onProgress: OnProgress;
   constructor(
     client: Client,
     workspace: Workspace,
     state: State,
     keyring: Keyring | null,
     refreshAssets: boolean,
+    onProgress: OnProgress,
   ) {
+    this.onProgress = onProgress;
     this.client = client;
     this.workspace = workspace;
     this.state = state;
@@ -177,8 +191,33 @@ class Puller {
   private async dropRemote(entry: Entry | undefined): Promise<void> {
     if (entry?.remote) await this.workspace.remove(entry.remote.path);
   }
+  // A file whose note did not change only needs its place changed, and its
+  // links when the depth differs: a renamed parent must not mean downloading
+  // everything below it.
+  private async placeParked(item: Item, parked: { temporary: string; old: Entry }): Promise<void> {
+    const { node, path } = item;
+    const { temporary, old } = parked;
+    if ((await this.workspace.hash(path)) !== null) {
+      this.report.blocked.push(path);
+      return;
+    }
+    let hash = old.hash!;
+    if (node.kind === 'markdown' || node.kind === 'text') {
+      const bytes = await this.workspace.read(temporary);
+      const text = encoder.encode(relocateLinks(new TextDecoder().decode(bytes), old.assets, path));
+      if (hashBytes(text) !== hash) {
+        await this.workspace.write(temporary, text);
+        hash = hashBytes(text);
+      }
+    }
+    await this.workspace.place(temporary, path);
+    this.record(item, { hash, normal: old.normal ?? hash, assets: old.assets });
+    this.report.moved.push(`${old.path} → ${path}`);
+  }
   private async pullFile(item: Item): Promise<void> {
     const { node, path } = item;
+    const parked = this.parked.get(node.id);
+    if (parked) return this.placeParked(item, parked);
     if (node.kind === 'pdf' && !this.state.pdf) {
       this.report.omittedPdfs++;
       this.record(item, undefined, true);
@@ -233,7 +272,8 @@ class Puller {
     await this.workspace.write(path, fetched.bytes);
     await this.dropRemote(old);
     this.record(item, { hash, normal: fetched.normal, assets: fetched.assets });
-    (old && !old.omitted ? this.report.updated : this.report.added).push(path);
+    const known = (old && !old.omitted) || this.relocated.has(node.id);
+    (known ? this.report.updated : this.report.added).push(path);
   }
   // Clears what no longer belongs where it was, and returns the items whose
   // edited file holds them at their old place. Runs before writing, so notes
@@ -263,8 +303,19 @@ class Puller {
       if (local === null) {
         forget();
       } else if (local === old.hash) {
-        await this.workspace.remove(old.path);
-        if (!item) this.report.removed.push(old.path);
+        if (
+          item &&
+          item.node.revision === old.revision &&
+          !this.refreshAssets &&
+          !old.remote &&
+          (await this.assetsPresent(old))
+        ) {
+          this.parked.set(id, { temporary: await this.workspace.park(old.path), old });
+        } else {
+          await this.workspace.remove(old.path);
+          if (item) this.relocated.add(id);
+          else this.report.removed.push(old.path);
+        }
         forget();
       } else {
         this.report.kept.push(old.path);
@@ -301,14 +352,17 @@ class Puller {
       roots,
       (node) => this.admit(node),
       () => this.report.references++,
+      this.onProgress,
     );
     const items = new Map(listed.map((item) => [item.node.id, item]));
     const dirs = new Set<string>();
+    this.onProgress('检查本地文件');
     // A local move waiting for push would otherwise read as a lost file and
     // come back at its old place, ready to be pushed as a duplicate.
     const local = await findChanges(this.workspace, this.state);
-    for (const { from } of local.moves) this.report.movedLocally.push(from);
-    const moved = new Set(local.moves.map((move) => move.id));
+    const waiting = [...local.moves, ...local.blockedMoves];
+    for (const { from } of waiting) this.report.movedLocally.push(from);
+    const moved = new Set(waiting.map((move) => move.id));
     for (const id of moved) items.delete(id);
     const held = await this.clearOutdated(items, dirs, moved);
     const pending = listed.filter((item) => !held.has(item.node.id) && !moved.has(item.node.id));
@@ -335,6 +389,7 @@ class Puller {
       Array.from({ length: CONCURRENCY }, async () => {
         while (next < files.length) {
           const item = files[next++];
+          this.onProgress(`拉取 ${next}/${files.length}：${item.path}`);
           await attempt(item, () => this.pullFile(item));
         }
       }),
@@ -353,9 +408,10 @@ export interface PullOptions {
   pdf: boolean;
   decrypt?: boolean;
   ask?: AskPassword;
+  onProgress?: OnProgress;
 }
 export async function pull(options: PullOptions): Promise<{ state: State; report: PullReport }> {
-  const { client, dir } = options;
+  const { client, dir, onProgress = () => {} } = options;
   const workspace = new Workspace(dir);
   await mkdir(dir, { recursive: true });
   const saved = await workspace.loadState();
@@ -379,12 +435,13 @@ export async function pull(options: PullOptions): Promise<{ state: State; report
   state.pdf ||= options.pdf;
   state.decrypt ||= !!options.decrypt;
   const keyring = workspaceKeyring(client, state, options.ask);
+  onProgress('读取目录');
   const roots = state.root
     ? [await rootNode(client, state.root, !!keyring)]
     : await client.children(null);
   await workspace.ensureDir(META_DIR);
   await workspace.write(`${META_DIR}/.gitignore`, encoder.encode('*\n'));
-  const puller = new Puller(client, workspace, state, keyring, refreshAssets);
+  const puller = new Puller(client, workspace, state, keyring, refreshAssets, onProgress);
   try {
     await puller.run(roots);
   } finally {
