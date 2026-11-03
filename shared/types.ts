@@ -1,6 +1,14 @@
 import type { PasswordParameters } from './password';
 import type { ProjectCategory } from './projects';
 
+// A command-line credential, as listed in settings.
+export interface ApiToken {
+  id: string;
+  name: string;
+  scope: 'read' | 'write';
+  created_at: number;
+  last_used_at: number | null;
+}
 export interface AuthStatus {
   initialized: boolean;
   authenticated: boolean;

@@ -112,6 +112,7 @@ export async function cleanup(
     env.DB.prepare(
       'DELETE FROM sessions WHERE expires_at<=? OR epoch!=(SELECT auth_epoch FROM site WHERE id=1)',
     ).bind(now),
+    env.DB.prepare('DELETE FROM api_tokens WHERE epoch!=(SELECT auth_epoch FROM site WHERE id=1)'),
     env.DB.prepare('DELETE FROM login_attempts WHERE window_start<?').bind(now - 3600_000),
     ...(idempotency
       ? [env.DB.prepare('DELETE FROM idempotency WHERE created_at<?').bind(now - 7 * 86400_000)]

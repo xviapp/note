@@ -26,6 +26,9 @@ export interface Session {
   token_hash: string;
   epoch: number;
   expires_at: number;
+  // Set when the request carries a command-line token (worker/tokens.ts).
+  token_id?: string;
+  token_scope?: 'read' | 'write';
 }
 export interface BlobRow {
   id: string;

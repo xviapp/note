@@ -13,6 +13,7 @@ import { androidRelease } from './releases';
 import { shareSettings, saveShareSettings } from './sharing';
 import { AppError, asError, body, enforceOrigin, idValue, integer, json } from './http';
 import { publicAuth, requireSession, accountAuth, editToken, requireEdit } from './auth';
+import { requireTokenScope, tokenRoutes } from './tokens';
 import {
   createNode,
   getNode,
@@ -95,6 +96,9 @@ export default {
       const publicResponse = await publicAuth(request, env, url.pathname);
       if (publicResponse) return publicResponse;
       const session = await requireSession(request, env);
+      requireTokenScope(session, request.method, url.pathname);
+      const tokenResponse = await tokenRoutes(request, env, session, url.pathname);
+      if (tokenResponse) return tokenResponse;
       const accountResponse = await accountAuth(request, env, session, url.pathname);
       if (accountResponse) return accountResponse;
       const method = request.method,

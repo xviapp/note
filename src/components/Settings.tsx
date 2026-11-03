@@ -15,6 +15,7 @@ import { ShareSettings } from './ShareSettings';
 import { ServerSettings } from './ServerSettings';
 import { OutboxSettings } from './OutboxSettings';
 import { AppLockSettings } from './AppLockSettings';
+import { ApiTokenSettings } from './ApiTokenSettings';
 import { nativeServer } from '../server';
 import { settingsTitles, type SettingsSection } from '../navigation';
 import { SettingsIndex } from './SettingsIndex';
@@ -218,6 +219,7 @@ export function Settings({
               退出所有设备
             </button>
           </div>
+          <ApiTokenSettings confirm={confirm} onError={onError} />
           {nativeServer && <AppLockSettings />}
           <button className="text-button" onClick={() => onLogout()}>
             <LogOut size={16} />

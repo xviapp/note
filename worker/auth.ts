@@ -1,4 +1,5 @@
 import type { Env, Session, Site } from './types';
+import { findTokenSession } from './tokens';
 import { AppError, body, json, textValue } from './http';
 import {
   MIN_PASSWORD_LENGTH,
@@ -138,6 +139,8 @@ function cookie(
   return `${name}=${token}; Path=${path}; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${local && new URL(request.url).protocol === 'http:' ? '' : '; Secure'}`;
 }
 export async function findSession(request: Request, env: Env): Promise<Session | null> {
+  const bearer = request.headers.get('authorization')?.match(/^Bearer (\S+)$/)?.[1];
+  if (bearer) return findTokenSession(bearer, env);
   const token = request.headers
     .get('cookie')
     ?.split(';')
