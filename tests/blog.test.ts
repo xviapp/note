@@ -482,6 +482,24 @@ describe('blog themes and pages', () => {
   });
 });
 
+describe('blog font preloading', () => {
+  it('preloads only the fonts a page uses', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    await bindings.DB.prepare("UPDATE site SET blog_theme='paper' WHERE id=1").run();
+    await publish(await note('公式', root, '$\\mathbb{R}$ 与 $x$'), 'math');
+    await publish(await note('正文', root, '没有公式'), 'plain');
+    const math = await text('/posts/math');
+    expect(math).toContain('/assets/fonts/KaTeX_Main-Regular.woff2');
+    expect(math).toContain('/assets/fonts/KaTeX_AMS-Regular.woff2');
+    expect(math).not.toContain('KaTeX_Caligraphic');
+    expect(math).not.toContain('special-elite');
+    expect(await text('/posts/plain')).not.toContain('rel="preload"');
+    await bindings.DB.prepare("UPDATE site SET blog_theme='typing' WHERE id=1").run();
+    expect(await text('/posts/plain')).toContain('/assets/fonts/special-elite-latin-400-normal.woff2');
+  });
+});
+
 describe('blog text helpers', () => {
   it('derives links and summaries', () => {
     expect(blogSlug('  Hello, 世界！ 2026 ')).toBe('hello-世界-2026');

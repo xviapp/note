@@ -3,8 +3,8 @@ import { defineConfig } from 'vite';
 // The public blog's few static files (worker/blog-site.ts renders the pages),
 // at fixed addresses so pages need no build manifest.
 export default defineConfig({
-  // public/ holds the app's PDF.js data, icons and fonts, none of it used here.
-  publicDir: false,
+  // Not the app's public/: its PDF.js data, icons and fonts are not used here.
+  publicDir: 'src/blog/public',
   build: {
     outDir: 'dist-blog',
     target: 'es2022',
@@ -16,8 +16,9 @@ export default defineConfig({
       output: {
         entryFileNames: 'assets/[name].js',
         chunkFileNames: 'assets/[name]-[hash].js',
+        // Fonts keep their names so that pages can preload them (worker/blog-site.ts).
         assetFileNames: (asset) =>
-          asset.names?.some((name) => name.endsWith('.css')) ? 'assets/blog.css' : 'assets/[name]-[hash][extname]',
+          asset.names?.some((name) => name.endsWith('.css')) ? 'assets/blog.css' : 'assets/fonts/[name][extname]',
       },
     },
   },

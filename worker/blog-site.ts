@@ -46,6 +46,23 @@ const RENDER_VERSION = 1;
 const RENDER_TTL_SECONDS = 86_400;
 const INLINE_IMAGE = /^image\/(png|jpeg|gif|webp|avif|svg\+xml)$/;
 
+// Fonts a page needs at once: a formula stays blank until its font arrives, and
+// is laid out again when it does. Only what the page uses, or browsers warn.
+const THEME_FONT = 'special-elite-latin-400-normal';
+const MATH_FONTS: [RegExp, string][] = [
+  [/class="katex/, 'KaTeX_Main-Regular'],
+  [/\bmathnormal\b/, 'KaTeX_Math-Italic'],
+  [/\bboldsymbol\b/, 'KaTeX_Math-BoldItalic'],
+  [/\bmathbf\b/, 'KaTeX_Main-Bold'],
+  [/\b(?:mathbb|amsrm)\b/, 'KaTeX_AMS-Regular'],
+  [/\bmathcal\b/, 'KaTeX_Caligraphic-Regular'],
+  [/\bdelim-size1\b|\bsize1\b/, 'KaTeX_Size1-Regular'],
+  [/\bsize2\b/, 'KaTeX_Size2-Regular'],
+  [/\bsize3\b/, 'KaTeX_Size3-Regular'],
+  [/\bdelim-size4\b|\bsize4\b/, 'KaTeX_Size4-Regular'],
+];
+const mathFonts = (html: string) => MATH_FONTS.filter(([used]) => used.test(html)).map(([, font]) => font);
+
 const CSP = [
   "default-src 'none'",
   "img-src 'self' https: data:",
@@ -97,7 +114,7 @@ function navigation(posts: Post[], current: string): string {
 function page(
   request: Request,
   site: Site,
-  head: { title: string; description?: string; canonical: string; article?: boolean; mermaid?: boolean },
+  head: { title: string; description?: string; canonical: string; article?: boolean; mermaid?: boolean; fonts?: string[] },
   main: string,
   posts: Post[] = [],
   status = 200,
@@ -106,10 +123,12 @@ function page(
   const title = escapeHtml(head.title),
     name = escapeHtml(site.blog_title);
   const theme = BLOG_THEMES.find((item) => item.value === site.blog_theme) ?? BLOG_THEMES[0];
+  const sidebar = theme.value !== DEFAULT_BLOG_THEME;
+  const fonts = [...(sidebar ? [THEME_FONT] : []), ...(head.fonts ?? [])];
   return respond(
     request,
     `<!doctype html>
-<html lang="zh-CN" data-theme="${theme.value}" data-layout="${theme.value === DEFAULT_BLOG_THEME ? 'column' : 'sidebar'}">
+<html lang="zh-CN" data-theme="${theme.value}" data-layout="${sidebar ? 'sidebar' : 'column'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -123,6 +142,7 @@ ${description ? `<meta name="description" content="${escapeHtml(description)}">`
 <meta property="og:type" content="${head.article ? 'article' : 'website'}">
 <meta property="og:url" content="${escapeHtml(head.canonical)}">
 ${description ? `<meta property="og:description" content="${escapeHtml(description)}">` : ''}
+${fonts.map((font) => `<link rel="preload" href="/assets/fonts/${font}.woff2" as="font" type="font/woff2" crossorigin>`).join('\n')}
 <link rel="stylesheet" href="/assets/blog.css">
 ${head.mermaid ? '<script type="module" src="/assets/blog.js"></script>' : ''}
 </head>
@@ -340,6 +360,7 @@ async function showPost(request: Request, env: Env, site: Site, url: URL, post: 
       canonical: url.origin + publicPath(post),
       article: !post.page,
       mermaid: html.includes('<pre class="mermaid">'),
+      fonts: mathFonts(html),
     },
     `<article>
 <h1>${escapeHtml(post.title)}</h1>

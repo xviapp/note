@@ -1,0 +1,14 @@
+# Without these every page view revalidates the fonts, and until the answer
+# arrives formulas stay blank. A font's file name stays the same across builds,
+# so its lifetime is long rather than immutable.
+/assets/*
+  Cache-Control: public, max-age=2592000
+
+# Fixed addresses that change with each deploy: a new version reaches a returning
+# visitor within ten minutes, without making any page view wait for the check.
+/assets/blog.css
+  ! Cache-Control
+  Cache-Control: public, max-age=600, stale-while-revalidate=604800
+/assets/blog.js
+  ! Cache-Control
+  Cache-Control: public, max-age=600, stale-while-revalidate=604800
