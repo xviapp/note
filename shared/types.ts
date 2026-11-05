@@ -144,10 +144,13 @@ export interface BlogSettings {
   // Page key (BLOG_PAGES) to the note shown there.
   pages: Record<string, string>;
 }
+export type BlogSummarySource = 'excerpt' | 'ai' | 'manual';
 export interface BlogPostInfo {
   nodeId: string;
   slug: string;
   title: string;
+  summary: string;
+  summarySource: BlogSummarySource;
   publishedAt: number;
   updatedAt: number;
   // Visitors can see it: still in the blog folder and not encrypted.

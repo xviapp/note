@@ -1,6 +1,6 @@
 /// <reference types="@cloudflare/vitest-pool-workers/types" />
 import { env, SELF, applyD1Migrations } from 'cloudflare:test';
-import { beforeAll, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { Env } from '../worker/types';
 import type { BlogNoteStatus, BlogPostInfo, BlogSettings, NoteDetail, NoteNode } from '../shared/types';
 import { handleBlog } from '../worker/blog-site';
@@ -69,6 +69,7 @@ beforeAll(async () => {
 beforeEach(async () => {
   await bindings.DB.batch([
     bindings.DB.prepare('DELETE FROM blog_posts'),
+    bindings.DB.prepare('DELETE FROM ai_settings'),
     bindings.DB.prepare('UPDATE site SET blog_parent_id=NULL,share_parent_id=NULL WHERE id=1'),
     bindings.DB.prepare('DELETE FROM version_assets'),
     bindings.DB.prepare('UPDATE nodes SET current_version_id=NULL'),
@@ -497,6 +498,146 @@ describe('blog font preloading', () => {
     expect(await text('/posts/plain')).not.toContain('rel="preload"');
     await bindings.DB.prepare("UPDATE site SET blog_theme='typing' WHERE id=1").run();
     expect(await text('/posts/plain')).toContain('/assets/fonts/special-elite-latin-400-normal.woff2');
+  });
+});
+
+describe('blog summaries', () => {
+  const BODY = `# 文章\n\n${'这是一段足够长的正文，用来确认摘要的来源。'.repeat(10)}`;
+  const reply = (content: string) =>
+    new Response(
+      `data: ${JSON.stringify({ choices: [{ delta: { content } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'stop' }] })}\n\ndata: [DONE]\n\n`,
+      { headers: { 'content-type': 'text/event-stream' } },
+    );
+  const provider = (...replies: string[]) =>
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => reply(replies.shift() ?? '多余的调用'));
+  const sent = (fetch: { mock: { calls: unknown[][] } }, call = 0) =>
+    (fetch.mock.calls[call][1] as RequestInit).body as string;
+  const withKey = () => ok('/api/ai/settings', 'PUT', { apiKey: 'sk-test-only-fake-deepseek-key' });
+  const blogRoot = async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    return root;
+  };
+  afterEach(() => vi.restoreAllMocks());
+
+  it('generates once per published version, not on saves', async () => {
+    await withKey();
+    const fetch = provider('第一版摘要', '第二版摘要');
+    const post = await note('文章', await blogRoot(), BODY);
+    const first = await publish(post, 'post');
+    expect(first.post).toMatchObject({ summary: '第一版摘要', summarySource: 'ai' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(sent(fetch)).toContain('这是一段足够长的正文');
+    expect(await text('/')).toContain('第一版摘要');
+
+    // Only the link changes: same version, no call.
+    await publish(post, 'renamed');
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    const saved = await save(post.id, `${BODY}\n\n还没有发布的秘密段落`);
+    expect(fetch).toHaveBeenCalledTimes(1);
+    const updated = await publish(saved);
+    expect(updated.post).toMatchObject({ summary: '第二版摘要', summarySource: 'ai', slug: 'renamed' });
+    expect(fetch).toHaveBeenCalledTimes(2);
+    expect(sent(fetch, 1)).toContain('还没有发布的秘密段落');
+  });
+
+  it('still publishes, with the excerpt, when the call cannot succeed', async () => {
+    const root = await blogRoot();
+    const fetch = vi.spyOn(globalThis, 'fetch');
+    const unconfigured = await publish(await note('没有密钥', root, BODY));
+    expect(unconfigured.post).toMatchObject({ summarySource: 'excerpt', online: true });
+    expect(unconfigured.post!.summary).toContain('这是一段足够长的正文');
+    expect(fetch).not.toHaveBeenCalled();
+
+    await withKey();
+    fetch.mockImplementation(async () => new Response('{}', { status: 402 }));
+    const post = await note('余额不足', root, BODY);
+    expect((await publish(post)).post).toMatchObject({ summarySource: 'excerpt', online: true });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    fetch.mockImplementation(async () => {
+      throw new DOMException('timed out', 'TimeoutError');
+    });
+    expect((await publish(await note('连不上', root, BODY))).post).toMatchObject({ summarySource: 'excerpt' });
+  });
+
+  it('spends nothing on short posts, pages or a taken link', async () => {
+    await withKey();
+    const fetch = provider('摘要');
+    const root = await blogRoot();
+    expect((await publish(await note('短文', root, '只有一句话。'))).post).toMatchObject({
+      summary: '只有一句话。',
+      summarySource: 'excerpt',
+    });
+    const response = await call(`/api/blog/posts/${(await note('撞车', root, BODY)).id}`, 'PUT', {
+      revision: 1,
+      slug: '短文',
+    });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: 'BLOG_SLUG_TAKEN' });
+
+    const page = await note('关于', root, BODY);
+    await ok('/api/blog/settings', 'PUT', { parentId: root, title: '我的博客', pages: { about: page.id } });
+    const saved = await save(page.id, `${BODY}\n\n新段落`);
+    expect((await publish(saved)).post).toMatchObject({ page: 'about', summarySource: 'excerpt' });
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  it('keeps a hand-written summary across updates until replaced', async () => {
+    await withKey();
+    const fetch = provider('青藜的摘要', '重新生成的摘要');
+    const post = await note('文章', await blogRoot(), BODY);
+    const before = await publish(post, 'post');
+    const manual = await ok<BlogNoteStatus>(`/api/blog/posts/${post.id}/summary`, 'PUT', { summary: ' 我\n写的 ' });
+    expect(manual.post).toMatchObject({ summary: '我 写的', summarySource: 'manual', updatedAt: before.post!.updatedAt });
+    expect(await text('/')).toContain('我 写的');
+
+    const saved = await save(post.id, `${BODY}\n\n新段落`);
+    expect((await publish(saved)).post).toMatchObject({ summary: '我 写的', summarySource: 'manual' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+
+    const again = await ok<BlogNoteStatus>(`/api/blog/posts/${post.id}/summary`, 'POST');
+    expect(again.post).toMatchObject({ summary: '重新生成的摘要', summarySource: 'ai' });
+
+    const cleared = await ok<BlogNoteStatus>(`/api/blog/posts/${post.id}/summary`, 'PUT', { summary: '  ' });
+    expect(cleared.post!.summarySource).toBe('excerpt');
+    expect(cleared.post!.summary).toContain('这是一段足够长的正文');
+  });
+
+  it('regenerates from the published version and reports failures', async () => {
+    await withKey();
+    const fetch = provider('旧摘要', '新摘要');
+    const post = await note('文章', await blogRoot(), BODY);
+    await publish(post, 'post');
+    await save(post.id, `${BODY}\n\n还没有发布的秘密段落`);
+    await ok(`/api/blog/posts/${post.id}/summary`, 'POST');
+    expect(sent(fetch, 1)).not.toContain('还没有发布的秘密段落');
+
+    fetch.mockImplementation(async () => new Response('{}', { status: 402 }));
+    expect((await call(`/api/blog/posts/${post.id}/summary`, 'POST')).status).toBe(502);
+    expect((await ok<BlogNoteStatus>(`/api/blog/posts/${post.id}`)).post!.summary).toBe('新摘要');
+
+    expect((await call(`/api/blog/posts/${(await note('未发布', null, BODY)).id}/summary`, 'POST')).status).toBe(404);
+  });
+
+  it('caps a long reply and refuses an over-long manual summary', async () => {
+    await withKey();
+    provider('长'.repeat(300));
+    const post = await note('文章', await blogRoot(), BODY);
+    expect([...(await publish(post, 'post')).post!.summary]).toHaveLength(161);
+    expect((await call(`/api/blog/posts/${post.id}/summary`, 'PUT', { summary: '长'.repeat(161) })).status).toBe(400);
+  });
+
+  it('is closed to command-line tokens', async () => {
+    const post = await note('文章', await blogRoot(), BODY);
+    await publish(post, 'post');
+    const { token } = await ok<{ token: string }>('/api/tokens', 'POST', { name: '电脑', scope: 'write' });
+    const byToken = await SELF.fetch(`${ORIGIN}/api/blog/posts/${post.id}/summary`, {
+      method: 'POST',
+      headers: { origin: ORIGIN, authorization: `Bearer ${token}`, 'content-type': 'application/json' },
+    });
+    expect(byToken.status).toBe(403);
   });
 });
 

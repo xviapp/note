@@ -1,6 +1,6 @@
 import { useEffect, useState, type FormEvent } from 'react';
-import { BLOG_SLUG_LIMIT } from '../../shared/blog';
-import type { BlogNoteStatus, NoteDetail } from '../../shared/types';
+import { BLOG_SLUG_LIMIT, BLOG_SUMMARY_LIMIT } from '../../shared/blog';
+import type { BlogNoteStatus, BlogSummarySource, NoteDetail } from '../../shared/types';
 import { api } from '../api';
 import { Modal } from './Primitives';
 
@@ -53,6 +53,12 @@ export function useBlogPublish(note: NoteDetail | null, disabled: boolean) {
   };
 }
 
+const SUMMARY_SOURCES: Record<BlogSummarySource, string> = {
+  ai: '由青藜根据已发布的版本生成，可以修改。',
+  manual: '手动填写，更新文章时会保留。清空后保存可改回正文开头。',
+  excerpt: '摘自正文开头。',
+};
+
 function PublishDialog({
   note,
   status,
@@ -66,10 +72,13 @@ function PublishDialog({
 }) {
   const post = status.post;
   const [slug, setSlug] = useState(post?.slug ?? status.suggestedSlug);
-  const [busy, setBusy] = useState(false),
+  const saved = post?.summary ?? '';
+  const [summary, setSummary] = useState(saved);
+  useEffect(() => setSummary(saved), [saved]);
+  const [busy, setBusy] = useState<'' | 'publish' | 'summary' | 'generate' | 'unpublish'>(''),
     [error, setError] = useState('');
-  const run = async (action: () => Promise<BlogNoteStatus>, finished: boolean) => {
-    setBusy(true);
+  const run = async (task: typeof busy, action: () => Promise<BlogNoteStatus>, finished: boolean) => {
+    setBusy(task);
     setError('');
     try {
       onChanged(await action());
@@ -77,28 +86,29 @@ function PublishDialog({
     } catch (reason) {
       setError((reason as Error).message);
     } finally {
-      setBusy(false);
+      setBusy('');
     }
   };
   const publish = (event: FormEvent) => {
     event.preventDefault();
     void run(
+      'publish',
       () => api<BlogNoteStatus>(`/api/blog/posts/${note.id}`, 'PUT', { revision: note.revision, slug: slug.trim() }),
       false,
     );
   };
   const unpublish = () =>
-    run(async () => {
+    run('unpublish', async () => {
       await api(`/api/blog/posts/${note.id}`, 'DELETE');
       return api<BlogNoteStatus>(`/api/blog/posts/${note.id}`);
     }, true);
   return (
     <Modal title={post ? '博客文章' : '发布到博客'} onClose={() => !busy && onClose()}>
       <form className="form-stack blog-publish" onSubmit={publish}>
-        <fieldset disabled={busy}>
+        <fieldset disabled={!!busy}>
           {!post && (
             <p className="field-hint">
-              发布后，任何人都能在博客上看到这篇笔记当前保存的版本，以及正文引用的图片和附件。之后的修改不会自动上线。
+              发布后，任何人都能在博客上看到这篇笔记当前保存的版本，以及正文引用的图片和附件。之后的修改不会自动上线。配置了 DeepSeek 时，青藜会根据这个版本生成摘要。
             </p>
           )}
           {post && !post.online && (
@@ -135,6 +145,43 @@ function PublishDialog({
               </>
             )}
           </p>
+          {post && (
+            <>
+              <label>
+                摘要
+                <textarea
+                  rows={3}
+                  value={summary}
+                  maxLength={BLOG_SUMMARY_LIMIT}
+                  onChange={(event) => setSummary(event.target.value)}
+                />
+              </label>
+              <p className="field-hint">
+                显示在文章列表、搜索结果和 RSS 里。{SUMMARY_SOURCES[post.summarySource]}
+              </p>
+              <div className="dialog-actions">
+                <button
+                  type="button"
+                  className="button"
+                  onClick={() =>
+                    void run('generate', () => api<BlogNoteStatus>(`/api/blog/posts/${note.id}/summary`, 'POST'), false)
+                  }
+                >
+                  {busy === 'generate' ? '正在生成…' : '重新生成'}
+                </button>
+                <button
+                  type="button"
+                  className="button"
+                  disabled={summary.trim() === saved}
+                  onClick={() =>
+                    void run('summary', () => api<BlogNoteStatus>(`/api/blog/posts/${note.id}/summary`, 'PUT', { summary }), false)
+                  }
+                >
+                  {busy === 'summary' ? '正在保存…' : '保存摘要'}
+                </button>
+              </div>
+            </>
+          )}
           {error && (
             <p className="inline-error" role="alert">
               {error}
@@ -154,7 +201,7 @@ function PublishDialog({
               className="button primary"
               disabled={!!post && !post.outdated && slug.trim() === post.slug}
             >
-              {busy ? '正在保存…' : post ? '更新到当前版本' : '发布'}
+              {busy === 'publish' ? '正在发布…' : post ? '更新到当前版本' : '发布'}
             </button>
           </div>
         </fieldset>

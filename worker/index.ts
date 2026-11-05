@@ -11,7 +11,17 @@ import {
 import { BACKUP_METADATA_LIMIT } from '../shared/backup';
 import { androidRelease } from './releases';
 import { shareSettings, saveShareSettings } from './sharing';
-import { blogCandidates, blogPosts, blogSettings, blogStatus, publishPost, saveBlogSettings, unpublishPost } from './blog';
+import {
+  blogCandidates,
+  blogPosts,
+  blogSettings,
+  blogStatus,
+  publishPost,
+  regenerateBlogSummary,
+  saveBlogSettings,
+  saveBlogSummary,
+  unpublishPost,
+} from './blog';
 import { AppError, asError, body, enforceOrigin, idValue, integer, json } from './http';
 import { publicAuth, requireSession, accountAuth, editToken, requireEdit } from './auth';
 import { requireTokenScope, tokenRoutes } from './tokens';
@@ -120,6 +130,11 @@ export default {
         if (method === 'GET') return json(await blogStatus(env, blogPost[1]));
         if (method === 'PUT') return json(await publishPost(env, blogPost[1], await body(request)));
         if (method === 'DELETE') return json(await unpublishPost(env, blogPost[1]));
+      }
+      const blogSummary = path.match(/^\/api\/blog\/posts\/([a-zA-Z0-9_-]{1,80})\/summary$/);
+      if (blogSummary) {
+        if (method === 'PUT') return json(await saveBlogSummary(env, blogSummary[1], await body(request)));
+        if (method === 'POST') return json(await regenerateBlogSummary(env, blogSummary[1]));
       }
       if (path.startsWith('/api/app/android-release') && ['GET', 'HEAD'].includes(method))
         return await androidRelease(request, env);

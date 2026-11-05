@@ -2,6 +2,7 @@ import {
   BLOG_DESCRIPTION_LIMIT,
   BLOG_SLUG,
   BLOG_SLUG_LIMIT,
+  BLOG_SUMMARY_LIMIT,
   BLOG_THEMES,
   BLOG_TITLE_LIMIT,
   blogExcerpt,
@@ -10,7 +11,8 @@ import {
   blogSlug,
   DEFAULT_BLOG_THEME,
 } from '../shared/blog';
-import type { BlogCandidate, BlogNoteStatus, BlogPostInfo, BlogSettings, NoteNode } from '../shared/types';
+import type { BlogCandidate, BlogNoteStatus, BlogPostInfo, BlogSettings, BlogSummarySource, NoteNode } from '../shared/types';
+import { generateSummary, summaryWorthGenerating } from './blog-summary';
 import { AppError, idValue, integer, textValue } from './http';
 import { getNode, KEY_SQL, nodePath, NOT_DISCUSSION } from './library';
 import { readText } from './storage';
@@ -153,6 +155,8 @@ interface PostRow {
   node_id: string;
   slug: string;
   title: string;
+  summary: string;
+  summary_source: BlogSummarySource;
   published_at: number;
   updated_at: number;
   version_id: string;
@@ -161,7 +165,7 @@ interface PostRow {
   page: string | null;
 }
 const POST_ROWS = `${BLOG_TREE}
-  SELECT p.node_id,p.slug,p.title,p.published_at,p.updated_at,p.version_id,p.page,n.current_version_id,
+  SELECT p.node_id,p.slug,p.title,p.summary,p.summary_source,p.published_at,p.updated_at,p.version_id,p.page,n.current_version_id,
     (t.id IS NOT NULL AND n.kind='markdown' AND b.key_id IS NULL AND b.state='ready') online
   FROM blog_posts p
   JOIN nodes n ON n.id=p.node_id
@@ -172,6 +176,8 @@ const postInfo = (row: PostRow, base: string | null): BlogPostInfo => ({
   nodeId: row.node_id,
   slug: row.slug,
   title: row.title,
+  summary: row.summary,
+  summarySource: row.summary_source,
   publishedAt: row.published_at,
   updatedAt: row.updated_at,
   online: !!row.online,
@@ -222,32 +228,103 @@ export async function publishPost(env: Env, id: string, data: Record<string, unk
     env,
     node,
     chosen ?? status.post?.slug ?? (status.suggestedSlug || `post-${id.slice(0, 8).toLowerCase()}`),
+    true,
   );
   return blogStatus(env, id);
 }
 
-async function publishCurrent(env: Env, node: NoteNode, slug: string) {
+const slugTaken = () => new AppError(409, '这个链接已被另一篇文章使用，请换一个。', 'BLOG_SLUG_TAKEN');
+
+async function publishCurrent(env: Env, node: NoteNode, slug: string, summarize = false) {
   const version = await env.DB.prepare(
     'SELECT v.id,v.body_blob_id FROM versions v JOIN blobs b ON b.id=v.body_blob_id WHERE v.id=? AND b.key_id IS NULL',
   )
     .bind(node.current_version_id)
     .first<{ id: string; body_blob_id: string }>();
   if (!version) throw new AppError(409, '这篇笔记还没有可发布的正文。');
+  // Before the paid call, so a taken link costs nothing. The constraint below
+  // still decides a race.
+  if (await env.DB.prepare('SELECT 1 FROM blog_posts WHERE slug=? AND node_id<>?').bind(slug, node.id).first())
+    throw slugTaken();
   const content = await readText(env, version.body_blob_id);
+  const summary = await summaryFor(env, node, version.id, content, summarize);
   const now = Date.now();
   try {
     await env.DB.prepare(
-      `INSERT INTO blog_posts(node_id,version_id,slug,title,summary,files,published_at,updated_at) VALUES(?,?,?,?,?,?,?,?)
+      `INSERT INTO blog_posts(node_id,version_id,slug,title,summary,summary_source,files,published_at,updated_at) VALUES(?,?,?,?,?,?,?,?,?)
        ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,slug=excluded.slug,title=excluded.title,
-         summary=excluded.summary,files=excluded.files,updated_at=excluded.updated_at`,
+         summary=excluded.summary,summary_source=excluded.summary_source,files=excluded.files,updated_at=excluded.updated_at`,
     )
-      .bind(node.id, version.id, slug, node.title, blogExcerpt(content, node.title), JSON.stringify(blogFiles(content)), now, now)
+      .bind(node.id, version.id, slug, node.title, summary.text, summary.source, JSON.stringify(blogFiles(content)), now, now)
       .run();
   } catch (error) {
-    if (/UNIQUE constraint failed: blog_posts\.slug/.test(String(error)))
-      throw new AppError(409, '这个链接已被另一篇文章使用，请换一个。', 'BLOG_SLUG_TAKEN');
+    if (/UNIQUE constraint failed: blog_posts\.slug/.test(String(error))) throw slugTaken();
     throw error;
   }
+}
+
+// The summary a publish should store. An unchanged body keeps what it has, so
+// only new text costs a call, and a hand-written one stays until the author
+// replaces it. Pages are not listed, so they make do with the excerpt, and a
+// failed call must not stop the publish.
+async function summaryFor(
+  env: Env,
+  node: NoteNode,
+  versionId: string,
+  content: string,
+  summarize: boolean,
+): Promise<{ text: string; source: BlogSummarySource }> {
+  const published = await env.DB.prepare(
+    'SELECT version_id,summary,summary_source,page FROM blog_posts WHERE node_id=?',
+  )
+    .bind(node.id)
+    .first<{ version_id: string; summary: string; summary_source: BlogSummarySource; page: string | null }>();
+  if (published && (published.summary_source === 'manual' || published.version_id === versionId))
+    return { text: published.summary, source: published.summary_source };
+  const excerpt = { text: blogExcerpt(content, node.title), source: 'excerpt' as const };
+  if (!summarize || published?.page || !summaryWorthGenerating(content, node.title)) return excerpt;
+  try {
+    return { text: await generateSummary(env, node.title, content), source: 'ai' };
+  } catch {
+    return excerpt;
+  }
+}
+
+async function publishedBody(env: Env, id: string) {
+  const row = await env.DB.prepare(
+    `SELECT p.title,v.body_blob_id FROM blog_posts p JOIN versions v ON v.id=p.version_id
+     JOIN blobs b ON b.id=v.body_blob_id WHERE p.node_id=? AND b.key_id IS NULL`,
+  )
+    .bind(id)
+    .first<{ title: string; body_blob_id: string }>();
+  if (!row) throw new AppError(404, '这篇笔记没有发布。');
+  return { title: row.title, content: await readText(env, row.body_blob_id) };
+}
+
+// The article itself is unchanged, so updated_at stays: readers see no new
+// "updated" date, and the blog keeps its rendered posts.
+async function storeSummary(env: Env, id: string, summary: string, source: BlogSummarySource) {
+  await env.DB.prepare('UPDATE blog_posts SET summary=?,summary_source=? WHERE node_id=?')
+    .bind(summary, source, id)
+    .run();
+  return blogStatus(env, id);
+}
+
+// The author's own summary; left empty, it goes back to the body's opening.
+export async function saveBlogSummary(env: Env, id: string, data: Record<string, unknown>): Promise<BlogNoteStatus> {
+  const { title, content } = await publishedBody(env, id);
+  const summary = textValue(data.summary, '摘要', BLOG_SUMMARY_LIMIT, true).replace(/\s+/g, ' ').trim();
+  return summary
+    ? storeSummary(env, id, summary, 'manual')
+    : storeSummary(env, id, blogExcerpt(content, title), 'excerpt');
+}
+
+// Asked for by hand, so a failure is reported instead of falling back. Reads the
+// published version: the summary must describe what visitors can read.
+export async function regenerateBlogSummary(env: Env, id: string): Promise<BlogNoteStatus> {
+  const { title, content } = await publishedBody(env, id);
+  if (!blogExcerpt(content, title)) throw new AppError(400, '这篇文章没有可以概括的文字。');
+  return storeSummary(env, id, await generateSummary(env, title, content), 'ai');
 }
 
 export async function unpublishPost(env: Env, id: string): Promise<{ ok: true }> {
