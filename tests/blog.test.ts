@@ -312,7 +312,7 @@ describe('blog pages', () => {
     await publish(post, 'unsafe');
     const page = await visit('/posts/unsafe');
     const html = await page.text();
-    expect(page.headers.get('content-security-policy')).toContain("script-src 'self'");
+    expect(page.headers.get('content-security-policy')).toContain("script-src 'self' https://static.cloudflareinsights.com");
     expect(html).toContain('&lt;b&gt;标题&lt;/b&gt;');
     expect(html).not.toContain('<script>alert');
     expect(html).not.toContain('javascript:');

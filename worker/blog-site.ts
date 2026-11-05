@@ -52,7 +52,9 @@ const CSP = [
   // KaTeX and Mermaid position their output with inline styles.
   "style-src 'self' 'unsafe-inline'",
   "font-src 'self'",
-  "script-src 'self'",
+  // Cloudflare Web Analytics, which the zone injects into every page.
+  "script-src 'self' https://static.cloudflareinsights.com",
+  "connect-src 'self' https://cloudflareinsights.com",
   "base-uri 'none'",
   "form-action 'none'",
   "frame-ancestors 'none'",
