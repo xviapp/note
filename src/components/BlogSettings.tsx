@@ -1,7 +1,7 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ExternalLink, FolderOpen, Globe } from 'lucide-react';
-import { BLOG_DESCRIPTION_LIMIT, BLOG_TITLE_LIMIT } from '../../shared/blog';
-import type { BlogPostInfo, BlogSettings as Settings } from '../../shared/types';
+import { BLOG_DESCRIPTION_LIMIT, BLOG_PAGES, BLOG_THEMES, BLOG_TITLE_LIMIT, DEFAULT_BLOG_THEME } from '../../shared/blog';
+import type { BlogCandidate, BlogPostInfo, BlogSettings as Settings } from '../../shared/types';
 import { api } from '../api';
 import { blogFolderChanged } from './BlogPublish';
 import { Modal, Spinner, type Confirm } from './Primitives';
@@ -12,37 +12,55 @@ const folderLabel = (path: { title: string }[]) => path.map((item) => item.title
 export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavigate: (id: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [posts, setPosts] = useState<BlogPostInfo[]>([]);
-  const [form, setForm] = useState({ title: '', description: '', url: '' });
+  const [candidates, setCandidates] = useState<BlogCandidate[]>([]);
+  const [form, setForm] = useState({ title: '', description: '', url: '', theme: DEFAULT_BLOG_THEME as string });
+  const [pages, setPages] = useState<Record<string, string>>({});
   const [folder, setFolder] = useState<{ parentId: string; title: string } | null>(null);
   const [busy, setBusy] = useState(false),
     [error, setError] = useState(''),
     [saved, setSaved] = useState(false);
   const accept = (value: Settings) => {
     setSettings(value);
-    setForm({ title: value.title, description: value.description, url: value.url ?? '' });
+    setForm({ title: value.title, description: value.description, url: value.url ?? '', theme: value.theme });
+    setPages(value.pages);
   };
+  const lists = () =>
+    Promise.all([api<{ posts: BlogPostInfo[] }>('/api/blog/posts'), api<{ notes: BlogCandidate[] }>('/api/blog/candidates')]);
   useEffect(() => {
     let live = true;
-    Promise.all([api<Settings>('/api/blog/settings'), api<{ posts: BlogPostInfo[] }>('/api/blog/posts')])
-      .then(([value, list]) => {
+    Promise.all([api<Settings>('/api/blog/settings'), lists()])
+      .then(([value, [list, notes]]) => {
         if (!live) return;
         accept(value);
         setPosts(list.posts);
+        setCandidates(notes.notes);
       })
       .catch((reason: Error) => live && setError(reason.message));
     return () => {
       live = false;
     };
   }, []);
-  const save = async (parentId: string | null) => {
+  // Only what changed, so a page whose note left the folder stays as it is.
+  const changedPages = () => {
+    if (!settings) return {};
+    return Object.fromEntries(
+      BLOG_PAGES.filter(({ key }) => (pages[key] ?? '') !== (settings.pages[key] ?? '')).map(({ key }) => [
+        key,
+        pages[key] || null,
+      ]),
+    );
+  };
+  const save = async (parentId: string | null, withPages = false) => {
     setBusy(true);
     setError('');
     setSaved(false);
     try {
-      accept(await api<Settings>('/api/blog/settings', 'PUT', { parentId, ...form }));
+      accept(await api<Settings>('/api/blog/settings', 'PUT', { parentId, ...form, ...(withPages ? { pages: changedPages() } : {}) }));
       blogFolderChanged();
       // Changing the folder can take posts online or offline.
-      setPosts((await api<{ posts: BlogPostInfo[] }>('/api/blog/posts')).posts);
+      const [list, notes] = await lists();
+      setPosts(list.posts);
+      setCandidates(notes.notes);
       setFolder(null);
       setSaved(true);
     } catch (reason) {
@@ -50,6 +68,13 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
     } finally {
       setBusy(false);
     }
+  };
+  // Choosing a note that was never published is what makes it public.
+  const submit = async () => {
+    const fresh = Object.values(changedPages()).filter((id) => id && !posts.some((post) => post.nodeId === id));
+    if (fresh.length && !(await confirm('公开笔记', `选中的 ${fresh.length} 篇笔记还没有发布，保存后当前版本会公开。`, '保存并公开')))
+      return;
+    await save(settings?.parentId ?? null, true);
   };
   const close = async () => {
     if (
@@ -110,7 +135,7 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
         className="form-stack blog-form"
         onSubmit={(event: FormEvent) => {
           event.preventDefault();
-          void save(settings.parentId);
+          void submit();
         }}
       >
         <fieldset disabled={busy}>
@@ -143,6 +168,61 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
             />
           </label>
           <p className="field-hint">仅用于在这里打开文章。绑定域名的方法见部署文档。</p>
+          <div className="blog-field">
+            <span id="blog-theme-label">主题</span>
+            <div className="blog-themes" role="radiogroup" aria-labelledby="blog-theme-label">
+              {BLOG_THEMES.map((theme) => (
+                <label key={theme.value} className="blog-theme">
+                  <input
+                    type="radio"
+                    name="blog-theme"
+                    value={theme.value}
+                    checked={form.theme === theme.value}
+                    onChange={() => setForm({ ...form, theme: theme.value })}
+                  />
+                  <span className="blog-theme-swatch" style={{ background: theme.colors[0] }} aria-hidden="true">
+                    <i style={{ background: theme.colors[1] }} />
+                    <i style={{ background: theme.colors[2] }} />
+                  </span>
+                  <span>{theme.label}</span>
+                </label>
+              ))}
+            </div>
+          </div>
+          {settings.parentId && (
+            <div className="blog-field">
+              <span>页面</span>
+              <div className="blog-pages">
+                {BLOG_PAGES.map((page) => {
+                  const current = pages[page.key] ?? '';
+                  // A note that left the folder keeps its place until replaced.
+                  const stale = current && !candidates.some((note) => note.id === current);
+                  return (
+                    <label key={page.key}>
+                      {page.label}
+                      <select value={current} onChange={(event) => setPages({ ...pages, [page.key]: event.target.value })}>
+                        <option value="">{page.key === 'home' ? '文章列表' : '不显示'}</option>
+                        {stale && (
+                          <option value={current}>
+                            {posts.find((post) => post.nodeId === current)?.title ?? '未知笔记'}（已不在博客目录）
+                          </option>
+                        )}
+                        {candidates.map((note) => (
+                          <option key={note.id} value={note.id}>
+                            {note.category ? `${note.category} / ` : ''}
+                            {note.title}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                  );
+                })}
+              </div>
+              <p className="field-hint">
+                选中的笔记显示在对应地址，不再出现在文章列表。可选博客目录下未加密的笔记；之后的修改同样要在笔记菜单里更新才会上线。选了首页后，文章列表移到 /blog。
+              </p>
+            </div>
+          )}
           {error && !folder && (
             <p className="inline-error" role="alert">
               {error}
@@ -165,6 +245,7 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
                 {post.title}
               </button>
               <span className="small muted">
+                {post.page ? `${BLOG_PAGES.find((page) => page.key === post.page)?.label ?? ''}页面 · ` : ''}
                 {!post.online ? '未显示（已移出博客目录）' : post.outdated ? '有未发布的修改' : '已是当前版本'}
               </span>
               {post.url && post.online && (

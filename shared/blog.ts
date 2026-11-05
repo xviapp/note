@@ -51,3 +51,25 @@ export function blogExcerpt(content: string, title = ''): string {
 export const blogFiles = (content: string): string[] => [
   ...new Set([...content.matchAll(/\/api\/files\/([a-zA-Z0-9_-]{1,80})/g)].map((match) => match[1])),
 ];
+
+// `scheme` is the page's color-scheme; `colors` are the settings page's swatches
+// (background, panel, link) and repeat src/blog/blog.css.
+export const BLOG_THEMES = [
+  { value: 'paper', label: '页间', scheme: 'light dark', colors: ['#f9efe2', '#fff8ef', '#895332'] },
+  { value: 'typing', label: '打字机', scheme: 'light', colors: ['#e4ca91', '#ffe6b0', '#b80d19'] },
+  { value: 'whiteglass', label: '素白', scheme: 'light', colors: ['#ffffff', '#ffffff', '#5c5c5c'] },
+  { value: 'littlegirl', label: '粉紫', scheme: 'light', colors: ['#ef9ec7', '#fab5e4', '#5e1f8a'] },
+  { value: 'hacking', label: '终端', scheme: 'dark', colors: ['#000000', '#0a0a0a', '#1ad62a'] },
+  { value: 'cloudysky', label: '晴空', scheme: 'light', colors: ['#f7f7f7', '#f3f3f3', '#2f5bd0'] },
+] as const;
+export const DEFAULT_BLOG_THEME = 'paper';
+
+// Addresses that show one chosen note. With a home page the post list moves to /blog.
+export const BLOG_PAGES = [
+  { key: 'home', label: '首页', path: '/' },
+  { key: 'projects', label: '项目', path: '/projects' },
+  { key: 'resume', label: '简历', path: '/resume' },
+  { key: 'contact', label: '联系', path: '/contact' },
+  { key: 'about', label: '关于', path: '/about' },
+] as const;
+export const blogPagePath = (key: string) => BLOG_PAGES.find((page) => page.key === key)?.path ?? null;

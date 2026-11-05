@@ -1,7 +1,8 @@
 // The public blog, deployed as its own Worker (wrangler.blog.jsonc) on its own
 // domain. It only reads, has no sign-in and exposes no /api route, so nothing
 // private is reachable from that domain. See docs/blog.md.
-import { BLOG_TREE, postPath } from './blog';
+import { BLOG_PAGES, BLOG_THEMES, blogPagePath, DEFAULT_BLOG_THEME } from '../shared/blog';
+import { BLOG_TREE, publicPath } from './blog';
 import { renderPost } from './blog-render';
 import type { Env } from './types';
 
@@ -9,6 +10,7 @@ interface Site {
   blog_parent_id: string | null;
   blog_title: string;
   blog_description: string;
+  blog_theme: string;
 }
 interface Post {
   node_id: string;
@@ -20,9 +22,10 @@ interface Post {
   updated_at: number;
   category: string | null;
   object_key: string;
+  page: string | null;
 }
 const POSTS = `${BLOG_TREE}
-  SELECT p.node_id,p.slug,p.title,p.summary,p.version_id,p.published_at,p.updated_at,t.category,b.object_key
+  SELECT p.node_id,p.slug,p.title,p.summary,p.version_id,p.published_at,p.updated_at,p.page,t.category,b.object_key
   FROM blog_tree t
   JOIN blog_posts p ON p.node_id=t.id
   JOIN nodes n ON n.id=p.node_id AND n.kind='markdown'
@@ -76,24 +79,39 @@ function respond(request: Request, body: string, type: string, status = 200): Re
   });
 }
 
+// The menu: the post list, then each page that has a note online.
+function navigation(posts: Post[], current: string): string {
+  const has = new Set(posts.map((post) => post.page));
+  const link = (href: string, label: string) =>
+    `<a href="${href}"${href === current ? ' aria-current="page"' : ''}>${label}</a>`;
+  return [
+    ...(has.has('home') ? [link('/', '首页')] : []),
+    link(has.has('home') ? '/blog' : '/', '文章'),
+    ...BLOG_PAGES.filter((item) => item.key !== 'home' && has.has(item.key)).map((item) => link(item.path, item.label)),
+    '<a href="/feed.xml">RSS</a>',
+  ].join('');
+}
+
 function page(
   request: Request,
   site: Site,
   head: { title: string; description?: string; canonical: string; article?: boolean; mermaid?: boolean },
   main: string,
+  posts: Post[] = [],
   status = 200,
 ): Response {
   const description = head.description ?? site.blog_description;
   const title = escapeHtml(head.title),
     name = escapeHtml(site.blog_title);
+  const theme = BLOG_THEMES.find((item) => item.value === site.blog_theme) ?? BLOG_THEMES[0];
   return respond(
     request,
     `<!doctype html>
-<html lang="zh-CN">
+<html lang="zh-CN" data-theme="${theme.value}" data-layout="${theme.value === DEFAULT_BLOG_THEME ? 'column' : 'sidebar'}">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="color-scheme" content="light dark">
+<meta name="color-scheme" content="${theme.scheme}">
 <title>${title}</title>
 ${description ? `<meta name="description" content="${escapeHtml(description)}">` : ''}
 <link rel="canonical" href="${escapeHtml(head.canonical)}">
@@ -107,8 +125,15 @@ ${description ? `<meta property="og:description" content="${escapeHtml(descripti
 ${head.mermaid ? '<script type="module" src="/assets/blog.js"></script>' : ''}
 </head>
 <body>
-<header class="site-header"><a class="site-name" href="/">${name}</a><a class="site-feed" href="/feed.xml">RSS</a></header>
+<div class="site-shell">
+<header class="site-header">
+<a class="site-mark" href="/" aria-hidden="true" tabindex="-1">${escapeHtml(Array.from(site.blog_title)[0] ?? '')}</a>
+<a class="site-name" href="/">${name}</a>
+<nav class="site-nav" aria-label="页面">${navigation(posts, new URL(request.url).pathname)}</nav>
+</header>
 <main>${main}</main>
+</div>
+<footer class="site-footer">${name} © ${new Date().getUTCFullYear()}</footer>
 </body>
 </html>`,
     'text/html',
@@ -116,12 +141,13 @@ ${head.mermaid ? '<script type="module" src="/assets/blog.js"></script>' : ''}
   );
 }
 
-function notFound(request: Request, site: Site, url: URL, message = '这个页面不存在或已下线。') {
+function notFound(request: Request, site: Site, url: URL, posts: Post[] = [], message = '这个页面不存在或已下线。') {
   return page(
     request,
     site,
     { title: `未找到 · ${site.blog_title}`, canonical: url.origin + url.pathname },
     `<article class="empty"><h1>未找到</h1><p>${escapeHtml(message)}</p><p><a href="/">返回首页</a></p></article>`,
+    posts,
     404,
   );
 }
@@ -131,7 +157,7 @@ function postList(posts: Post[]): string {
   return `<ol class="post-list">${posts
     .map(
       (post) => `<li>
-<h2><a href="${postPath(post.slug)}">${escapeHtml(post.title)}</a></h2>
+<h2><a href="${publicPath(post)}">${escapeHtml(post.title)}</a></h2>
 <p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${
         post.category ? ` · <a href="${categoryPath(post.category)}">${escapeHtml(post.category)}</a>` : ''
       }</p>
@@ -159,14 +185,15 @@ function categoryNav(posts: Post[], active?: string): string {
 // gets, so the result is kept. Links to other posts are part of the output,
 // hence the stamp of the whole published set. Access checks are never cached.
 async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Promise<string> {
-  const stamp = `${posts.length}-${Math.max(...posts.map((item) => item.updated_at))}`;
+  const pages = posts.flatMap((item) => (item.page ? [`${item.page}.${item.node_id}`] : [])).sort().join();
+  const stamp = encodeURIComponent(`${posts.length}-${Math.max(...posts.map((item) => item.updated_at))}-${pages}`);
   const key = new Request(`${url.origin}/__rendered/${RENDER_VERSION}/${post.version_id}/${stamp}`);
   const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default;
   const hit = await cache?.match(key).catch(() => undefined);
   if (hit) return hit.text();
   const object = await env.FILES.get(post.object_key);
   if (!object) throw new Error('Post body is missing');
-  const hrefs = new Map(posts.map((item) => [item.node_id, postPath(item.slug)]));
+  const hrefs = new Map(posts.map((item) => [item.node_id, publicPath(item)]));
   const html = renderPost(await object.text(), post.title, (id) => hrefs.get(id) ?? null);
   await cache
     ?.put(key, new Response(html, { headers: { 'cache-control': `public, max-age=${RENDER_TTL_SECONDS}` } }))
@@ -200,8 +227,8 @@ function feed(request: Request, site: Site, url: URL, posts: Post[]): Response {
       // oxlint-disable-next-line no-control-regex
       .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
       .replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
-  const items = posts.slice(0, 30).map((post) => {
-    const link = xml(url.origin + postPath(post.slug));
+  const items = posts.filter((post) => !post.page).slice(0, 30).map((post) => {
+    const link = xml(url.origin + publicPath(post));
     return `<item><title>${xml(post.title)}</title><link>${link}</link><guid isPermaLink="false">${xml(post.node_id)}</guid><pubDate>${new Date(post.published_at).toUTCString()}</pubDate><description>${xml(post.summary)}</description></item>`;
   });
   return respond(
@@ -216,8 +243,10 @@ function sitemap(request: Request, url: URL, posts: Post[]): Response {
   return respond(
     request,
     `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>${url.origin}/</loc></url>${posts
-      .map((post) => `<url><loc>${url.origin}${postPath(post.slug)}</loc><lastmod>${day(post.updated_at)}</lastmod></url>`)
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${
+      posts.some((post) => post.page === 'home') ? `<url><loc>${url.origin}/blog</loc></url>` : `<url><loc>${url.origin}/</loc></url>`
+    }${posts
+      .map((post) => `<url><loc>${url.origin}${publicPath(post)}</loc><lastmod>${day(post.updated_at)}</lastmod></url>`)
       .join('')}</urlset>`,
     'application/xml',
   );
@@ -239,61 +268,84 @@ export async function handleBlog(request: Request, env: Env): Promise<Response> 
   if (path === '/robots.txt')
     return respond(request, `User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, 'text/plain');
   const site = await env.DB.prepare(
-    'SELECT blog_parent_id,blog_title,blog_description FROM site WHERE id=1',
+    'SELECT blog_parent_id,blog_title,blog_description,blog_theme FROM site WHERE id=1',
   ).first<Site>();
   if (!site?.blog_parent_id)
-    return notFound(request, site ?? { blog_parent_id: null, blog_title: '博客', blog_description: '' }, url, '博客尚未开放。');
+    return notFound(
+      request,
+      site ?? { blog_parent_id: null, blog_title: '博客', blog_description: '', blog_theme: DEFAULT_BLOG_THEME },
+      url,
+      [],
+      '博客尚未开放。',
+    );
   const file = path.match(/^\/files\/([a-zA-Z0-9_-]{1,80})$/);
   if (file)
     return (await serveFile(env, request, file[1])) ?? notFound(request, site, url);
   const posts = (await env.DB.prepare(POSTS).all<Post>()).results;
+  const listed = posts.filter((post) => !post.page);
+  const home = posts.find((post) => post.page === 'home');
   if (path === '/feed.xml') return feed(request, site, url, posts);
   if (path === '/sitemap.xml') return sitemap(request, url, posts);
-  if (path === '/')
+  const shown = posts.find((post) => post.page && blogPagePath(post.page) === path);
+  if (shown) return showPost(request, env, site, url, shown, posts);
+  if (path === (home ? '/blog' : '/'))
     return page(
       request,
       site,
-      { title: site.blog_title, canonical: `${url.origin}/` },
-      `${site.blog_description ? `<p class="site-description">${escapeHtml(site.blog_description)}</p>` : ''}${categoryNav(posts)}${postList(posts)}`,
+      { title: site.blog_title, canonical: url.origin + path },
+      `${site.blog_description ? `<p class="site-description">${escapeHtml(site.blog_description)}</p>` : ''}${categoryNav(listed)}${postList(listed)}`,
+      posts,
     );
+  if (path === '/blog') return Response.redirect(`${url.origin}/`, 301);
   const category = path.match(/^\/category\/([^/]+)$/);
   if (category) {
     const name = decoded(category[1]);
-    const listed = posts.filter((post) => post.category === name);
-    if (!name || !listed.length) return notFound(request, site, url);
+    const inCategory = listed.filter((post) => post.category === name);
+    if (!name || !inCategory.length) return notFound(request, site, url, posts);
     return page(
       request,
       site,
       { title: `${name} · ${site.blog_title}`, canonical: url.origin + categoryPath(name) },
-      `${categoryNav(posts, name)}${postList(listed)}`,
+      `${categoryNav(listed, name)}${postList(inCategory)}`,
+      posts,
     );
   }
   const slug = path.match(/^\/posts\/([^/]+)$/);
   if (slug) {
     const name = decoded(slug[1]);
     const post = posts.find((item) => item.slug === name);
-    if (!post) return notFound(request, site, url);
-    const html = await renderedPost(env, url, post, posts);
-    return page(
-      request,
-      site,
-      {
-        title: `${post.title} · ${site.blog_title}`,
-        description: post.summary,
-        canonical: url.origin + postPath(post.slug),
-        article: true,
-        mermaid: html.includes('<pre class="mermaid">'),
-      },
-      `<article>
-<h1>${escapeHtml(post.title)}</h1>
-<p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${
+    if (!post) return notFound(request, site, url, posts);
+    // Links from before the post became a page keep working.
+    if (post.page) return Response.redirect(url.origin + publicPath(post), 301);
+    return showPost(request, env, site, url, post, posts);
+  }
+  return notFound(request, site, url, posts);
+}
+
+async function showPost(request: Request, env: Env, site: Site, url: URL, post: Post, posts: Post[]) {
+  const html = await renderedPost(env, url, post, posts);
+  const meta = post.page
+    ? ''
+    : `<p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${
         post.category ? ` · <a href="${categoryPath(post.category)}">${escapeHtml(post.category)}</a>` : ''
-      }${day(post.updated_at) !== day(post.published_at) ? ` · 更新于 ${day(post.updated_at)}` : ''}</p>
+      }${day(post.updated_at) !== day(post.published_at) ? ` · 更新于 ${day(post.updated_at)}` : ''}</p>`;
+  return page(
+    request,
+    site,
+    {
+      title: post.page === 'home' ? site.blog_title : `${post.title} · ${site.blog_title}`,
+      description: post.summary,
+      canonical: url.origin + publicPath(post),
+      article: !post.page,
+      mermaid: html.includes('<pre class="mermaid">'),
+    },
+    `<article>
+<h1>${escapeHtml(post.title)}</h1>
+${meta}
 <div class="markdown-body">${html}</div>
 </article>`,
-    );
-  }
-  return notFound(request, site, url);
+    posts,
+  );
 }
 
 export default {

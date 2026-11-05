@@ -2,12 +2,15 @@ import {
   BLOG_DESCRIPTION_LIMIT,
   BLOG_SLUG,
   BLOG_SLUG_LIMIT,
+  BLOG_THEMES,
   BLOG_TITLE_LIMIT,
   blogExcerpt,
   blogFiles,
+  blogPagePath,
   blogSlug,
+  DEFAULT_BLOG_THEME,
 } from '../shared/blog';
-import type { BlogNoteStatus, BlogPostInfo, BlogSettings } from '../shared/types';
+import type { BlogCandidate, BlogNoteStatus, BlogPostInfo, BlogSettings, NoteNode } from '../shared/types';
 import { AppError, idValue, integer, textValue } from './http';
 import { getNode, KEY_SQL, nodePath, NOT_DISCUSSION } from './library';
 import { readText } from './storage';
@@ -28,18 +31,25 @@ export const BLOG_TREE = `WITH RECURSIVE blog_tree(id,category,depth) AS (
 )`;
 
 export const postPath = (slug: string) => `/posts/${encodeURIComponent(slug)}`;
+// Where a post lives: a page's own address, or under /posts.
+export const publicPath = (post: { slug: string; page: string | null }) =>
+  (post.page && blogPagePath(post.page)) || postPath(post.slug);
 
 interface SettingsRow {
   id: string | null;
   blog_title: string;
   blog_description: string;
   blog_url: string | null;
+  blog_theme: string;
 }
 
 export async function blogSettings(env: Env): Promise<BlogSettings> {
-  const row = await env.DB.prepare(
-    'SELECT n.id,s.blog_title,s.blog_description,s.blog_url FROM site s LEFT JOIN nodes n ON n.id=s.blog_parent_id AND n.trash_id IS NULL WHERE s.id=1',
-  ).first<SettingsRow>();
+  const [row, pages] = await Promise.all([
+    env.DB.prepare(
+      'SELECT n.id,s.blog_title,s.blog_description,s.blog_url,s.blog_theme FROM site s LEFT JOIN nodes n ON n.id=s.blog_parent_id AND n.trash_id IS NULL WHERE s.id=1',
+    ).first<SettingsRow>(),
+    pageRows(env),
+  ]);
   const parentId = row?.id ?? null;
   return {
     parentId,
@@ -47,7 +57,22 @@ export async function blogSettings(env: Env): Promise<BlogSettings> {
     title: row?.blog_title ?? '',
     description: row?.blog_description ?? '',
     url: row?.blog_url ?? null,
+    theme: row?.blog_theme ?? DEFAULT_BLOG_THEME,
+    pages: Object.fromEntries(pages.map((page) => [page.page, page.node_id])),
   };
+}
+
+const pageRows = async (env: Env) =>
+  (await env.DB.prepare('SELECT node_id,page FROM blog_posts WHERE page IS NOT NULL').all<{ node_id: string; page: string }>())
+    .results;
+
+// The notes a page can show: what could be published right now.
+export async function blogCandidates(env: Env): Promise<{ notes: BlogCandidate[] }> {
+  const rows = await env.DB.prepare(
+    `${BLOG_TREE} SELECT n.id,n.title,t.category FROM blog_tree t JOIN nodes n ON n.id=t.id
+     WHERE t.depth>0 AND n.kind='markdown' ORDER BY t.category IS NOT NULL,t.category,n.title LIMIT 1000`,
+  ).all<BlogCandidate>();
+  return { notes: rows.results };
 }
 
 function blogUrl(value: unknown): string | null {
@@ -74,12 +99,54 @@ export async function saveBlogSettings(env: Env, data: Record<string, unknown>):
   const title = textValue(data.title, '博客名称', BLOG_TITLE_LIMIT).trim();
   if (!title) throw new AppError(400, '请填写博客名称。');
   const description = textValue(data.description ?? '', '博客简介', BLOG_DESCRIPTION_LIMIT, true).trim();
+  const theme = data.theme ?? (await blogSettings(env)).theme;
+  if (!BLOG_THEMES.some((item) => item.value === theme)) throw new AppError(400, '没有这个主题。');
   await env.DB.prepare(
-    'UPDATE site SET blog_parent_id=?,blog_title=?,blog_description=?,blog_url=? WHERE id=1',
+    'UPDATE site SET blog_parent_id=?,blog_title=?,blog_description=?,blog_url=?,blog_theme=? WHERE id=1',
   )
-    .bind(parent, title, description, blogUrl(data.url ?? null))
+    .bind(parent, title, description, blogUrl(data.url ?? null), theme)
     .run();
+  if (data.pages !== undefined) await assignPages(env, data.pages);
   return blogSettings(env);
+}
+
+// `pages` holds only what changed: a note already on a page may have left the
+// folder, and that must not stop the rest of the form from saving. A chosen note
+// that was never published goes public here; one already published stays at its
+// pinned version.
+async function assignPages(env: Env, value: unknown) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) throw new AppError(400, '页面设置不正确。');
+  const changes = Object.entries(value as Record<string, unknown>).map(([key, id]) => {
+    if (!blogPagePath(key)) throw new AppError(400, '页面设置不正确。');
+    return [key, id === null ? null : idValue(id)] as const;
+  });
+  if (!changes.length) return;
+  const assigned = new Map((await pageRows(env)).map((row) => [row.page, row.node_id]));
+  for (const [key, id] of changes) {
+    if (id) assigned.set(key, id);
+    else assigned.delete(key);
+  }
+  if (new Set(assigned.values()).size !== assigned.size) throw new AppError(400, '一篇笔记只能对应一个页面。');
+  for (const [, id] of changes) {
+    if (!id) continue;
+    const status = await blogStatus(env, id);
+    if (status.post) continue;
+    if (!status.eligible) throw new AppError(400, '页面只能选择博客目录下未加密的 Markdown 笔记。', 'BLOG_NOT_ELIGIBLE');
+    await publishCurrent(env, await getNode(env, id), await freeSlug(env, id, status.suggestedSlug));
+  }
+  await env.DB.batch(
+    changes.flatMap(([key, id]) => [
+      env.DB.prepare('UPDATE blog_posts SET page=NULL WHERE page=?').bind(key),
+      ...(id ? [env.DB.prepare('UPDATE blog_posts SET page=? WHERE node_id=?').bind(key, id)] : []),
+    ]),
+  );
+}
+
+async function freeSlug(env: Env, id: string, suggested: string) {
+  const fallback = `post-${id.slice(0, 8).toLowerCase()}`;
+  if (!suggested) return fallback;
+  const taken = await env.DB.prepare('SELECT 1 FROM blog_posts WHERE slug=?').bind(suggested).first();
+  return taken ? fallback : suggested;
 }
 
 interface PostRow {
@@ -91,9 +158,10 @@ interface PostRow {
   version_id: string;
   current_version_id: string | null;
   online: number;
+  page: string | null;
 }
 const POST_ROWS = `${BLOG_TREE}
-  SELECT p.node_id,p.slug,p.title,p.published_at,p.updated_at,p.version_id,n.current_version_id,
+  SELECT p.node_id,p.slug,p.title,p.published_at,p.updated_at,p.version_id,p.page,n.current_version_id,
     (t.id IS NOT NULL AND n.kind='markdown' AND b.key_id IS NULL AND b.state='ready') online
   FROM blog_posts p
   JOIN nodes n ON n.id=p.node_id
@@ -108,7 +176,8 @@ const postInfo = (row: PostRow, base: string | null): BlogPostInfo => ({
   updatedAt: row.updated_at,
   online: !!row.online,
   outdated: row.version_id !== row.current_version_id,
-  url: base ? base + postPath(row.slug) : null,
+  url: base ? base + publicPath(row) : null,
+  page: row.page,
 });
 const baseUrl = async (env: Env) =>
   (await env.DB.prepare('SELECT blog_url FROM site WHERE id=1').first<{ blog_url: string | null }>())?.blog_url ?? null;
@@ -146,17 +215,25 @@ export async function publishPost(env: Env, id: string, data: Record<string, unk
   const status = await blogStatus(env, id);
   if (!status.enabled) throw new AppError(400, '请先在设置中选择博客目录。');
   if (!status.eligible) throw new AppError(400, '只有博客目录下未加密的 Markdown 笔记可以发布。', 'BLOG_NOT_ELIGIBLE');
+  const chosen = data.slug === undefined || data.slug === '' ? null : textValue(data.slug, '链接', BLOG_SLUG_LIMIT).trim();
+  if (chosen !== null && !BLOG_SLUG.test(chosen))
+    throw new AppError(400, '链接只能包含文字、数字和连字符。');
+  await publishCurrent(
+    env,
+    node,
+    chosen ?? status.post?.slug ?? (status.suggestedSlug || `post-${id.slice(0, 8).toLowerCase()}`),
+  );
+  return blogStatus(env, id);
+}
+
+async function publishCurrent(env: Env, node: NoteNode, slug: string) {
   const version = await env.DB.prepare(
     'SELECT v.id,v.body_blob_id FROM versions v JOIN blobs b ON b.id=v.body_blob_id WHERE v.id=? AND b.key_id IS NULL',
   )
     .bind(node.current_version_id)
     .first<{ id: string; body_blob_id: string }>();
   if (!version) throw new AppError(409, '这篇笔记还没有可发布的正文。');
-  const chosen = data.slug === undefined || data.slug === '' ? null : textValue(data.slug, '链接', BLOG_SLUG_LIMIT).trim();
-  if (chosen !== null && !BLOG_SLUG.test(chosen))
-    throw new AppError(400, '链接只能包含文字、数字和连字符。');
   const content = await readText(env, version.body_blob_id);
-  const slug = chosen ?? status.post?.slug ?? (status.suggestedSlug || `post-${id.slice(0, 8).toLowerCase()}`);
   const now = Date.now();
   try {
     await env.DB.prepare(
@@ -164,14 +241,13 @@ export async function publishPost(env: Env, id: string, data: Record<string, unk
        ON CONFLICT(node_id) DO UPDATE SET version_id=excluded.version_id,slug=excluded.slug,title=excluded.title,
          summary=excluded.summary,files=excluded.files,updated_at=excluded.updated_at`,
     )
-      .bind(id, version.id, slug, node.title, blogExcerpt(content, node.title), JSON.stringify(blogFiles(content)), now, now)
+      .bind(node.id, version.id, slug, node.title, blogExcerpt(content, node.title), JSON.stringify(blogFiles(content)), now, now)
       .run();
   } catch (error) {
     if (/UNIQUE constraint failed: blog_posts\.slug/.test(String(error)))
       throw new AppError(409, '这个链接已被另一篇文章使用，请换一个。', 'BLOG_SLUG_TAKEN');
     throw error;
   }
-  return blogStatus(env, id);
 }
 
 export async function unpublishPost(env: Env, id: string): Promise<{ ok: true }> {

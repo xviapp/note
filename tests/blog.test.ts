@@ -355,6 +355,133 @@ describe('blog pages', () => {
   });
 });
 
+describe('blog themes and pages', () => {
+  const settings = (extra: object, parentId: string | null) =>
+    call('/api/blog/settings', 'PUT', { parentId, title: '我的博客', description: '简介', url: 'https://blog.test', ...extra });
+  const assign = async (parentId: string, pages: Record<string, string | null>) => {
+    const response = await settings({ pages }, parentId);
+    if (!response.ok) throw new Error(await response.text());
+    return (await response.json()) as BlogSettings;
+  };
+
+  it('applies a theme, keeps it when not sent, and refuses an unknown one', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    expect(await text('/')).toContain('data-theme="paper"');
+    expect((await settings({ theme: 'hacking' }, root)).status).toBe(200);
+    await setRoot(root);
+    const html = await text('/');
+    expect(html).toContain('data-theme="hacking"');
+    expect(html).toContain('data-layout="sidebar"');
+    expect(html).toContain('<meta name="color-scheme" content="dark">');
+    expect((await settings({ theme: '<script>' }, root)).status).toBe(400);
+    expect(await text('/')).toContain('data-theme="hacking"');
+  });
+
+  it('shows a chosen note at its address instead of in the list, feed and categories', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const post = await note('普通文章', root, '普通正文');
+    await publish(post, 'plain');
+    const about = await note('关于我', root, '自我介绍');
+    expect((await ok<{ notes: { id: string }[] }>('/api/blog/candidates')).notes.map(({ id }) => id).sort()).toEqual(
+      [about.id, post.id].sort(),
+    );
+    // Choosing it is what publishes it.
+    expect((await visit('/about')).status).toBe(404);
+    expect((await assign(root, { about: about.id })).pages).toEqual({ about: about.id });
+    const html = await text('/about');
+    expect(html).toContain('自我介绍');
+    expect(html).toContain('aria-current="page">关于');
+    const home = await text('/');
+    expect(home).toContain('href="/about"');
+    expect(home).toContain('普通文章');
+    expect(home).not.toContain('关于我');
+    expect(await text('/feed.xml')).not.toContain('关于我');
+    expect(await text('/sitemap.xml')).toContain('/about');
+    const { slug, url } = (await ok<BlogNoteStatus>(`/api/blog/posts/${about.id}`)).post!;
+    expect(url).toBe('https://blog.test/about');
+    const moved = await visit(`/posts/${encodeURIComponent(slug)}`);
+    expect(moved.status).toBe(301);
+    expect(moved.headers.get('location')).toBe('https://blog.test/about');
+    // Cleared, it is an ordinary published post again.
+    expect((await assign(root, { about: null })).pages).toEqual({});
+    expect((await visit('/about')).status).toBe(404);
+    expect(await text('/')).toContain('关于我');
+  });
+
+  it('moves the post list to /blog when a home page is chosen', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    await publish(await note('普通文章', root, '普通正文'), 'plain');
+    expect((await visit('/blog')).status).toBe(301);
+    const hello = await note('你好', root, '欢迎来到这里');
+    await assign(root, { home: hello.id });
+    const home = await text('/');
+    expect(home).toContain('欢迎来到这里');
+    expect(home).not.toContain('普通文章');
+    expect(await text('/blog')).toContain('普通文章');
+    expect(home).toContain('href="/blog"');
+  });
+
+  it('keeps the pinned version of a note that was already published', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const about = await note('关于', root, '已发布的内容');
+    await publish(about);
+    await save(about.id, '尚未发布的修改');
+    await assign(root, { about: about.id });
+    const html = await text('/about');
+    expect(html).toContain('已发布的内容');
+    expect(html).not.toContain('尚未发布的修改');
+  });
+
+  it('refuses notes that cannot be public, and leaves nothing published', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const outside = await note('私人笔记', null, '私人内容');
+    const refused = await settings({ pages: { about: outside.id } }, root);
+    expect(refused.status).toBe(400);
+    expect((await ok<BlogNoteStatus>(`/api/blog/posts/${outside.id}`)).post).toBeNull();
+    expect(await text('/')).not.toContain('私人笔记');
+    expect((await visit('/about')).status).toBe(404);
+    const one = await note('一篇', root, '内容');
+    expect((await settings({ pages: { about: one.id, resume: one.id } }, root)).status).toBe(400);
+    expect((await settings({ pages: { admin: one.id } }, root)).status).toBe(400);
+    expect((await ok<BlogNoteStatus>(`/api/blog/posts/${one.id}`)).post).toBeNull();
+  });
+
+  it('takes a page offline with its note, and returns it when restored to the folder', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const hello = await note('你好', root, '欢迎来到这里');
+    await assign(root, { home: hello.id });
+    expect(await text('/')).toContain('欢迎来到这里');
+    const move = async (parentId: string | null) => {
+      const { revision } = await ok<NoteDetail>(`/api/nodes/${hello.id}`);
+      await ok(`/api/nodes/${hello.id}`, 'PATCH', { revision, parentId });
+    };
+    await move(null);
+    expect(await text('/')).not.toContain('欢迎来到这里');
+    expect((await visit('/blog')).status).toBe(301);
+    // The page keeps its place, so saving the rest of the form still works.
+    expect((await ok<BlogSettings>('/api/blog/settings')).pages).toEqual({ home: hello.id });
+    expect((await settings({ pages: {} }, root)).status).toBe(200);
+    await move(root);
+    expect(await text('/')).toContain('欢迎来到这里');
+  });
+
+  it('drops the page when its post is unpublished', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const about = await note('关于', root, '内容');
+    await assign(root, { about: about.id });
+    await ok(`/api/blog/posts/${about.id}`, 'DELETE');
+    expect((await ok<BlogSettings>('/api/blog/settings')).pages).toEqual({});
+    expect((await visit('/about')).status).toBe(404);
+  });
+});
+
 describe('blog text helpers', () => {
   it('derives links and summaries', () => {
     expect(blogSlug('  Hello, 世界！ 2026 ')).toBe('hello-世界-2026');

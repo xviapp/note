@@ -2,7 +2,9 @@
 // pages run no script at all.
 import { renderMermaid } from '../mermaid';
 
-const dark = matchMedia('(prefers-color-scheme: dark)').matches;
+// A theme is either fixed or, like the default, follows the system.
+const scheme = document.querySelector<HTMLMetaElement>('meta[name="color-scheme"]')?.content ?? '';
+const dark = scheme === 'dark' || (scheme.includes('dark') && matchMedia('(prefers-color-scheme: dark)').matches);
 for (const block of document.querySelectorAll<HTMLPreElement>('pre.mermaid')) {
   try {
     const image = document.createElement('img');

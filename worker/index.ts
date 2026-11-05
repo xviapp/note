@@ -11,7 +11,7 @@ import {
 import { BACKUP_METADATA_LIMIT } from '../shared/backup';
 import { androidRelease } from './releases';
 import { shareSettings, saveShareSettings } from './sharing';
-import { blogPosts, blogSettings, blogStatus, publishPost, saveBlogSettings, unpublishPost } from './blog';
+import { blogCandidates, blogPosts, blogSettings, blogStatus, publishPost, saveBlogSettings, unpublishPost } from './blog';
 import { AppError, asError, body, enforceOrigin, idValue, integer, json } from './http';
 import { publicAuth, requireSession, accountAuth, editToken, requireEdit } from './auth';
 import { requireTokenScope, tokenRoutes } from './tokens';
@@ -114,6 +114,7 @@ export default {
       if (path === '/api/blog/settings' && method === 'PUT')
         return json(await saveBlogSettings(env, await body(request)));
       if (path === '/api/blog/posts' && method === 'GET') return json(await blogPosts(env));
+      if (path === '/api/blog/candidates' && method === 'GET') return json(await blogCandidates(env));
       const blogPost = path.match(/^\/api\/blog\/posts\/([a-zA-Z0-9_-]{1,80})$/);
       if (blogPost) {
         if (method === 'GET') return json(await blogStatus(env, blogPost[1]));

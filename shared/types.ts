@@ -140,6 +140,9 @@ export interface BlogSettings {
   title: string;
   description: string;
   url: string | null;
+  theme: string;
+  // Page key (BLOG_PAGES) to the note shown there.
+  pages: Record<string, string>;
 }
 export interface BlogPostInfo {
   nodeId: string;
@@ -152,6 +155,13 @@ export interface BlogPostInfo {
   // The note has been saved since it was published.
   outdated: boolean;
   url: string | null;
+  // Shown at this fixed address (BLOG_PAGES) instead of in the post list.
+  page: string | null;
+}
+export interface BlogCandidate {
+  id: string;
+  title: string;
+  category: string | null;
 }
 export interface BlogNoteStatus {
   // A blog folder has been chosen.

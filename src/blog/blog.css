@@ -1,5 +1,6 @@
-/* The public blog: its own small stylesheet, in the colors of the app's light
-   and dark palettes (scripts/theme/brand-theme.ts), following the system theme. */
+/* The public blog: its own small stylesheet. The default theme ("paper") uses the
+   colors of the app's light and dark palettes (scripts/theme/brand-theme.ts) and
+   follows the system; the others are fixed, see the end of this file. */
 :root {
   color-scheme: light dark;
   --canvas: #f9efe2;
@@ -17,7 +18,7 @@
   --font-code: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
 }
 @media (prefers-color-scheme: dark) {
-  :root {
+  :root[data-theme='paper'] {
     --canvas: #191817;
     --surface: #242220;
     --surface-raised: #302d29;
@@ -64,9 +65,23 @@ main {
   font-weight: 700;
   text-decoration: none;
 }
-.site-feed {
-  color: var(--muted);
+.site-mark,
+.site-footer {
+  display: none;
+}
+.site-nav {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 2px 14px;
   font-size: 0.875rem;
+}
+.site-nav a {
+  color: var(--muted);
+}
+.site-nav a[aria-current] {
+  color: var(--link);
+  font-weight: 600;
 }
 main {
   padding-block: 16px 72px;
@@ -226,4 +241,216 @@ article > h1 {
 }
 .markdown-body .mermaid-diagram {
   max-width: 100%;
+}
+
+/* The themes below follow the Typing Jekyll template: a side column of panels, a
+   panel for the content, and a typewriter face for Latin text. Their colors come
+   from it, with links darkened where they fell short of WCAG AA on the panels.
+   Typing (c) 2015-2022 William C. Canin, MIT License. */
+:root[data-layout='sidebar'] {
+  --font-ui: 'Special Elite', 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', serif;
+  --font-body: var(--font-ui);
+  --radius: 20px;
+}
+:root[data-theme='typing'] {
+  color-scheme: light;
+  --canvas: #e4ca91;
+  --surface: #e4ca91;
+  --panel: #ffe6b0;
+  --surface-subtle: #f1d9a3;
+  --ink: #000;
+  --muted: #5a4a26;
+  --line: #1d1d1d;
+  --line-strong: #1d1d1d;
+  --link: #b80d19;
+}
+:root[data-theme='whiteglass'] {
+  color-scheme: light;
+  --canvas: #fff;
+  --surface: #fafafa;
+  --panel: #fff;
+  --surface-subtle: #f1eded;
+  --ink: #000;
+  --muted: #595959;
+  --line: #1b1b1b;
+  --line-strong: #1b1b1b;
+  --link: #5c5c5c;
+}
+:root[data-theme='littlegirl'] {
+  color-scheme: light;
+  --canvas: #ef9ec7;
+  --surface: #e77eb3;
+  --panel: #fab5e4;
+  --surface-subtle: #ef9ec7;
+  --ink: #000;
+  --muted: #4d2440;
+  --line: #5e1f8a;
+  --line-strong: #5e1f8a;
+  --link: #5e1f8a;
+}
+:root[data-theme='hacking'] {
+  color-scheme: dark;
+  --canvas: #000;
+  --surface: #131313;
+  --panel: #0a0a0a;
+  --surface-subtle: #161616;
+  --ink: #fff;
+  --muted: #b5b5b5;
+  --line: #3a3a3a;
+  --line-strong: #636363;
+  --link: #1ad62a;
+}
+:root[data-theme='cloudysky'] {
+  color-scheme: light;
+  --canvas: #f7f7f7;
+  --surface: #fff;
+  --panel: #f3f3f3;
+  --surface-subtle: #e9e9e9;
+  --ink: #000;
+  --muted: #555;
+  --line: #b4b4b4;
+  --line-strong: #b4b4b4;
+  --link: #2f5bd0;
+  --panel-border: #b4b4b4;
+}
+:root[data-layout='sidebar'] .site-shell {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 12px;
+  width: min(1180px, 100%);
+  margin-inline: auto;
+  padding: 16px;
+}
+:root[data-layout='sidebar'] .site-header,
+:root[data-layout='sidebar'] main {
+  width: auto;
+  margin: 0;
+  padding: 0;
+}
+:root[data-layout='sidebar'] .site-header {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+:root[data-layout='sidebar'] .site-name,
+:root[data-layout='sidebar'] .site-nav,
+:root[data-layout='sidebar'] main {
+  border: 1px solid var(--panel-border, transparent);
+  border-radius: var(--radius);
+  background: var(--panel);
+}
+:root[data-layout='sidebar'] .site-name {
+  padding: 12px 16px;
+  color: var(--link);
+  font-size: 1.625rem;
+  line-height: 1.3;
+  text-align: center;
+  text-decoration: underline;
+}
+:root[data-layout='sidebar'] .site-nav {
+  justify-content: flex-start;
+  gap: 2px 16px;
+  padding: 10px 16px;
+  font-size: 1.125rem;
+}
+:root[data-layout='sidebar'] .site-nav a {
+  padding-block: 4px;
+  color: var(--link);
+  font-weight: 700;
+}
+:root[data-layout='sidebar'] .site-nav a[aria-current] {
+  text-decoration: none;
+}
+:root[data-layout='sidebar'] main {
+  min-width: 0;
+  padding: 20px;
+}
+:root[data-layout='sidebar'] a {
+  font-weight: 700;
+}
+:root[data-layout='sidebar'] .post-list li:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+:root[data-layout='sidebar'] .post-summary {
+  padding: 8px 12px;
+  border-radius: 6px;
+  background: var(--surface-subtle);
+}
+:root[data-layout='sidebar'] .markdown-body code {
+  color: var(--ink);
+}
+:root[data-layout='sidebar'] .markdown-body blockquote {
+  padding: 8px 14px;
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--ink);
+}
+:root[data-layout='sidebar'] .site-footer {
+  display: block;
+  padding: 8px 16px 16px;
+  color: var(--muted);
+  font-size: 0.8125rem;
+  text-align: center;
+}
+@media (min-width: 992px) {
+  :root[data-layout='sidebar'] .site-shell {
+    grid-template-columns: 280px minmax(0, 1fr);
+    gap: 28px;
+    align-items: start;
+    padding: 36px 28px 20px;
+  }
+  :root[data-layout='sidebar'] .site-header {
+    position: sticky;
+    top: 24px;
+  }
+  :root[data-layout='sidebar'] .site-mark {
+    display: grid;
+    place-items: center;
+    width: 150px;
+    aspect-ratio: 1;
+    margin: 0 auto 4px;
+    border: 2px solid var(--ink);
+    padding-top: 0.15em;
+    border-radius: 50%;
+    background: var(--panel);
+    color: var(--ink);
+    font-family: var(--font-ui);
+    font-size: 4rem;
+    line-height: 1;
+    text-decoration: none;
+  }
+  :root[data-layout='sidebar'] .site-nav {
+    flex-direction: column;
+  }
+  :root[data-layout='sidebar'] main {
+    padding: 28px 32px 36px;
+  }
+}
+@media print {
+  .site-header,
+  .site-footer,
+  .categories {
+    display: none !important;
+  }
+  :root[data-theme] {
+    color-scheme: light;
+    --canvas: #fff;
+    --ink: #000;
+    --muted: #444;
+    --panel: #fff;
+    --link: #000;
+    --surface: #fff;
+    --surface-subtle: #eee;
+    --line: #999;
+  }
+  :root[data-layout='sidebar'] .site-shell {
+    display: block;
+    padding: 0;
+  }
+  :root[data-layout='sidebar'] main {
+    border: 0;
+    padding: 0;
+  }
 }
