@@ -11,6 +11,7 @@ import {
 import { BACKUP_METADATA_LIMIT } from '../shared/backup';
 import { androidRelease } from './releases';
 import { shareSettings, saveShareSettings } from './sharing';
+import { blogPosts, blogSettings, blogStatus, publishPost, saveBlogSettings, unpublishPost } from './blog';
 import { AppError, asError, body, enforceOrigin, idValue, integer, json } from './http';
 import { publicAuth, requireSession, accountAuth, editToken, requireEdit } from './auth';
 import { requireTokenScope, tokenRoutes } from './tokens';
@@ -109,6 +110,16 @@ export default {
         return json(await saveQuickJournal(env, await body(request)));
       if (path === '/api/share/settings' && method === 'PUT')
         return json(await saveShareSettings(env, await body(request)));
+      if (path === '/api/blog/settings' && method === 'GET') return json(await blogSettings(env));
+      if (path === '/api/blog/settings' && method === 'PUT')
+        return json(await saveBlogSettings(env, await body(request)));
+      if (path === '/api/blog/posts' && method === 'GET') return json(await blogPosts(env));
+      const blogPost = path.match(/^\/api\/blog\/posts\/([a-zA-Z0-9_-]{1,80})$/);
+      if (blogPost) {
+        if (method === 'GET') return json(await blogStatus(env, blogPost[1]));
+        if (method === 'PUT') return json(await publishPost(env, blogPost[1], await body(request)));
+        if (method === 'DELETE') return json(await unpublishPost(env, blogPost[1]));
+      }
       if (path.startsWith('/api/app/android-release') && ['GET', 'HEAD'].includes(method))
         return await androidRelease(request, env);
       if (path === '/api/backups' && method === 'POST') return json(await createBackup(env));

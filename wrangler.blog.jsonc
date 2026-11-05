@@ -1,0 +1,20 @@
+{
+  // The public blog (worker/blog-site.ts) for local development. It shares the
+  // app's local D1 and R2; `wrangler.blog.example.jsonc` is the template for production.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xvi-note-blog",
+  "main": "worker/blog-site.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./dist-blog", "binding": "ASSETS" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "xvi-note",
+      "database_id": "00000000-0000-0000-0000-000000000001",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "r2_buckets": [{ "binding": "FILES", "bucket_name": "xvi-note-files" }],
+  "observability": { "enabled": true },
+}

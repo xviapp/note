@@ -1,0 +1,29 @@
+{
+  // Copy to wrangler.blog.selfhost.jsonc. Use the same account, D1 and R2 as
+  // wrangler.selfhost.jsonc: the blog reads the app's library. See docs/blog.md.
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "xvi-note-blog",
+  "main": "worker/blog-site.ts",
+  "compatibility_date": "2026-10-01",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": { "directory": "./dist-blog", "binding": "ASSETS" },
+  "observability": { "enabled": true },
+  "env": {
+    "production": {
+      "name": "xvi-note-blog",
+      "account_id": "YOUR_CLOUDFLARE_ACCOUNT_ID",
+      "workers_dev": false,
+      "preview_urls": false,
+      "routes": [{ "pattern": "blog.example.com", "custom_domain": true }],
+      "d1_databases": [
+        {
+          "binding": "DB",
+          "database_name": "xvi-note",
+          "database_id": "YOUR_D1_DATABASE_ID",
+          "migrations_dir": "migrations",
+        },
+      ],
+      "r2_buckets": [{ "binding": "FILES", "bucket_name": "xvi-note-files" }],
+    },
+  },
+}

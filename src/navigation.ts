@@ -7,6 +7,7 @@ export const settingsTitles = {
   ai: '青藜',
   offline: '离线缓存',
   share: '保存位置',
+  blog: '博客',
   outbox: '待发送',
   sent: '已发送',
   backup: '备份与恢复',

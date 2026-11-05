@@ -18,6 +18,8 @@
 
 **Clips.** 随手记 is a persistent clipboard outside the node tree: rows in `clips` (text inline, sealed-text prefix when encrypted; an optional image in `blob_id`; `site.clip_key_id` is the key for new ones), API in `worker/clips.ts`. The note being edited registers in `src/note-insert.ts` so clips can be inserted at its cursor. Devices pick clip IDs and queue new clips in a localStorage outbox (`src/clips.ts`) that is sent when online; the panel is `QuickClips`, opened by the `note:clips` window event. Details in `docs/quick-clips.md`.
 
+**Blog.** `worker/blog-site.ts` is a second, read-only Worker on its own domain (`wrangler.blog.jsonc`, `npm run deploy:blog`) sharing the app's D1 and R2; it has no sign-in and no `/api`. `site.blog_parent_id` picks the folder, and a note is public only with a `blog_posts` row, which pins the published version (`saveNote` keeps it past the history window). Every public read starts from `BLOG_TREE` (`worker/blog.ts`), so moving, trashing or encrypting takes a post offline. Details in `docs/blog.md`.
+
 **Encryption.** Any node can be encrypted with a password (`nodes.encryption`: NULL inherits, `'none'`, or a key ID; the effective key is `key_id` from `KEY_SQL`). Content keys live wrapped in `encryption_keys`; sealed objects carry their key in `blobs.key_id` and the `XVE1` header (`shared/encryption.ts`), short D1 fields use the sealed-text prefix. Devices seal bodies, files and annotations themselves (`sealWrite` in `src/api.ts`) and decrypt responses in `reveal()` (`src/encryption.ts`); keys unlocked on a device are in `src/keyring.ts`. Only Worker-processed features (青藜, translation, books, projects) receive keys, via `x-note-keys` → `withKeys()` in `worker/encryption.ts`; any new server-side read of content must go through `readText`/`readBytes` and any new write through `storeText(…, keyId)`. Re-encryption replaces objects in place under the same ID (`syncEncryption`). Details in `docs/encryption.md`.
 
 **Shared contracts.** `shared/` is imported by both `src/` and `worker/`: API types, limits, SVG sanitizer, SSE parsing, assistant token budgeting (`shared/ai-context.ts`) and the backup format. Change limits and types there. New tables need entries in `shared/backup.ts` and restore in `worker/backups.ts`.
@@ -44,6 +46,7 @@ Use Node.js 22.12+ and install with `npm ci` (pnpm also works).
 - `npm test` (Vitest: `worker` project in workerd, `client` project in happy-dom, `cli` project in Node). Single file: `npx vitest run tests/library.test.ts`, add `-t '<name>'` for one test.
 - `npm run test:e2e` serves the built `dist/`, so run `npm run build` first. Single spec: `npx playwright test e2e/notebook.spec.ts --project=desktop`.
 - `pnpm run deploy`: build, migrate production D1, deploy. Keep `run`; bare `pnpm deploy` is a different command. Deploying the site does not update installed APKs.
+- `npm run dev:blog` serves the public blog on port 8788; `npm run deploy:blog` deploys it (needs `wrangler.blog.selfhost.jsonc`).
 - Android (JDK 21, Android SDK 37): `npm run android:apk`, `pnpm install:android`, `node scripts/android.mjs testDebugUnitTest`, `node scripts/android.mjs lintDebug`.
 
 ## Source ownership
@@ -55,7 +58,7 @@ All application source and assets are maintained in this repository. Edit local 
 - User-facing text, error messages, README and `docs/` are Simplified Chinese; code comments and commits are English.
 - Match surrounding code. Base styles live in `src/styles.css`; `src/shell.css` only adds family-specific rules.
 - Docs describe current behavior. Do not add dated validation logs or version histories; release notes go in `docs/releases/<version>.txt`.
-- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, folder import in `docs/import.md`, proxy in `docs/network-proxy.md`, CLI in `docs/cli.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
+- Topic docs: Android in `docs/android.md`, offline cache in `docs/offline-reading.md`, encryption in `docs/encryption.md`, journals in `docs/journals.md`, clips in `docs/quick-clips.md`, search in `docs/search.md`, blog in `docs/blog.md`, folder import in `docs/import.md`, proxy in `docs/network-proxy.md`, CLI in `docs/cli.md`, icons and splash in `docs/branding.md` (follow it for any artwork change), Cloudflare in `docs/cloudflare-deployment.md`.
 
 ## Testing
 

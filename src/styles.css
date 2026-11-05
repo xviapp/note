@@ -4929,3 +4929,46 @@ button.node-list-toggle:focus-visible {
     outline: 2px solid var(--favorite);
   }
 }
+
+/* Blog settings and the publish dialog. */
+.blog-settings .share-setting-row .button {
+  flex: none;
+}
+.blog-form {
+  margin-top: 20px;
+}
+.blog-form fieldset,
+.blog-publish fieldset {
+  display: flex;
+  flex-direction: column;
+  gap: inherit;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+.blog-posts-heading {
+  margin: 28px 0 8px;
+  font-size: 15px;
+}
+.blog-posts {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.blog-posts li {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+  padding-block: 8px;
+  border-top: 1px solid var(--line);
+}
+.blog-posts .text-button {
+  min-width: 0;
+  overflow-wrap: anywhere;
+  text-align: start;
+}
+.blog-posts .small {
+  margin-inline-start: auto;
+}

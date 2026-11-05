@@ -2,6 +2,7 @@ import {
   Archive,
   ChevronRight,
   Download,
+  Globe,
   HardDrive,
   Info,
   LockKeyhole,
@@ -31,6 +32,7 @@ const groups = [
     items: [
       { key: 'offline', icon: Download },
       { key: 'share', icon: Share2 },
+      { key: 'blog', icon: Globe },
       { key: 'outbox', icon: UploadCloud },
       { key: 'backup', icon: Archive },
       { key: 'storage', icon: HardDrive },

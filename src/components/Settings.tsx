@@ -12,6 +12,7 @@ import { BackupSettings } from './BackupSettings';
 import { AppUpdates } from './AppUpdates';
 import { CacheSettings } from './OfflineCache';
 import { ShareSettings } from './ShareSettings';
+import { BlogSettings } from './BlogSettings';
 import { ServerSettings } from './ServerSettings';
 import { OutboxSettings } from './OutboxSettings';
 import { AppLockSettings } from './AppLockSettings';
@@ -82,6 +83,7 @@ export function Settings({
       )}
       {section === 'offline' && <CacheSettings />}
       {section === 'share' && <ShareSettings />}
+      {section === 'blog' && <BlogSettings confirm={confirm} onNavigate={onNavigate} />}
       {(section === 'outbox' || section === 'sent') && (
         <OutboxSettings confirm={confirm} onNavigate={onNavigate} history={section === 'sent'} />
       )}

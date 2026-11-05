@@ -31,6 +31,7 @@ import { NodeList } from './NodeList';
 import { ListControls } from './ListControls';
 import { FastScroll } from './FastScroll';
 import { NodeMenu, type NodeAction } from './Tree';
+import { useBlogPublish } from './BlogPublish';
 import { LockedNote } from './Encryption';
 import { isUnlocked } from '../keyring';
 import { AssistantPanel, type AssistantHandle } from './AssistantPanel';
@@ -170,6 +171,7 @@ export default function NotePane(props: Props) {
     reset,
     onLoaded: props.onLoaded,
   });
+  const blog = useBlogPublish(note, offline || stale);
   const quickMarkdown = useQuickMarkdown({
     id, note, editing, disabled: offline || stale, appending,
     projectContext: props.projectContext,
@@ -551,7 +553,7 @@ export default function NotePane(props: Props) {
           annotationsOpen={annotationPanel}
           onAnnotations={() => setAnnotationsOpen((open) => !(open && !toc.compact))}
           onEdit={() => void openEditor()}
-          menu={quickMarkdown.available ? <>{typeView.menu}{quickMarkdown.menu}</> : typeView.menu}
+          menu={quickMarkdown.available || blog.menu ? <>{typeView.menu}{quickMarkdown.available && quickMarkdown.menu}{blog.menu}</> : typeView.menu}
           extra={typeView.toolbar}
           onAction={props.onAction}
         />
@@ -908,6 +910,7 @@ export default function NotePane(props: Props) {
           </Suspense>
         </Modal>
       )}
+      {blog.dialog}
       {historyOpen && (
         <HistoryDialog
           note={note}

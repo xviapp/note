@@ -1,0 +1,229 @@
+/* The public blog: its own small stylesheet, in the colors of the app's light
+   and dark palettes (scripts/theme/brand-theme.ts), following the system theme. */
+:root {
+  color-scheme: light dark;
+  --canvas: #f9efe2;
+  --surface: #fff8ef;
+  --surface-raised: #fffcf7;
+  --surface-subtle: #f0e1cf;
+  --selected: #efdfc9;
+  --ink: #352e28;
+  --muted: #706357;
+  --line: #ddccb7;
+  --line-strong: #887461;
+  --link: #895332;
+  --font-ui: system-ui, -apple-system, 'Noto Sans SC', 'PingFang SC', 'Microsoft YaHei', sans-serif;
+  --font-body: 'Noto Serif SC', 'Source Han Serif SC', 'Songti SC', Georgia, serif;
+  --font-code: ui-monospace, 'SFMono-Regular', Menlo, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) {
+  :root {
+    --canvas: #191817;
+    --surface: #242220;
+    --surface-raised: #302d29;
+    --surface-subtle: #211f1d;
+    --selected: #35291f;
+    --ink: #eee7dd;
+    --muted: #b9afa2;
+    --line: #47413a;
+    --line-strong: #8e8274;
+    --link: #eba16b;
+  }
+}
+* {
+  box-sizing: border-box;
+}
+body {
+  margin: 0;
+  background: var(--canvas);
+  color: var(--ink);
+  font-family: var(--font-ui);
+  line-height: 1.7;
+  overflow-wrap: anywhere;
+}
+a {
+  color: var(--link);
+}
+.site-header,
+main {
+  width: min(720px, 100%);
+  margin-inline: auto;
+  padding-inline: 20px;
+}
+.site-header {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 32px 12px;
+}
+.site-name {
+  color: var(--ink);
+  font-family: var(--font-body);
+  font-size: 1.25rem;
+  font-weight: 700;
+  text-decoration: none;
+}
+.site-feed {
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+main {
+  padding-block: 16px 72px;
+}
+.site-description {
+  margin: 0 0 24px;
+  color: var(--muted);
+}
+.categories {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 16px;
+  margin-bottom: 16px;
+  font-size: 0.9375rem;
+}
+.categories a {
+  color: var(--muted);
+  text-decoration: none;
+}
+.categories a:hover,
+.categories a[aria-current] {
+  color: var(--link);
+}
+.categories a[aria-current] {
+  font-weight: 600;
+}
+.post-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.post-list li {
+  padding-block: 24px;
+  border-top: 1px solid var(--line);
+}
+.post-list h2 {
+  margin: 0;
+  font-family: var(--font-body);
+  font-size: 1.3125rem;
+  line-height: 1.45;
+}
+.post-list h2 a {
+  color: var(--ink);
+  text-decoration: none;
+}
+.post-list h2 a:hover {
+  color: var(--link);
+}
+.post-meta {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 0.875rem;
+}
+.post-summary {
+  margin: 8px 0 0;
+}
+.empty {
+  color: var(--muted);
+}
+article > h1 {
+  margin: 16px 0 0;
+  font-family: var(--font-body);
+  font-size: clamp(1.625rem, 5vw, 2.125rem);
+  line-height: 1.35;
+}
+.markdown-body {
+  margin-top: 32px;
+  font-family: var(--font-body);
+  font-size: 1.0625rem;
+  line-height: 1.85;
+}
+.markdown-body h1,
+.markdown-body h2,
+.markdown-body h3,
+.markdown-body h4 {
+  margin: 1.8em 0 0.6em;
+  line-height: 1.4;
+}
+.markdown-body h1 {
+  font-size: 1.5em;
+}
+.markdown-body h2 {
+  font-size: 1.3em;
+}
+.markdown-body h3 {
+  font-size: 1.12em;
+}
+.markdown-body img {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin: 1.2em auto;
+  border-radius: 6px;
+}
+.markdown-body blockquote {
+  margin: 1.2em 0;
+  padding-left: 1em;
+  border-left: 3px solid var(--line-strong);
+  color: var(--muted);
+}
+.markdown-body code {
+  padding: 0.1em 0.3em;
+  border-radius: 4px;
+  background: var(--surface-subtle);
+  font-family: var(--font-code);
+  font-size: 0.88em;
+}
+.markdown-body pre {
+  overflow-x: auto;
+  padding: 14px 16px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--surface);
+  font-family: var(--font-code);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-wrap: normal;
+}
+.markdown-body pre code {
+  padding: 0;
+  background: none;
+  font-size: inherit;
+}
+/* Wide math scrolls by itself. A table inside inline math (`cases`, `aligned`)
+   cannot wrap, unlike ordinary inline math, which must stay inline to break. */
+.markdown-body .katex-display,
+.markdown-body .katex:has(.mtable):not(.katex-display > .katex) {
+  overflow-x: auto;
+  overflow-y: hidden;
+  max-width: 100%;
+  overflow-wrap: normal;
+}
+.markdown-body .katex:has(.mtable):not(.katex-display > .katex) {
+  display: inline-block;
+  padding-block: 0.15em;
+  vertical-align: middle;
+}
+.markdown-body table {
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+  max-width: 100%;
+  overflow-wrap: normal;
+}
+.markdown-body th,
+.markdown-body td {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+}
+.markdown-body th {
+  background: var(--surface);
+}
+.markdown-body hr {
+  margin: 2em 0;
+  border: 0;
+  border-top: 1px solid var(--line);
+}
+.markdown-body .mermaid-diagram {
+  max-width: 100%;
+}

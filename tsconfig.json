@@ -20,6 +20,7 @@
     "tests",
     "cli",
     "vite.config.ts",
+    "vite.blog.config.ts",
     "vitest.config.ts",
     "playwright.config.ts",
     "capacitor.config.ts"

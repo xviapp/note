@@ -134,6 +134,33 @@ export interface ShareSettings {
   parentId: string | null;
   breadcrumbs: { id: string; title: string }[];
 }
+export interface BlogSettings {
+  parentId: string | null;
+  breadcrumbs: { id: string; title: string }[];
+  title: string;
+  description: string;
+  url: string | null;
+}
+export interface BlogPostInfo {
+  nodeId: string;
+  slug: string;
+  title: string;
+  publishedAt: number;
+  updatedAt: number;
+  // Visitors can see it: still in the blog folder and not encrypted.
+  online: boolean;
+  // The note has been saved since it was published.
+  outdated: boolean;
+  url: string | null;
+}
+export interface BlogNoteStatus {
+  // A blog folder has been chosen.
+  enabled: boolean;
+  // This note is a plain Markdown note in that folder.
+  eligible: boolean;
+  suggestedSlug: string;
+  post: BlogPostInfo | null;
+}
 export interface NoteDetail extends NoteNode {
   project_id?: string;
   reference?: { target: NoteNode | null };

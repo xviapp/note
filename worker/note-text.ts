@@ -51,14 +51,16 @@ export function forgetStatement(env: Env, nodeId: string) {
 }
 // A folder that became encrypted (or a note moved into one) drops its plain
 // text at once; notes below it that stay unencrypted are indexed again later.
+// The subtree is becoming encrypted: its plain text leaves the search index,
+// and its blog posts go offline along with the titles and summaries they hold.
 export async function forgetSubtree(env: Env, rootId: string) {
-  await env.DB.prepare(
-    `WITH RECURSIVE below(id,depth) AS (
+  const below = `WITH RECURSIVE below(id,depth) AS (
        SELECT ?,0 UNION ALL SELECT n.id,b.depth+1 FROM nodes n JOIN below b ON n.parent_id=b.id WHERE b.depth<200
-     ) DELETE FROM note_text WHERE node_id IN (SELECT id FROM below)`,
-  )
-    .bind(rootId)
-    .run();
+     )`;
+  await env.DB.batch([
+    env.DB.prepare(`${below} DELETE FROM note_text WHERE node_id IN (SELECT id FROM below)`).bind(rootId),
+    env.DB.prepare(`${below} DELETE FROM blog_posts WHERE node_id IN (SELECT id FROM below)`).bind(rootId),
+  ]);
 }
 
 // Indexes up to `limit` notes whose current body is not indexed yet. Small

@@ -590,8 +590,9 @@ export async function saveNote(
           ]
         : []),
       env.DB.prepare(
-        'DELETE FROM versions WHERE node_id=? AND id NOT IN (SELECT id FROM versions WHERE node_id=? ORDER BY sequence DESC LIMIT 6)',
-      ).bind(id, id),
+        // The version a blog post shows outlives the history window.
+        'DELETE FROM versions WHERE node_id=? AND id NOT IN (SELECT id FROM versions WHERE node_id=? ORDER BY sequence DESC LIMIT 6) AND id NOT IN (SELECT version_id FROM blog_posts WHERE node_id=?)',
+      ).bind(id, id, id),
       known && !scope && !node.arxiv_id
         ? indexStatement(env, id, version, node.kind, content)
         : forgetStatement(env, id),

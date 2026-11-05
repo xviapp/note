@@ -56,6 +56,8 @@
 
    命令依次构建、迁移 D1、部署 Worker，任一步失败即停止。使用 pnpm 时运行 `pnpm run deploy`。
 
+   公开博客是单独部署的 Worker，需要时参考[博客](blog.md)。
+
 6. 打开 `https://你的站点/#setup=你的SETUP_TOKEN` 设置密码。初始化后链接失效，不要公开。确认笔记保存、附件下载正常，Cron 每 30 分钟运行，再导出一次[备份](backups.md)。
 
 `npm run cf -- <命令>` 使用实例配置的 `production` 环境。`wrangler.selfhost.jsonc` 已被 Git 忽略，更新源码时保留；模板中的运行配置有变化时同步修改。本地开发使用 `wrangler.jsonc` 和 `.wrangler/state`。

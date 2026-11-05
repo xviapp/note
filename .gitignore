@@ -2,6 +2,7 @@ node_modules/
 public/pdf/
 dist/
 dist-android/
+dist-blog/
 artifacts/
 .wrangler/
 .dev.vars
@@ -21,3 +22,4 @@ coverage/
 
 # Instance-specific Cloudflare deployment configuration
 wrangler.selfhost.jsonc
+wrangler.blog.selfhost.jsonc
