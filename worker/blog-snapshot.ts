@@ -38,20 +38,22 @@ export interface BlogSnapshot {
 }
 
 const ONLINE = blogReach('SELECT node_id FROM blog_posts');
+// CROSS JOIN fixes the order: from the few posts outward, each step by key.
+// D1 keeps no statistics, and other orders scan every note or blob.
 const POSTS = `${ONLINE}
   SELECT p.node_id,p.slug,p.title,p.summary,p.version_id,p.published_at,p.updated_at,p.page,t.category,b.object_key
   FROM blog_tree t
-  JOIN blog_posts p ON p.node_id=t.id
-  JOIN nodes n ON n.id=p.node_id AND n.kind='markdown'
-  JOIN versions v ON v.id=p.version_id AND v.node_id=p.node_id
-  JOIN blobs b ON b.id=v.body_blob_id AND b.key_id IS NULL AND b.state='ready'
+  CROSS JOIN blog_posts p ON p.node_id=t.id
+  CROSS JOIN nodes n ON n.id=p.node_id AND n.kind='markdown'
+  CROSS JOIN versions v ON v.id=p.version_id AND v.node_id=p.node_id
+  CROSS JOIN blobs b ON b.id=v.body_blob_id AND b.key_id IS NULL AND b.state='ready'
   ORDER BY p.published_at DESC,p.node_id`;
 const FILES = `${ONLINE}
   SELECT DISTINCT b.id,b.object_key,b.name,b.mime
   FROM blog_tree t
-  JOIN blog_posts p ON p.node_id=t.id
-  JOIN version_assets a ON a.version_id=p.version_id
-  JOIN blobs b ON b.id=a.blob_id AND b.key_id IS NULL AND b.state='ready'
+  CROSS JOIN blog_posts p ON p.node_id=t.id
+  CROSS JOIN version_assets a ON a.version_id=p.version_id
+  CROSS JOIN blobs b ON b.id=a.blob_id AND b.key_id IS NULL AND b.state='ready'
   WHERE a.blob_id IN (SELECT value FROM json_each(p.files))`;
 
 export async function buildBlogSnapshot(env: Env): Promise<BlogSnapshot> {

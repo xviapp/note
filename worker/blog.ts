@@ -27,28 +27,30 @@ import type { Env } from './types';
 // blogReach() below.
 export const BLOG_TREE = `WITH RECURSIVE blog_tree(id,category,depth) AS (
   SELECT n.id,NULL,0 FROM site s JOIN nodes n ON n.id=s.blog_parent_id
-    WHERE s.id=1 AND n.trash_id IS NULL AND ${KEY_SQL('n')} IS NULL
+    WHERE s.id=1 AND +n.trash_id IS NULL AND ${KEY_SQL('n')} IS NULL
   UNION ALL
   SELECT c.id,CASE WHEN t.depth=0 AND c.kind='folder' THEN c.title ELSE t.category END,t.depth+1
     FROM nodes c JOIN blog_tree t ON c.parent_id=t.id
-    WHERE t.depth<200 AND c.trash_id IS NULL AND (c.encryption IS NULL OR c.encryption='none') AND ${NOT_DISCUSSION('c')}
+    WHERE t.depth<200 AND +c.trash_id IS NULL AND (c.encryption IS NULL OR c.encryption='none') AND ${NOT_DISCUSSION('c')}
 )`;
 // The same rule as BLOG_TREE, checked upward from the notes `starts` selects:
 // a `blog_tree(id,category,depth)` holding those of them BLOG_TREE would reach
 // below the folder. Reads only their ancestors, so a visit costs rows per post,
-// not per note in the folder.
-export const blogReach = (starts: string) => `WITH RECURSIVE blog_root(id) AS (
+// not per note in the folder. D1 keeps no table statistics, so the CTEs are
+// materialized and the unary + hides the trash_id index: otherwise SQLite may
+// start from every live note and read them all.
+export const blogReach = (starts: string) => `WITH RECURSIVE blog_root(id) AS MATERIALIZED (
   SELECT n.id FROM site s JOIN nodes n ON n.id=s.blog_parent_id
-    WHERE s.id=1 AND n.trash_id IS NULL AND ${KEY_SQL('n')} IS NULL
+    WHERE s.id=1 AND +n.trash_id IS NULL AND ${KEY_SQL('n')} IS NULL
 ), blog_up(start,id,parent_id,kind,title,child_kind,child_title,depth) AS (
   SELECT n.id,n.id,n.parent_id,n.kind,n.title,NULL,NULL,0 FROM nodes n
-    WHERE n.id IN (${starts}) AND n.trash_id IS NULL AND (n.encryption IS NULL OR n.encryption='none') AND ${NOT_DISCUSSION('n')}
+    WHERE n.id IN (${starts}) AND +n.trash_id IS NULL AND (n.encryption IS NULL OR n.encryption='none') AND ${NOT_DISCUSSION('n')}
   UNION ALL
   SELECT u.start,a.id,a.parent_id,a.kind,a.title,u.kind,u.title,u.depth+1
     FROM blog_up u JOIN nodes a ON a.id=u.parent_id
     WHERE u.depth<200 AND u.id NOT IN (SELECT id FROM blog_root) AND a.trash_id IS NULL
       AND (a.id IN (SELECT id FROM blog_root) OR ((a.encryption IS NULL OR a.encryption='none') AND ${NOT_DISCUSSION('a')}))
-), blog_tree(id,category,depth) AS (
+), blog_tree(id,category,depth) AS MATERIALIZED (
   SELECT u.start,CASE WHEN u.child_kind='folder' THEN u.child_title END,u.depth
     FROM blog_up u JOIN blog_root r ON r.id=u.id WHERE u.depth>0
 )`;
