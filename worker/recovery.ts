@@ -126,9 +126,10 @@ export async function cleanup(
     id: string;
   }>();
   for (const batch of batches.results) await purgeBatch(env, batch.id);
-  // A few notes per run; the app fills the rest through POST /api/search/index.
-  await indexPending(env, 5).catch(() => {});
   if (!files) return { removed: 0 };
+  // A few notes per file sweep: finding them scans every note, and the app
+  // fills the rest through POST /api/search/index.
+  await indexPending(env, 5).catch(() => {});
   // Old content kept for an export that has since ended or expired.
   const retired = await env.DB.prepare(
     'SELECT object_key FROM retired_objects r WHERE NOT EXISTS(SELECT 1 FROM backup_files f WHERE f.object_key=r.object_key) LIMIT 50',

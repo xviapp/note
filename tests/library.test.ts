@@ -221,9 +221,11 @@ describe('private library behavior', () => {
     expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 2, more: false });
     expect(await ok('/api/search/index', 'POST', {})).toEqual({ indexed: 0, more: false });
     expect((await search()).results).toHaveLength(12);
-    // The scheduled cleanup fills the index too.
+    // The scheduled file sweep fills the index too; the half-hourly run does not.
     await bindings.DB.prepare('DELETE FROM note_text').run();
     await cleanup(bindings, { files: false });
+    expect((await search()).results).toHaveLength(0);
+    await cleanup(bindings);
     expect((await search()).results).toHaveLength(5);
     // Deleting a note for good removes its text.
     const [first] = (await search()).results;

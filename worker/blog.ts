@@ -22,7 +22,9 @@ import type { Env } from './types';
 // neither trashed, encrypted nor a book discussion. Every public read starts
 // here, so moving, trashing or encrypting takes a post offline at once. A
 // sealed folder is not entered at all, even for a 'none' note inside it, so
-// its title never becomes a category.
+// its title never becomes a category. Walking the whole folder reads every
+// note in it, so only the editor's list of candidates does; the rest use
+// blogReach() below.
 export const BLOG_TREE = `WITH RECURSIVE blog_tree(id,category,depth) AS (
   SELECT n.id,NULL,0 FROM site s JOIN nodes n ON n.id=s.blog_parent_id
     WHERE s.id=1 AND n.trash_id IS NULL AND ${KEY_SQL('n')} IS NULL
@@ -30,6 +32,25 @@ export const BLOG_TREE = `WITH RECURSIVE blog_tree(id,category,depth) AS (
   SELECT c.id,CASE WHEN t.depth=0 AND c.kind='folder' THEN c.title ELSE t.category END,t.depth+1
     FROM nodes c JOIN blog_tree t ON c.parent_id=t.id
     WHERE t.depth<200 AND c.trash_id IS NULL AND (c.encryption IS NULL OR c.encryption='none') AND ${NOT_DISCUSSION('c')}
+)`;
+// The same rule as BLOG_TREE, checked upward from the notes `starts` selects:
+// a `blog_tree(id,category,depth)` holding those of them BLOG_TREE would reach
+// below the folder. Reads only their ancestors, so a visit costs rows per post,
+// not per note in the folder.
+export const blogReach = (starts: string) => `WITH RECURSIVE blog_root(id) AS (
+  SELECT n.id FROM site s JOIN nodes n ON n.id=s.blog_parent_id
+    WHERE s.id=1 AND n.trash_id IS NULL AND ${KEY_SQL('n')} IS NULL
+), blog_up(start,id,parent_id,kind,title,child_kind,child_title,depth) AS (
+  SELECT n.id,n.id,n.parent_id,n.kind,n.title,NULL,NULL,0 FROM nodes n
+    WHERE n.id IN (${starts}) AND n.trash_id IS NULL AND (n.encryption IS NULL OR n.encryption='none') AND ${NOT_DISCUSSION('n')}
+  UNION ALL
+  SELECT u.start,a.id,a.parent_id,a.kind,a.title,u.kind,u.title,u.depth+1
+    FROM blog_up u JOIN nodes a ON a.id=u.parent_id
+    WHERE u.depth<200 AND u.id NOT IN (SELECT id FROM blog_root) AND a.trash_id IS NULL
+      AND (a.id IN (SELECT id FROM blog_root) OR ((a.encryption IS NULL OR a.encryption='none') AND ${NOT_DISCUSSION('a')}))
+), blog_tree(id,category,depth) AS (
+  SELECT u.start,CASE WHEN u.child_kind='folder' THEN u.child_title END,u.depth
+    FROM blog_up u JOIN blog_root r ON r.id=u.id WHERE u.depth>0
 )`;
 
 export const postPath = (slug: string) => `/posts/${encodeURIComponent(slug)}`;
@@ -164,7 +185,7 @@ interface PostRow {
   online: number;
   page: string | null;
 }
-const POST_ROWS = `${BLOG_TREE}
+const POST_ROWS = `${blogReach('SELECT node_id FROM blog_posts')}
   SELECT p.node_id,p.slug,p.title,p.summary,p.summary_source,p.published_at,p.updated_at,p.version_id,p.page,n.current_version_id,
     (t.id IS NOT NULL AND n.kind='markdown' AND b.key_id IS NULL AND b.state='ready') online
   FROM blog_posts p
@@ -200,7 +221,7 @@ export async function blogStatus(env: Env, id: string): Promise<BlogNoteStatus> 
   const node = await getNode(env, id);
   const [settings, inTree, post, base] = await Promise.all([
     env.DB.prepare('SELECT blog_parent_id FROM site WHERE id=1').first<{ blog_parent_id: string | null }>(),
-    env.DB.prepare(`${BLOG_TREE} SELECT 1 FROM blog_tree WHERE id=? AND depth>0`).bind(id).first(),
+    env.DB.prepare(`${blogReach('SELECT ?')} SELECT 1 FROM blog_tree WHERE id=? AND depth>0`).bind(id, id).first(),
     env.DB.prepare(`${POST_ROWS} WHERE p.node_id=?`).bind(id).first<PostRow>(),
     baseUrl(env),
   ]);

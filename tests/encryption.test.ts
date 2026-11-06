@@ -439,7 +439,7 @@ describe('encrypted notes', () => {
       size: number;
     }>();
     expect(site!.allocated_bytes).toBe(blobs!.size);
-    expect((await bindings.FILES.list()).objects).toHaveLength(1);
+    expect((await bindings.FILES.list({ prefix: 'objects/' })).objects).toHaveLength(1);
   });
   it('gives each note its own copy of a file another place uses', async () => {
     const image = new TextEncoder().encode('<svg xmlns="http://www.w3.org/2000/svg"/>');

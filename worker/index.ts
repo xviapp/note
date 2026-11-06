@@ -38,6 +38,7 @@ import {
   versionsList,
 } from './library';
 import { discardFile, serveFile, storageInfo, storageUsage, uploadFile } from './storage';
+import { refreshBlog } from './blog-snapshot';
 import { cleanup, deletePreview, listTrash, purgeTrash, restoreTrash, trashNode } from './recovery';
 import { favorite, openReading, readingState, saveReading } from './reading';
 import { aiSettings, configureProvider, saveAiSettings, testAiSettings } from './deepseek';
@@ -93,7 +94,19 @@ import {
   updateClip,
 } from './clips';
 
-export default {
+// Requests that cannot change what the blog shows: saves (a post shows its
+// pinned version), reading state, annotations, chat, translations, clips,
+// uploads, tokens, sign-in and re-sealing objects (posts leave the blog when
+// the encryption is set, before that). Every other change rebuilds the blog snapshot.
+const BLOG_UNAFFECTED =
+  /^\/api\/(?:auth|edit|search|files|clips|ai|tokens)\/|^\/api\/(?:files|clips|tokens)$|^\/api\/nodes\/[^/]+\/(?:content|annotations|translations|assistant|paper-translation|favorite|open|reading|insights|encryption\/fields|encryption\/objects)(?:\/|$)/;
+const refreshesBlog = (request: Request, url: URL, response: Response) =>
+  response.ok &&
+  !['GET', 'HEAD', 'OPTIONS'].includes(request.method) &&
+  url.pathname.startsWith('/api/') &&
+  !BLOG_UNAFFECTED.test(url.pathname);
+
+const app = {
   async fetch(request: Request, baseEnv: Env, execution: ExecutionContext): Promise<Response> {
     let env = baseEnv;
     const url = new URL(request.url);
@@ -433,6 +446,18 @@ export default {
       return json({ ...known.details, error: known.message, code: known.code }, known.status);
     }
   },
+};
+
+export default {
+  async fetch(request: Request, env: Env, execution: ExecutionContext): Promise<Response> {
+    const response = await app.fetch(request, env, execution);
+    // Before answering, so a post taken offline is gone once the app says so.
+    if (refreshesBlog(request, new URL(request.url), response))
+      await refreshBlog(env).catch((error) =>
+        console.error('Blog snapshot failed', error instanceof Error ? error.message : String(error)),
+      );
+    return response;
+  },
   async scheduled(
     event: ScheduledController,
     env: Env,
@@ -440,6 +465,8 @@ export default {
   ): Promise<void> {
     // Use the scheduled slot, so delayed delivery still runs the intended maintenance.
     const slot = Math.floor(event.scheduledTime / (30 * 60_000));
-    execution.waitUntil(cleanup(env, { files: slot % 12 === 0, idempotency: slot % 48 === 0 }));
+    execution.waitUntil(
+      cleanup(env, { files: slot % 12 === 0, idempotency: slot % 48 === 0 }).finally(() => refreshBlog(env).catch(() => {})),
+    );
   },
 } satisfies ExportedHandler<Env>;

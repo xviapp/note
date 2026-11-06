@@ -4,6 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { Env } from '../worker/types';
 import type { BlogNoteStatus, BlogPostInfo, BlogSettings, NoteDetail, NoteNode } from '../shared/types';
 import { handleBlog } from '../worker/blog-site';
+import { BLOG_SNAPSHOT_KEY, refreshBlog } from '../worker/blog-snapshot';
 import { cleanup } from '../worker/recovery';
 import { blogExcerpt, blogSlug } from '../shared/blog';
 import { preparePassword } from '../shared/password';
@@ -84,6 +85,7 @@ beforeEach(async () => {
       'UPDATE site SET password_hash=NULL,password_salt=NULL,auth_epoch=0,quota_bytes=8000000000,allocated_bytes=0 WHERE id=1',
     ),
   ]);
+  await bindings.FILES.delete(BLOG_SNAPSHOT_KEY);
   const setup = await SELF.fetch(`${ORIGIN}/api/auth/setup`, {
     method: 'POST',
     headers: { origin: ORIGIN, 'content-type': 'application/json' },
@@ -346,6 +348,39 @@ describe('blog pages', () => {
     expect(await text('/robots.txt')).toContain('Sitemap: https://blog.test/sitemap.xml');
   });
 
+  it('serves visits from the snapshot without touching D1', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    await publish(await note('静态', root, '正文'), 'static');
+    const offline = {
+      ...bindings,
+      DB: new Proxy(bindings.DB, {
+        get() {
+          throw new Error('D1 was queried');
+        },
+      }),
+    } as Env;
+    const visitOffline = (path: string) => handleBlog(new Request(`https://blog.test${path}`), offline);
+    for (const path of ['/', '/posts/static', '/feed.xml', '/sitemap.xml', '/missing'])
+      expect([200, 404]).toContain((await visitOffline(path)).status);
+    expect(await (await visitOffline('/posts/static')).text()).toContain('正文');
+  });
+
+  it('rebuilds the snapshot when a category folder is renamed, and only then', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const tech = await folder('技术', root);
+    const post = await note('文章', tech, '正文');
+    await publish(post, 'post');
+    expect(await text('/')).toContain(encodeURIComponent('技术'));
+    const before = await bindings.FILES.head(BLOG_SNAPSHOT_KEY);
+    await save(post.id, '新正文');
+    expect((await bindings.FILES.head(BLOG_SNAPSHOT_KEY))?.etag).toBe(before?.etag);
+    const { revision } = await ok<NoteDetail>(`/api/nodes/${tech}`);
+    await ok(`/api/nodes/${tech}`, 'PATCH', { title: '编程', revision });
+    expect(await text('/')).toContain(encodeURIComponent('编程'));
+  });
+
   it('only reads: no other methods, and no app routes', async () => {
     const root = await folder('博客');
     await setRoot(root);
@@ -497,6 +532,7 @@ describe('blog font preloading', () => {
     expect(math).not.toContain('special-elite');
     expect(await text('/posts/plain')).not.toContain('rel="preload"');
     await bindings.DB.prepare("UPDATE site SET blog_theme='typing' WHERE id=1").run();
+    await refreshBlog(bindings);
     expect(await text('/posts/plain')).toContain('/assets/fonts/special-elite-latin-400-normal.woff2');
   });
 });

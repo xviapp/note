@@ -2,45 +2,12 @@
 // domain. It only reads, has no sign-in and exposes no /api route, so nothing
 // private is reachable from that domain. See docs/blog.md.
 import { BLOG_PAGES, BLOG_THEMES, blogPagePath, DEFAULT_BLOG_THEME } from '../shared/blog';
-import { BLOG_TREE, publicPath } from './blog';
+import { publicPath } from './blog';
 import { renderPost } from './blog-render';
+import { type BlogFile, type BlogPost as Post, type BlogSite as Site, readBlogSnapshot } from './blog-snapshot';
+import { SEALED_MAGIC } from '../shared/encryption';
 import type { Env } from './types';
 
-interface Site {
-  blog_parent_id: string | null;
-  blog_title: string;
-  blog_description: string;
-  blog_theme: string;
-}
-interface Post {
-  node_id: string;
-  slug: string;
-  title: string;
-  summary: string;
-  version_id: string;
-  published_at: number;
-  updated_at: number;
-  category: string | null;
-  object_key: string;
-  page: string | null;
-}
-const POSTS = `${BLOG_TREE}
-  SELECT p.node_id,p.slug,p.title,p.summary,p.version_id,p.published_at,p.updated_at,p.page,t.category,b.object_key
-  FROM blog_tree t
-  JOIN blog_posts p ON p.node_id=t.id
-  JOIN nodes n ON n.id=p.node_id AND n.kind='markdown'
-  JOIN versions v ON v.id=p.version_id AND v.node_id=p.node_id
-  JOIN blobs b ON b.id=v.body_blob_id AND b.key_id IS NULL AND b.state='ready'
-  ORDER BY p.published_at DESC,p.node_id`;
-// Only a file its post's published body names, whatever else the note holds.
-const FILE = `${BLOG_TREE}
-  SELECT b.object_key,b.name,b.mime
-  FROM blog_tree t
-  JOIN blog_posts p ON p.node_id=t.id
-  JOIN version_assets a ON a.version_id=p.version_id AND a.blob_id=?
-  JOIN blobs b ON b.id=a.blob_id AND b.key_id IS NULL AND b.state='ready'
-  WHERE a.blob_id IN (SELECT value FROM json_each(p.files))
-  LIMIT 1`;
 // Bump when renderPost's output changes for the same Markdown.
 const RENDER_VERSION = 1;
 const RENDER_TTL_SECONDS = 86_400;
@@ -206,7 +173,7 @@ function categoryNav(posts: Post[], active?: string): string {
 // Rendering a long post with formulas can take longer than the CPU a Worker
 // gets, so the result is kept. Links to other posts are part of the output,
 // hence the stamp of the whole published set. Access checks are never cached.
-async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Promise<string> {
+async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Promise<string | null> {
   const pages = posts.flatMap((item) => (item.page ? [`${item.page}.${item.node_id}`] : [])).sort().join();
   const stamp = encodeURIComponent(`${posts.length}-${Math.max(...posts.map((item) => item.updated_at))}-${pages}`);
   const key = new Request(`${url.origin}/__rendered/${RENDER_VERSION}/${post.version_id}/${stamp}`);
@@ -216,15 +183,17 @@ async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Prom
   const object = await env.FILES.get(post.object_key);
   if (!object) throw new Error('Post body is missing');
   const hrefs = new Map(posts.map((item) => [item.node_id, publicPath(item)]));
-  const html = renderPost(await object.text(), post.title, (id) => hrefs.get(id) ?? null);
+  const markdown = await object.text();
+  // Sealed since the snapshot was written: the next refresh drops the post.
+  if (markdown.startsWith(SEALED_MAGIC)) return null;
+  const html = renderPost(markdown, post.title, (id) => hrefs.get(id) ?? null);
   await cache
     ?.put(key, new Response(html, { headers: { 'cache-control': `public, max-age=${RENDER_TTL_SECONDS}` } }))
     .catch(() => {});
   return html;
 }
 
-async function serveFile(env: Env, request: Request, id: string): Promise<Response | null> {
-  const file = await env.DB.prepare(FILE).bind(id).first<{ object_key: string; name: string; mime: string }>();
+async function serveFile(env: Env, request: Request, file: BlogFile | undefined): Promise<Response | null> {
   if (!file) return null;
   const object =
     request.method === 'HEAD' ? await env.FILES.head(file.object_key) : await env.FILES.get(file.object_key);
@@ -289,9 +258,8 @@ export async function handleBlog(request: Request, env: Env): Promise<Response> 
     path = url.pathname;
   if (path === '/robots.txt')
     return respond(request, `User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, 'text/plain');
-  const site = await env.DB.prepare(
-    'SELECT blog_parent_id,blog_title,blog_description,blog_theme FROM site WHERE id=1',
-  ).first<Site>();
+  // Visits read only the snapshot; D1 is not touched (worker/blog-snapshot.ts).
+  const { site, posts, files } = await readBlogSnapshot(env);
   if (!site?.blog_parent_id)
     return notFound(
       request,
@@ -302,8 +270,7 @@ export async function handleBlog(request: Request, env: Env): Promise<Response> 
     );
   const file = path.match(/^\/files\/([a-zA-Z0-9_-]{1,80})$/);
   if (file)
-    return (await serveFile(env, request, file[1])) ?? notFound(request, site, url);
-  const posts = (await env.DB.prepare(POSTS).all<Post>()).results;
+    return (await serveFile(env, request, Object.hasOwn(files, file[1]) ? files[file[1]] : undefined)) ?? notFound(request, site, url);
   const listed = posts.filter((post) => !post.page);
   const home = posts.find((post) => post.page === 'home');
   if (path === '/feed.xml') return feed(request, site, url, posts);
@@ -346,6 +313,7 @@ export async function handleBlog(request: Request, env: Env): Promise<Response> 
 
 async function showPost(request: Request, env: Env, site: Site, url: URL, post: Post, posts: Post[]) {
   const html = await renderedPost(env, url, post, posts);
+  if (html === null) return notFound(request, site, url, posts);
   const meta = post.page
     ? ''
     : `<p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${
