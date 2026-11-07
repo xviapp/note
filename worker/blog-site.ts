@@ -1,11 +1,14 @@
 // The public blog, deployed as its own Worker (wrangler.blog.jsonc) on its own
-// domain. It only reads, has no sign-in and exposes no /api route, so nothing
-// private is reachable from that domain. See docs/blog.md.
+// domain. It never changes notes (it writes only the snapshot, when that is
+// missing), has no sign-in and exposes no /api route, so nothing private is
+// reachable from that domain. It still needs the D1 binding to build a missing
+// snapshot. See docs/blog.md.
 import { BLOG_PAGES, BLOG_THEMES, blogPagePath, DEFAULT_BLOG_THEME } from '../shared/blog';
 import { publicPath } from './blog';
 import { renderPost } from './blog-render';
 import { type BlogFile, type BlogPost as Post, type BlogSite as Site, readBlogSnapshot } from './blog-snapshot';
-import { SEALED_MAGIC } from '../shared/encryption';
+import { sealedKeyId } from '../shared/encryption';
+import { digest } from './auth';
 import type { Env } from './types';
 
 // Bump when renderPost's output changes for the same Markdown.
@@ -172,20 +175,21 @@ function categoryNav(posts: Post[], active?: string): string {
 
 // Rendering a long post with formulas can take longer than the CPU a Worker
 // gets, so the result is kept. Links to other posts are part of the output,
-// hence the stamp of the whole published set. Access checks are never cached.
+// hence the stamp of every online post's address. Access checks are never cached.
 async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Promise<string | null> {
-  const pages = posts.flatMap((item) => (item.page ? [`${item.page}.${item.node_id}`] : [])).sort().join();
-  const stamp = encodeURIComponent(`${posts.length}-${Math.max(...posts.map((item) => item.updated_at))}-${pages}`);
+  const addresses = posts.map((item) => `${item.node_id}=${publicPath(item)}`).sort().join('\n');
+  const stamp = encodeURIComponent(await digest(addresses));
   const key = new Request(`${url.origin}/__rendered/${RENDER_VERSION}/${post.version_id}/${stamp}`);
   const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default;
   const hit = await cache?.match(key).catch(() => undefined);
   if (hit) return hit.text();
+  // Gone or sealed since the snapshot was written: the next refresh drops it.
   const object = await env.FILES.get(post.object_key);
-  if (!object) throw new Error('Post body is missing');
+  if (!object) return null;
+  const bytes = new Uint8Array(await object.arrayBuffer());
+  if (sealedKeyId(bytes)) return null;
   const hrefs = new Map(posts.map((item) => [item.node_id, publicPath(item)]));
-  const markdown = await object.text();
-  // Sealed since the snapshot was written: the next refresh drops the post.
-  if (markdown.startsWith(SEALED_MAGIC)) return null;
+  const markdown = new TextDecoder().decode(bytes);
   const html = renderPost(markdown, post.title, (id) => hrefs.get(id) ?? null);
   await cache
     ?.put(key, new Response(html, { headers: { 'cache-control': `public, max-age=${RENDER_TTL_SECONDS}` } }))
@@ -258,7 +262,7 @@ export async function handleBlog(request: Request, env: Env): Promise<Response> 
     path = url.pathname;
   if (path === '/robots.txt')
     return respond(request, `User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, 'text/plain');
-  // Visits read only the snapshot; D1 is not touched (worker/blog-snapshot.ts).
+  // Visits read the snapshot; D1 only builds it when it is missing (worker/blog-snapshot.ts).
   const { site, posts, files } = await readBlogSnapshot(env);
   if (!site?.blog_parent_id)
     return notFound(
