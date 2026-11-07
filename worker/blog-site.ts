@@ -175,10 +175,11 @@ function categoryNav(posts: Post[], active?: string): string {
 
 // Rendering a long post with formulas can take longer than the CPU a Worker
 // gets, so the result is kept. Links to other posts are part of the output,
-// hence the stamp of every online post's address. Access checks are never cached.
+// hence the stamp of every online post's address, and the title decides
+// whether a first heading repeating it is dropped. Access checks are never cached.
 async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Promise<string | null> {
   const addresses = posts.map((item) => `${item.node_id}=${publicPath(item)}`).sort().join('\n');
-  const stamp = encodeURIComponent(await digest(addresses));
+  const stamp = encodeURIComponent(await digest(`${post.title}\n${addresses}`));
   const key = new Request(`${url.origin}/__rendered/${RENDER_VERSION}/${post.version_id}/${stamp}`);
   const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default;
   const hit = await cache?.match(key).catch(() => undefined);

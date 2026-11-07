@@ -142,6 +142,19 @@ describe('blog visibility', () => {
     expect(await text(`/posts/${encodeURIComponent('文章')}`)).toContain('第二版');
   });
 
+  it('renders again when a rename changes which heading repeats the title', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const post = await note('旧标题', root, '# 新标题\n\n正文');
+    await publish(post, 'renamed');
+    const headings = async () => (await text('/posts/renamed')).match(/<h1[^>]*>新标题<\/h1>/g)?.length ?? 0;
+    expect(await headings()).toBe(1);
+    const { revision } = await ok<NoteDetail>(`/api/nodes/${post.id}`);
+    const renamed = await ok<NoteNode>(`/api/nodes/${post.id}`, 'PATCH', { title: '新标题', revision });
+    await publish(renamed, 'renamed');
+    expect(await headings()).toBe(1);
+  });
+
   it('refuses to publish a version the author has not seen', async () => {
     const root = await folder('博客');
     await setRoot(root);
