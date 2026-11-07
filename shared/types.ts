@@ -1,3 +1,4 @@
+import type { BlogPageKey } from './blog';
 import type { PasswordParameters } from './password';
 import type { ProjectCategory } from './projects';
 
@@ -141,8 +142,13 @@ export interface BlogSettings {
   description: string;
   url: string | null;
   theme: string;
-  // Page key (BLOG_PAGES) to the note shown there.
+  // Note page key (NOTE_PAGES) to the note shown there.
   pages: Record<string, string>;
+  // The first-level folders listed as articles and as projects.
+  articlesFolderId: string | null;
+  projectsFolderId: string | null;
+  // The section (BLOG_PAGES) shown at /.
+  home: BlogPageKey;
 }
 export type BlogSummarySource = 'excerpt' | 'ai' | 'manual';
 export interface BlogPostInfo {

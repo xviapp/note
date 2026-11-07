@@ -3,13 +3,17 @@
 // alter what is public (see refreshesBlog in worker/index.ts) and on each cron
 // run; the blog Worker builds it only when it is missing. See docs/blog.md.
 import { digest } from './auth';
-import { blogReach } from './blog';
+import { blogReach, SHOWN } from './blog';
 import type { Env } from './types';
 
 export const BLOG_SNAPSHOT_KEY = 'blog/snapshot.json';
 
 export interface BlogSite {
   blog_parent_id: string | null;
+  // Missing from snapshots written before sections.
+  blog_articles_id?: string | null;
+  blog_projects_id?: string | null;
+  blog_home?: string;
   blog_title: string;
   blog_description: string;
   blog_theme: string;
@@ -23,6 +27,8 @@ export interface BlogPost {
   published_at: number;
   updated_at: number;
   category: string | null;
+  // The first-level folder it is in, the articles or the projects one.
+  section_id?: string | null;
   object_key: string;
   page: string | null;
 }
@@ -42,24 +48,27 @@ const ONLINE = blogReach('SELECT node_id FROM blog_posts');
 // CROSS JOIN fixes the order: from the few posts outward, each step by key.
 // D1 keeps no statistics, and other orders scan every note or blob.
 const POSTS = `${ONLINE}
-  SELECT p.node_id,p.slug,p.title,p.summary,p.version_id,p.published_at,p.updated_at,p.page,t.category,b.object_key
+  SELECT p.node_id,p.slug,p.title,p.summary,p.version_id,p.published_at,p.updated_at,p.page,t.category,t.section_id,b.object_key
   FROM blog_tree t
   CROSS JOIN blog_posts p ON p.node_id=t.id
+  CROSS JOIN site s ON s.id=1
   CROSS JOIN nodes n ON n.id=p.node_id AND n.kind='markdown'
   CROSS JOIN versions v ON v.id=p.version_id AND v.node_id=p.node_id
   CROSS JOIN blobs b ON b.id=v.body_blob_id AND b.key_id IS NULL AND b.state='ready'
+  WHERE ${SHOWN}
   ORDER BY p.published_at DESC,p.node_id`;
 const FILES = `${ONLINE}
   SELECT DISTINCT b.id,b.object_key,b.name,b.mime
   FROM blog_tree t
   CROSS JOIN blog_posts p ON p.node_id=t.id
+  CROSS JOIN site s ON s.id=1
   CROSS JOIN version_assets a ON a.version_id=p.version_id
   CROSS JOIN blobs b ON b.id=a.blob_id AND b.key_id IS NULL AND b.state='ready'
-  WHERE a.blob_id IN (SELECT value FROM json_each(p.files))`;
+  WHERE ${SHOWN} AND a.blob_id IN (SELECT value FROM json_each(p.files))`;
 
 export async function buildBlogSnapshot(env: Env): Promise<BlogSnapshot> {
   const site =
-    (await env.DB.prepare('SELECT blog_parent_id,blog_title,blog_description,blog_theme FROM site WHERE id=1').first<BlogSite>()) ??
+    (await env.DB.prepare('SELECT blog_parent_id,blog_articles_id,blog_projects_id,blog_home,blog_title,blog_description,blog_theme FROM site WHERE id=1').first<BlogSite>()) ??
     null;
   // No blog: nothing to walk.
   if (!site?.blog_parent_id) return { site, posts: [], files: {} };

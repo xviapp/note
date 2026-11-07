@@ -123,7 +123,7 @@ function PublishDialog({
           )}
           {post && !post.online && (
             <p className="inline-error" role="status">
-              这篇文章目前没有显示在博客上：笔记已不在博客目录内。移回目录后会恢复显示。
+              这篇文章目前没有显示在博客上：笔记不在文章或项目文件夹里。移进去或在设置里选作页面后会恢复显示。
             </p>
           )}
           {post?.online && (

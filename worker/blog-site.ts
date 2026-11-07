@@ -3,7 +3,7 @@
 // missing), has no sign-in and exposes no /api route, so nothing private is
 // reachable from that domain. It still needs the D1 binding to build a missing
 // snapshot. See docs/blog.md.
-import { BLOG_PAGES, BLOG_THEMES, blogPagePath, DEFAULT_BLOG_THEME } from '../shared/blog';
+import { BLOG_PAGES, BLOG_THEMES, type BlogPageKey, blogPagePath, DEFAULT_BLOG_THEME, isBlogPage } from '../shared/blog';
 import { publicPath } from './blog';
 import { renderPost } from './blog-render';
 import { type BlogFile, type BlogPost as Post, type BlogSite as Site, readBlogSnapshot } from './blog-snapshot';
@@ -68,27 +68,62 @@ function respond(request: Request, body: string, type: string, status = 200): Re
   });
 }
 
-// The menu: the post list, then each page that has a note online.
-function navigation(posts: Post[], current: string): string {
-  const has = new Set(posts.map((post) => post.page));
+// What one request works with: the sections that have something to show,
+// the one at / (the chosen home, or the first present when it has nothing),
+// and the posts of each list.
+interface Blog {
+  site: Site;
+  posts: Post[];
+  articles: Post[];
+  projects: Post[];
+  present: BlogPageKey[];
+  home: BlogPageKey | null;
+}
+function blogOf(site: Site, posts: Post[]): Blog {
+  const inFolder = (folder: string | null | undefined) =>
+    posts.filter((post) => !post.page && !!folder && post.section_id === folder);
+  const articles = inFolder(site.blog_articles_id),
+    projects = inFolder(site.blog_projects_id);
+  const present = BLOG_PAGES.map((item) => item.key).filter((key) =>
+    key === 'articles'
+      ? !!site.blog_articles_id
+      : key === 'projects'
+        ? projects.length > 0
+        : posts.some((post) => post.page === key),
+  );
+  const chosen = isBlogPage(site.blog_home) ? site.blog_home : 'articles';
+  return { site, posts, articles, projects, present, home: present.includes(chosen) ? chosen : (present[0] ?? null) };
+}
+const pathOf = (blog: Blog, key: BlogPageKey) => blogPagePath(key, blog.home ?? undefined)!;
+const hrefOf = (blog: Blog, post: Post) => publicPath(post, blog.home ?? undefined);
+const labelOf = (key: BlogPageKey) => BLOG_PAGES.find((item) => item.key === key)!.label;
+const isProject = (blog: Blog, post: Post) => blog.projects.includes(post);
+// Where a post's meta line points: its category, or the projects list.
+const sectionLink = (blog: Blog, post: Post) =>
+  isProject(blog, post)
+    ? ` · <a href="${pathOf(blog, 'projects')}">${labelOf('projects')}</a>`
+    : post.category
+      ? ` · <a href="${categoryPath(post.category)}">${escapeHtml(post.category)}</a>`
+      : '';
+
+// The menu: each section that has something to show, then the feed.
+function navigation(blog: Blog, current: string): string {
   const link = (href: string, label: string) =>
     `<a href="${href}"${href === current ? ' aria-current="page"' : ''}>${label}</a>`;
   return [
-    ...(has.has('home') ? [link('/', '首页')] : []),
-    link(has.has('home') ? '/blog' : '/', '文章'),
-    ...BLOG_PAGES.filter((item) => item.key !== 'home' && has.has(item.key)).map((item) => link(item.path, item.label)),
-    '<a href="/feed.xml">RSS</a>',
+    ...blog.present.map((key) => link(pathOf(blog, key), labelOf(key))),
+    ...(blog.articles.length ? ['<a href="/feed.xml">RSS</a>'] : []),
   ].join('');
 }
 
 function page(
   request: Request,
-  site: Site,
+  blog: Blog,
   head: { title: string; description?: string; canonical: string; article?: boolean; mermaid?: boolean; fonts?: string[] },
   main: string,
-  posts: Post[] = [],
   status = 200,
 ): Response {
+  const { site } = blog;
   const description = head.description ?? site.blog_description;
   const title = escapeHtml(head.title),
     name = escapeHtml(site.blog_title);
@@ -121,7 +156,7 @@ ${head.mermaid ? '<script type="module" src="/assets/blog.js"></script>' : ''}
 <header class="site-header">
 <a class="site-mark" href="/" aria-hidden="true" tabindex="-1">${escapeHtml(Array.from(site.blog_title)[0] ?? '')}</a>
 <a class="site-name" href="/">${name}</a>
-<nav class="site-nav" aria-label="页面">${navigation(posts, new URL(request.url).pathname)}</nav>
+<nav class="site-nav" aria-label="页面">${navigation(blog, new URL(request.url).pathname)}</nav>
 </header>
 <main>${main}</main>
 </div>
@@ -133,25 +168,24 @@ ${head.mermaid ? '<script type="module" src="/assets/blog.js"></script>' : ''}
   );
 }
 
-function notFound(request: Request, site: Site, url: URL, posts: Post[] = [], message = '这个页面不存在或已下线。') {
+function notFound(request: Request, blog: Blog, url: URL, message = '这个页面不存在或已下线。') {
   return page(
     request,
-    site,
-    { title: `未找到 · ${site.blog_title}`, canonical: url.origin + url.pathname },
+    blog,
+    { title: `未找到 · ${blog.site.blog_title}`, canonical: url.origin + url.pathname },
     `<article class="empty"><h1>未找到</h1><p>${escapeHtml(message)}</p><p><a href="/">返回首页</a></p></article>`,
-    posts,
     404,
   );
 }
 
-function postList(posts: Post[]): string {
+function postList(blog: Blog, posts: Post[], sections = true): string {
   if (!posts.length) return '<p class="empty">还没有文章。</p>';
   return `<ol class="post-list">${posts
     .map(
       (post) => `<li>
-<h2><a href="${publicPath(post)}">${escapeHtml(post.title)}</a></h2>
+<h2><a href="${hrefOf(blog, post)}">${escapeHtml(post.title)}</a></h2>
 <p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${
-        post.category ? ` · <a href="${categoryPath(post.category)}">${escapeHtml(post.category)}</a>` : ''
+        sections ? sectionLink(blog, post) : ''
       }</p>
 ${post.summary ? `<p class="post-summary">${escapeHtml(post.summary)}</p>` : ''}
 </li>`,
@@ -159,13 +193,14 @@ ${post.summary ? `<p class="post-summary">${escapeHtml(post.summary)}</p>` : ''}
     .join('')}</ol>`;
 }
 
-function categoryNav(posts: Post[], active?: string): string {
+function categoryNav(blog: Blog, active?: string): string {
+  const posts = blog.articles;
   const names = [...new Set(posts.map((post) => post.category).filter((name): name is string => !!name))].sort((a, b) =>
     a.localeCompare(b, 'zh-CN'),
   );
   if (!names.length) return '';
   return `<nav class="categories" aria-label="分类">${[
-    `<a href="/"${active ? '' : ' aria-current="page"'}>全部</a>`,
+    `<a href="${pathOf(blog, 'articles')}"${active ? '' : ' aria-current="page"'}>全部</a>`,
     ...names.map(
       (name) =>
         `<a href="${categoryPath(name)}"${name === active ? ' aria-current="page"' : ''}>${escapeHtml(name)}</a>`,
@@ -177,8 +212,8 @@ function categoryNav(posts: Post[], active?: string): string {
 // gets, so the result is kept. Links to other posts are part of the output,
 // hence the stamp of every online post's address, and the title decides
 // whether a first heading repeating it is dropped. Access checks are never cached.
-async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Promise<string | null> {
-  const addresses = posts.map((item) => `${item.node_id}=${publicPath(item)}`).sort().join('\n');
+async function renderedPost(env: Env, url: URL, post: Post, blog: Blog): Promise<string | null> {
+  const addresses = blog.posts.map((item) => `${item.node_id}=${hrefOf(blog, item)}`).sort().join('\n');
   const stamp = encodeURIComponent(await digest(`${post.title}\n${addresses}`));
   const key = new Request(`${url.origin}/__rendered/${RENDER_VERSION}/${post.version_id}/${stamp}`);
   const cache = typeof caches === 'undefined' ? null : (caches as unknown as { default: Cache }).default;
@@ -189,7 +224,7 @@ async function renderedPost(env: Env, url: URL, post: Post, posts: Post[]): Prom
   if (!object) return null;
   const bytes = new Uint8Array(await object.arrayBuffer());
   if (sealedKeyId(bytes)) return null;
-  const hrefs = new Map(posts.map((item) => [item.node_id, publicPath(item)]));
+  const hrefs = new Map(blog.posts.map((item) => [item.node_id, hrefOf(blog, item)]));
   const markdown = new TextDecoder().decode(bytes);
   const html = renderPost(markdown, post.title, (id) => hrefs.get(id) ?? null);
   await cache
@@ -216,15 +251,16 @@ async function serveFile(env: Env, request: Request, file: BlogFile | undefined)
   });
 }
 
-function feed(request: Request, site: Site, url: URL, posts: Post[]): Response {
+function feed(request: Request, blog: Blog, url: URL): Response {
+  const { site } = blog;
   const xml = (value: string) =>
     value
       // Characters XML 1.0 cannot carry at all.
       // oxlint-disable-next-line no-control-regex
       .replace(/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/g, '')
       .replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' })[c]!);
-  const items = posts.filter((post) => !post.page).slice(0, 30).map((post) => {
-    const link = xml(url.origin + publicPath(post));
+  const items = blog.articles.slice(0, 30).map((post) => {
+    const link = xml(url.origin + hrefOf(blog, post));
     return `<item><title>${xml(post.title)}</title><link>${link}</link><guid isPermaLink="false">${xml(post.node_id)}</guid><pubDate>${new Date(post.published_at).toUTCString()}</pubDate><description>${xml(post.summary)}</description></item>`;
   });
   return respond(
@@ -235,14 +271,16 @@ function feed(request: Request, site: Site, url: URL, posts: Post[]): Response {
   );
 }
 
-function sitemap(request: Request, url: URL, posts: Post[]): Response {
+function sitemap(request: Request, blog: Blog, url: URL): Response {
+  const notes = new Set<string>(blog.present.map((key) => pathOf(blog, key)));
   return respond(
     request,
     `<?xml version="1.0" encoding="UTF-8"?>
-<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${
-      posts.some((post) => post.page === 'home') ? `<url><loc>${url.origin}/blog</loc></url>` : `<url><loc>${url.origin}/</loc></url>`
-    }${posts
-      .map((post) => `<url><loc>${url.origin}${publicPath(post)}</loc><lastmod>${day(post.updated_at)}</lastmod></url>`)
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">${[...notes]
+      .map((path) => `<url><loc>${url.origin}${path}</loc></url>`)
+      .join('')}${blog.posts
+      .filter((post) => !post.page)
+      .map((post) => `<url><loc>${url.origin}${hrefOf(blog, post)}</loc><lastmod>${day(post.updated_at)}</lastmod></url>`)
       .join('')}</urlset>`,
     'application/xml',
   );
@@ -265,72 +303,71 @@ export async function handleBlog(request: Request, env: Env): Promise<Response> 
     return respond(request, `User-agent: *\nAllow: /\nSitemap: ${url.origin}/sitemap.xml\n`, 'text/plain');
   // Visits read the snapshot; D1 only builds it when it is missing (worker/blog-snapshot.ts).
   const { site, posts, files } = await readBlogSnapshot(env);
-  if (!site?.blog_parent_id)
-    return notFound(
-      request,
-      site ?? { blog_parent_id: null, blog_title: '博客', blog_description: '', blog_theme: DEFAULT_BLOG_THEME },
-      url,
-      [],
-      '博客尚未开放。',
-    );
+  const closed = { blog_parent_id: null, blog_title: '博客', blog_description: '', blog_theme: DEFAULT_BLOG_THEME };
+  if (!site?.blog_parent_id) return notFound(request, blogOf(site ?? closed, []), url, '博客尚未开放。');
+  const blog = blogOf(site, posts);
   const file = path.match(/^\/files\/([a-zA-Z0-9_-]{1,80})$/);
   if (file)
-    return (await serveFile(env, request, Object.hasOwn(files, file[1]) ? files[file[1]] : undefined)) ?? notFound(request, site, url);
-  const listed = posts.filter((post) => !post.page);
-  const home = posts.find((post) => post.page === 'home');
-  if (path === '/feed.xml') return feed(request, site, url, posts);
-  if (path === '/sitemap.xml') return sitemap(request, url, posts);
-  const shown = posts.find((post) => post.page && blogPagePath(post.page) === path);
-  if (shown) return showPost(request, env, site, url, shown, posts);
-  if (path === (home ? '/blog' : '/'))
-    return page(
-      request,
-      site,
-      { title: site.blog_title, canonical: url.origin + path },
-      `${site.blog_description ? `<p class="site-description">${escapeHtml(site.blog_description)}</p>` : ''}${categoryNav(listed)}${postList(listed)}`,
-      posts,
-    );
-  if (path === '/blog') return Response.redirect(`${url.origin}/`, 301);
+    return (await serveFile(env, request, Object.hasOwn(files, file[1]) ? files[file[1]] : undefined)) ?? notFound(request, blog, url);
+  if (path === '/feed.xml') return feed(request, blog, url);
+  if (path === '/sitemap.xml') return sitemap(request, blog, url);
+  if (!blog.home) return notFound(request, blog, url, '博客尚未开放。');
+  // A section's own address while it is home: it lives at / instead.
+  if (path !== '/' && path === blogPagePath(blog.home, '')) return Response.redirect(`${url.origin}/`, 301);
+  const section = blog.present.find((key) => pathOf(blog, key) === path);
+  if (section) return showSection(request, env, blog, url, section);
   const category = path.match(/^\/category\/([^/]+)$/);
   if (category) {
     const name = decoded(category[1]);
-    const inCategory = listed.filter((post) => post.category === name);
-    if (!name || !inCategory.length) return notFound(request, site, url, posts);
+    const inCategory = blog.articles.filter((post) => post.category === name);
+    if (!name || !inCategory.length) return notFound(request, blog, url);
     return page(
       request,
-      site,
+      blog,
       { title: `${name} · ${site.blog_title}`, canonical: url.origin + categoryPath(name) },
-      `${categoryNav(listed, name)}${postList(inCategory)}`,
-      posts,
+      `${categoryNav(blog, name)}${postList(blog, inCategory)}`,
     );
   }
   const slug = path.match(/^\/posts\/([^/]+)$/);
   if (slug) {
     const name = decoded(slug[1]);
     const post = posts.find((item) => item.slug === name);
-    if (!post) return notFound(request, site, url, posts);
+    if (!post) return notFound(request, blog, url);
     // Links from before the post became a page keep working.
-    if (post.page) return Response.redirect(url.origin + publicPath(post), 301);
-    return showPost(request, env, site, url, post, posts);
+    if (post.page) return Response.redirect(url.origin + hrefOf(blog, post), 301);
+    return showPost(request, env, blog, url, post);
   }
-  return notFound(request, site, url, posts);
+  return notFound(request, blog, url);
 }
 
-async function showPost(request: Request, env: Env, site: Site, url: URL, post: Post, posts: Post[]) {
-  const html = await renderedPost(env, url, post, posts);
-  if (html === null) return notFound(request, site, url, posts);
+function showSection(request: Request, env: Env, blog: Blog, url: URL, key: BlogPageKey) {
+  const { site } = blog;
+  const atHome = key === blog.home;
+  const title = atHome ? site.blog_title : `${labelOf(key)} · ${site.blog_title}`;
+  const description = atHome && site.blog_description ? `<p class="site-description">${escapeHtml(site.blog_description)}</p>` : '';
+  if (key === 'articles')
+    return page(request, blog, { title, canonical: url.origin + url.pathname }, `${description}${categoryNav(blog)}${postList(blog, blog.articles)}`);
+  if (key === 'projects')
+    return page(request, blog, { title, canonical: url.origin + url.pathname }, `${description}${postList(blog, blog.projects, false)}`);
+  return showPost(request, env, blog, url, blog.posts.find((post) => post.page === key)!);
+}
+
+async function showPost(request: Request, env: Env, blog: Blog, url: URL, post: Post) {
+  const { site } = blog;
+  const html = await renderedPost(env, url, post, blog);
+  if (html === null) return notFound(request, blog, url);
   const meta = post.page
     ? ''
-    : `<p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${
-        post.category ? ` · <a href="${categoryPath(post.category)}">${escapeHtml(post.category)}</a>` : ''
-      }${day(post.updated_at) !== day(post.published_at) ? ` · 更新于 ${day(post.updated_at)}` : ''}</p>`;
+    : `<p class="post-meta"><time datetime="${day(post.published_at)}">${day(post.published_at)}</time>${sectionLink(blog, post)}${
+        day(post.updated_at) !== day(post.published_at) ? ` · 更新于 ${day(post.updated_at)}` : ''
+      }</p>`;
   return page(
     request,
-    site,
+    blog,
     {
-      title: post.page === 'home' ? site.blog_title : `${post.title} · ${site.blog_title}`,
+      title: post.page && post.page === blog.home ? site.blog_title : `${post.title} · ${site.blog_title}`,
       description: post.summary,
-      canonical: url.origin + publicPath(post),
+      canonical: url.origin + hrefOf(blog, post),
       article: !post.page,
       mermaid: html.includes('<pre class="mermaid">'),
       fonts: mathFonts(html),
@@ -340,7 +377,6 @@ async function showPost(request: Request, env: Env, site: Site, url: URL, post: 
 ${meta}
 <div class="markdown-body">${html}</div>
 </article>`,
-    posts,
   );
 }
 

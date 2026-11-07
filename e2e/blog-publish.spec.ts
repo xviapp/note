@@ -1,4 +1,5 @@
 import { expect, test, type Page } from './fixtures';
+import { nav } from './notebook-helpers';
 import { preparePassword } from '../shared/password';
 import type { NoteNode } from '../shared/types';
 
@@ -52,4 +53,28 @@ test('publishing shows the generated summary, which can be edited and regenerate
   await published.getByRole('button', { name: '重新生成' }).click();
   await expect(published.getByText('由青藜根据已发布的版本生成')).toBeVisible();
   await expect(summary).toHaveValue(generated);
+});
+
+test('sections pick folders and notes, and home picks among them', async ({ page, baseURL }) => {
+  const note = await setUp(page, baseURL!);
+  const headers = { origin: new URL(baseURL!).origin };
+  const folder = async (title: string): Promise<NoteNode> =>
+    (await page.request.post('/api/nodes', { headers, data: { kind: 'folder', title, parentId: note.parent_id } })).json();
+  const articles = await folder('随笔');
+  const work = await folder('作品');
+  await page.goto('/');
+  await nav(page, '设置', '博客');
+  const field = (label: string) =>
+    page.locator('.blog-pages label').filter({ hasText: new RegExp(`^${label}`) }).locator('select');
+  const home = field('首页');
+  await expect(home).toBeDisabled();
+  await field('文章').selectOption({ label: '随笔' });
+  await field('项目').selectOption({ label: '作品' });
+  await home.selectOption({ label: '项目' });
+  await page.getByRole('button', { name: '保存', exact: true }).click();
+  await expect(page.getByRole('status')).toHaveText('已保存');
+  const saved = await (await page.request.get('/api/blog/settings')).json();
+  expect(saved).toMatchObject({ articlesFolderId: articles.id, projectsFolderId: work.id, home: 'projects' });
+  await page.reload();
+  await expect(home).toHaveValue('projects');
 });

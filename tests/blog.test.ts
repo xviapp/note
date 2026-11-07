@@ -51,8 +51,16 @@ async function save(id: string, content: string, attachments: string[] = []) {
 }
 const publish = (node: NoteNode, slug?: string) =>
   ok<BlogNoteStatus>(`/api/blog/posts/${node.id}`, 'PUT', { revision: node.revision, slug });
-const setRoot = (parentId: string | null) =>
-  ok<BlogSettings>('/api/blog/settings', 'PUT', { parentId, title: '我的博客', description: '简介', url: 'https://blog.test' });
+const setRoot = (parentId: string | null, extra: object = {}) =>
+  ok<BlogSettings>('/api/blog/settings', 'PUT', { parentId, title: '我的博客', description: '简介', url: 'https://blog.test', ...extra });
+// A blog folder with its articles folder, where posts are listed.
+async function openBlog() {
+  const blogRoot = await folder('博客');
+  await setRoot(blogRoot);
+  const articles = await folder('文章', blogRoot);
+  await setRoot(blogRoot, { articlesFolderId: articles });
+  return { blogRoot, root: articles };
+}
 
 const upload = async (name: string, mime: string, parent?: string) => {
   const response = await SELF.fetch(
@@ -84,7 +92,9 @@ beforeEach(async () => {
   await bindings.DB.batch([
     bindings.DB.prepare('DELETE FROM blog_posts'),
     bindings.DB.prepare('DELETE FROM ai_settings'),
-    bindings.DB.prepare('UPDATE site SET blog_parent_id=NULL,share_parent_id=NULL WHERE id=1'),
+    bindings.DB.prepare(
+      "UPDATE site SET blog_parent_id=NULL,blog_articles_id=NULL,blog_projects_id=NULL,blog_home='articles',share_parent_id=NULL WHERE id=1",
+    ),
     bindings.DB.prepare('DELETE FROM version_assets'),
     bindings.DB.prepare('UPDATE nodes SET current_version_id=NULL'),
     bindings.DB.prepare('DELETE FROM versions'),
@@ -113,9 +123,13 @@ beforeEach(async () => {
 describe('blog visibility', () => {
   it('shows nothing until a folder is chosen and a note is published', async () => {
     const root = await folder('博客');
-    const draft = await note('草稿标题', root, '# 草稿标题\n\n私密草稿');
+    const articles = await folder('文章', root);
+    const draft = await note('草稿标题', articles, '# 草稿标题\n\n私密草稿');
     expect((await visit('/')).status).toBe(404);
     await setRoot(root);
+    // Nothing to show until a section is chosen.
+    expect((await visit('/')).status).toBe(404);
+    await setRoot(root, { articlesFolderId: articles });
     const home = await text('/');
     expect(home).toContain('我的博客');
     expect(home).not.toContain('草稿标题');
@@ -130,8 +144,7 @@ describe('blog visibility', () => {
   });
 
   it('keeps later saves private until published again', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const post = await note('文章', root, '第一版');
     await publish(post);
     const saved = await save(post.id, '尚未发布的第二版');
@@ -143,8 +156,7 @@ describe('blog visibility', () => {
   });
 
   it('renders again when a rename changes which heading repeats the title', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const post = await note('旧标题', root, '# 新标题\n\n正文');
     await publish(post, 'renamed');
     const headings = async () => (await text('/posts/renamed')).match(/<h1[^>]*>新标题<\/h1>/g)?.length ?? 0;
@@ -156,8 +168,7 @@ describe('blog visibility', () => {
   });
 
   it('refuses to publish a version the author has not seen', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const post = await note('文章', root, '第一版');
     await save(post.id, '别处保存的版本');
     const response = await call(`/api/blog/posts/${post.id}`, 'PUT', { revision: post.revision });
@@ -166,8 +177,7 @@ describe('blog visibility', () => {
   });
 
   it('keeps the published version through more saves than the history holds', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const post = await note('长文', root, '发布的版本');
     await publish(post);
     for (let i = 0; i < 8; i++) await save(post.id, `后来的第 ${i} 版`);
@@ -210,17 +220,15 @@ describe('blog visibility', () => {
   });
 
   it('closes the whole blog when its folder is trashed', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { blogRoot, root } = await openBlog();
     await publish(await note('文章', root, '正文'));
-    await ok(`/api/nodes/${root}`, 'DELETE', { count: 2 });
+    await ok(`/api/nodes/${blogRoot}`, 'DELETE', { count: 3 });
     expect((await ok<BlogSettings>('/api/blog/settings')).parentId).toBeNull();
     expect((await visit('/')).status).toBe(404);
   });
 
   it('drops the post and its stored title when the note becomes encrypted', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const post = await note('将要加密', root, '正文');
     await publish(post);
     const keyId = await newKey();
@@ -234,8 +242,7 @@ describe('blog visibility', () => {
   });
 
   it('never uses an encrypted folder, or enters one inside the blog', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const sealed = await folder('密封分类', root);
     const inner = await note('明文', sealed, '正文');
     const keyId = await newKey();
@@ -264,8 +271,7 @@ describe('blog visibility', () => {
   });
 
   it('is closed to command-line tokens and anonymous requests', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const post = await note('文章', root, '正文');
     const { token } = await ok<{ token: string }>('/api/tokens', 'POST', { name: '电脑', scope: 'write' });
     const byToken = await SELF.fetch(`${ORIGIN}/api/blog/posts/${post.id}`, {
@@ -281,8 +287,7 @@ describe('blog visibility', () => {
 
 describe('blog files', () => {
   it('serves only the files the published body names', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const shown = await upload('shown.png', 'image/png');
     const hidden = await upload('hidden.png', 'image/png');
     const later = await upload('later.png', 'image/png');
@@ -310,8 +315,7 @@ describe('blog files', () => {
   });
 
   it('keeps the files of the published version when a later save copies them', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const shown = await upload('shown.png', 'image/png');
     const post = await note('带图', root, '无图');
     await publish(await save(post.id, `![图](/api/files/${shown})`, [shown]));
@@ -336,8 +340,7 @@ describe('blog files', () => {
 
 describe('blog pages', () => {
   it('renders Markdown safely and links only to public notes', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const target = await note('目标', root, '正文');
     await publish(target, 'target');
     const hidden = await note('未发布', root, '正文');
@@ -369,8 +372,7 @@ describe('blog pages', () => {
   });
 
   it('lists categories from first-level folders, and offers a feed and sitemap', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const tech = await folder('技术', root);
     await publish(await note('甲 & 乙', tech, '正文一'), 'one');
     await publish(await note('丙', root, '正文二'), 'two');
@@ -388,8 +390,7 @@ describe('blog pages', () => {
   });
 
   it('serves visits from the snapshot without touching D1', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     await publish(await note('静态', root, '正文'), 'static');
     const offline = {
       ...bindings,
@@ -412,8 +413,7 @@ describe('blog pages', () => {
   });
 
   it('rebuilds the snapshot when a category folder is renamed, and only then', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     const tech = await folder('技术', root);
     const post = await note('文章', tech, '正文');
     await publish(post, 'post');
@@ -430,8 +430,7 @@ describe('blog pages', () => {
   });
 
   it('rebuilds after a request that failed part of the way', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     await publish(await note('文章', root, '正文'), 'post');
     // The folder is saved before the pages are checked.
     const response = await call('/api/blog/settings', 'PUT', { parentId: null, title: '我的博客', pages: { nope: null } });
@@ -440,15 +439,13 @@ describe('blog pages', () => {
   });
 
   it('shows a plain post whose text starts like a sealed object', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     await publish(await note('格式', root, 'XVE1 是加密对象的开头'), 'format');
     expect(await text('/posts/format')).toContain('是加密对象的开头');
   });
 
   it('only reads: no other methods, and no app routes', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    await openBlog();
     expect((await visit('/', 'POST')).status).toBe(405);
     expect((await visit('/api/nodes')).status).toBe(404);
     expect((await visit('/api/auth/status')).status).toBe(404);
@@ -456,41 +453,45 @@ describe('blog pages', () => {
   });
 });
 
-describe('blog themes and pages', () => {
+describe('blog themes and sections', () => {
   const settings = (extra: object, parentId: string | null) =>
     call('/api/blog/settings', 'PUT', { parentId, title: '我的博客', description: '简介', url: 'https://blog.test', ...extra });
-  const assign = async (parentId: string, pages: Record<string, string | null>) => {
-    const response = await settings({ pages }, parentId);
+  const change = async (parentId: string, extra: object) => {
+    const response = await settings(extra, parentId);
     if (!response.ok) throw new Error(await response.text());
     return (await response.json()) as BlogSettings;
   };
+  const assign = (parentId: string, pages: Record<string, string | null>) => change(parentId, { pages });
+  const move = async (id: string, parentId: string | null) => {
+    const { revision } = await ok<NoteDetail>(`/api/nodes/${id}`);
+    await ok(`/api/nodes/${id}`, 'PATCH', { revision, parentId });
+  };
 
   it('applies a theme, keeps it when not sent, and refuses an unknown one', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { blogRoot } = await openBlog();
     expect(await text('/')).toContain('data-theme="paper"');
-    expect((await settings({ theme: 'hacking' }, root)).status).toBe(200);
-    await setRoot(root);
+    expect((await settings({ theme: 'hacking' }, blogRoot)).status).toBe(200);
+    await setRoot(blogRoot);
     const html = await text('/');
     expect(html).toContain('data-theme="hacking"');
     expect(html).toContain('data-layout="sidebar"');
     expect(html).toContain('<meta name="color-scheme" content="dark">');
-    expect((await settings({ theme: '<script>' }, root)).status).toBe(400);
+    expect((await settings({ theme: '<script>' }, blogRoot)).status).toBe(400);
     expect(await text('/')).toContain('data-theme="hacking"');
   });
 
   it('shows a chosen note at its address instead of in the list, feed and categories', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { blogRoot, root } = await openBlog();
     const post = await note('普通文章', root, '普通正文');
     await publish(post, 'plain');
-    const about = await note('关于我', root, '自我介绍');
+    // A page may be anywhere in the blog, not only in a listed folder.
+    const about = await note('关于我', blogRoot, '自我介绍');
     expect((await ok<{ notes: { id: string }[] }>('/api/blog/candidates')).notes.map(({ id }) => id).sort()).toEqual(
       [about.id, post.id].sort(),
     );
     // Choosing it is what publishes it.
     expect((await visit('/about')).status).toBe(404);
-    expect((await assign(root, { about: about.id })).pages).toEqual({ about: about.id });
+    expect((await assign(blogRoot, { about: about.id })).pages).toEqual({ about: about.id });
     const html = await text('/about');
     expect(html).toContain('自我介绍');
     expect(html).toContain('aria-current="page">关于');
@@ -505,88 +506,137 @@ describe('blog themes and pages', () => {
     const moved = await visit(`/posts/${encodeURIComponent(slug)}`);
     expect(moved.status).toBe(301);
     expect(moved.headers.get('location')).toBe('https://blog.test/about');
-    // Cleared, it is an ordinary published post again.
-    expect((await assign(root, { about: null })).pages).toEqual({});
+    // Cleared, it is in neither list folder, so it is not shown at all.
+    expect((await assign(blogRoot, { about: null })).pages).toEqual({});
     expect((await visit('/about')).status).toBe(404);
-    expect(await text('/')).toContain('关于我');
+    expect((await visit(`/posts/${encodeURIComponent(slug)}`)).status).toBe(404);
+    expect((await ok<BlogNoteStatus>(`/api/blog/posts/${about.id}`)).post?.online).toBe(false);
   });
 
-  it('moves the post list to /blog when a home page is chosen', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+  it('shows the chosen section at /, and moves its own address there', async () => {
+    const { blogRoot, root } = await openBlog();
     await publish(await note('普通文章', root, '普通正文'), 'plain');
     expect((await visit('/blog')).status).toBe(301);
-    const hello = await note('你好', root, '欢迎来到这里');
-    await assign(root, { home: hello.id });
+    const hello = await note('你好', blogRoot, '欢迎来到这里');
+    expect(await change(blogRoot, { pages: { about: hello.id }, home: 'about' })).toMatchObject({ home: 'about' });
     const home = await text('/');
     expect(home).toContain('欢迎来到这里');
     expect(home).not.toContain('普通文章');
-    expect(await text('/blog')).toContain('普通文章');
     expect(home).toContain('href="/blog"');
+    expect(home).toContain('href="/" aria-current="page">关于');
+    const own = await visit('/about');
+    expect(own.status).toBe(301);
+    expect(own.headers.get('location')).toBe('https://blog.test/');
+    expect(await text('/blog')).toContain('普通文章');
+    expect((await ok<BlogNoteStatus>(`/api/blog/posts/${hello.id}`)).post?.url).toBe('https://blog.test/');
+    // A home with nothing to show falls back to the first section that has something.
+    await ok(`/api/blog/posts/${hello.id}`, 'DELETE');
+    expect(await text('/')).toContain('普通文章');
+    expect((await settings({ home: 'home' }, blogRoot)).status).toBe(400);
   });
 
   it('keeps the pinned version of a note that was already published', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { blogRoot, root } = await openBlog();
     const about = await note('关于', root, '已发布的内容');
     await publish(about);
     await save(about.id, '尚未发布的修改');
-    await assign(root, { about: about.id });
+    await assign(blogRoot, { about: about.id });
     const html = await text('/about');
     expect(html).toContain('已发布的内容');
     expect(html).not.toContain('尚未发布的修改');
   });
 
   it('refuses notes that cannot be public, and leaves nothing published', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { blogRoot, root } = await openBlog();
     const outside = await note('私人笔记', null, '私人内容');
-    const refused = await settings({ pages: { about: outside.id } }, root);
+    const refused = await settings({ pages: { about: outside.id } }, blogRoot);
     expect(refused.status).toBe(400);
     expect((await ok<BlogNoteStatus>(`/api/blog/posts/${outside.id}`)).post).toBeNull();
     expect(await text('/')).not.toContain('私人笔记');
     expect((await visit('/about')).status).toBe(404);
     const one = await note('一篇', root, '内容');
-    expect((await settings({ pages: { about: one.id, resume: one.id } }, root)).status).toBe(400);
-    expect((await settings({ pages: { admin: one.id } }, root)).status).toBe(400);
+    expect((await settings({ pages: { about: one.id, resume: one.id } }, blogRoot)).status).toBe(400);
+    for (const key of ['admin', 'home', 'projects', 'articles'])
+      expect((await settings({ pages: { [key]: one.id } }, blogRoot)).status).toBe(400);
     expect((await ok<BlogNoteStatus>(`/api/blog/posts/${one.id}`)).post).toBeNull();
   });
 
   it('takes a page offline with its note, and returns it when restored to the folder', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
-    const hello = await note('你好', root, '欢迎来到这里');
-    await assign(root, { home: hello.id });
-    expect(await text('/')).toContain('欢迎来到这里');
-    const move = async (parentId: string | null) => {
-      const { revision } = await ok<NoteDetail>(`/api/nodes/${hello.id}`);
-      await ok(`/api/nodes/${hello.id}`, 'PATCH', { revision, parentId });
-    };
-    await move(null);
-    expect(await text('/')).not.toContain('欢迎来到这里');
-    expect((await visit('/blog')).status).toBe(301);
+    const { blogRoot } = await openBlog();
+    const about = await note('关于', blogRoot, '自我介绍');
+    await assign(blogRoot, { about: about.id });
+    expect(await text('/about')).toContain('自我介绍');
+    await move(about.id, null);
+    expect((await visit('/about')).status).toBe(404);
     // The page keeps its place, so saving the rest of the form still works.
-    expect((await ok<BlogSettings>('/api/blog/settings')).pages).toEqual({ home: hello.id });
-    expect((await settings({ pages: {} }, root)).status).toBe(200);
-    await move(root);
-    expect(await text('/')).toContain('欢迎来到这里');
+    expect((await ok<BlogSettings>('/api/blog/settings')).pages).toEqual({ about: about.id });
+    expect((await settings({ pages: {} }, blogRoot)).status).toBe(200);
+    await move(about.id, blogRoot);
+    expect(await text('/about')).toContain('自我介绍');
   });
 
   it('drops the page when its post is unpublished', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { blogRoot, root } = await openBlog();
     const about = await note('关于', root, '内容');
-    await assign(root, { about: about.id });
+    await assign(blogRoot, { about: about.id });
     await ok(`/api/blog/posts/${about.id}`, 'DELETE');
     expect((await ok<BlogSettings>('/api/blog/settings')).pages).toEqual({});
     expect((await visit('/about')).status).toBe(404);
+  });
+
+  it('lists the projects folder at /projects, apart from the articles, categories and feed', async () => {
+    const { blogRoot, root } = await openBlog();
+    const tech = await folder('技术', root);
+    const work = await folder('项目', blogRoot);
+    await publish(await note('一篇文章', tech, '正文'), 'article');
+    await publish(await note('一个项目', work, '项目介绍'), 'project');
+    expect((await ok<{ folders: { title: string }[] }>('/api/blog/candidates')).folders.map(({ title }) => title).sort()).toEqual(
+      ['文章', '项目'].sort(),
+    );
+    // Published, but in no listed folder yet.
+    expect((await visit('/posts/project')).status).toBe(404);
+    expect((await visit('/projects')).status).toBe(404);
+    expect((await change(blogRoot, { projectsFolderId: work })).projectsFolderId).toBe(work);
+
+    const list = await text('/projects');
+    expect(list).toContain('/posts/project');
+    expect(list).not.toContain('/posts/article');
+    expect(list).toContain('aria-current="page">项目');
+    const home = await text('/');
+    expect(home).toContain('href="/projects"');
+    expect(home).toContain('/posts/article');
+    expect(home).toContain(`/category/${encodeURIComponent('技术')}`);
+    expect(home).not.toContain('/posts/project');
+    expect(await text('/feed.xml')).not.toContain('一个项目');
+    expect(await text('/sitemap.xml')).toContain('https://blog.test/projects');
+    expect(await text('/posts/project')).toContain('<a href="/projects">项目</a>');
+    expect(await text('/posts/article')).toContain(`<a href="/category/${encodeURIComponent('技术')}">技术</a>`);
+
+    // Out of the blog, the list is gone with its posts.
+    await move(work, null);
+    expect((await visit('/projects')).status).toBe(404);
+    expect(await text('/')).not.toContain('href="/projects"');
+    expect((await ok<BlogSettings>('/api/blog/settings')).projectsFolderId).toBe(work);
+  });
+
+  it('takes only first-level folders for the lists, and clears them with the blog folder', async () => {
+    const { blogRoot, root } = await openBlog();
+    const work = await folder('项目', blogRoot);
+    const nested = await folder('子目录', work);
+    const outside = await folder('别处');
+    const intro = await note('总览', blogRoot, '总览');
+    for (const id of [nested, outside, intro.id, root])
+      expect((await settings({ projectsFolderId: id }, blogRoot)).status).toBe(400);
+    expect((await settings({ articlesFolderId: work, projectsFolderId: work }, blogRoot)).status).toBe(400);
+    expect(await change(blogRoot, { projectsFolderId: work })).toMatchObject({ articlesFolderId: root, projectsFolderId: work });
+    const other = await folder('另一个博客');
+    expect(await change(other, {})).toMatchObject({ articlesFolderId: null, projectsFolderId: null });
   });
 });
 
 describe('blog font preloading', () => {
   it('preloads only the fonts a page uses', async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     await bindings.DB.prepare("UPDATE site SET blog_theme='paper' WHERE id=1").run();
     await publish(await note('公式', root, '$\\mathbb{R}$ 与 $x$'), 'math');
     await publish(await note('正文', root, '没有公式'), 'plain');
@@ -615,8 +665,7 @@ describe('blog summaries', () => {
     (fetch.mock.calls[call][1] as RequestInit).body as string;
   const withKey = () => ok('/api/ai/settings', 'PUT', { apiKey: 'sk-test-only-fake-deepseek-key' });
   const blogRoot = async () => {
-    const root = await folder('博客');
-    await setRoot(root);
+    const { root } = await openBlog();
     return root;
   };
   afterEach(() => vi.restoreAllMocks());

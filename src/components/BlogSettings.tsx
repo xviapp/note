@@ -1,6 +1,14 @@
 import { useEffect, useState, type FormEvent } from 'react';
 import { ExternalLink, FolderOpen, Globe } from 'lucide-react';
-import { BLOG_DESCRIPTION_LIMIT, BLOG_PAGES, BLOG_THEMES, BLOG_TITLE_LIMIT, DEFAULT_BLOG_THEME } from '../../shared/blog';
+import {
+  BLOG_DESCRIPTION_LIMIT,
+  BLOG_PAGES,
+  BLOG_THEMES,
+  BLOG_TITLE_LIMIT,
+  type BlogPageKey,
+  DEFAULT_BLOG_HOME,
+  DEFAULT_BLOG_THEME,
+} from '../../shared/blog';
 import type { BlogCandidate, BlogPostInfo, BlogSettings as Settings } from '../../shared/types';
 import { api } from '../api';
 import { blogFolderChanged } from './BlogPublish';
@@ -8,11 +16,20 @@ import { Modal, Spinner, type Confirm } from './Primitives';
 import { NodePicker } from './Tree';
 
 const folderLabel = (path: { title: string }[]) => path.map((item) => item.title).join(' / ');
+type Folder = { id: string; title: string };
+// What each section shows: a folder ID for the lists, a note ID for the pages.
+const sectionValues = (value: Settings): Record<string, string> => ({
+  ...value.pages,
+  ...(value.articlesFolderId ? { articles: value.articlesFolderId } : {}),
+  ...(value.projectsFolderId ? { projects: value.projectsFolderId } : {}),
+});
 
 export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavigate: (id: string) => void }) {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [posts, setPosts] = useState<BlogPostInfo[]>([]);
   const [candidates, setCandidates] = useState<BlogCandidate[]>([]);
+  const [folders, setFolders] = useState<Folder[]>([]);
+  const [home, setHome] = useState<BlogPageKey>(DEFAULT_BLOG_HOME);
   const [form, setForm] = useState({ title: '', description: '', url: '', theme: DEFAULT_BLOG_THEME as string });
   const [pages, setPages] = useState<Record<string, string>>({});
   const [folder, setFolder] = useState<{ parentId: string; title: string } | null>(null);
@@ -22,10 +39,14 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
   const accept = (value: Settings) => {
     setSettings(value);
     setForm({ title: value.title, description: value.description, url: value.url ?? '', theme: value.theme });
-    setPages(value.pages);
+    setPages(sectionValues(value));
+    setHome(value.home);
   };
   const lists = () =>
-    Promise.all([api<{ posts: BlogPostInfo[] }>('/api/blog/posts'), api<{ notes: BlogCandidate[] }>('/api/blog/candidates')]);
+    Promise.all([
+      api<{ posts: BlogPostInfo[] }>('/api/blog/posts'),
+      api<{ notes: BlogCandidate[]; folders: Folder[] }>('/api/blog/candidates'),
+    ]);
   useEffect(() => {
     let live = true;
     Promise.all([api<Settings>('/api/blog/settings'), lists()])
@@ -34,6 +55,7 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
         accept(value);
         setPosts(list.posts);
         setCandidates(notes.notes);
+        setFolders(notes.folders);
       })
       .catch((reason: Error) => live && setError(reason.message));
     return () => {
@@ -41,26 +63,42 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
     };
   }, []);
   // Only what changed, so a page whose note left the folder stays as it is.
-  const changedPages = () => {
+  const changedPages = (): Record<string, string | null> => {
     if (!settings) return {};
+    const before = sectionValues(settings);
     return Object.fromEntries(
-      BLOG_PAGES.filter(({ key }) => (pages[key] ?? '') !== (settings.pages[key] ?? '')).map(({ key }) => [
+      BLOG_PAGES.filter(({ key, kind }) => kind === 'note' && (pages[key] ?? '') !== (before[key] ?? '')).map(({ key }) => [
         key,
         pages[key] || null,
       ]),
     );
+  };
+  // Home can only be a section that shows something.
+  const chosen = BLOG_PAGES.filter(({ key }) => pages[key]).map(({ key }) => key);
+  const homeValue = chosen.includes(home) ? home : (chosen[0] ?? DEFAULT_BLOG_HOME);
+  // Folders too only when changed: one that left the blog would be refused.
+  const sections = () => {
+    const before = settings ? sectionValues(settings) : {};
+    const changed = (key: string) => (pages[key] ?? '') !== (before[key] ?? '');
+    return {
+      pages: changedPages(),
+      ...(changed('articles') ? { articlesFolderId: pages.articles || null } : {}),
+      ...(changed('projects') ? { projectsFolderId: pages.projects || null } : {}),
+      home: homeValue,
+    };
   };
   const save = async (parentId: string | null, withPages = false) => {
     setBusy(true);
     setError('');
     setSaved(false);
     try {
-      accept(await api<Settings>('/api/blog/settings', 'PUT', { parentId, ...form, ...(withPages ? { pages: changedPages() } : {}) }));
+      accept(await api<Settings>('/api/blog/settings', 'PUT', { parentId, ...form, ...(withPages ? sections() : {}) }));
       blogFolderChanged();
       // Changing the folder can take posts online or offline.
       const [list, notes] = await lists();
       setPosts(list.posts);
       setCandidates(notes.notes);
+      setFolders(notes.folders);
       setFolder(null);
       setSaved(true);
     } catch (reason) {
@@ -195,32 +233,49 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
               <div className="blog-pages">
                 {BLOG_PAGES.map((page) => {
                   const current = pages[page.key] ?? '';
-                  // A note that left the folder keeps its place until replaced.
-                  const stale = current && !candidates.some((note) => note.id === current);
+                  const folder = page.kind === 'folder';
+                  // A note or folder that left the blog keeps its place until replaced.
+                  const stale =
+                    current && (folder ? !folders.some((item) => item.id === current) : !candidates.some((note) => note.id === current));
                   return (
                     <label key={page.key}>
                       {page.label}
                       <select value={current} onChange={(event) => setPages({ ...pages, [page.key]: event.target.value })}>
-                        <option value="">{page.key === 'home' ? '文章列表' : '不显示'}</option>
+                        <option value="">不显示</option>
                         {stale && (
                           <option value={current}>
-                            {posts.find((post) => post.nodeId === current)?.title ?? '未知笔记'}（已不在博客目录）
+                            {folder ? '原文件夹' : (posts.find((post) => post.nodeId === current)?.title ?? '未知笔记')}
+                            （已不在博客目录）
                           </option>
                         )}
-                        {candidates.map((note) => (
-                          <option key={note.id} value={note.id}>
-                            {note.category ? `${note.category} / ` : ''}
-                            {note.title}
-                          </option>
-                        ))}
+                        {folder
+                          ? folders.map((item) => (
+                              <option key={item.id} value={item.id} disabled={Object.values(pages).includes(item.id) && current !== item.id}>
+                                {item.title}
+                              </option>
+                            ))
+                          : candidates.map((note) => (
+                              <option key={note.id} value={note.id}>
+                                {note.category ? `${note.category} / ` : ''}
+                                {note.title}
+                              </option>
+                            ))}
                       </select>
                     </label>
                   );
                 })}
+                <label>
+                  首页
+                  <select value={homeValue} disabled={!chosen.length} onChange={(event) => setHome(event.target.value as BlogPageKey)}>
+                    {(chosen.length ? chosen : [DEFAULT_BLOG_HOME]).map((key) => (
+                      <option key={key} value={key}>
+                        {BLOG_PAGES.find((page) => page.key === key)!.label}
+                      </option>
+                    ))}
+                  </select>
+                </label>
               </div>
-              <p className="field-hint">
-                选中的笔记显示在对应地址，不再出现在文章列表。可选博客目录下未加密的笔记；之后的修改同样要在笔记菜单里更新才会上线。选了首页后，文章列表移到 /blog。
-              </p>
+              <p className="field-hint">文章和项目列出所选文件夹里已发布的笔记；不在这两个文件夹里、也没有选作页面的文章不会显示。</p>
             </div>
           )}
           {error && !folder && (
@@ -246,7 +301,7 @@ export function BlogSettings({ confirm, onNavigate }: { confirm: Confirm; onNavi
               </button>
               <span className="small muted">
                 {post.page ? `${BLOG_PAGES.find((page) => page.key === post.page)?.label ?? ''}页面 · ` : ''}
-                {!post.online ? '未显示（已移出博客目录）' : post.outdated ? '有未发布的修改' : '已是当前版本'}
+                {!post.online ? '未显示（不在文章或项目目录）' : post.outdated ? '有未发布的修改' : '已是当前版本'}
               </span>
               {post.url && post.online && (
                 <a className="icon-button" href={post.url} target="_blank" rel="noopener noreferrer" aria-label={`打开《${post.title}》`}>

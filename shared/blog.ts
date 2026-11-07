@@ -86,12 +86,19 @@ export const BLOG_THEMES = [
 ] as const;
 export const DEFAULT_BLOG_THEME = 'paper';
 
-// Addresses that show one chosen note. With a home page the post list moves to /blog.
+// The blog's sections: a first-level folder of the blog listed as posts, or a
+// note shown at a fixed address. The one chosen as home is shown at /.
 export const BLOG_PAGES = [
-  { key: 'home', label: '首页', path: '/' },
-  { key: 'projects', label: '项目', path: '/projects' },
-  { key: 'resume', label: '简历', path: '/resume' },
-  { key: 'contact', label: '联系', path: '/contact' },
-  { key: 'about', label: '关于', path: '/about' },
+  { key: 'articles', label: '文章', path: '/blog', kind: 'folder' },
+  { key: 'projects', label: '项目', path: '/projects', kind: 'folder' },
+  { key: 'resume', label: '简历', path: '/resume', kind: 'note' },
+  { key: 'contact', label: '联系', path: '/contact', kind: 'note' },
+  { key: 'about', label: '关于', path: '/about', kind: 'note' },
 ] as const;
-export const blogPagePath = (key: string) => BLOG_PAGES.find((page) => page.key === key)?.path ?? null;
+export type BlogPageKey = (typeof BLOG_PAGES)[number]['key'];
+export const DEFAULT_BLOG_HOME: BlogPageKey = 'articles';
+// The pages a note is chosen for (blog_posts.page).
+export const NOTE_PAGES: readonly string[] = BLOG_PAGES.filter((page) => page.kind === 'note').map((page) => page.key);
+export const isBlogPage = (key: unknown): key is BlogPageKey => BLOG_PAGES.some((page) => page.key === key);
+export const blogPagePath = (key: string, home: string = DEFAULT_BLOG_HOME) =>
+  key === home ? '/' : (BLOG_PAGES.find((page) => page.key === key)?.path ?? null);
