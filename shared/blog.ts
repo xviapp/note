@@ -27,9 +27,34 @@ export function stripRepeatedTitle(content: string, title: string): string {
   return first && first[1].trim() === title.trim() ? content.slice(first[0].length) : content;
 }
 
+// The blog renders Markdown with raw HTML skipped, so comments and tags never
+// reach visitors; nothing derived from the body (excerpt, summary) may either.
+export const stripHtml = (content: string) =>
+  content.replace(/<!--[\s\S]*?(?:-->|$)/g, ' ').replace(/<\/?[a-zA-Z][^>]*>/g, ' ');
+
+// At most BLOG_SUMMARY_LIMIT UTF-16 units including the ellipsis, the unit the
+// editor's maxLength and the API count. Latin text is cut at a word boundary.
+export function clipSummary(text: string): string {
+  if (text.length <= BLOG_SUMMARY_LIMIT) return text;
+  let cut = '';
+  for (const character of text) {
+    if (cut.length + character.length > BLOG_SUMMARY_LIMIT - 1) break;
+    cut += character;
+  }
+  if (/\w$/.test(cut) && /^\w/.test(text.slice(cut.length))) {
+    const space = cut.lastIndexOf(' ');
+    if (space > cut.length - 40) cut = cut.slice(0, space);
+  }
+  return `${cut.trimEnd()}…`;
+}
+
 export function blogExcerpt(content: string, title = ''): string {
-  const text = stripRepeatedTitle(stripFrontMatter(content), title)
-    .replace(/^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\1[^\n]*(?:\n|$)|$)/gm, ' ')
+  const text = stripHtml(
+    stripRepeatedTitle(stripFrontMatter(content), title).replace(
+      /^(`{3,}|~{3,})[^\n]*\n[\s\S]*?(?:\n\1[^\n]*(?:\n|$)|$)/gm,
+      ' ',
+    ),
+  )
     .replace(/\$\$[\s\S]*?\$\$/g, ' ')
     .replace(/(?<!\\)\$[^$\n]+?(?<!\\)\$/g, ' ')
     // Headings and tables read as noise in running text.
@@ -41,10 +66,7 @@ export function blogExcerpt(content: string, title = ''): string {
     .replace(/[*_~`]+/g, '')
     .replace(/\s+/g, ' ')
     .trim();
-  const characters = [...text];
-  return characters.length > BLOG_SUMMARY_LIMIT
-    ? `${characters.slice(0, BLOG_SUMMARY_LIMIT).join('')}…`
-    : text;
+  return clipSummary(text);
 }
 
 // Every file a body names; only these are served with the post.

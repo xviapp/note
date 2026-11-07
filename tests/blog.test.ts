@@ -4,7 +4,7 @@ import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vite
 import type { Env } from '../worker/types';
 import type { BlogNoteStatus, BlogPostInfo, BlogSettings, NoteDetail, NoteNode } from '../shared/types';
 import { handleBlog } from '../worker/blog-site';
-import { BLOG_SNAPSHOT_KEY, refreshBlog } from '../worker/blog-snapshot';
+import { BLOG_SNAPSHOT_KEY, blogServesFile, refreshBlog } from '../worker/blog-snapshot';
 import { cleanup } from '../worker/recovery';
 import { blogExcerpt, blogSlug } from '../shared/blog';
 import { preparePassword } from '../shared/password';
@@ -53,6 +53,19 @@ const publish = (node: NoteNode, slug?: string) =>
   ok<BlogNoteStatus>(`/api/blog/posts/${node.id}`, 'PUT', { revision: node.revision, slug });
 const setRoot = (parentId: string | null) =>
   ok<BlogSettings>('/api/blog/settings', 'PUT', { parentId, title: '我的博客', description: '简介', url: 'https://blog.test' });
+
+const upload = async (name: string, mime: string, parent?: string) => {
+  const response = await SELF.fetch(
+    `${ORIGIN}/api/files?name=${encodeURIComponent(name)}&size=12&mime=${encodeURIComponent(mime)}${parent ? `&nodeId=${parent}` : ''}`,
+    {
+      method: 'POST',
+      headers: { origin: ORIGIN, cookie, 'content-type': mime },
+      body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]),
+    },
+  );
+  if (!response.ok) throw new Error(await response.text());
+  return ((await response.json()) as { id: string }).id;
+};
 
 async function newKey() {
   const keyId = crypto.randomUUID();
@@ -254,19 +267,6 @@ describe('blog visibility', () => {
 });
 
 describe('blog files', () => {
-  const upload = async (name: string, mime: string, parent?: string) => {
-    const response = await SELF.fetch(
-      `${ORIGIN}/api/files?name=${encodeURIComponent(name)}&size=12&mime=${encodeURIComponent(mime)}${parent ? `&nodeId=${parent}` : ''}`,
-      {
-        method: 'POST',
-        headers: { origin: ORIGIN, cookie, 'content-type': mime },
-        body: new Uint8Array([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13]),
-      },
-    );
-    if (!response.ok) throw new Error(await response.text());
-    return ((await response.json()) as { id: string }).id;
-  };
-
   it('serves only the files the published body names', async () => {
     const root = await folder('博客');
     await setRoot(root);
@@ -290,8 +290,34 @@ describe('blog files', () => {
     await save(post.id, `![图](/api/files/${shown}) ![新](/api/files/${later})`);
     expect((await visit(`/files/${later}`)).status).toBe(404);
     // Gone with the post.
+    expect(await blogServesFile(bindings, shown)).toBe(true);
+    expect(await blogServesFile(bindings, hidden)).toBe(false);
     await ok(`/api/blog/posts/${post.id}`, 'DELETE');
     expect((await visit(`/files/${shown}`)).status).toBe(404);
+  });
+
+  it('keeps the files of the published version when a later save copies them', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    const shown = await upload('shown.png', 'image/png');
+    const post = await note('带图', root, '无图');
+    await publish(await save(post.id, `![图](/api/files/${shown})`, [shown]));
+    // A note written by the Worker links the same file without a copy.
+    const other = await note('引用', null, '正文');
+    await bindings.DB.prepare('INSERT INTO version_assets(version_id,blob_id) VALUES(?,?)')
+      .bind(other.current_version_id, shown)
+      .run();
+    const copy = await upload('copy.png', 'image/png');
+    const detail = await ok<NoteDetail>(`/api/nodes/${post.id}`);
+    const { token } = await ok<{ token: string }>('/api/edit/unlock', 'POST', { nodeId: post.id });
+    await ok(
+      `/api/nodes/${post.id}/content`,
+      'PUT',
+      { content: `![图](/api/files/${copy}) 改过`, attachments: [copy], copies: { [shown]: copy }, revision: detail.revision },
+      { 'x-note-edit': token },
+    );
+    await refreshBlog(bindings);
+    expect((await visit(`/files/${shown}`)).status).toBe(200);
   });
 });
 
@@ -361,8 +387,14 @@ describe('blog pages', () => {
       }),
     } as Env;
     const visitOffline = (path: string) => handleBlog(new Request(`https://blog.test${path}`), offline);
-    for (const path of ['/', '/posts/static', '/feed.xml', '/sitemap.xml', '/missing'])
-      expect([200, 404]).toContain((await visitOffline(path)).status);
+    for (const [path, status] of [
+      ['/', 200],
+      ['/posts/static', 200],
+      ['/feed.xml', 200],
+      ['/sitemap.xml', 200],
+      ['/missing', 404],
+    ] as const)
+      expect((await visitOffline(path)).status).toBe(status);
     expect(await (await visitOffline('/posts/static')).text()).toContain('正文');
   });
 
@@ -373,12 +405,32 @@ describe('blog pages', () => {
     const post = await note('文章', tech, '正文');
     await publish(post, 'post');
     expect(await text('/')).toContain(encodeURIComponent('技术'));
-    const before = await bindings.FILES.head(BLOG_SNAPSHOT_KEY);
+    // Changed behind the app's back: only a rebuild would show it.
+    await bindings.DB.prepare("UPDATE site SET blog_title='直接改的' WHERE id=1").run();
     await save(post.id, '新正文');
-    expect((await bindings.FILES.head(BLOG_SNAPSHOT_KEY))?.etag).toBe(before?.etag);
+    expect(await text('/')).not.toContain('直接改的');
     const { revision } = await ok<NoteDetail>(`/api/nodes/${tech}`);
     await ok(`/api/nodes/${tech}`, 'PATCH', { title: '编程', revision });
-    expect(await text('/')).toContain(encodeURIComponent('编程'));
+    const home = await text('/');
+    expect(home).toContain(encodeURIComponent('编程'));
+    expect(home).toContain('直接改的');
+  });
+
+  it('rebuilds after a request that failed part of the way', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    await publish(await note('文章', root, '正文'), 'post');
+    // The folder is saved before the pages are checked.
+    const response = await call('/api/blog/settings', 'PUT', { parentId: null, title: '我的博客', pages: { nope: null } });
+    expect(response.status).toBe(400);
+    expect((await visit('/posts/post')).status).toBe(404);
+  });
+
+  it('shows a plain post whose text starts like a sealed object', async () => {
+    const root = await folder('博客');
+    await setRoot(root);
+    await publish(await note('格式', root, 'XVE1 是加密对象的开头'), 'format');
+    expect(await text('/posts/format')).toContain('是加密对象的开头');
   });
 
   it('only reads: no other methods, and no app routes', async () => {
@@ -661,8 +713,88 @@ describe('blog summaries', () => {
     await withKey();
     provider('长'.repeat(300));
     const post = await note('文章', await blogRoot(), BODY);
-    expect([...(await publish(post, 'post')).post!.summary]).toHaveLength(161);
+    const capped = (await publish(post, 'post')).post!.summary;
+    expect(capped).toHaveLength(160);
+    expect(capped.endsWith('…')).toBe(true);
     expect((await call(`/api/blog/posts/${post.id}/summary`, 'PUT', { summary: '长'.repeat(161) })).status).toBe(400);
+  });
+
+  it('leaves out HTML the blog does not show', async () => {
+    await withKey();
+    const fetch = provider('摘要');
+    const post = await note('文章', await blogRoot(), `<!-- 私人备注 -->\n${BODY}\n\n<span title="隐藏">标签</span>`);
+    await publish(post, 'post');
+    expect(sent(fetch)).not.toContain('私人备注');
+    expect(sent(fetch)).not.toContain('隐藏');
+    expect(blogExcerpt('<!-- 秘密 -->正文<b>加粗</b>')).toBe('正文 加粗');
+  });
+
+  it('keeps the summary when a new version has the same text', async () => {
+    await withKey();
+    const fetch = provider('摘要一', '摘要二');
+    const post = await note('文章', await blogRoot(), BODY);
+    await publish(post, 'post');
+    const file = await upload('a.png', 'image/png');
+    const saved = await save(post.id, BODY, [file]);
+    expect((await publish(saved)).post).toMatchObject({ summary: '摘要一', summarySource: 'ai' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stores an edited summary sent with the update instead of generating one', async () => {
+    await withKey();
+    const fetch = provider('摘要一', '多余');
+    const post = await note('文章', await blogRoot(), BODY);
+    await publish(post, 'post');
+    const saved = await save(post.id, `${BODY}\n\n新段落`);
+    const updated = await ok<BlogNoteStatus>(`/api/blog/posts/${post.id}`, 'PUT', {
+      revision: saved.revision,
+      summary: ' 作者\n写的 ',
+    });
+    expect(updated.post).toMatchObject({ summary: '作者 写的', summarySource: 'manual' });
+    expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('does not bring back a post encrypted while its summary was written', async () => {
+    await withKey();
+    const keyId = await newKey();
+    const post = await note('文章', await blogRoot(), BODY);
+    vi.spyOn(globalThis, 'fetch').mockImplementation(async () => {
+      // What PUT /encryption does meanwhile on another device.
+      await bindings.DB.batch([
+        bindings.DB.prepare('UPDATE nodes SET encryption=? WHERE id=?').bind(keyId, post.id),
+        bindings.DB.prepare('DELETE FROM blog_posts WHERE node_id=?').bind(post.id),
+      ]);
+      return reply('摘要');
+    });
+    const response = await call(`/api/blog/posts/${post.id}`, 'PUT', { revision: post.revision, slug: 'post' });
+    expect(response.status).toBe(409);
+    expect(await bindings.DB.prepare('SELECT 1 FROM blog_posts WHERE node_id=?').bind(post.id).first()).toBeNull();
+  });
+
+  it('uses a reply cut off at the token limit', async () => {
+    await withKey();
+    vi.spyOn(globalThis, 'fetch').mockImplementation(
+      async () =>
+        new Response(
+          `data: ${JSON.stringify({ choices: [{ delta: { content: '长'.repeat(300) } }] })}\n\ndata: ${JSON.stringify({ choices: [{ delta: {}, finish_reason: 'length' }] })}\n\ndata: [DONE]\n\n`,
+          { headers: { 'content-type': 'text/event-stream' } },
+        ),
+    );
+    const post = await note('文章', await blogRoot(), BODY);
+    expect((await publish(post, 'post')).post).toMatchObject({ summarySource: 'ai', summary: `${'长'.repeat(159)}…` });
+  });
+
+  it('reports a blank reply and a post with nothing to summarize', async () => {
+    await withKey();
+    provider('原摘要', '   ');
+    const root = await blogRoot();
+    const post = await note('文章', root, BODY);
+    await publish(post, 'post');
+    const blank = await call(`/api/blog/posts/${post.id}/summary`, 'POST');
+    expect(blank.status).toBe(502);
+    const empty = await note('只有图', root, '![图](/x.png)');
+    await publish(empty, 'image-only');
+    expect((await call(`/api/blog/posts/${empty.id}/summary`, 'POST')).status).toBe(400);
   });
 
   it('is closed to command-line tokens', async () => {
@@ -685,6 +817,11 @@ describe('blog text helpers', () => {
       blogExcerpt('---\ntitle: x\n---\n# 标题\n\n**正文** [链接](https://a.test) ![图](/x.png)\n\n```js\ncode\n```\n结束', '标题'),
     ).toBe('正文 链接 结束');
     expect(blogExcerpt('公式 $E=mc^2$ 与 \\$5\n\n## 小标题\n\n| 甲 | 乙 |\n| --- | --- |\n\n- 列表')).toBe('公式 与 \\$5 列表');
-    expect([...blogExcerpt('字'.repeat(200))]).toHaveLength(161);
+    expect(blogExcerpt('字'.repeat(200))).toHaveLength(160);
+    expect(blogExcerpt('word '.repeat(60))).toMatch(/ word…$/);
+    // Counted in the editor's unit, and never split inside a character.
+    const astral = blogExcerpt('𝑥'.repeat(100));
+    expect(astral.length).toBeLessThanOrEqual(160);
+    expect(astral).toMatch(/^(?:𝑥)+…$/u);
   });
 });

@@ -7,12 +7,13 @@ const BODY = `# 文章\n\n${'这是一段足够长的正文，用来确认摘要
 async function setUp(page: Page, baseURL: string) {
   const headers = { origin: new URL(baseURL).origin };
   const status = await (await page.request.get('/api/auth/status')).json();
-  await page.request.post(status.initialized ? '/api/auth/login' : '/api/auth/setup', {
+  const auth = await page.request.post(status.initialized ? '/api/auth/login' : '/api/auth/setup', {
     headers,
     data: status.initialized
       ? { password: await preparePassword('Note2026', status.password) }
       : { password: await preparePassword('Note2026'), token: 'e2e-test-only-setup-token-never-deploy-0001' },
   });
+  expect(auth.ok()).toBeTruthy();
   await page.request.put('/api/ai/settings', { headers, data: { apiKey: 'sk-e2e-placeholder-key' } });
   const root: NoteNode = await (await page.request.post('/api/nodes', { headers, data: { kind: 'folder', title: '博客' } })).json();
   await page.request.put('/api/blog/settings', { headers, data: { parentId: root.id, title: '我的博客' } });

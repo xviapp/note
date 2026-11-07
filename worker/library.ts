@@ -291,13 +291,18 @@ async function ownFiles(
       files: shared.results,
     });
   if (!node) return [];
+  // The version a blog post pins keeps its files: its published body links
+  // them by ID. Encrypting the note deletes the post first (forgetSubtree), and
+  // the encryption sync then gives that version its own copies too.
+  const older = 'SELECT id FROM versions WHERE node_id=? AND id NOT IN (SELECT version_id FROM blog_posts WHERE node_id=?)';
   return copies.flatMap(([from, to]) => [
-    env.DB.prepare(
-      'UPDATE OR IGNORE version_assets SET blob_id=? WHERE blob_id=? AND version_id IN (SELECT id FROM versions WHERE node_id=?)',
-    ).bind(to, from, node),
-    env.DB.prepare(
-      'DELETE FROM version_assets WHERE blob_id=? AND version_id IN (SELECT id FROM versions WHERE node_id=?)',
-    ).bind(from, node),
+    env.DB.prepare(`UPDATE OR IGNORE version_assets SET blob_id=? WHERE blob_id=? AND version_id IN (${older})`).bind(
+      to,
+      from,
+      node,
+      node,
+    ),
+    env.DB.prepare(`DELETE FROM version_assets WHERE blob_id=? AND version_id IN (${older})`).bind(from, node, node),
   ]);
 }
 // Any entry's icon: an Emoji or a small picture (see migrations/0029_node_icons.sql).

@@ -74,14 +74,18 @@ function PublishDialog({
   const [slug, setSlug] = useState(post?.slug ?? status.suggestedSlug);
   const saved = post?.summary ?? '';
   const [summary, setSummary] = useState(saved);
-  useEffect(() => setSummary(saved), [saved]);
+  // The server stores it with whitespace collapsed.
+  const edited = !!post && summary.replace(/\s+/g, ' ').trim() !== saved;
   const [busy, setBusy] = useState<'' | 'publish' | 'summary' | 'generate' | 'unpublish'>(''),
     [error, setError] = useState('');
   const run = async (task: typeof busy, action: () => Promise<BlogNoteStatus>, finished: boolean) => {
     setBusy(task);
     setError('');
     try {
-      onChanged(await action());
+      const next = await action();
+      onChanged(next);
+      // Show what was stored, even when it equals the last saved text.
+      setSummary(next.post?.summary ?? '');
       if (finished) onClose();
     } catch (reason) {
       setError((reason as Error).message);
@@ -93,7 +97,13 @@ function PublishDialog({
     event.preventDefault();
     void run(
       'publish',
-      () => api<BlogNoteStatus>(`/api/blog/posts/${note.id}`, 'PUT', { revision: note.revision, slug: slug.trim() }),
+      () =>
+        api<BlogNoteStatus>(`/api/blog/posts/${note.id}`, 'PUT', {
+          revision: note.revision,
+          slug: slug.trim(),
+          // An edited summary goes with the update instead of being replaced.
+          ...(edited ? { summary } : {}),
+        }),
       false,
     );
   };
@@ -157,7 +167,8 @@ function PublishDialog({
                 />
               </label>
               <p className="field-hint">
-                显示在文章列表、搜索结果和 RSS 里。{SUMMARY_SOURCES[post.summarySource]}
+                显示在文章列表、搜索结果和 RSS 里。
+                {edited ? '修改还没有保存，更新文章时会一起保存。' : SUMMARY_SOURCES[post.summarySource]}
               </p>
               <div className="dialog-actions">
                 <button
@@ -172,7 +183,7 @@ function PublishDialog({
                 <button
                   type="button"
                   className="button"
-                  disabled={summary.trim() === saved}
+                  disabled={!edited}
                   onClick={() =>
                     void run('summary', () => api<BlogNoteStatus>(`/api/blog/posts/${note.id}/summary`, 'PUT', { summary }), false)
                   }
