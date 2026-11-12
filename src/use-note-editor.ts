@@ -11,6 +11,18 @@ import { pendingSave, queueSave, waitForSave, type SaveFailure } from './save-ou
 const CONFLICT_MESSAGE =
   '这篇笔记已在其他页面更新，你的修改还在编辑器里。可以用你的版本覆盖（之前的内容进入版本历史），或另存为一篇新笔记。';
 
+export type EditTab = 'source' | 'split' | 'preview';
+
+function readEditLayout(): EditTab {
+  try {
+    const saved = localStorage.getItem('note:edit-layout');
+    if (saved === 'source' || saved === 'split' || saved === 'preview') return saved;
+  } catch {
+    /* Optional device preference. */
+  }
+  return 'split';
+}
+
 // Editing a note's body and attachments: a draft, a confirmed start, a save that
 // is safe to retry, and a guard that asks before unsaved changes are left.
 export function useNoteEditor({
@@ -45,7 +57,17 @@ export function useNoteEditor({
     [saveError, setSaveError] = useState(''),
     // Another page saved first; the editor still holds this page's text.
     [conflict, setConflict] = useState(false);
-  const [tab, setTab] = useState<'source' | 'preview'>('source');
+  const [tab, setTabState] = useState<EditTab>(readEditLayout);
+  const setTab = (next: EditTab, persist = false) => {
+    setTabState(next);
+    if (persist) {
+      try {
+        localStorage.setItem('note:edit-layout', next);
+      } catch {
+        /* Optional device preference. */
+      }
+    }
+  };
   const [storedDraft, setStoredDraft] = useState<{
     content: string;
     assets: FileInfo[];
@@ -306,7 +328,7 @@ export function useNoteEditor({
       onStart();
       baseRevision.current = noteRef.current?.revision ?? 0;
       setEditing(true);
-      setTab('source');
+      setTabState(readEditLayout());
       setSaveError('');
       setConflict(false);
     } catch (e) {
@@ -351,7 +373,7 @@ export function useNoteEditor({
       setContent(draft.content);
       setAssets(draft.attachments);
       setEditing(true);
-      setTab('source');
+      setTabState(readEditLayout());
       setSaveError('');
     } catch (e) {
       onError(e);

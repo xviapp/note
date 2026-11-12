@@ -208,7 +208,25 @@ function Notebook({
   const globalActions = useRef<AssistantHandle | null>(null);
   const offline = useOffline();
   const [loaded, setLoaded] = useState<NoteDetail | null>(null),
-    [mobileOpen, setMobileOpen] = useState(false);
+    [mobileOpen, setMobileOpen] = useState(false),
+    [sidebarCollapsed, setSidebarCollapsed] = useState(() => {
+      try {
+        return localStorage.getItem('note:sidebar-collapsed') === 'true';
+      } catch {
+        return false;
+      }
+    });
+  const updateSidebarCollapsed = useCallback((next: boolean | ((prev: boolean) => boolean)) => {
+    setSidebarCollapsed((prev) => {
+      const resolved = typeof next === 'function' ? next(prev) : next;
+      try {
+        localStorage.setItem('note:sidebar-collapsed', String(resolved));
+      } catch {
+        /* Optional device preference. */
+      }
+      return resolved;
+    });
+  }, []);
   // A note just created from the form, opened for writing on arrival.
   const [freshNote, setFreshNote] = useState<string | null>(null);
   const clearFreshNote = useCallback(() => setFreshNote(null), []);
@@ -252,7 +270,8 @@ function Notebook({
     return () => window.removeEventListener('note:library-refresh', changed);
   }, [changed]);
   const openSidebar = () => {
-    setMobileOpen(true);
+    if (window.matchMedia('(max-width: 760px)').matches) setMobileOpen(true);
+    else updateSidebarCollapsed(false);
     if (isOffline()) void onCheckSession();
     else changed();
   };
@@ -505,6 +524,14 @@ function Notebook({
         setSearchOpen(true);
         return;
       }
+      if ((event.ctrlKey || event.metaKey) && !event.altKey && !event.shiftKey && event.key === '\\') {
+        if (!android && !document.querySelector('dialog[open]')) {
+          event.preventDefault();
+          if (window.matchMedia('(max-width: 760px)').matches) setMobileOpen((open) => !open);
+          else updateSidebarCollapsed((collapsed) => !collapsed);
+        }
+        return;
+      }
       if (
         event.ctrlKey ||
         event.metaKey ||
@@ -530,7 +557,7 @@ function Notebook({
     };
     window.addEventListener('keydown', key);
     return () => window.removeEventListener('keydown', key);
-  }, []);
+  }, [android, updateSidebarCollapsed]);
   const action = async (kind: NodeAction, node: NoteNode) => {
     document.querySelectorAll<HTMLDetailsElement>('details.node-menu[open]').forEach((element) => {
       element.open = false;
@@ -725,7 +752,7 @@ function Notebook({
   const syncStatus = <SyncStatus count={outbox.count} failed={outbox.failed} onOpen={() => openSettings('outbox')} />;
   return (
     <div
-      className={`app-shell ${android ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
+      className={`app-shell ${android ? 'android-shell' : ''} ${mobileOpen ? 'sidebar-open' : ''} ${sidebarCollapsed && !android ? 'sidebar-collapsed' : ''} ${subpage ? 'has-subpage' : 'has-bottom-nav'}`}
     >
       <ShareImport
         onImported={(nodes) => {
@@ -749,6 +776,7 @@ function Notebook({
             onNew={() => void newNode()}
             onSearch={() => setSearchOpen(true)}
             onClose={() => setMobileOpen(false)}
+            onCollapse={() => updateSidebarCollapsed(true)}
             onView={(next) => void switchView(next)}
             tree={{
               refresh: revision,
@@ -1044,11 +1072,13 @@ function Notebook({
         <Modal title="快捷键" onClose={() => setShortcutsOpen(false)}>
           <dl className="shortcut-list">
             {[
-              ['Ctrl K 或 /', '按标题搜索笔记'],
+              ['Ctrl K 或 /', '搜索笔记标题、正文或批注'],
+              ['Ctrl \\', '收起或展开侧边栏'],
               ['N', '新建笔记'],
               ['E', '编辑当前笔记'],
               ['Q', '打开随手记'],
               ['Ctrl S', '编辑时保存并继续编辑'],
+              ['Ctrl B / I / K', '编辑 Markdown 时加粗、斜体、插入链接'],
               ['Ctrl 点击', '在目录或列表中多选，再批量移动或删除'],
               ['Shift 点击', '连续选择到上次点击的条目'],
               ['Esc', '关闭弹窗、菜单或全屏视图，或取消多选'],

@@ -1,10 +1,11 @@
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, formatDate } from '../api';
-import type { FileInfo, NoteDetail, VersionInfo } from '../../shared/types';
+import { TEXT_KINDS, type FileInfo, type NoteDetail, type VersionInfo } from '../../shared/types';
 import { Modal, Spinner } from './Primitives';
 import { MarkdownView } from './LazyMarkdown';
 import type { Heading } from './MarkdownView';
 import { Attachments } from './Attachments';
+import { diffLines } from '../line-diff';
 
 export function HistoryDialog({
   note,
@@ -22,12 +23,18 @@ export function HistoryDialog({
   onPreviewFile: (file: FileInfo) => void;
 }) {
   const [versions, setVersions] = useState<VersionInfo[]>([]),
-    [selected, setSelected] = useState('');
+    [selected, setSelected] = useState(''),
+    [mode, setMode] = useState<'preview' | 'diff'>('preview');
   const [preview, setPreview] = useState<{ content: string; attachments: FileInfo[] } | null>(null),
     [error, setError] = useState(''),
     [busy, setBusy] = useState(false),
     [headings, setHeadings] = useState<Heading[]>([]);
   const previewRef = useRef<HTMLDivElement>(null);
+  const canDiff = TEXT_KINDS.includes(note.kind);
+  const diff = useMemo(
+    () => (canDiff && mode === 'diff' && preview ? diffLines(preview.content, note.content) : []),
+    [canDiff, mode, preview, note.content],
+  );
   useEffect(() => {
     let live = true;
     api<{ versions: VersionInfo[] }>(`/api/nodes/${note.id}/versions`)
@@ -64,7 +71,29 @@ export function HistoryDialog({
       }}
       wide
     >
-      <p className="dialog-copy">保留当前版本与最近 5 个历史版本。</p>
+      <div className="history-toolbar">
+        <p className="dialog-copy">保留当前版本与最近 5 个历史版本。</p>
+        {canDiff && (
+          <div className="history-mode-tabs" role="group" aria-label="预览方式">
+            <button
+              type="button"
+              aria-pressed={mode === 'preview'}
+              className={mode === 'preview' ? 'active' : ''}
+              onClick={() => setMode('preview')}
+            >
+              渲染预览
+            </button>
+            <button
+              type="button"
+              aria-pressed={mode === 'diff'}
+              className={mode === 'diff' ? 'active' : ''}
+              onClick={() => setMode('diff')}
+            >
+              文本差异
+            </button>
+          </div>
+        )}
+      </div>
       <div className="history-layout">
         <div className="version-list">
           {versions.map((version) => (
@@ -81,7 +110,39 @@ export function HistoryDialog({
         <div className="version-preview" ref={previewRef}>
           {preview ? (
             <>
-              {note.kind === 'markdown' ? (
+              {canDiff && mode === 'diff' ? (
+                preview.content === note.content ? (
+                  <p className="diff-empty">与当前版本正文一致。</p>
+                ) : (
+                  <div className="version-diff" aria-label="版本差异对比">
+                    <p className="version-diff-legend">
+                      对比所选版本与当前版本：<code>-</code> 为所选版本原有内容，<code>+</code> 为当前版本新增内容。
+                    </p>
+                    <div className="version-diff-lines">
+                      {diff.map((entry, index) =>
+                        entry.type === 'skip' ? (
+                          <div key={`skip-${index}`} className="diff-line diff-skip">
+                            ⋯ 省略 {entry.count} 行相同内容
+                          </div>
+                        ) : (
+                          <div key={index} className={`diff-line diff-${entry.type}`}>
+                            <span className="diff-num" aria-hidden="true">
+                              {entry.oldNumber ?? ''}
+                            </span>
+                            <span className="diff-num" aria-hidden="true">
+                              {entry.newNumber ?? ''}
+                            </span>
+                            <span className="diff-sign" aria-hidden="true">
+                              {entry.type === 'add' ? '+' : entry.type === 'del' ? '-' : ' '}
+                            </span>
+                            <span className="diff-text">{entry.text || ' '}</span>
+                          </div>
+                        ),
+                      )}
+                    </div>
+                  </div>
+                )
+              ) : note.kind === 'markdown' ? (
                 <>
                   <div className="history-toc">
                     {headings.map((h) => (

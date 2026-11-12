@@ -1,4 +1,3 @@
-import { Fragment } from 'react';
 import {
   ArrowLeft,
   Clock3,
@@ -7,6 +6,7 @@ import {
   History,
   Menu,
   MessagesSquare,
+  PanelLeftClose,
   Plus,
   Search,
   Settings2,
@@ -22,10 +22,13 @@ import { Brand } from './Brand';
 import { ThemeSwitcher } from './ThemePicker';
 import { Tree, type TreeProps } from './Tree';
 
-const navItems = [
+const primaryNavItems = [
   { key: 'tree' as const, label: '全部笔记', icon: FolderOpen },
   { key: 'favorites' as const, label: '收藏', icon: Star },
   { key: 'recent' as const, label: '最近访问', icon: Clock3 },
+];
+
+const systemNavItems = [
   { key: 'offline' as const, label: '离线阅读', icon: HardDriveDownload },
   { key: 'trash' as const, label: '回收站', icon: Trash2 },
   { key: 'settings' as const, label: '设置', icon: Settings2 },
@@ -38,6 +41,7 @@ export function Sidebar({
   onNew,
   onSearch,
   onClose,
+  onCollapse,
   onView,
   tree,
 }: {
@@ -46,6 +50,7 @@ export function Sidebar({
   onNew: () => void;
   onSearch: () => void;
   onClose: () => void;
+  onCollapse?: () => void;
   onView: (view: View) => void;
   tree: TreeProps;
 }) {
@@ -63,6 +68,16 @@ export function Sidebar({
           >
             <Plus size={19} />
           </button>
+          {onCollapse && (
+            <button
+              className="icon-button collapse-sidebar"
+              aria-label="收起侧栏"
+              title="收起侧栏（Ctrl+\）"
+              onClick={onCollapse}
+            >
+              <PanelLeftClose size={18} />
+            </button>
+          )}
           <button className="icon-button close-sidebar" aria-label="关闭侧栏" onClick={onClose}>
             <X size={20} />
           </button>
@@ -79,32 +94,65 @@ export function Sidebar({
         <span>搜索笔记</span>
         <kbd aria-hidden="true">Ctrl K</kbd>
       </button>
-      <nav className="main-nav" aria-label="页面">
-        {navItems.map((item) => (
-          <Fragment key={item.key}>
+      <nav className="main-nav main-nav-primary" aria-label="页面">
+        {primaryNavItems.map((item) => (
+          <button
+            key={item.key}
+            className={view === item.key ? 'active' : ''}
+            aria-label={item.label}
+            aria-current={view === item.key ? 'page' : undefined}
+            title={item.label}
+            onClick={() => onView(item.key)}
+          >
+            <item.icon size={17} />
+            <span>{item.label}</span>
+          </button>
+        ))}
+      </nav>
+      <div className="sidebar-tree">
+        <Tree {...tree} />
+      </div>
+      <nav className="main-nav main-nav-footer" aria-label="工具与系统">
+        <div className="sidebar-tools-row">
+          <button
+            aria-label="随手记"
+            title="随手记（Q）"
+            onClick={() => {
+              onClose();
+              openClips();
+            }}
+          >
+            <StickyNote size={15} />
+            <span>随手记</span>
+          </button>
+          <button
+            aria-label="青藜对话"
+            title="青藜对话"
+            onClick={() => {
+              onClose();
+              openAssistantThreads();
+            }}
+          >
+            <MessagesSquare size={15} />
+            <span>青藜对话</span>
+          </button>
+        </div>
+        <div className="sidebar-system-row">
+          {systemNavItems.map((item) => (
             <button
+              key={item.key}
               className={view === item.key ? 'active' : ''}
               aria-label={item.label}
               aria-current={view === item.key ? 'page' : undefined}
               title={item.label}
               onClick={() => onView(item.key)}
             >
-              <item.icon size={18} />
+              <item.icon size={15} />
               <span>{item.label}</span>
             </button>
-            {/* 青藜对话 is a list of its own rather than a page. */}
-            {item.key === 'recent' && (
-              <button aria-label="青藜对话" title="青藜对话" onClick={openAssistantThreads}>
-                <MessagesSquare size={18} />
-                <span>青藜对话</span>
-              </button>
-            )}
-          </Fragment>
-        ))}
+          ))}
+        </div>
       </nav>
-      <div className="sidebar-tree">
-        <Tree {...tree} />
-      </div>
     </aside>
   );
 }
@@ -154,6 +202,7 @@ export function AppHeader({
           <button
             className="icon-button mobile-menu"
             aria-label="打开笔记目录"
+            title="展开侧栏（Ctrl+\）"
             aria-controls="notebook-sidebar"
             aria-expanded={menuOpen}
             onClick={onMenu}

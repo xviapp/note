@@ -269,7 +269,84 @@ export function AssistantPanel(props: Props) {
                   </button>
                 </>
               ) : (
-                <p>附上文件、选中文字或截图，开始提问。</p>
+                <>
+                  <p>附上文件、选中文字或截图，开始提问。</p>
+                  <div className="assistant-starters" role="group" aria-label="快捷提问建议">
+                    {(currentFile && currentFile.kind !== 'folder'
+                      ? [
+                          {
+                            label: '总结本篇要点',
+                            run: () => {
+                              setPrompt('请总结这篇内容的核心观点与结构脉络。');
+                              if (!currentFiles.length && !props.context && files.length < CHAT_FILE_LIMIT)
+                                setFileSource({ type: 'note', note: currentFile });
+                              else if (!matchMedia('(pointer: coarse)').matches)
+                                promptInput.current?.focus({ preventScroll: true });
+                            },
+                          },
+                          ...(props.annotationCount
+                            ? [
+                                {
+                                  label: '梳理我的批注',
+                                  run: () => {
+                                    setWithNotes(true);
+                                    setPrompt('请结合我的高亮与批注，帮我梳理核心思考与待解问题。');
+                                    if (!matchMedia('(pointer: coarse)').matches)
+                                      promptInput.current?.focus({ preventScroll: true });
+                                  },
+                                },
+                              ]
+                            : []),
+                          {
+                            label: '提炼关键问题',
+                            run: () => {
+                              setPrompt('这篇内容试图解决什么核心问题？有哪些值得进一步追问的地方？');
+                              if (!currentFiles.length && !props.context && files.length < CHAT_FILE_LIMIT)
+                                setFileSource({ type: 'note', note: currentFile });
+                              else if (!matchMedia('(pointer: coarse)').matches)
+                                promptInput.current?.focus({ preventScroll: true });
+                            },
+                          },
+                        ]
+                      : [
+                          {
+                            label: '梳理读书想法',
+                            run: () => {
+                              setPrompt('帮我梳理并延伸以下读书想法：\n');
+                              if (!matchMedia('(pointer: coarse)').matches)
+                                promptInput.current?.focus({ preventScroll: true });
+                            },
+                          },
+                          {
+                            label: '对比两个概念',
+                            run: () => {
+                              setPrompt('请帮我对比辨析以下两个概念的异同与适用边界：\n');
+                              if (!matchMedia('(pointer: coarse)').matches)
+                                promptInput.current?.focus({ preventScroll: true });
+                            },
+                          },
+                          {
+                            label: '整理零散记录',
+                            run: () => {
+                              setPrompt('请帮我将下面这段零散记录整理成结构清晰的笔记：\n');
+                              if (!matchMedia('(pointer: coarse)').matches)
+                                promptInput.current?.focus({ preventScroll: true });
+                            },
+                          },
+                        ]
+                    ).map((starter) => (
+                      <button
+                        key={starter.label}
+                        type="button"
+                        className="assistant-starter"
+                        disabled={sending}
+                        onClick={starter.run}
+                      >
+                        {starter.label}
+                      </button>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           ) : null}

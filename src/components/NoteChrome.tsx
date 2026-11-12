@@ -3,6 +3,7 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
+  FolderOpen,
   Link2,
   LoaderCircle,
   Menu,
@@ -18,6 +19,7 @@ import { variantOf, type NoteDetail } from '../../shared/types';
 import { NodeIcon } from './Primitives';
 import { noteType, typeLabel } from '../note-types/registry';
 import { LockBadge } from './LockBadge';
+import type { EditTab } from '../use-note-editor';
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 
 // The parts of a note page around its body: location, heading, edit bar.
@@ -26,17 +28,23 @@ export function NoteLocation({
   note,
   showSidebar,
   sidebarOpen,
+  scrolledTitle,
   onBack,
   onOpenSidebar,
   onNavigate,
+  onScrollTop,
 }: {
   note: NoteDetail | null;
   showSidebar: boolean;
   sidebarOpen: boolean;
+  scrolledTitle?: string;
   onBack: () => void;
   onOpenSidebar: () => void;
   onNavigate: (id: string) => void;
+  onScrollTop?: () => void;
 }) {
+  const visibleCrumbs = note ? note.breadcrumbs.filter((_, index) => !filed(note, index)) : [];
+  const parentCrumb = visibleCrumbs.length >= 2 ? visibleCrumbs[visibleCrumbs.length - 2] : null;
   return (
     <div className="note-location">
       <button className="icon-button page-back" aria-label="返回" onClick={onBack}>
@@ -46,6 +54,7 @@ export function NoteLocation({
         <button
           className="icon-button mobile-menu"
           aria-label="打开笔记目录"
+          title="展开侧栏（Ctrl+\）"
           aria-controls="notebook-sidebar"
           aria-expanded={sidebarOpen}
           onClick={onOpenSidebar}
@@ -54,30 +63,50 @@ export function NoteLocation({
         </button>
       )}
       <div className="breadcrumbs">
-        <button onClick={() => onNavigate('')}>全部笔记</button>
-        {note?.breadcrumbs.map((part, index) => filed(note, index) ? null : (
-          <span key={part.id}>
-            <ChevronRight size={13} />
-            <button
-              title={part.title}
-              disabled={index === note.breadcrumbs.length - 1}
-              onClick={() => onNavigate(part.id)}
-            >
-              {part.title}
-            </button>
-          </span>
-        ))}
-      </div>
-      {note?.kind !== 'folder' && (
-        <button
-          className="icon-button location-clips"
-          aria-label="随手记"
-          title="随手记（Q）"
-          onClick={openClips}
-        >
-          <StickyNote size={18} />
+        <button className="desktop-crumb" onClick={() => onNavigate('')}>
+          全部笔记
         </button>
-      )}
+        {note?.breadcrumbs.map((part, index) =>
+          filed(note, index) ? null : (
+            <span className="desktop-crumb" key={part.id}>
+              <ChevronRight size={13} />
+              <button
+                title={part.title}
+                disabled={index === note.breadcrumbs.length - 1}
+                onClick={() => onNavigate(part.id)}
+              >
+                {part.title}
+              </button>
+            </span>
+          ),
+        )}
+        <button
+          type="button"
+          className={`mobile-crumb${scrolledTitle ? ' is-scrolled-title' : ''}`}
+          title={
+            scrolledTitle
+              ? `回到顶部：${scrolledTitle}`
+              : parentCrumb
+                ? `上级目录：${parentCrumb.title}`
+                : '全部笔记'
+          }
+          onClick={() => {
+            if (scrolledTitle && onScrollTop) onScrollTop();
+            else onNavigate(parentCrumb ? parentCrumb.id : '');
+          }}
+        >
+          {!scrolledTitle && <FolderOpen size={13} aria-hidden="true" />}
+          <span>{scrolledTitle || (parentCrumb ? parentCrumb.title : '全部笔记')}</span>
+        </button>
+      </div>
+      <button
+        className="icon-button location-clips"
+        aria-label="随手记"
+        title="随手记（Q）"
+        onClick={openClips}
+      >
+        <StickyNote size={18} />
+      </button>
     </div>
   );
 }
@@ -109,6 +138,7 @@ export function NoteHeading({
   actions?: ReactNode;
 }) {
   const [renaming, setRenaming] = useState(false);
+  const renameDone = useRef(false);
   // A note left mid-rename starts its own page untouched.
   useEffect(() => setRenaming(false), [note.id]);
   const shown = title ?? (note.project_category && note.metadata_title ? note.metadata_title : note.title);
@@ -127,16 +157,24 @@ export function NoteHeading({
           defaultValue={note.title}
           enterKeyHint="done"
           autoFocus
-          onFocus={(event) => event.currentTarget.select()}
-          // Leaving the field without Enter keeps the old title.
-          onBlur={() => finish(null)}
+          onFocus={(event) => {
+            renameDone.current = false;
+            event.currentTarget.select();
+          }}
+          onBlur={(event) => {
+            if (renameDone.current) return;
+            renameDone.current = true;
+            finish(event.currentTarget.value);
+          }}
           onKeyDown={(event) => {
             if (event.nativeEvent.isComposing) return;
             if (event.key === 'Enter') {
               event.preventDefault();
+              renameDone.current = true;
               finish(event.currentTarget.value);
             } else if (event.key === 'Escape') {
               event.preventDefault();
+              renameDone.current = true;
               finish(null);
             }
           }}
@@ -204,10 +242,10 @@ export function EditToolbar({
   kind: NoteDetail['kind'];
   dirty: boolean;
   draftStatus: 'pending' | 'stored' | 'error';
-  tab: 'source' | 'preview';
+  tab: EditTab;
   busy: boolean;
   uploading: boolean;
-  onTab: (tab: 'source' | 'preview') => void;
+  onTab: (tab: EditTab, persist?: boolean) => void;
   onFiles: (files: FileList | null) => void;
   onInsertLink: () => void;
   onCancel: () => void;
@@ -224,17 +262,35 @@ export function EditToolbar({
   const closeInsertMenu = () => {
     if (compact && insertMenu.current) insertMenu.current.open = false;
   };
+  const activeTab = compact && tab === 'split' ? 'source' : tab;
   return (
     <div className="edit-toolbar">
       <span className={`editing-label${dirty && draftStatus === 'error' ? ' draft-error' : ''}`} role="status">
         {busy || uploading ? <LoaderCircle size={14} className="spin" aria-hidden="true" /> : <Pencil size={14} />}
         {busy ? '正在同步…' : uploading ? '正在上传…' : !dirty ? '已同步' : draftStatus === 'stored' ? '草稿已存本机' : draftStatus === 'error' ? '草稿暂存失败' : '正在暂存草稿…'}
       </span>
-      <div className="edit-tabs">
-        <button aria-pressed={tab === 'source'} className={tab === 'source' ? 'active' : ''} onClick={() => onTab('source')}>
+      <div className="edit-tabs" role="group" aria-label="编辑布局">
+        <button
+          aria-pressed={activeTab === 'source'}
+          className={activeTab === 'source' ? 'active' : ''}
+          onClick={() => onTab('source', !compact)}
+        >
           源码
         </button>
-        <button aria-pressed={tab === 'preview'} className={tab === 'preview' ? 'active' : ''} onClick={() => onTab('preview')}>
+        {!compact && (
+          <button
+            aria-pressed={activeTab === 'split'}
+            className={activeTab === 'split' ? 'active' : ''}
+            onClick={() => onTab('split', true)}
+          >
+            分栏
+          </button>
+        )}
+        <button
+          aria-pressed={activeTab === 'preview'}
+          className={activeTab === 'preview' ? 'active' : ''}
+          onClick={() => onTab('preview', !compact)}
+        >
           预览
         </button>
       </div>

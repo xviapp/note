@@ -2,19 +2,20 @@ import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, expect, it, vi } from 'vitest';
 import { MarkdownView } from './components/MarkdownView';
 import type { SectionControls } from './components/MarkdownSection';
-import { replaceSection, type MarkdownSection } from './markdown-sections';
+import { replaceSection, toggleTaskAt, type MarkdownSection } from './markdown-sections';
 
 afterEach(cleanup);
 function view(content: string) {
   const onEdit = vi.fn();
-  const controls: SectionControls = { disabled: false, activeStart: null, editor: null, onEdit, onDelete: vi.fn() };
+  const onToggleTask = vi.fn();
+  const controls: SectionControls = { disabled: false, activeStart: null, editor: null, onEdit, onDelete: vi.fn(), onToggleTask };
   const result = render(<MarkdownView content={content} onNavigate={() => {}} onImage={() => {}} sections={controls} />);
   const section = (title: string) => {
     fireEvent.click(screen.getByRole('button', { name: `管理章节 ${title}` }));
     fireEvent.click(screen.getByRole('button', { name: '编辑本节' }));
     return onEdit.mock.lastCall![0] as MarkdownSection;
   };
-  return { ...result, section, controls };
+  return { ...result, section, controls, onToggleTask };
 }
 
 it('uses parsed heading levels and includes descendants while ignoring code, quotes and lists', () => {
@@ -75,4 +76,24 @@ it('includes leading indentation when editing or deleting a heading-free preambl
   const intro = section('前言');
   expect(intro.start).toBe(0);
   expect(replaceSection(content, intro, '')).toBe('## 正文\n\n保留');
+});
+
+it('toggles GFM task checkboxes and renders icon-only code copy buttons without changing textContent', () => {
+  const content = '# 清单\n\n- [ ] 第一项\n- [x] 第二项\n\n```ts\nconst answer = 42;\n```\n';
+  const plain = render(<MarkdownView content={content} onNavigate={() => {}} onImage={() => {}} />);
+  const plainText = plain.container.textContent;
+  expect(plain.getByRole('button', { name: '复制代码' })).toBeTruthy();
+  expect((plain.container.querySelector('input[type="checkbox"]') as HTMLInputElement).disabled).toBe(true);
+  plain.unmount();
+
+  const { container, onToggleTask } = view(content);
+  expect(container.textContent).toBe(plainText);
+  const boxes = container.querySelectorAll<HTMLInputElement>('input[type="checkbox"]');
+  expect(boxes).toHaveLength(2);
+  expect(boxes[0].disabled).toBe(false);
+  fireEvent.click(boxes[0]);
+  expect(onToggleTask).toHaveBeenCalledTimes(1);
+  const [offset, checked] = onToggleTask.mock.calls[0] as [number, boolean];
+  expect(checked).toBe(true);
+  expect(toggleTaskAt(content, offset, checked)).toBe('# 清单\n\n- [x] 第一项\n- [x] 第二项\n\n```ts\nconst answer = 42;\n```\n');
 });

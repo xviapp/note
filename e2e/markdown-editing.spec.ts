@@ -113,6 +113,7 @@ test('ordinary Markdown can append, edit and delete sections in every theme', as
   expect(concurrent.ok(), await concurrent.text()).toBe(true);
   await page.getByRole('button', { name: '保存本节', exact: true }).click();
   await expect(page.locator('.section-editor').getByRole('alert')).toContainText('修改已保留');
+  await expect(page.getByRole('button', { name: '复制本节修改', exact: true })).toBeVisible();
   await expect(field).toHaveValue('## 第二节\n\n本机尚未保存的修改。');
   expect((await detail()).content).toContain('其他页面的新内容。');
   await page.getByRole('button', { name: '取消', exact: true }).click();
@@ -136,4 +137,31 @@ test('ordinary Markdown can append, edit and delete sections in every theme', as
   await noteAction(page, '关闭快捷编辑');
   await expect(page.locator('.section-trigger, .quick-append')).toHaveCount(0);
   expect(errors).toEqual([]);
+});
+
+test('reading mode toggles task checkboxes and copies fenced code blocks cleanly', async ({ page, context }) => {
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']).catch(() => {});
+  await login(page);
+  const content = '# 待办与代码\n\n- [ ] 完成章节巡检\n- [x] 整理阅读笔记\n\n```ts\nexport const ready = true;\n```\n';
+  const node = await (
+    await page.request.post('/api/nodes', {
+      headers,
+      data: { kind: 'markdown', title: '待办测试.md', content },
+    })
+  ).json();
+  await page.goto(`/n/${node.id}`);
+  const firstBox = page.locator('.read-content input[type=checkbox]').first();
+  await expect(firstBox).not.toBeChecked();
+  await firstBox.click();
+  await expect(firstBox).toBeChecked();
+  await expect
+    .poll(async () => ((await (await page.request.get(`/api/nodes/${node.id}`)).json()) as NoteDetail).content)
+    .toContain('- [x] 完成章节巡检');
+
+  const copy = page.locator('.read-content').getByRole('button', { name: '复制代码', exact: true });
+  await copy.click();
+  await expect(page.locator('.read-content').getByRole('button', { name: '已复制代码', exact: true })).toBeVisible();
+
+  await noteAction(page, '关闭快捷编辑');
+  await expect(firstBox).toBeDisabled();
 });

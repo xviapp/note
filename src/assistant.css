@@ -183,6 +183,28 @@
   margin: 0;
   max-width: 320px;
 }
+.assistant-starters {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 8px;
+  margin-top: 4px;
+  max-width: 340px;
+}
+.assistant-starter {
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--family-radius-pill);
+  background: var(--surface-raised);
+  color: var(--ink);
+  font-size: 12px;
+  line-height: 1.4;
+}
+.assistant-starter:hover {
+  border-color: var(--blue);
+  background: var(--selected);
+  color: var(--blue);
+}
 .older-messages {
   margin: 10px auto;
 }

@@ -54,7 +54,9 @@ test('随手记 keeps, copies, pins and deletes clips from any page', async ({ p
   await expect(dialog.locator('.clip-item').first()).toContainText('第二条');
 
   // Pinning moves the older one to the top group.
-  await dialog.locator('.clip-item').filter({ hasText: '第一条' }).getByRole('button', { name: '置顶' }).click();
+  const first = dialog.locator('.clip-item').filter({ hasText: '第一条' });
+  await first.getByLabel('更多操作').click();
+  await first.getByRole('button', { name: '置顶' }).click();
   await expect(dialog.getByRole('region', { name: '置顶' })).toContainText('第一条：买书');
   for (const theme of ['light', 'dark', 'starry']) {
     await page.evaluate((value) => {
@@ -72,6 +74,7 @@ test('随手记 keeps, copies, pins and deletes clips from any page', async ({ p
     expect(await page.evaluate(() => navigator.clipboard.readText())).toBe('第二条：从笔记里记下');
 
   // Delete, then undo.
+  await second.getByLabel('更多操作').click();
   await second.getByRole('button', { name: '删除' }).click();
   await expect(dialog.locator('.clip-item').filter({ hasText: '第二条' })).toHaveCount(0);
   await dialog.getByRole('button', { name: '撤销' }).click();
@@ -207,6 +210,7 @@ test('随手记 archives, searches and restores from the header entry', async ({
   await page.locator('.app-header').getByRole('button', { name: '随手记' }).click();
   const active = page.getByRole('dialog', { name: '随手记', exact: true });
   await expect(active.getByText('已整理的读书想法')).toBeVisible();
+  await active.getByLabel('更多操作').click();
   await active.getByRole('button', { name: '归档', exact: true }).click();
   await expect(active.getByText('已整理的读书想法')).toHaveCount(0);
   await active.getByRole('button', { name: '已归档', exact: true }).click();

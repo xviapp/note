@@ -102,7 +102,22 @@ it('keeps conflicting input editable and prevents another save from overwriting 
   expect(field()).toHaveProperty('value', '## 一\n\n修改');
   expect(field()).toHaveProperty('disabled', false);
   expect(screen.getByRole('button', { name: '保存本节' })).toHaveProperty('disabled', true);
+  expect(screen.getByRole('button', { name: '复制本节修改' })).toBeTruthy();
   expect(write).toHaveBeenCalledTimes(1);
+});
+
+it('cancels section editing on Escape, asking confirmation when dirty', async () => {
+  render(<Harness />);
+  fireEvent.click(screen.getByRole('button', { name: '开始编辑' }));
+  fireEvent.keyDown(field(), { key: 'Escape' });
+  await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
+  expect(confirm).not.toHaveBeenCalled();
+
+  edit();
+  confirm.mockResolvedValueOnce(true);
+  fireEvent.keyDown(field(), { key: 'Escape' });
+  await waitFor(() => expect(confirm).toHaveBeenCalledTimes(1));
+  await waitFor(() => expect(screen.queryByRole('textbox')).toBeNull());
 });
 
 it('freezes an uncertain write, blocks leaving and clears the draft after explicit retry succeeds', async () => {

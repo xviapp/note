@@ -9,6 +9,7 @@ export interface SectionControls {
   editor: ReactNode;
   onEdit: (section: Section) => void;
   onDelete: (section: Section) => void;
+  onToggleTask?: (offset: number, checked: boolean) => void;
 }
 
 // Menus live outside the reading text so opening one never changes annotation

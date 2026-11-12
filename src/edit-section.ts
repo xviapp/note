@@ -4,15 +4,18 @@ import { replaceSection, type MarkdownSection } from './markdown-sections';
 
 // A section edit always checks the revision it was opened from. Uncertain
 // writes keep the exact payload and key until the user explicitly retries.
-export function createSectionWriter(note: NoteDetail, section: MarkdownSection) {
+export function createSectionWriter(note: NoteDetail, section?: MarkdownSection) {
   let pending: { key: string; payload: { content: string; revision: number; attachments: string[] } } | null = null;
-  return async (replacement: string): Promise<NoteDetail> => {
+  return async (replacement: string, extraAttachments?: string[]): Promise<NoteDetail> => {
+    const attachments = Array.from(
+      new Set([...note.attachments.map((file) => file.id), ...(extraAttachments ?? [])]),
+    );
     pending ??= {
       key: crypto.randomUUID(),
       payload: {
-        content: replaceSection(note.content, section, replacement),
+        content: section ? replaceSection(note.content, section, replacement) : replacement,
         revision: note.revision,
-        attachments: note.attachments.map((file) => file.id),
+        attachments,
       },
     };
     try {

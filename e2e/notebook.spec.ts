@@ -21,6 +21,7 @@ test('default preview, editing, save/history, favorites, trash and restore', asy
     await expect(
       page.locator('.read-content').getByRole('heading', { name: '一个安静的阅读空间' }),
     ).toBeVisible();
+    await expect(page.locator('.read-content input[type=checkbox]').first()).toBeDisabled();
     await page.getByRole('button', { name: '源码', exact: true }).click();
   }
   await page.getByRole('button', { name: '保存', exact: true }).click();
@@ -28,7 +29,7 @@ test('default preview, editing, save/history, favorites, trash and restore', asy
   await expect(
     page.locator('.read-content').getByRole('heading', { name: '本周的阅读' }),
   ).toBeVisible();
-  await expect(page.locator('.read-content input[type=checkbox]').first()).toBeDisabled();
+  await expect(page.locator('.read-content input[type=checkbox]').first()).toBeEnabled();
   await noteAction(page, '收藏笔记');
   const url = page.url();
   await page.reload();
@@ -64,6 +65,8 @@ test('default preview, editing, save/history, favorites, trash and restore', asy
   await noteAction(page, '版本历史');
   const history = page.getByRole('dialog', { name: '版本历史', exact: true });
   await history.getByRole('button', { name: /版本 2/ }).click();
+  await history.getByRole('button', { name: '文本差异', exact: true }).click();
+  await expect(history.locator('.version-diff')).toContainText('修改后的内容。');
   await history.getByRole('button', { name: '恢复此版本', exact: true }).click();
   await page
     .getByRole('dialog', { name: '恢复这个版本？' })

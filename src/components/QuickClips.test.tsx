@@ -23,6 +23,11 @@ function deferred<T>() {
   return { promise, resolve, reject };
 }
 
+function clickMoreAction(name: string) {
+  fireEvent.click(screen.getByLabelText('更多操作'));
+  fireEvent.click(screen.getByRole('button', { name }));
+}
+
 it.each(['success', 'refresh failure', 'save failure'])(
   'keeps an undone clip visible throughout saving and refreshing: %s', async (result) => {
   const clip: Clip = {
@@ -41,7 +46,7 @@ it.each(['success', 'refresh failure', 'save failure'])(
   });
   render(<QuickClips source={null} onClose={() => {}} onNavigate={() => {}} onCreated={() => {}} />);
   await screen.findByText(clip.text);
-  fireEvent.click(screen.getByRole('button', { name: '删除' }));
+  clickMoreAction('删除');
   await screen.findByRole('button', { name: '撤销' });
   expect(screen.queryByText(clip.text)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
@@ -82,12 +87,12 @@ it('offers archive, undo, search through older archives, and restore', async () 
   });
   render(<QuickClips source={null} onClose={() => {}} onNavigate={() => {}} onCreated={() => {}} />);
   await screen.findByText(clip.text);
-  fireEvent.click(screen.getByRole('button', { name: '归档' }));
+  clickMoreAction('归档');
   await screen.findByRole('button', { name: '撤销' });
   expect(screen.queryByText(clip.text)).toBeNull();
   fireEvent.click(screen.getByRole('button', { name: '撤销' }));
   await screen.findByText(clip.text);
-  fireEvent.click(screen.getByRole('button', { name: '归档' }));
+  clickMoreAction('归档');
   await screen.findByRole('button', { name: '撤销' });
   fireEvent.click(screen.getByRole('button', { name: '已归档' }));
   await screen.findByText(clip.text);
@@ -128,7 +133,7 @@ it('leaves a clip visible when archiving is refused', async () => {
   });
   render(<QuickClips source={null} onClose={() => {}} onNavigate={() => {}} onCreated={() => {}} />);
   await screen.findByText('仍需保留');
-  fireEvent.click(screen.getByRole('button', { name: '归档' }));
+  clickMoreAction('归档');
   await screen.findByText('归档失败，请重试。');
   expect(screen.getByText('仍需保留')).toBeTruthy();
 });

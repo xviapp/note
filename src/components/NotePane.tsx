@@ -112,6 +112,15 @@ export default function NotePane(props: Props) {
     [linkOpen, setLinkOpen] = useState(false);
   const question = useQuestion();
   const readingRoot = useRef<HTMLDivElement>(null);
+  const sourcePaneRef = useRef<HTMLDivElement>(null);
+  const [compactEdit, setCompactEdit] = useState(() => window.matchMedia('(max-width: 760px)').matches);
+  const [headingScrolled, setHeadingScrolled] = useState(false);
+  useEffect(() => {
+    const query = window.matchMedia('(max-width: 760px)');
+    const change = () => setCompactEdit(query.matches);
+    query.addEventListener('change', change);
+    return () => query.removeEventListener('change', change);
+  }, []);
   const [assistantOpen, setAssistantOpen] = useState(false);
   const [assistantMode, setAssistantMode] = useState<AssistantMode>('floating');
   const [selection, setSelection] = useState('');
@@ -161,6 +170,56 @@ export default function NotePane(props: Props) {
   const {
     scroll, reading, toc, touched, restored, tocPosition, revealAppend, restorePosition, recordScroll,
   } = useNoteReading({ id, note, editing: editing || sectionEditing });
+  const effectiveEditTab = compactEdit && editTab === 'split' ? 'source' : editTab;
+  useEffect(() => setHeadingScrolled(false), [id, editing]);
+  useEffect(() => {
+    if (!editing || effectiveEditTab !== 'split') return;
+    const preview = scroll.current;
+    const pane = sourcePaneRef.current;
+    if (!preview || !pane) return;
+    let scroller: HTMLElement | null = null;
+    let lock: 'source' | 'preview' | null = null;
+    let timer = 0;
+    const release = () => {
+      window.clearTimeout(timer);
+      timer = window.setTimeout(() => {
+        lock = null;
+      }, 80);
+    };
+    const onSourceScroll = () => {
+      if (!scroller || lock === 'preview') return;
+      lock = 'source';
+      const max = scroller.scrollHeight - scroller.clientHeight;
+      const ratio = max > 0 ? scroller.scrollTop / max : 0;
+      preview.scrollTop = ratio * Math.max(0, preview.scrollHeight - preview.clientHeight);
+      release();
+    };
+    const onPreviewScroll = () => {
+      if (!scroller || lock === 'source') return;
+      lock = 'preview';
+      const max = preview.scrollHeight - preview.clientHeight;
+      const ratio = max > 0 ? preview.scrollTop / max : 0;
+      scroller.scrollTop = ratio * Math.max(0, scroller.scrollHeight - scroller.clientHeight);
+      release();
+    };
+    const bindScroller = () => {
+      const next = pane.querySelector<HTMLElement>('.cm-scroller');
+      if (next === scroller) return;
+      if (scroller) scroller.removeEventListener('scroll', onSourceScroll);
+      scroller = next;
+      if (scroller) scroller.addEventListener('scroll', onSourceScroll, { passive: true });
+    };
+    bindScroller();
+    const observer = new MutationObserver(bindScroller);
+    observer.observe(pane, { childList: true, subtree: true });
+    preview.addEventListener('scroll', onPreviewScroll, { passive: true });
+    return () => {
+      window.clearTimeout(timer);
+      observer.disconnect();
+      if (scroller) scroller.removeEventListener('scroll', onSourceScroll);
+      preview.removeEventListener('scroll', onPreviewScroll);
+    };
+  }, [editing, effectiveEditTab, scroll]);
   const { loadError, retry, setRetry, stale, applyDetail } = useNoteLoading({
     id,
     refresh: props.refresh,
@@ -366,16 +425,6 @@ export default function NotePane(props: Props) {
       props.onError(e);
     }
   };
-  const navigation = (
-    <NoteLocation
-      note={note}
-      showSidebar={props.showSidebar}
-      sidebarOpen={props.sidebarOpen}
-      onBack={props.onBack}
-      onOpenSidebar={props.onOpenSidebar}
-      onNavigate={props.onNavigate}
-    />
-  );
   const markdownReady = useMarkdownReady(note?.kind === 'markdown');
 
   // Highlights and notes on the rendered text (Markdown, plain text, papers).
@@ -442,6 +491,24 @@ export default function NotePane(props: Props) {
   function addQuote(text: string): string | undefined {
     return typeView.addQuote ? typeView.addQuote(text) : quoteInAssistant(text);
   }
+  const shownTitle =
+    displayNote &&
+    (typeView.title ??
+      (displayNote.project_category && displayNote.metadata_title
+        ? displayNote.metadata_title
+        : displayNote.title));
+  const navigation = (
+    <NoteLocation
+      note={note}
+      showSidebar={props.showSidebar}
+      sidebarOpen={props.sidebarOpen}
+      scrolledTitle={!editing && headingScrolled && note?.kind !== 'pdf' ? (shownTitle ?? undefined) : undefined}
+      onBack={props.onBack}
+      onOpenSidebar={props.onOpenSidebar}
+      onNavigate={props.onNavigate}
+      onScrollTop={() => scroll.current?.scrollTo({ top: 0, behavior: 'smooth' })}
+    />
+  );
   if (loadError || !note || !markdownReady)
     return (
       <div className="note-pane">
@@ -601,10 +668,10 @@ export default function NotePane(props: Props) {
         <div
           ref={readingRoot}
           data-selection-owner={id}
-          className={`note-workspace ${editing ? `edit-tab-${editTab}` : ''}`}
+          className={`note-workspace ${editing ? `edit-tab-${effectiveEditTab}` : ''}`}
         >
           {editing && (
-            <div className="source-pane">
+            <div ref={sourcePaneRef} className="source-pane">
               <Suspense fallback={<Spinner label="正在打开编辑器…" />}>
                 <Editor
                   value={content}
@@ -649,7 +716,11 @@ export default function NotePane(props: Props) {
                 className="note-scroll"
                 tabIndex={0}
                 aria-label="笔记阅读区"
-                onScroll={recordScroll}
+                onScroll={(event) => {
+                  recordScroll();
+                  const past = event.currentTarget.scrollTop > 72;
+                  setHeadingScrolled((prev) => (prev === past ? prev : past));
+                }}
                 onWheel={() => {
                   touched.current = true;
                 }}

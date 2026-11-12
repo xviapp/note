@@ -118,12 +118,6 @@ button:active:not(:disabled) {
 .note-location .page-back {
   color: var(--ink);
 }
-.document-heading > h1 {
-  font-family: var(--font-ui);
-  font-size: var(--family-type-pageTitle);
-  line-height: var(--family-leading-pageTitle);
-  font-weight: 700;
-}
 
 .settings-group + .settings-group {
   margin-top: var(--family-space-xl);
@@ -364,8 +358,18 @@ button:active:not(:disabled) {
     padding: max(16px, env(safe-area-inset-top)) 12px max(16px, env(safe-area-inset-bottom));
     border-radius: 0 var(--radius-panel) var(--radius-panel) 0;
   }
-  .main-nav button {
-    min-height: 56px;
+  .main-nav-primary button {
+    min-height: 52px;
+  }
+  .sidebar-tools-row button,
+  .sidebar-system-row button {
+    min-height: 44px;
+  }
+  .markdown-body .code-copy {
+    width: 36px;
+    height: 36px;
+    min-width: 36px;
+    min-height: 36px;
   }
   .sync-status {
     min-height: 48px;
@@ -682,7 +686,7 @@ button:active:not(:disabled) {
   overflow: hidden;
 }
 
-body:has(.android-shell .phone-bottom-nav) .move-toast {
+body:has(.android-shell .phone-bottom-nav) :is(.move-toast, .multi-select-bar) {
   bottom: calc(env(safe-area-inset-bottom) + 84px);
 }
 body:has(.android-shell .phone-bottom-nav) .global-assistant-launcher {
@@ -695,7 +699,7 @@ body:has(.android-shell .phone-bottom-nav) .collection-page,
   padding-bottom: 96px;
 }
 @media (max-width: 760px) {
-  body:has(.phone-bottom-nav) .move-toast {
+  body:has(.phone-bottom-nav) :is(.move-toast, .multi-select-bar) {
     bottom: calc(env(safe-area-inset-bottom) + 84px);
   }
   body:has(.phone-bottom-nav) .global-assistant-launcher {

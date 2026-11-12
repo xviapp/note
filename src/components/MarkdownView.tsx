@@ -1,6 +1,7 @@
 // Renderers are created once per safeImages value in useMemo below.
 // oxlint-disable react/no-unstable-nested-components
-import { memo, useEffect, useMemo, useRef, type ReactNode } from 'react';
+import { memo, useEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from 'react';
+import { Check, Copy } from 'lucide-react';
 import ReactMarkdown, { type Components } from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import remarkMath from 'remark-math';
@@ -30,6 +31,36 @@ export interface Heading {
   title: string;
   level: number;
 }
+function CodeBlock({ children, ...props }: ComponentPropsWithoutRef<'pre'>) {
+  const preRef = useRef<HTMLPreElement>(null);
+  const [copied, setCopied] = useState(false);
+  useEffect(() => {
+    if (!copied) return;
+    const timer = window.setTimeout(() => setCopied(false), 1600);
+    return () => window.clearTimeout(timer);
+  }, [copied]);
+  return (
+    <div className="code-block">
+      {/* Icon-only so copied text and annotation character offsets stay untouched. */}
+      <button
+        type="button"
+        className={`icon-button code-copy${copied ? ' is-copied' : ''}`}
+        aria-label={copied ? '已复制代码' : '复制代码'}
+        title={copied ? '已复制代码' : '复制代码'}
+        onClick={() => {
+          const text = preRef.current?.textContent ?? '';
+          void navigator.clipboard?.writeText(text).then(() => setCopied(true)).catch(() => {});
+        }}
+      >
+        {copied ? <Check size={14} /> : <Copy size={14} />}
+      </button>
+      <pre ref={preRef} {...props}>
+        {children}
+      </pre>
+    </div>
+  );
+}
+
 function prepareMarkdown(source: string) {
   const content = normalizeMathDelimiters(source);
   const front = markdownFrontMatter(content);
@@ -121,7 +152,7 @@ export const MarkdownView = memo(function MarkdownView({
           const source = code.children.map((child) => child.type === 'text' ? child.value : '').join('');
           return <MermaidDiagram source={source} onImage={onImage} />;
         }
-        return <pre {...props}>{children}</pre>;
+        return <CodeBlock {...props}>{children}</CodeBlock>;
       },
       section: ({ node, children, ...props }) => {
         const start = node?.properties.dataSectionStart;
@@ -183,7 +214,21 @@ export const MarkdownView = memo(function MarkdownView({
             />
           )
         ) : null,
-      input: (props) => <input {...props} disabled />,
+      input: ({ node, checked, ...props }) => {
+        const offset = node?.properties.dataTaskOffset;
+        const controls = callbacks.current.sections;
+        if (typeof offset !== 'number' || !controls?.onToggleTask)
+          return <input {...props} checked={Boolean(checked)} disabled />;
+        return (
+          <input
+            {...props}
+            className="task-checkbox"
+            checked={Boolean(checked)}
+            disabled={controls.disabled || controls.activeStart !== null}
+            onChange={() => controls.onToggleTask!(offset, !checked)}
+          />
+        );
+      },
     };
   }, [safeImages]);
   return (

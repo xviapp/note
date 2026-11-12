@@ -1,9 +1,11 @@
 import CodeMirror from '@uiw/react-codemirror';
 import { markdown } from '@codemirror/lang-markdown';
+import { Prec } from '@codemirror/state';
 import { EditorView, keymap } from '@codemirror/view';
 import { useEffect, useMemo, useRef, useState, type RefObject } from 'react';
 import { useTheme } from '../theme';
 import { editorTheme } from '../editor-theme';
+import { insertLink, toggleWrap } from '../markdown-format';
 import { FormatBar } from './FormatBar';
 
 const touch = () => typeof matchMedia === 'function' && matchMedia('(pointer: coarse)').matches;
@@ -76,15 +78,42 @@ export default function Editor({
       EditorView.contentAttributes.of({
         'aria-label': kind === 'markdown' ? 'Markdown 源码' : '纯文本正文',
       }),
-      keymap.of([
-        {
-          key: 'Mod-s',
-          run: () => {
-            handlers.current.onSave();
-            return true;
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Mod-s',
+            run: () => {
+              handlers.current.onSave();
+              return true;
+            },
           },
-        },
-      ]),
+          ...(kind === 'markdown'
+            ? [
+                {
+                  key: 'Mod-b',
+                  run: (editor: EditorView) => {
+                    editor.dispatch(toggleWrap(editor.state, '**'));
+                    return true;
+                  },
+                },
+                {
+                  key: 'Mod-i',
+                  run: (editor: EditorView) => {
+                    editor.dispatch(toggleWrap(editor.state, '*'));
+                    return true;
+                  },
+                },
+                {
+                  key: 'Mod-k',
+                  run: (editor: EditorView) => {
+                    editor.dispatch(insertLink(editor.state));
+                    return true;
+                  },
+                },
+              ]
+            : []),
+        ]),
+      ),
       EditorView.domEventHandlers({
         paste(event) {
           const files = event.clipboardData?.files;

@@ -1,5 +1,17 @@
-import { useState } from 'react';
-import { Archive, ArchiveRestore, Copy, FilePlus2, Lock, Pin, PinOff, TextCursorInput, Trash2 } from 'lucide-react';
+import { useRef, useState } from 'react';
+import {
+  Archive,
+  ArchiveRestore,
+  Copy,
+  FilePlus2,
+  Images,
+  Lock,
+  MoreHorizontal,
+  Pin,
+  PinOff,
+  TextCursorInput,
+  Trash2,
+} from 'lucide-react';
 import type { Clip } from '../../shared/clips';
 import type { PendingClip } from '../clips';
 import { fileUrl, formatDate } from '../api';
@@ -35,6 +47,10 @@ export function ClipRow({
   onSource: () => void;
 }) {
   const [open, setOpen] = useState(false);
+  const moreRef = useRef<HTMLDetailsElement>(null);
+  const closeMore = () => {
+    if (moreRef.current) moreRef.current.open = false;
+  };
   const sealed = !!item.key_id && !isUnlocked(item.key_id);
   return (
     <li className={`clip-item${item.pending ? ' is-pending' : ''}`}>
@@ -86,7 +102,7 @@ export function ClipRow({
           )}
           {item.file && !sealed && (
             <button className="icon-button" aria-label="复制图片" title="复制图片" onClick={onCopyImage}>
-              <Copy size={15} />
+              <Images size={15} />
             </button>
           )}
           {onInsert && !sealed && (
@@ -100,7 +116,7 @@ export function ClipRow({
               <TextCursorInput size={15} />
             </button>
           )}
-          {!item.pending && !sealed && (
+          {!onInsert && !item.pending && !sealed && !item.archived && (
             <button
               className="icon-button"
               aria-label="转为笔记"
@@ -111,32 +127,82 @@ export function ClipRow({
               <FilePlus2 size={15} />
             </button>
           )}
-          {!item.pending && !item.archived && (
+          {!item.pending && item.archived && (
             <button
               className="icon-button"
-              aria-label={item.pinned ? '取消置顶' : '置顶'}
-              title={item.pinned ? '取消置顶' : '置顶'}
+              aria-label="恢复随手记"
+              title="恢复到随手记"
               disabled={offline}
-              onClick={onPin}
+              onClick={onArchive}
             >
-              {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}
+              <ArchiveRestore size={15} />
             </button>
           )}
-          {!item.pending && (
-            <button className="icon-button" aria-label={item.archived ? '恢复随手记' : '归档'}
-              title={item.archived ? '恢复到随手记' : '归档'} disabled={offline} onClick={onArchive}>
-              {item.archived ? <ArchiveRestore size={15} /> : <Archive size={15} />}
+          {item.pending ? (
+            <button
+              className="icon-button"
+              aria-label="删除"
+              title="删除"
+              onClick={onRemove}
+            >
+              <Trash2 size={15} />
             </button>
+          ) : (
+            <details ref={moreRef} className="node-menu clip-more">
+              <summary className="icon-button" role="button" aria-label="更多操作" title="更多操作">
+                <MoreHorizontal size={15} />
+              </summary>
+              <div className="menu-popup">
+                {(onInsert || item.archived) && !sealed && (
+                  <button
+                    disabled={offline}
+                    onClick={() => {
+                      closeMore();
+                      onConvert();
+                    }}
+                  >
+                    <FilePlus2 size={15} />
+                    转为笔记
+                  </button>
+                )}
+                {!item.archived && (
+                  <button
+                    disabled={offline}
+                    onClick={() => {
+                      closeMore();
+                      onPin();
+                    }}
+                  >
+                    {item.pinned ? <PinOff size={15} /> : <Pin size={15} />}
+                    {item.pinned ? '取消置顶' : '置顶'}
+                  </button>
+                )}
+                {!item.archived && (
+                  <button
+                    disabled={offline}
+                    onClick={() => {
+                      closeMore();
+                      onArchive();
+                    }}
+                  >
+                    <Archive size={15} />
+                    归档
+                  </button>
+                )}
+                <button
+                  className="danger-text"
+                  disabled={offline}
+                  onClick={() => {
+                    closeMore();
+                    onRemove();
+                  }}
+                >
+                  <Trash2 size={15} />
+                  删除
+                </button>
+              </div>
+            </details>
           )}
-          <button
-            className="icon-button"
-            aria-label="删除"
-            title="删除"
-            disabled={offline && !item.pending}
-            onClick={onRemove}
-          >
-            <Trash2 size={15} />
-          </button>
         </span>
       </div>
     </li>
