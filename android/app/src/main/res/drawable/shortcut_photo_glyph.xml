@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Lucide icon (ISC license), as used in the web interface. -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <group android:translateX="33" android:translateY="33" android:scaleX="1.75" android:scaleY="1.75">
+        <path android:strokeColor="@color/brand_mark" android:strokeWidth="2" android:strokeLineCap="round"
+            android:strokeLineJoin="round" android:pathData="M13.997 4a2 2 0 0 1 1.76 1.05l0.486 0.9A2 2 0 0 0 18.003 7H20a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2h1.997a2 2 0 0 0 1.759-1.048l0.489-0.904A2 2 0 0 1 10.004 4z" />
+        <path android:strokeColor="@color/brand_mark" android:strokeWidth="2" android:strokeLineCap="round"
+            android:strokeLineJoin="round" android:pathData="M9 13a3 3 0 1 0 6 0a3 3 0 1 0-6 0" />
+    </group>
+</vector>

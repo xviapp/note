@@ -5,11 +5,12 @@
     <string name="package_name">app.xvi.note</string>
     <string name="custom_url_scheme">app.xvi.note</string>
     <string name="quick_bar_label">页间快捷栏</string>
-    <string name="quick_bar_description">进入页间，或打开随手记、今日记、问青藜</string>
+    <string name="quick_bar_description">进入页间，或随手拍、随手记、今日记</string>
     <string name="quick_bar_app">页间</string>
     <string name="clip_process_text">存入随手记</string>
     <string name="shortcut_clip">随手记</string>
     <string name="shortcut_journal">今日记</string>
     <string name="shortcut_qingli">问青藜</string>
+    <string name="shortcut_photo">随手拍</string>
     <item type="id" name="clip_capture_text" />
 </resources>

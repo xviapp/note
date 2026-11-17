@@ -48,6 +48,8 @@ abstract class NoteBridgeActivity extends BridgeActivity {
             public WebResourceResponse shouldInterceptRequest(WebView view, WebResourceRequest request) {
                 if (policy.sameOrigin(request.getUrl().toString()) && request.getUrl().getPath().startsWith("/__share/"))
                     return shareInbox.open(request.getUrl().getPath());
+                if (policy.sameOrigin(request.getUrl().toString()) && request.getUrl().getPath().startsWith("/__camera/"))
+                    return CameraInbox.open(NoteBridgeActivity.this, request.getUrl().getPath());
                 // Let Chromium issue these requests itself: it keeps HttpOnly cookies,
                 // request bodies, Range responses and streaming fetch intact.
                 if (policy.isApi(request.getUrl().toString())) return null;

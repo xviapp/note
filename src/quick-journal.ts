@@ -26,10 +26,14 @@ export interface QuickRecord {
   // Photos chosen but not uploaded yet.
   photos: number;
   error?: string;
+  // A 随手拍 photo: sent by any flush, today's too.
+  camera?: boolean;
   // The key it is sealed with, while locked here; nothing else is readable then.
   locked?: string;
 }
-const DAY_DRAFT = /^append:journal:([^:]+):(\d{4}-\d{2}-\d{2})$/;
+// A 随手拍 photo is a record of its own (`…:photo:<id>`, src/quick-photo.ts):
+// no composer resumes it, so a flush of earlier days sends it on its own day too.
+const DAY_DRAFT = /^append:journal:([^:]+):(\d{4}-\d{2}-\d{2})(:photo:[0-9a-f-]{36})?$/;
 
 // Which day drafts were saved, readable without their key: the draft, its key
 // and when, never the record. Under the draft prefix, so sign-out clears it;
@@ -113,7 +117,7 @@ export async function queuedQuickRecords(): Promise<QuickRecord[]> {
   const marks = new Map(readMarks().map((mark) => [mark.draftId, mark]));
   const records: QuickRecord[] = [];
   for (const draftId of ids) {
-    const [, journalId, date] = DAY_DRAFT.exec(draftId)!;
+    const [, journalId, date, photo] = DAY_DRAFT.exec(draftId)!;
     const mark = marks.get(draftId);
     marks.delete(draftId);
     const draft = await readDraft(draftId);
@@ -121,7 +125,7 @@ export async function queuedQuickRecords(): Promise<QuickRecord[]> {
       if (mark && !isUnlocked(mark.keyId))
         records.push({
           draftId, journalId: journalId!, date: date!, title: '', text: '', images: [], operationKey: '',
-          savedAt: mark.savedAt, photos: 0, locked: mark.keyId,
+          savedAt: mark.savedAt, photos: 0, locked: mark.keyId, ...(photo && { camera: true }),
         });
       continue;
     }
@@ -148,6 +152,7 @@ export async function queuedQuickRecords(): Promise<QuickRecord[]> {
       savedAt: draft.savedAt,
       photos: (await pendingPhotos(draftId)).length,
       error: errors.get(draftId),
+      ...(photo && { camera: true }),
     });
   }
   // Marks whose draft is gone.
@@ -167,7 +172,8 @@ async function send(record: QuickRecord) {
 }
 
 let flushing: Promise<number> | null = null;
-// Sends the saved records (`earlier`: only those before today), oldest first.
+// Sends the saved records (`earlier`: not today's composer record, which its
+// window sends), oldest first.
 // Returns how many were added; a refused one stays with its reason.
 export function flushQuickRecords({ earlier = false } = {}): Promise<number> {
   // A round of earlier days only does not stand in for a full one.
@@ -179,7 +185,7 @@ export function flushQuickRecords({ earlier = false } = {}): Promise<number> {
     try {
       const today = localDate();
       for (const record of await queuedQuickRecords()) {
-        if (record.locked || held.has(record.draftId) || (earlier && record.date >= today)) continue;
+        if (record.locked || held.has(record.draftId) || (earlier && record.date >= today && !record.camera)) continue;
         try {
           await send(record);
           errors.delete(record.draftId);

@@ -7,13 +7,13 @@ import android.content.Context;
 import android.content.Intent;
 import android.widget.RemoteViews;
 
-/** A 4×1 bar: the notebook, then the 随手记, 今日记 and 问青藜 windows. */
+/** A 4×1 bar: the notebook, 随手拍 (the camera), then the 随手记 and 今日记 windows. */
 public class QuickBarWidget extends AppWidgetProvider {
     private static final int[] BUTTONS = {
-        R.id.quick_bar_app, R.id.quick_bar_clip, R.id.quick_bar_journal, R.id.quick_bar_qingli,
+        R.id.quick_bar_app, R.id.quick_bar_photo, R.id.quick_bar_clip, R.id.quick_bar_journal,
     };
     private static final Class<?>[] TARGETS = {
-        MainActivity.class, ClipCaptureActivity.class, JournalWindowActivity.class, AssistantWindowActivity.class,
+        MainActivity.class, CameraActivity.class, ClipCaptureActivity.class, JournalWindowActivity.class,
     };
 
     @Override public void onUpdate(Context context, AppWidgetManager manager, int[] ids) {

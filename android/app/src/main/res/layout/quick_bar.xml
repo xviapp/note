@@ -8,6 +8,11 @@
         <ImageView style="@style/QuickBarIcon" android:src="@mipmap/ic_launcher_round" />
         <TextView style="@style/QuickBarLabel" android:text="@string/quick_bar_app" />
     </LinearLayout>
+    <LinearLayout android:id="@+id/quick_bar_photo" style="@style/QuickBarItem"
+        android:contentDescription="@string/shortcut_photo">
+        <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_photo" />
+        <TextView style="@style/QuickBarLabel" android:text="@string/shortcut_photo" />
+    </LinearLayout>
     <LinearLayout android:id="@+id/quick_bar_clip" style="@style/QuickBarItem"
         android:contentDescription="@string/shortcut_clip">
         <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_clip" />
@@ -17,10 +22,5 @@
         android:contentDescription="@string/shortcut_journal">
         <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_journal" />
         <TextView style="@style/QuickBarLabel" android:text="@string/shortcut_journal" />
-    </LinearLayout>
-    <LinearLayout android:id="@+id/quick_bar_qingli" style="@style/QuickBarItem"
-        android:contentDescription="@string/shortcut_qingli">
-        <ImageView style="@style/QuickBarIcon" android:src="@drawable/shortcut_qingli" />
-        <TextView style="@style/QuickBarLabel" android:text="@string/shortcut_qingli" />
     </LinearLayout>
 </LinearLayout>

@@ -1,10 +1,11 @@
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { CalendarDays, ExternalLink, X } from 'lucide-react';
 import { api, cachedApi } from '../api';
-import { useOffline } from '../connectivity';
+import { isOffline, useOffline } from '../connectivity';
 import { createJournalRecorder } from '../journal-record';
 import { flushJournalOutbox } from '../journal-outbox';
-import { flushQuickRecords } from '../quick-journal';
+import { flushQuickRecords, queuedQuickRecords } from '../quick-journal';
+import { queuePhoto, shrinkPhoto } from '../quick-photo';
 import { isUnlocked, keysVersion, subscribeKeys } from '../keyring';
 import { device } from '../mobile';
 import { dismissReadingOverlay } from '../mobile-back';
@@ -209,6 +210,73 @@ export function JournalWindow() {
           />
         </>
       )}
+    </Sheet>
+  );
+}
+
+// 随手拍, after the camera: each photo it wrote becomes a record of its own in
+// that day's entry of the journal written in most recently. Nothing shows
+// unless it cannot (signed out, no journal); photos not queued stay with the
+// camera for the next time.
+export function PhotoWindow() {
+  const auth = useSignedIn();
+  const [problem, setProblem] = useState<ReactNode>(null);
+  const started = useRef(false);
+  useBack();
+  useEffect(() => {
+    if (auth !== 'in' || started.current) return;
+    started.current = true;
+    void (async () => {
+      const path = '/api/nodes?view=journals';
+      const list = await api<{ nodes: NoteNode[] }>(path).catch(() => cachedApi<{ nodes: NoteNode[] }>(path));
+      if (!list) {
+        setProblem(<p className="inline-error" role="alert">读不到日记本，照片留在本机，下次随手拍时一并记入。</p>);
+        return;
+      }
+      const journal = list.nodes[0];
+      if (!journal) {
+        setProblem(<OpenApp message="还没有日记本，先在页间里新建一个。" />);
+        return;
+      }
+      let locked = false;
+      const drafts: string[] = [];
+      for (const photo of (await device.cameraPhotos()).photos) {
+        const response = await fetch(photo.path);
+        if (!response.ok) continue;
+        const taken = new Date(photo.takenAt);
+        const time = `${String(taken.getHours()).padStart(2, '0')}${String(taken.getMinutes()).padStart(2, '0')}`;
+        const date = localDate(taken);
+        const file = await shrinkPhoto(await response.blob(), `随手拍-${date.replaceAll('-', '')}-${time}.jpg`, photo.takenAt);
+        const queued = await queuePhoto(journal, date, photo.id, file);
+        await device.discardCameraPhoto({ id: photo.id });
+        if (queued.draftId) drafts.push(queued.draftId);
+        else locked = true;
+      }
+      const waiting = locked ? `，解锁「${journal.title}」后自动记入` : '';
+      if (!drafts.length) return close({ message: locked ? `已记下${waiting}` : undefined });
+      void device.hideWindow().catch(() => {});
+      if (isOffline()) return close({ message: '已记下，联网后记入日记' });
+      await flushQuickRecords();
+      const left = (await queuedQuickRecords()).filter((record) => drafts.includes(record.draftId));
+      const refused = left.find((record) => record.error)?.error;
+      close({
+        message: refused
+          ? `没能记入日记：${refused}。可在「设置 → 待发送」重试`
+          : left.length ? '已记下，联网后记入日记' : `已记入日记${waiting}`,
+      });
+    })().catch((reason: Error) =>
+      setProblem(<p className="inline-error" role="alert">{reason.message || '照片没能记下'}，照片留在本机，下次随手拍时一并记入。</p>));
+  }, [auth]);
+  if (auth === 'out')
+    return (
+      <Sheet title="随手拍" onClose={() => close()}>
+        <OpenApp message="登录页间后才能记录。" label="打开页间登录" />
+      </Sheet>
+    );
+  if (!problem) return null;
+  return (
+    <Sheet title="随手拍" onClose={() => close()}>
+      {problem}
     </Sheet>
   );
 }

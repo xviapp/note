@@ -1,5 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <shortcuts xmlns:android="http://schemas.android.com/apk/res/android">
+    <shortcut android:shortcutId="photo" android:icon="@drawable/shortcut_photo"
+        android:shortcutShortLabel="@string/shortcut_photo">
+        <intent android:action="android.intent.action.VIEW"
+            android:targetPackage="app.xvi.note" android:targetClass="app.xvi.note.CameraActivity" />
+    </shortcut>
     <shortcut android:shortcutId="clip" android:icon="@drawable/shortcut_clip"
         android:shortcutShortLabel="@string/shortcut_clip">
         <intent android:action="android.intent.action.VIEW"

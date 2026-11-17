@@ -12,6 +12,9 @@ export const device = registerPlugin<{
   clearWidgetClips(): Promise<void>;
   getPendingShare(): Promise<{ share: import('./shared-import').IncomingShare | null }>;
   discardShare(options: { id: string }): Promise<void>;
+  // 随手拍: photos the camera wrote (served at `path`), until queued for the journal.
+  cameraPhotos(): Promise<{ photos: { id: string; path: string; takenAt: number }[] }>;
+  discardCameraPhoto(options: { id: string }): Promise<void>;
   // The share window only: discard its share and close, with a toast once saved,
   // or hand over to the full app.
   closeShare(options: { saved?: boolean; openApp?: boolean }): Promise<void>;
@@ -58,7 +61,7 @@ export const device = registerPlugin<{
   }): Promise<{ cancelled: boolean }>;
 }>('NoteDevice');
 
-export type LaunchAction = 'open' | 'journal' | 'assistant';
+export type LaunchAction = 'open' | 'journal' | 'assistant' | 'photo';
 export interface AppLockState {
   enabled: boolean;
   pinLength: number;

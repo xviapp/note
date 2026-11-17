@@ -87,7 +87,7 @@ const quickRecords: OutboxSource = {
       const photos = record.images.length + record.photos;
       return {
         id: record.draftId,
-        summary: record.locked ? '（加密内容）' : record.title || excerpt(record.text) || '（只有照片）',
+        summary: record.camera ? '随手拍' : record.locked ? '（加密内容）' : record.title || excerpt(record.text) || '（只有照片）',
         detail: [longDate(record.date), journal, photos ? `${photos} 张照片` : ''].filter(Boolean).join(' · '),
         createdAt: record.savedAt,
         status: record.locked ? `等待解锁「${journal}」` : record.error ? `没能记入：${record.error}` : waiting(),

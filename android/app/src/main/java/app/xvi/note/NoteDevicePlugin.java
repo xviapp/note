@@ -246,6 +246,19 @@ public class NoteDevicePlugin extends Plugin {
         catch (Exception error) { call.reject("无法读取待导入内容。", error); }
     }
 
+    // 随手拍: photos the camera wrote, until the page has queued them.
+    @PluginMethod
+    public void cameraPhotos(PluginCall call) {
+        try { call.resolve(new JSObject().put("photos", CameraInbox.list(getContext()))); }
+        catch (Exception error) { call.reject("无法读取照片。", error); }
+    }
+
+    @PluginMethod
+    public void discardCameraPhoto(PluginCall call) {
+        CameraInbox.discard(getContext(), call.getString("id"));
+        call.resolve();
+    }
+
     @PluginMethod
     public void discardShare(PluginCall call) {
         host().shareInbox.discard(call.getString("id"));

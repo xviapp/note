@@ -17,13 +17,13 @@ import com.getcapacitor.JSObject;
 import java.time.LocalDate;
 
 /** A floating window over whatever app is open, opened from a launcher
- * shortcut: window.html shows one tool (今日记 or 青藜) without the notebook. */
+ * shortcut: window.html shows one tool (今日记, 青藜 or 随手拍) without the notebook. */
 abstract class PageWindowActivity extends NoteBridgeActivity {
     // Longest the native card stands in for the page.
     private static final long BOOT_TIMEOUT_MS = 5000;
     private View placeholder;
 
-    /** What window.html shows: "journal" or "assistant". */
+    /** What window.html shows: "journal", "assistant" or "photo". */
     abstract String kind();
 
     /** The card's largest height in dp; its width is that of src/share.css and windowCard(). */
@@ -33,6 +33,11 @@ abstract class PageWindowActivity extends NoteBridgeActivity {
     abstract String title();
 
     abstract String detail();
+
+    /** Whether the page opens on a card, drawn natively until the page has its own. */
+    boolean showsCard() {
+        return true;
+    }
 
     @Override
     public void onCreate(Bundle savedInstanceState) {
@@ -44,7 +49,7 @@ abstract class PageWindowActivity extends NoteBridgeActivity {
         getWindow().setBackgroundDrawable(new ColorDrawable(Color.TRANSPARENT));
         bridge.getWebView().setBackgroundColor(Color.TRANSPARENT);
         installWebView();
-        showPlaceholder();
+        if (showsCard()) showPlaceholder();
     }
 
     // The WebView takes a moment to start in a cold process. Until the page has

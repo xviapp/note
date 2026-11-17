@@ -4,7 +4,7 @@ import { device, installMobile, type LaunchAction } from './mobile';
 import { prepareProxy } from './proxy';
 import { ProxyStatus } from './components/ProxySettings';
 import { AppErrorBoundary, AppErrorScreen } from './components/AppErrorBoundary';
-import { AssistantSheet, JournalWindow } from './components/FloatingWindows';
+import { AssistantSheet, JournalWindow, PhotoWindow } from './components/FloatingWindows';
 import './theme';
 import './family-tokens.css';
 import './styles.css';
@@ -15,7 +15,7 @@ import './themes.css';
 import './shell.css';
 import './share.css';
 
-// Android's floating windows from launcher shortcuts (今日记, 问青藜): one
+// Android's floating windows from launcher shortcuts (今日记, 问青藜, 随手拍): one
 // tool over whatever app is open, without the notebook or its offline cache.
 const root = createRoot(document.getElementById('root')!);
 async function start() {
@@ -27,7 +27,7 @@ async function start() {
   else kind = location.hash === '#assistant' ? 'assistant' : 'journal';
   root.render(
     <AppErrorBoundary>
-      {kind === 'assistant' ? <AssistantSheet /> : <JournalWindow />}
+      {kind === 'assistant' ? <AssistantSheet /> : kind === 'photo' ? <PhotoWindow /> : <JournalWindow />}
       <ProxyStatus />
     </AppErrorBoundary>,
   );

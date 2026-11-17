@@ -1,11 +1,13 @@
 import { useEffect, useState } from 'react';
-import { CalendarDays, FolderOpen, Share2 } from 'lucide-react';
+import { Capacitor } from '@capacitor/core';
+import { Camera, CalendarDays, FolderOpen, Share2 } from 'lucide-react';
 import type { NoteNode, ShareSettings as Settings } from '../../shared/types';
 import { api } from '../api';
 import { Modal, Spinner } from './Primitives';
 import { NodePicker } from './Tree';
 
 import { shareDestinationLabel } from '../use-share-destination';
+import { PHOTO_QUALITIES, photoQuality, setPhotoQuality, type PhotoQuality } from '../quick-photo';
 
 export function ShareSettings() {
   const [settings, setSettings] = useState<Settings | null>(null);
@@ -67,6 +69,7 @@ export function ShareSettings() {
       )}
       <p className="field-hint">用于系统分享，保存时仍可更改。</p>
       <QuickJournalSetting />
+      {Capacitor.getPlatform() === 'android' && <PhotoQualitySetting />}
       {error && !draft && (
         <p className="inline-error" role="alert">
           {error}
@@ -195,5 +198,34 @@ function QuickJournalSetting() {
         </p>
       )}
     </>
+  );
+}
+
+// How 随手拍 keeps photos on this device (src/quick-photo.ts).
+function PhotoQualitySetting() {
+  const [value, setValue] = useState(photoQuality);
+  return (
+    <div className="share-setting-row">
+      <label className="quick-journal-setting">
+        <span className="small muted">
+          <Camera size={14} aria-hidden="true" />
+          随手拍画质
+        </span>
+        <select
+          value={value}
+          onChange={(event) => {
+            const next = event.target.value as PhotoQuality;
+            setPhotoQuality(next);
+            setValue(next);
+          }}
+        >
+          {PHOTO_QUALITIES.map((option) => (
+            <option key={option.value} value={option.value}>
+              {option.label}
+            </option>
+          ))}
+        </select>
+      </label>
+    </div>
   );
 }
